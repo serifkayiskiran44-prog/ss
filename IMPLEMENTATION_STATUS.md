@@ -141,3 +141,5 @@ M52 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windo
 M53 ürün detay/düzenleme (Issue #88, 2026-09-11): SaveProduct ürün adı/SKU/barkod/marka/kategori/açıklama ve 3 karakter döviz sınırlarını doğruluyor; mevcut UpdatedUtc stale guard korunuyor. docs/taskpacks/M53.md 100/100.
 
 M53 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M53-Product-Detail oluşturuldu.
+
+M54 XML kaynak/mapping (Issue #89, 2026-09-11): XmlCatalog kaynak adresini güvenli şemalarla sınırlar ve URL şemasını sınırlar; credential metni indekslenmez; XML variant mapping kapsam dışıdır. docs/taskpacks/M54.md 100/100.

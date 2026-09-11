@@ -423,3 +423,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M52 toplu ürün işlemleri: channel mapping batch commit cancellation kapısı ve atomiklik testi (docs/taskpacks/M52.md).
 
 - [x] M53 ürün detay düzenleme: metin alanı uzunlukları ve ISO 4217 üç karakter döviz doğrulaması (docs/taskpacks/M53.md).
+
+- [x] M54 XML kaynak/mapping: kaynak adresi yalnız http/https/file; URL şeması doğrulanıyor; credential metni arama indeksine alınmıyor (docs/taskpacks/M54.md).
