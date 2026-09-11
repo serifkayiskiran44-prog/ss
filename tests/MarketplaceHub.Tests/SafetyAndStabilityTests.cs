@@ -8,6 +8,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using TrMarketplaceHubDesktop;
 
 namespace MarketplaceHub.Tests;
 
@@ -465,6 +466,20 @@ public sealed class SafetyAndStabilityTests
         TrMarketplaceHubDesktop.TrendyolPilot.ValidateInvoice(new(123, 456, "https://invoice.example.test/a.pdf", "TY42024567890123", 1700000000));
         Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.TrendyolPilot.ValidateProductBatch([new("b", "s", "t", "m", 1, 99, 100)]));
         Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.TrendyolPilot.ValidateInvoice(new(123, 456, "http://invoice.example.test/a", null, null)));
+    }
+
+    [TestMethod]
+    public void InvoiceCenterGuardsScopeStalenessAndDuplicateAndClassifiesResponses()
+    {
+        var preview = InvoiceCenter.CreateTrendyolPreview(7, "shop-a", "order-1", 42, "https://example.test/invoice/1", "ABC2024000000001", 1700000000);
+        Assert.AreEqual(preview.IdempotencyKey, InvoiceCenter.CreateTrendyolPreview(7, "shop-a", "order-1", 42, "https://example.test/invoice/1", "ABC2024000000001", 1700000000).IdempotencyKey);
+        Assert.AreEqual("READY", InvoiceCenter.GuardDuplicate(new HashSet<string>(), preview).State);
+        Assert.AreEqual("DUPLICATE", InvoiceCenter.GuardDuplicate(new HashSet<string> { preview.IdempotencyKey }, preview).State);
+        Assert.ThrowsException<InvalidOperationException>(() => InvoiceCenter.EnsureOrderScope("shop-b", "order-1", preview));
+        Assert.ThrowsException<InvalidOperationException>(() => InvoiceCenter.EnsureFresh(DateTimeOffset.UtcNow.AddHours(-2), DateTimeOffset.UtcNow, TimeSpan.FromHours(1)));
+        Assert.IsTrue(InvoiceCenter.ClassifyTrendyolResponse(503).ShouldRetry);
+        Assert.AreEqual("AUTH_ERROR", InvoiceCenter.ClassifyTrendyolResponse(401).State);
+        Assert.AreEqual("LIVE_API_BLOCKED", InvoiceCenter.DescribeProvider("FAST", true, false).Status);
     }
 
     [TestMethod]
