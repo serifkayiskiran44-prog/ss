@@ -258,3 +258,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Ürün ve seçili kanal ekranına hızlı geçiş; capability listesi doğrulanmamış yazımı başarı gibi göstermeden görünür.
 - [x] `ChannelProductsStore` kanal/mağaza izolasyonlu listeleme sağlıyor; geçici SQLite testleri ile 305 Release testi geçti; self-contained yayın `Windows-M26-Listing-Matrix` altında üretilecek.
 - [ ] Toplu canlı yayın yok; connector preview/onay kapısı ve kullanıcı ertelemeleri korunuyor.
+
+## M27 sipariş istisna, iptal ve iade karar merkezi — 2026-09-11
+- [x] Eksik/ambiguous SKU ve iptal/iade olayları için kalıcı SQLite istisna kuyruğu; kanal/mağaza/sipariş/tür/öncelik/durum/yaşlandırma filtreleri.
+- [x] Sipariş taraması aynı olay anahtarını upsert eder; sorunlar kaybolmaz ve tekrar taramada duplicate kayıt büyümez.
+- [x] İptal/iade için mevcut stok receipt'inden somut geri koyma önizlemesi; kullanıcı onayı olmadan hareket yok.
+- [x] Geri koyma transaction + ürün sürümü kontrolü + tek sipariş idempotency kaydı ile stale/duplicate stok hareketi engellendi.
+- [x] 308 Release testi geçti; self-contained yayın `Windows-M27-Order-Exceptions` altında üretilecek.
+- [ ] Fulfillment, hakediş/mutabakat ve otomatik canlı iptal/iade API yazımı kapsam dışı.

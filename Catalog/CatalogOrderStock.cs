@@ -15,6 +15,7 @@ public partial class CatalogStore
   cmd.CommandText="""
    CREATE TABLE IF NOT EXISTS OrderStockReceipts(Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,OrderId TEXT NOT NULL,Payload TEXT NOT NULL,Json TEXT NOT NULL,PRIMARY KEY(Marketplace,ShopId,OrderId));
    CREATE TABLE IF NOT EXISTS OrderStockMovements(Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,OrderId TEXT NOT NULL,ProductId TEXT NOT NULL,Sku TEXT NOT NULL,Quantity INTEGER NOT NULL,StockBefore INTEGER NOT NULL,StockAfter INTEGER NOT NULL,AppliedUtc TEXT NOT NULL,PRIMARY KEY(Marketplace,ShopId,OrderId,ProductId));
+   CREATE TABLE IF NOT EXISTS OrderStockRestores(Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,OrderId TEXT NOT NULL,ActionKey TEXT NOT NULL,Payload TEXT NOT NULL,AppliedUtc TEXT NOT NULL,PRIMARY KEY(Marketplace,ShopId,OrderId));
    """;
   cmd.ExecuteNonQuery();
  }
