@@ -216,6 +216,16 @@ public sealed class SafetyAndStabilityTests
         Assert.IsTrue(summary.HasAction);
     }
 
+    [TestMethod]
+    public void ScreenParityAuditReportsMissingRouteAndPassesCompleteContract()
+    {
+        var missing = TrMarketplaceHubDesktop.ScreenParityAudit.Evaluate(["dashboard", "products"]);
+        var complete = TrMarketplaceHubDesktop.ScreenParityAudit.Evaluate(TrMarketplaceHubDesktop.ScreenParityAudit.RequiredRoutes);
+        Assert.AreEqual("BLOCKED", missing.Status);
+        CollectionAssert.Contains(missing.MissingRoutes.ToList(), "orders");
+        Assert.AreEqual("WORKING", complete.Status);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler

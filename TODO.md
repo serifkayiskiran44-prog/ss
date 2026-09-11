@@ -579,3 +579,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M119 dynamic marketplace product UI: ürün kanal özeti ortak connection/mapping/capability/health metadata’sından dinamik üretiliyor; iki mağazalı wrong-shop fixture doğrulandı (docs/taskpacks/M119.md).
 - [x] M120 Etsy product surface: ürün, Etsy şablonu, credential/shop ve listing mapping’i birleştiren read-only readiness kararı ve wrong-shop negatif testi eklendi (docs/taskpacks/M120.md).
 - [x] M121 supporting screen parity: operasyon sayaçları için ortak gerçek-snapshot özeti eklendi ve dashboard durum satırı bu sözleşmeyi kullanıyor (docs/taskpacks/M121.md).
+- [x] M122 final screen parity: merkezi navigation route audit’i eksik paneli BLOCKED raporlıyor ve mevcut rotaların tam sözleşmesini test ediyor (docs/taskpacks/M122.md).

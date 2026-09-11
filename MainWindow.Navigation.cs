@@ -84,6 +84,7 @@ public partial class MainWindow
   settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML yönetimi / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));
   Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
+  var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var initial = uiPreferences.Get("last-route");
   Navigate(routes.ContainsKey(initial ?? "") ? initial! : "dashboard", false);
  }
