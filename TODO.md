@@ -435,3 +435,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M58 sipariş liste/detay: OrdersStore.ReadPage ile kanal/mağaza/durum/metin filtreleri ve sayfalama eklendi (docs/taskpacks/M58.md).
 
 - [x] M60 sync kuyruğu: RetryDelay ile 5s tabanlı üstel backoff ve 300s üst sınırı eklendi; idempotency/claim/redaction korunuyor (docs/taskpacks/M60.md).
+
+- [x] M61 otomasyon scheduler: due-job sorgusu, enable/lease filtreleri ve gece yarısını aşan çalışma penceresi doğrulaması (docs/taskpacks/M61.md).

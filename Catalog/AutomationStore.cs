@@ -45,6 +45,14 @@ public static class AutomationTemplateCatalog
 
 public static class AutomationSchedule
 {
+    public static bool WindowContains(string startLocal, string endLocal, TimeSpan time)
+    {
+        if (string.IsNullOrWhiteSpace(startLocal) && string.IsNullOrWhiteSpace(endLocal)) return true;
+        if (!TimeSpan.TryParseExact(startLocal, @"hh\:mm", CultureInfo.InvariantCulture, out var start) ||
+            !TimeSpan.TryParseExact(endLocal, @"hh\:mm", CultureInfo.InvariantCulture, out var end)) return false;
+        return start <= end ? time >= start && time <= end : time >= start || time <= end;
+    }
+
     public static DateTime NextRunUtc(AutomationJob job, DateTime nowUtc)
     {
         nowUtc = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
@@ -117,6 +125,14 @@ public sealed class AutomationStore
     }
     public AutomationJob Get(string id) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = Select + " WHERE Id=$id"; cmd.Parameters.AddWithValue("$id", id); using var r = cmd.ExecuteReader(); if (!r.Read()) throw new InvalidOperationException("Otomasyon işi bulunamadı."); return Read(r); }
     public IReadOnlyList<AutomationJob> List() { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = Select + " ORDER BY NextRunUtc"; using var r = cmd.ExecuteReader(); var result = new List<AutomationJob>(); while (r.Read()) result.Add(Read(r)); return result; }
+    public IReadOnlyList<AutomationJob> Due(DateTime nowUtc)
+    {
+        nowUtc = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
+        using var c = Open(); using var cmd = c.CreateCommand();
+        cmd.CommandText = Select + " WHERE Enabled=1 AND NextRunUtc<=$now AND (LockedUntilUtc IS NULL OR LockedUntilUtc<$now) ORDER BY NextRunUtc";
+        cmd.Parameters.AddWithValue("$now", nowUtc.ToString("O", CultureInfo.InvariantCulture));
+        using var r = cmd.ExecuteReader(); var result = new List<AutomationJob>(); while (r.Read()) result.Add(Read(r)); return result;
+    }
     public bool TryClaim(string id, DateTime nowUtc, TimeSpan lease) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET LockedUntilUtc=$lock WHERE Id=$id AND Enabled=1 AND NextRunUtc<=$now AND (LockedUntilUtc IS NULL OR LockedUntilUtc<$now)"; cmd.Parameters.AddWithValue("$lock", (nowUtc + lease).ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$id", id); cmd.Parameters.AddWithValue("$now", nowUtc.ToString("O", CultureInfo.InvariantCulture)); return cmd.ExecuteNonQuery() == 1; }
     public void Complete(string id, DateTime nowUtc) { var job = Get(id); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET NextRunUtc=$next,LastRunUtc=$last,LockedUntilUtc=NULL,LastError='',FailureCount=0 WHERE Id=$id"; cmd.Parameters.AddWithValue("$next", AutomationSchedule.NextRunUtc(job, nowUtc).ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$last", nowUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$id", id); cmd.ExecuteNonQuery(); }
     public void Fail(string id, string error) { var job = Get(id); var failures = job.FailureCount + 1; var delay = failures <= job.RetryLimit ? TimeSpan.FromMinutes(Math.Min(1440, job.RetryBackoffMinutes * Math.Pow(2, failures - 1))) : TimeSpan.Zero; var next = delay > TimeSpan.Zero ? DateTime.UtcNow.Add(delay) : AutomationSchedule.NextRunUtc(job, DateTime.UtcNow); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET NextRunUtc=$next,LockedUntilUtc=NULL,LastError=$error,FailureCount=$failures WHERE Id=$id"; cmd.Parameters.AddWithValue("$next", next.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$error", MarketplaceConnectionStore.Redact(error)); cmd.Parameters.AddWithValue("$failures", failures); cmd.Parameters.AddWithValue("$id", id); cmd.ExecuteNonQuery(); }
