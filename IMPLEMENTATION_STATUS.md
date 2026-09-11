@@ -125,3 +125,5 @@ M46 günlük kullanım parite matrisi (2026-09-11, Issue #81): Ürün/toplu işl
 M47 Etsy resmi OAuth ve read doğrulaması (2026-09-11, Issue #82): Resmi dokümana göre OAuth token endpoint'i `https://api.etsy.com/v3/public/oauth/token` olarak güncellendi; PKCE/state/HTTPS callback ve scope doğrulaması korundu. Credential gerektiren gerçek mağaza read testi çalıştırılmadı; fake HTTP contract testleri kullanıldı.
 
 M48 Etsy listing yaşam döngüsü (2026-09-11, Issue #83): Etsy listing publish akışı resmi `updateListing` PATCH `state=active` çağrısı olarak eklendi. Create/update/publish işlemleri preview, explicit approval, stale ürün sürümü ve SyncJob idempotency ile korunuyor; görsel yükleme ayrı ve credential-safe. 345 Release testi geçti; gerçek mağazaya write yapılmadı.
+
+M49 Etsy sipariş senkronu (2026-09-11, Issue #84): `OrdersEtsyClient` resmi receipts read akışına 100'lü pagination ve `min_last_modified` incremental filtresi eklendi. `OrdersStore` mağaza+receipt idempotent upsert ve eski yerel kargo olaylarını korur; stok/iptal/iade karar kapıları değişmedi. 345 Release testi geçti; canlı credential olmadan gerçek API çağrısı yapılmadı.

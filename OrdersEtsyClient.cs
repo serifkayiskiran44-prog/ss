@@ -4,13 +4,15 @@ using System.Text.Json;
 namespace TrMarketplaceHubDesktop;
 public sealed class OrdersEtsyClient(HttpClient http)
 {
- public async Task<IReadOnlyList<OrderSnapshot>> ReadAsync(EtsyCredentials credentials,CancellationToken cancellationToken=default)
+ public Task<IReadOnlyList<OrderSnapshot>> ReadAsync(EtsyCredentials credentials,CancellationToken cancellationToken=default) => ReadAsync(credentials, null, cancellationToken);
+ public async Task<IReadOnlyList<OrderSnapshot>> ReadAsync(EtsyCredentials credentials,DateTimeOffset? minLastModified,CancellationToken cancellationToken=default)
  {
   if(!long.TryParse(credentials.ShopId,NumberStyles.None,CultureInfo.InvariantCulture,out var shop)||shop<=0)throw new ArgumentException("Geçerli Etsy mağaza kimliği gerekli.");
   var rows=new List<OrderSnapshot>();var ids=new HashSet<string>();int offset=0;
   for(int page=0;page<100;page++)
   {
-   using var request=new HttpRequestMessage(HttpMethod.Get,$"https://openapi.etsy.com/v3/application/shops/{shop}/receipts?limit=100&offset={offset}&sort_on=updated&sort_order=desc");EtsyHttp.AddHeaders(request,credentials,true);
+   var since=minLastModified.HasValue?$"&min_last_modified={minLastModified.Value.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}":"";
+   using var request=new HttpRequestMessage(HttpMethod.Get,$"https://openapi.etsy.com/v3/application/shops/{shop}/receipts?limit=100&offset={offset}&sort_on=updated&sort_order=desc{since}");EtsyHttp.AddHeaders(request,credentials,true);
    using var document=await SendAsync(request,cancellationToken).ConfigureAwait(false);
    try
    {

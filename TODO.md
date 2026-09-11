@@ -408,3 +408,8 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 ## M48 Etsy listing yaşam döngüsü — 2026-09-11
 - [x] Resmi create/update/publish gereksinimleri doğrulandı; publish `state=active` ile açık approval/stale/idempotency kapısından geçiyor.
 - [x] Fake HTTP + SQLite testleri eklendi; 345/345 Release testi geçti.
+
+## M49 Etsy sipariş senkronu — 2026-09-11
+- [x] Resmi receipt read akışına pagination ve `min_last_modified` incremental filtresi eklendi.
+- [x] Mağaza+receipt idempotent upsert, transaction stok kararı ve explicit restock preview korunuyor; 345 Release testi geçiyor.
+- [ ] Gerçek mağaza credential olmadan canlı receipt çağrısı yapılmadı.
