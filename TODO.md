@@ -437,3 +437,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M60 sync kuyruğu: RetryDelay ile 5s tabanlı üstel backoff ve 300s üst sınırı eklendi; idempotency/claim/redaction korunuyor (docs/taskpacks/M60.md).
 
 - [x] M61 otomasyon scheduler: due-job sorgusu, enable/lease filtreleri ve gece yarısını aşan çalışma penceresi doğrulaması (docs/taskpacks/M61.md).
+
+- [x] M62 hata merkezi/tanılama: SyncErrorClass için güvenli kullanıcı açıklamaları eklendi; redaction, retry ve idempotency korunuyor (docs/taskpacks/M62.md).
