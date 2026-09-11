@@ -347,6 +347,17 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual(15, local.Hour);
     }
 
+    [TestMethod]
+    public void WindowPlacementClampsOffscreenAndInvalidSavedGeometry()
+    {
+        var area = new TrMarketplaceHubDesktop.WindowRect(0, 0, 1920, 1080);
+        var restored = TrMarketplaceHubDesktop.WindowPlacement.Restore(new(-500, 900, 2400, double.NaN), area);
+        Assert.AreEqual(0, restored.Left);
+        Assert.AreEqual(700, restored.Height);
+        Assert.IsTrue(restored.Width <= area.Width);
+        Assert.IsTrue(restored.Top + restored.Height <= area.Height);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler

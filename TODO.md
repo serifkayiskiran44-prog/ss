@@ -588,3 +588,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M128 offline/degraded: network, auth ve rate-limit durumlarını ayıran bağlantı snapshot’ı ve online olmayan dispatch engeli eklendi (docs/taskpacks/M128.md).
 - [x] M129 workspace: kayıtlı route/shop/page/filter state için bounded JSON codec ve bozuk/eski state fallback’i eklendi (docs/taskpacks/M129.md).
 - [x] M130 yerel kültür: tr-TR/invariant amount parse ayrımı, TRY formatı ve UTC→Türkiye yerel saat dönüşümü eklendi (docs/taskpacks/M130.md).
+- [x] M131 DPI/erişilebilirlik: kayıtlı pencere geometrisini geçerli çalışma alanına clamp eden ve bozuk değerleri güvenli varsayılana çeviren yardımcı eklendi (docs/taskpacks/M131.md).
