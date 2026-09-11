@@ -527,6 +527,19 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void PurchasePlanningCalculatesDraftAndSafeCsvExport()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var input = new PurchasePlanningInput("SKU-1", "Marka", "Kategori", "Supplier, A", 10, 30, 5, 40, 12.5m, "eur", 4, now, now);
+        var suggestion = PurchasePlanning.Calculate(input, now);
+        Assert.AreEqual(1m, suggestion.DailyVelocity); Assert.AreEqual(10m, suggestion.DaysOfCover); Assert.AreEqual(30, suggestion.SuggestedQuantity); Assert.AreEqual("DRAFT_RECOMMENDATION", suggestion.Status);
+        var csv = PurchasePlanning.ExportCsv(new[] { suggestion });
+        StringAssert.Contains(csv, "SKU-1,\"Supplier, A\""); StringAssert.Contains(csv, "12.5,EUR");
+        Assert.AreEqual(1, PurchasePlanning.Filter(new[] { suggestion }, supplier: "supplier, a").Count);
+        var stale = PurchasePlanning.Calculate(input with { CostAtUtc = now.AddDays(-3) }, now); Assert.AreEqual("STALE", stale.Status);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
