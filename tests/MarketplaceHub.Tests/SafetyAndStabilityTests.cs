@@ -786,6 +786,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ChannelUpdateModePreviewSeparatesIncludedAndExcludedFields()
+    {
+        var plan = ChannelUpdateModePlanner.Preview(ChannelUpdateMode.OnlyStock, ["stock", "price", "title"]);
+        Assert.AreEqual("PARTIAL", plan.Status);
+        CollectionAssert.AreEquivalent(new[] { "stock" }, plan.IncludedFields.ToArray());
+        CollectionAssert.AreEquivalent(new[] { "price", "title" }, plan.ExcludedFields.ToArray());
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

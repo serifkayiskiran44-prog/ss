@@ -639,3 +639,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M216: hızlı satır içi düzenleme `DEFERRED_BY_USER` guard ile ertelendi.
 # M217: kritik stok ve kampanya allocation policy local preview olarak eklendi; dış write yok.
 # M218: kritik/akıllı/tarih bazlı fiyat `DEFERRED_BY_USER` guard ile ertelendi.
+# M219: kanal bazlı update mode planner local preview olarak eklendi; dış write yok.
