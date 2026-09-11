@@ -846,6 +846,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ProductComplianceValidatorFlagsMissingSafetyMetadata()
+    {
+        var checks = ProductComplianceValidator.Validate(new("Acme", "TR", "", "not-a-url"));
+        Assert.IsTrue(checks.Single(x => x.Key == "manufacturer").IsComplete);
+        Assert.IsFalse(checks.Single(x => x.Key == "safety-warning").IsComplete);
+        Assert.IsFalse(checks.Single(x => x.Key == "document-url").IsComplete);
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
