@@ -306,3 +306,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M228 — linked XML/source graph: deterministic health-aware selection teslim edildi.
 # M229 — Entegra parity audit: family status/gap matrix ve regression testi teslim edildi.
 # M230 — full parity release freeze: artifact bütünlük doğrulaması teslim edildi.
+# M231 — ürün workspace acceptance: screenshot/UI smoke kanıt kapısı teslim edildi.

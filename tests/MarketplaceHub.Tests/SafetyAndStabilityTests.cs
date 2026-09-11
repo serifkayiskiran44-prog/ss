@@ -889,6 +889,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ProductWorkspaceAcceptanceDoesNotClaimP0ParityWithoutEvidence()
+    {
+        var result = ProductWorkspaceAcceptanceGate.Evaluate(false, true);
+        Assert.AreEqual("BLOCKED", result.Status);
+        CollectionAssert.Contains(result.Blockers.ToArray(), "P0_SCREENSHOT_EVIDENCE_MISSING");
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
