@@ -550,3 +550,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M90 API health: cancellation ayrı state, Retry-After/reset/remaining header validation ve shop-scoped backoff görünümü (docs/taskpacks/M90.md).
 - [x] M91 audit/support: audit araması mağaza/marketplace alanlarını kapsıyor; destek ve audit redaction zincirinde e-posta/telefon PII maskeleniyor (docs/taskpacks/M91.md).
 - [x] M92 backup/recovery: manifest dosya SHA-256 doğrulaması restore öncesinde zorunlu; staging/safety backup sonrası eski veri rollback noktası korunuyor (docs/taskpacks/M92.md).
+- [x] M93 data quality: duplicate tespitleri trim/sıralı ve bağlamlı; yayın öncesi görsel URL preflight'ı host/userinfo doğrulamasıyla Error seviyesinde bloklayıcı (docs/taskpacks/M93.md).
