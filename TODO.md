@@ -413,3 +413,7 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Resmi receipt read akışına pagination ve `min_last_modified` incremental filtresi eklendi.
 - [x] Mağaza+receipt idempotent upsert, transaction stok kararı ve explicit restock preview korunuyor; 345 Release testi geçiyor.
 - [ ] Gerçek mağaza credential olmadan canlı receipt çağrısı yapılmadı.
+
+## M50 uçtan uca satıcı dry-run — 2026-09-11
+- [x] Sentetik XML → katalog → Etsy sipariş stok kararı → restart/idempotency fixture testi eklendi.
+- [x] Fake adapter kullanıldı; gerçek marketplace HTTP write ve PII yok; 346/346 Release testi geçiyor.
