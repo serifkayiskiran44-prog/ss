@@ -864,6 +864,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void LinkedSourceGraphSelectsHealthyIncludedSourceByPriority()
+    {
+        var result = LinkedSourceGraph.Select([new("slow", "s1", 2, true, true), new("preferred", "s2", 1, true, false), new("excluded", "s3", 0, false, true)]);
+        Assert.AreEqual("SELECTED", result.Status);
+        Assert.AreEqual("slow", result.Selected!.SourceId);
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

@@ -648,3 +648,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M225: competition gözleminde provenance yokluğu UNAVAILABLE ayrımı eklendi; scraping/write yok.
 # M226: ürün compliance metadata local validator ile eklendi; dış write yok.
 # M227: duplicate tracking anomaly detector eklendi; dış write yok.
+# M228: linked source graph priority/health selection eklendi; feed write yok.
