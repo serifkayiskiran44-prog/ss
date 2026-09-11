@@ -67,6 +67,12 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Testler ve self-contained Windows-M1-Etsy yayın doğrulaması tamamlandı.
 - [ ] Canlı Etsy credential/scope olmadan production dispatch doğrulanamaz; gerçek mağazada otomatik test çalıştırılmadı.
 
+## PR #4 review düzeltmesi — 2026-09-11
+- [x] Etsy dispatch SyncJob ile bağlandı: başarılı HTTP sonucu Succeeded, istisna/HTTP hatası Failed.
+- [x] Succeeded sync işi ikinci kez canlı gönderilmiyor; Pending -> Running atomik geçişi kullanılıyor.
+- [x] Preview ürün sürümü/stok/fiyat/döviz değişirse dispatch reddediliyor.
+- [x] Fake HTTP + geçici SQLite idempotency/status testi eklendi; toplam 259 Release testi geçti.
+
 ## Etsy operasyonları — 2026-09-11
 - [x] Etsy resmi API istemcisine basit ilan stok/fiyat güncellemesi eklendi; `listings_w` yetkisi, PATCH ve resmi API kimlik başlıkları kullanılıyor.
 - [x] Geçersiz stok/fiyat/ilan kimliği için istek göndermeyen testler eklendi.

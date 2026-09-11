@@ -19,6 +19,8 @@ Ana program: Windows-Current/TrMarketplaceHubDesktop.exe. Giriş parolası yoktu
 
 M1 Etsy dispatch scheduler (2026-09-11): IMPLEMENTED locally. WPF automation settings and due runner are connected to the idempotent sync queue. Etsy listing dispatch requires a concrete preview, unchanged product version and explicit user confirmation before PATCH. Production credential/scope validation remains environment-dependent; no live store test was run.
 
+PR #4 review follow-up (2026-09-11): SyncJob status is now atomically claimed and marked Succeeded/Failed around Etsy dispatch. A previously succeeded job cannot dispatch again. Added fake HTTP and temporary SQLite coverage; 259 Release tests pass.
+
 Ertelenen alanların tüm alt özellik/ekran/test geliştirmeleri kapsam dışıdır, eksik sayılmaz. Çalışan kod silinmez. Canlı marketplace verisi değiştirilmedi. Görsel masaüstü UI incelemesi bu adımda henüz yapılmadı.
 
 2026-09-11: 219 test geçti. Yeni yayın Windows-Operations/TrMarketplaceHubDesktop.exe; giriş şifresi yok. Açık eski uygulama korunur. Yeni alanların görsel kontrolü yapılmadı.

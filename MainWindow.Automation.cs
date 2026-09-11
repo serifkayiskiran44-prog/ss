@@ -33,13 +33,15 @@ public partial class MainWindow
         panel.Children.Add(Heading("Otomasyon zamanlayıcıları")); panel.Children.Add(Hint("Stok ve fiyat işleri kanal/mağaza bağlamıyla kaydedilir. Kilit, sonraki çalışma ve son hata bilgisi burada görünür.")); panel.Children.Add(form); panel.Children.Add(jobs); panel.Children.Add(status); Refresh(); return Scroll(panel);
     }
 
-    (EtsyListingUpdatePreview Preview, CatalogProduct Product)? pendingEtsyDispatch;
+    (EtsyListingUpdatePreview Preview, CatalogProduct Product, string SyncJobId)? pendingEtsyDispatch;
 
     void CreateEtsyDispatchPreview(TextBlock status)
     {
         var product = SelectedProduct();
         var preview = new EtsyListingSyncService(new EtsyShopClient(http)).CreatePreview(product);
-        pendingEtsyDispatch = (preview, product);
+        var sync = new SyncStore(dataDirectory);
+        var syncJob = sync.Enqueue(new SyncRequest("etsy", "stock-price", preview.ListingId.ToString(CultureInfo.InvariantCulture), $"{preview.ProductId}:{preview.ProductUpdatedUtc.Ticks}:{preview.Quantity}:{preview.Price:0.00}:{preview.Currency}"));
+        pendingEtsyDispatch = (preview, product, syncJob.Id);
         status.Text = $"ÖNİZLEME — {product.Name} / Etsy #{preview.ListingId} / stok {preview.Quantity} / fiyat {preview.Price:0.00} {preview.Currency} / sürüm {preview.ProductUpdatedUtc:O}";
     }
 
@@ -49,7 +51,7 @@ public partial class MainWindow
         var current = store.Products().SingleOrDefault(p => p.Id == pending.Product.Id) ?? throw new InvalidOperationException("Ürün artık bulunamadı; yeni önizleme alın.");
         if (MessageBox.Show(this, status.Text + "\n\nEtsy'ye PATCH gönderilsin mi?", "Açık Etsy onayı", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         var credentials = await AuthorizedAsync();
-        await new EtsyListingSyncService(new EtsyShopClient(http)).DispatchAsync(credentials, current, pending.Preview, true, lifetime.Token);
+        await new EtsyListingSyncService(new EtsyShopClient(http)).DispatchAsync(credentials, current, pending.Preview, true, new SyncStore(dataDirectory), pending.SyncJobId, lifetime.Token);
         status.Text = "Etsy dispatch başarılı; ilan stok/fiyatı güncellendi."; pendingEtsyDispatch = null; Log(status.Text);
     }
 }
