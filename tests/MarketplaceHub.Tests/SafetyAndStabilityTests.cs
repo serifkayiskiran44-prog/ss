@@ -447,6 +447,18 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void UnmappedResolutionSuggestsButNeverAutoBindsAmbiguousOrWrongShop()
+    {
+        var record = new TrMarketplaceHubDesktop.UnmappedRecord("order", "etsy", "shop-a", "o-1", "SKU-1", "", "Demo", "Brand");
+        var products = new[] { new TrMarketplaceHubDesktop.Catalog.CatalogProduct { Id = "p-1", Sku = "SKU-1", Name = "Demo", Brand = "Brand" } };
+        var suggestion = TrMarketplaceHubDesktop.UnmappedResolution.Suggest(record, products).Single();
+        Assert.AreEqual("SUGGESTED", suggestion.MatchKind);
+        Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.UnmappedResolution.EnsureApproved(suggestion, "etsy", "shop-b"));
+        TrMarketplaceHubDesktop.UnmappedResolution.EnsureApproved(suggestion, "etsy", "shop-a");
+        Assert.AreEqual(suggestion.Fingerprint, TrMarketplaceHubDesktop.UnmappedResolution.Suggest(record, products).Single().Fingerprint);
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
