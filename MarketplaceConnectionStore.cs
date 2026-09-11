@@ -18,7 +18,7 @@ public static class MarketplaceConnectionCatalog
     {
         new MarketplaceConnectionDefinition("etsy", "Etsy", "etsy", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead, MarketplaceOperation.StockWrite, MarketplaceOperation.PriceWrite }), "https://developers.etsy.com/documentation/", false),
         new MarketplaceConnectionDefinition("ebay", "eBay", "ebay", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead, MarketplaceOperation.StockWrite }), "https://developer.ebay.com/api-docs/", false),
-        new MarketplaceConnectionDefinition("amazon", "Amazon", null, MarketplaceCapabilities.LocalOnly, "https://developer-docs.amazon.com/sp-api/", true),
+        new MarketplaceConnectionDefinition("amazon", "Amazon", "amazon", MarketplaceCapabilities.LocalOnly, "https://developer-docs.amazon.com/sp-api/", true),
         new MarketplaceConnectionDefinition("trendyol", "Trendyol", null, MarketplaceCapabilities.LocalOnly, "https://developers.trendyol.com/", true),
         new MarketplaceConnectionDefinition("hepsiburada", "Hepsiburada", null, MarketplaceCapabilities.LocalOnly, "https://developers.hepsiburada.com/", true),
         new MarketplaceConnectionDefinition("allegro", "Allegro", "channels", MarketplaceCapabilities.LocalOnly, "https://developer.allegro.pl/", true),

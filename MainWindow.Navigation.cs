@@ -40,6 +40,7 @@ public partial class MainWindow
    tabs.Items.Add(new TabItem{Header="Bağlantı",Content=MarketplaceSetupPanel.CreateChannel(id)});
    Page(id,channel.Name,id=="joom"?"Satıcı kaydı / kabulü bekleniyor • Canlı ürün aktarımı etkin değil.":"Yerel kanal ürün planları • API bağlantı kontrolü ayrı; canlı ürün aktarımı etkin değil.",tabs);
   }
+  var amazonTabs=new TabControl();amazonTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("amazon",dataDirectory)});amazonTabs.Items.Add(new TabItem{Header="Bağlantı",Content=AmazonPanel.Create(dataDirectory)});Page("amazon","Amazon","SP-API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",amazonTabs);
   Page("channels","Diğer pazaryerleri","Wish, Allegro ve Fruugo: hesap başvuruları ve entegrasyon gereksinimleri.",MarketplaceSetupPanel.CreateOther(dataDirectory));
   Page("connections","Mağaza bağlantıları","Tüm kanal ve mağaza kayıtları, yetenekler ve salt okunur bağlantı testleri.",MarketplaceConnectionsPanel.Create(dataDirectory,key=>Navigate(key)));
   Group("OPERASYON");
@@ -51,7 +52,7 @@ public partial class MainWindow
   var settings=new StackPanel{Margin=new Thickness(20)};
   settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
   settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
-  foreach(var id in new[]{"etsy","ebay","ozon","joom"})
+  foreach(var id in new[]{"etsy","ebay","ozon","joom","amazon"})
   {var key=id;settings.Children.Add(Button(id=="ebay"?"eBay bağlantı ayarları":char.ToUpper(id[0])+id[1..]+" bağlantı ayarları",()=>{Navigate(key);if(routes[key].Content is TabControl tabs)tabs.SelectedIndex=tabs.Items.Count-1;}));}
   settings.Children.Add(Heading("Görseller"));settings.Children.Add(MarketplaceImagePanel.Create());
   settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML yönetimi / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));

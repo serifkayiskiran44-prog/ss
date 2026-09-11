@@ -134,3 +134,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] İptal/iade otomatik stok geri koymuyor; kargo/tracking yerel gözlem sınırında ve Fulfillment Core kapsamına girmiyor.
 - [x] 271 Release testi geçti; self-contained yayın `Windows-M8-Orders` altında üretildi.
 - [ ] Etsy dışı sipariş API'leri için doğrulanmış credential/contract olmadan otomatik çekme açılmadı.
+
+## M9 Amazon connector sınırı — 2026-09-11
+- [x] Amazon Seller ID, LWA ve SP-API region/marketplace ayarları doğrulamalı model ve mevcut DPAPI ile şifreli store olarak eklendi.
+- [x] Amazon bağlantı sekmesi ve yerel ürün planı erişimi eklendi; connection center Amazon kartına bağlandı.
+- [x] Resmi region/credential sözleşmesi doğrulanmadığı için read-only test bilinçli olarak `LIVE_API_BLOCKED` döndürüyor; endpoint/scope uydurulmadı.
+- [x] 273 Release testi geçti; self-contained yayın `Windows-M9-Amazon` altında üretildi.
+- [ ] Amazon SP-API production read/write, credential onayı ve gerçek mağaza testi resmi bilgiler sağlanana kadar kapalı.
