@@ -547,7 +547,7 @@ public sealed class SafetyAndStabilityTests
     public void ReportTemplateRendersFilteredAllowedColumnsAndRedactsSecrets()
     {
         var template = new TrMarketplaceHubDesktop.ReportTemplate("orders", ["OrderId", "ShopId", "Price", "Currency"]);
-        var csv = TrMarketplaceHubDesktop.ReportTemplateRenderer.Render(template, [new Dictionary<string, object?> { ["OrderId"] = "o-1", ["ShopId"] = "shop-a", ["Price"] = 12.5m, ["Currency"] = "USD", ["Token"] = "secret" }]);
+        var csv = TrMarketplaceHubDesktop.ReportTemplateRenderer.Render(template, [new Dictionary<string, object> { ["OrderId"] = "o-1", ["ShopId"] = "shop-a", ["Price"] = 12.5m, ["Currency"] = "USD", ["Token"] = "secret" }]);
         StringAssert.Contains(csv, "o-1;shop-a;12.5;USD"); Assert.IsFalse(csv.Contains("secret", StringComparison.Ordinal));
         Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.ReportTemplateRenderer.Render(new("orders", ["Token"]), []));
     }
