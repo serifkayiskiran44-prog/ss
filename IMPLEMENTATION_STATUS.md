@@ -289,3 +289,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M211 — ortak varyant/seçenek domain çekirdeği: `DEFERRED_BY_USER` guard teslim edildi; kalıcı varyant modeli ve write açılmadı.
 # M212 — XML varyant mapping: `DEFERRED_BY_USER` guard teslim edildi; mapping/import/write açılmadı.
 # M213 — Excel varyant import/export: `DEFERRED_BY_USER` guard teslim edildi; apply açılmadı.
+# M214 — marketplace seçenek/varyant eşleme: `DEFERRED_BY_USER` guard teslim edildi; connector publish açılmadı.

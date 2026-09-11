@@ -634,3 +634,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M211: ortak varyant/seçenek domain çekirdeği `DEFERRED_BY_USER` guard ile ertelendi; write/migration yok.
 # M212: XML varyant mapping/import `DEFERRED_BY_USER` guard ile ertelendi; normal XML akışı korunuyor.
 # M213: Excel varyant workflows `DEFERRED_BY_USER` guard ile ertelendi; workbook apply yok.
+# M214: marketplace varyant eşleme `DEFERRED_BY_USER` guard ile ertelendi; publish yok.
