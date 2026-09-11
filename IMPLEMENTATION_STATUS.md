@@ -177,3 +177,5 @@ M63 güvenlik (Issue #98, 2026-09-11): MarketplaceConnectionStore.Redact Authori
 M64 yedek/restore (Issue #99, 2026-09-11): DataBackupService manifest validation duplicate yolları, negatif uzunluk ve geçersiz SHA-256 özetlerini reddediyor; atomic staging ve safety backup korunuyor. docs/taskpacks/M64.md 100/100.
 
 M65 installer (Issue #100, 2026-09-11): InstallPathPolicy güvenli kurulum yolunu normalize eder, geçersiz ve Windows sistem klasörlerini reddeder; güncelleme endpointi uydurulmadı. docs/taskpacks/M65.md 100/100.
+
+M66 performans (Issue #101, 2026-09-11): OrdersStore.ReadPage SQL filtre/count/order/limit kullanır; 355 Release testi korunuyor. REAL_WORK_COUNT=1, VERIFICATION_ONLY_COUNT=9.

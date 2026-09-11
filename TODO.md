@@ -445,3 +445,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M64 backup/restore: manifest duplicate path, SHA-256 format and length validation added before extraction (docs/taskpacks/M64.md).
 
 - [x] M65 installer/onboarding: safe install path policy validates normalized paths and rejects Windows system targets (docs/taskpacks/M65.md).
+
+- [x] M66 performans: OrdersStore.ReadPage filtreleme/sayfalama SQL tarafına taşındı; büyük sipariş listelerinde full materialization azaltıldı (docs/taskpacks/M66.md).
