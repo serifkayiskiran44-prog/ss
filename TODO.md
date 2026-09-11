@@ -539,3 +539,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M66 performans: OrdersStore.ReadPage filtreleme/sayfalama SQL tarafına taşındı; büyük sipariş listelerinde full materialization azaltıldı (docs/taskpacks/M66.md).
 
 - [x] M81 mağaza bağlantı/ayar güvenliği: credential ShopId binding, disabled state ve geçmiş koruyan deactivate akışı (docs/taskpacks/M81.md).
+- [x] M82 çoklu mağaza izolasyonu: SyncJob idempotency ve otomasyon enqueue işlemleri ShopId kapsamına alındı (docs/taskpacks/M82.md).

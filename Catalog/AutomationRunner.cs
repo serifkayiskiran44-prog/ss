@@ -27,7 +27,7 @@ public static class AutomationRunner
             {
                 var operation = job.Kind switch { AutomationKind.Xml => "xml-import", AutomationKind.Health => "health-check", _ => "sync" };
                 var entity = string.IsNullOrWhiteSpace(job.TemplateKey) ? shop : job.TemplateKey;
-                sync.Enqueue(new SyncRequest(channel, operation, entity, $"{job.Id}:{nowUtc.Ticks}")); queued = 1;
+                sync.Enqueue(new SyncRequest(channel, operation, entity, $"{job.Id}:{nowUtc.Ticks}", shop)); queued = 1;
             }
             catch (Exception error) { errors.Add(error.Message); }
         }
@@ -41,11 +41,11 @@ public static class AutomationRunner
                 {
                     if (requireListingMapping && channel.Equals("etsy", StringComparison.OrdinalIgnoreCase) && (!long.TryParse(entity, out var listingId) || listingId <= 0)) throw new InvalidOperationException("Etsy ilan eşlemesi eksik.");
                     var payload = job.Kind == AutomationKind.Stock ? catalog.PreviewStock(channel, shop, product.Id).ToString(System.Globalization.CultureInfo.InvariantCulture) : catalog.PreviewPrice(channel, shop, product.Id).Price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-                    sync.Enqueue(new SyncRequest(channel, operation, entity, $"{product.Id}:{product.UpdatedUtc.Ticks}:{payload}")); queued++;
+                    sync.Enqueue(new SyncRequest(channel, operation, entity, $"{product.Id}:{product.UpdatedUtc.Ticks}:{payload}", shop)); queued++;
                 }
                 catch (Exception error)
                 {
-                    var failed = sync.Enqueue(new SyncRequest(channel, operation, entity, $"{product.Id}:{product.UpdatedUtc.Ticks}:error")); sync.Fail(failed.Id, error.Message); errors.Add($"{product.Sku}: {error.Message}");
+                    var failed = sync.Enqueue(new SyncRequest(channel, operation, entity, $"{product.Id}:{product.UpdatedUtc.Ticks}:error", shop)); sync.Fail(failed.Id, error.Message); errors.Add($"{product.Sku}: {error.Message}");
                 }
             }
         }
