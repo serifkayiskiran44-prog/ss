@@ -104,6 +104,9 @@ public sealed class ProductionReadinessService
     {
         try
         {
+            // Refresh the preflight before deciding readiness; a stale quality
+            // database must never make a changed catalog appear publishable.
+            _ = new DataQualityService(directory).Scan();
             var summary = new DataQualityStore(directory).Summary();
             if (summary.Critical > 0) return new("data-quality", "BLOCKED", $"{summary.Critical:N0} kritik, {summary.Error:N0} hata ve {summary.Open:N0} açık veri kalite kaydı var.");
             if (summary.Error > 0 || summary.Warning > 0) return new("data-quality", "WARN", $"{summary.Error:N0} hata ve {summary.Warning:N0} uyarı kaydı var; canlı işlem öncesi inceleyin.");
