@@ -81,6 +81,13 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] 261 Release testi geçti; M2 stacked branch publish doğrulanacak.
 - [ ] Etsy gerçek mağaza credential/scope olmadan canlı sipariş yazma doğrulanamaz (`LIVE_API_BLOCKED`).
 
+## M3 eBay güvenli operasyon paritesi — 2026-09-11
+- [x] Resmi eBay Inventory ve Fulfillment read/write yolları için mevcut OAuth bağlantısına API istemci metotları eklendi.
+- [x] eBay stok preview, açık onay, stale sürüm ve SyncJob idempotency kapısı eklendi.
+- [x] Başarılı/başarısız eBay dispatch SyncStore durumuna bağlandı; fake HTTP + SQLite testleri eklendi.
+- [x] 263 Release testi geçti; self-contained yayın hazırlanıyor.
+- [ ] eBay uygulamasında gerekli production scope/credential doğrulaması ortam bağımlı (`LIVE_API_BLOCKED`).
+
 ## Etsy operasyonları — 2026-09-11
 - [x] Etsy resmi API istemcisine basit ilan stok/fiyat güncellemesi eklendi; `listings_w` yetkisi, PATCH ve resmi API kimlik başlıkları kullanılıyor.
 - [x] Geçersiz stok/fiyat/ilan kimliği için istek göndermeyen testler eklendi.

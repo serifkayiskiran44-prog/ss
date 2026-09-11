@@ -1,0 +1,8 @@
+using TrMarketplaceHubDesktop.Catalog;
+namespace TrMarketplaceHubDesktop;
+public sealed record EbayInventoryPreview(string Sku,int CurrentQuantity,int NewQuantity,string ProductVersion);
+public sealed class EbayInventoryDispatchService(EbayConnection connection)
+{
+ public EbayInventoryPreview CreatePreview(string sku,int currentQuantity,int newQuantity,string productVersion){if(string.IsNullOrWhiteSpace(sku)||currentQuantity<0||newQuantity<0||string.IsNullOrWhiteSpace(productVersion))throw new ArgumentException("eBay SKU, stok ve ürün sürümü geçerli olmalı.");return new(sku,currentQuantity,newQuantity,productVersion);}
+ public async Task DispatchAsync(EbaySettings settings,EbayTokens tokens,EbayInventoryPreview preview,string currentProductVersion,bool approved,SyncStore sync,string syncJobId,CancellationToken cancellationToken=default){if(!approved)throw new InvalidOperationException("eBay güncellemesi için önizleme onayı gerekli.");if(!string.Equals(preview.ProductVersion,currentProductVersion,StringComparison.Ordinal))throw new InvalidOperationException("eBay önizlemesi güncelliğini kaybetti; yeni önizleme alınmalı.");if(!sync.TryStart(syncJobId)){var existing=sync.Get(syncJobId);if(existing.Status==SyncStatus.Succeeded)throw new InvalidOperationException("Bu eBay sync işi daha önce başarıyla gönderildi.");throw new InvalidOperationException("eBay sync işi zaten çalışıyor veya tekrar gönderilemez.");}try{await connection.UpdateInventoryQuantityAsync(settings,tokens,preview.Sku,preview.NewQuantity,cancellationToken);sync.Succeed(syncJobId);}catch(Exception ex){sync.Fail(syncJobId,ex.Message);throw;}}
+}
