@@ -356,3 +356,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Credential/token/password alanları filtreleniyor; geçiş öncesi kullanıcı seçmeli yedek, transaction katalog uygulaması ve migration journal geri alma eklendi.
 - [x] Veri geçiş WPF ekranı, hata raporu ve geri alma ID'si eklendi; geçici fixture testleri ile 336 Release testi geçti; self-contained yayın `Windows-M38-Migration-Assistant` altında üretilecek.
 - [ ] Proprietary Entegra veritabanı/decompile dosyası doğrudan okunmaz; canlı marketplace write yapılmaz.
+
+## M39 ilk kurulum sihirbazı ve bağlantı onboarding — 2026-09-11
+- [x] İlk açılışta opsiyonel WPF sihirbazı, atlama ve yarıda kalınca son adıma dönme state'i eklendi.
+- [x] Mağaza metadata, XML kaynağı, varsayılan stok/fiyat policy ve Excel başlangıç profili adımları mevcut doğrulama/store'lara bağlandı.
+- [x] Credential/token/parola state'e alınmıyor; XML URL'sinde inline secret reddediliyor; bilinmeyen API capability'si NOT_CONFIGURED/LIVE_API_BLOCKED olarak gösteriliyor.
+- [x] Son sağlık özeti ve ilgili panellere hızlı geçiş eklendi; UI smoke/state testleri ile 338 Release testi geçti; self-contained yayın `Windows-M39-Onboarding` altında üretilecek.
+- [ ] Sihirbaz canlı marketplace write yapmaz; credential girişi ilgili kanalın mevcut güvenli ekranındadır.
