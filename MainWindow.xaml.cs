@@ -19,6 +19,7 @@ public partial class MainWindow : Window
  readonly CatalogStore store;
  readonly HttpClient http=new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(60)};
  readonly SemaphoreSlim gate=new(1,1);
+ readonly SemaphoreSlim authorizationGate=new(1,1);
  readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMinutes(1)};
  readonly DispatcherTimer searchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
  readonly DispatcherTimer globalSearchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
@@ -44,7 +45,7 @@ public partial class MainWindow : Window
  public MainWindow():this(null){}
  public MainWindow(string? directory)
  {
-  dataDirectory=directory;startupRecovery=new StartupRecovery(directory);store=new CatalogStore(directory);globalSearchIndex=new GlobalSearchIndexService(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
+  dataDirectory=directory;startupRecovery=new StartupRecovery(directory);store=new CatalogStore(directory);new SyncStore(directory).RecoverAbandonedRunning(TimeSpan.FromHours(1));globalSearchIndex=new GlobalSearchIndexService(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
   InitializeComponent();uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
@@ -248,7 +249,7 @@ public partial class MainWindow : Window
  EtsyCredentials ReadCredentials(){var key=apiKey.Password.Trim();var secret=apiSecret.Password.Trim();var token=apiToken.Password.Trim();var changedApp=key!=credentials.Key||secret!=credentials.Secret;var changedToken=token!=credentials.Token;var refresh=refreshToken.Password.Trim();return credentials with{Key=key,Secret=secret,Token=token,RefreshToken=(changedApp||changedToken)&&refresh==credentials.RefreshToken?"":refresh,ExpiresAt=changedApp||changedToken?null:credentials.ExpiresAt,ShopId=shopId.Text.Trim(),RedirectUri=redirect.Text.Trim()};}
  void SetCredentials(EtsyCredentials c){credentials=c;apiKey.Password=c.Key;apiSecret.Password=c.Secret;apiToken.Password=c.Token;refreshToken.Password=c.RefreshToken;shopId.Text=c.ShopId;redirect.Text=c.RedirectUri;apiStatus.Text=c.ExpiresAt.HasValue?$"Token son kullanım: {c.ExpiresAt.Value.LocalDateTime:g}":"Bilgiler yüklendi; bağlantıyı test et.";}
  void SetAndSave(EtsyCredentials c){CredentialStore.Save(c);SetCredentials(c);Log("Etsy yetkilendirme bilgileri şifreli kaydedildi.");}
- async Task<EtsyCredentials> AuthorizedAsync(){var c=ReadCredentials();if(c.ExpiresAt<=DateTimeOffset.UtcNow.AddMinutes(1)&&c.RefreshToken!=""){c=await new EtsyOAuth(http).RefreshAsync(c,lifetime.Token);SetAndSave(c);}return c;}
+ async Task<EtsyCredentials> AuthorizedAsync(){await authorizationGate.WaitAsync(lifetime.Token);try{var c=ReadCredentials();if(c.ExpiresAt<=DateTimeOffset.UtcNow.AddMinutes(1)&&c.RefreshToken!=""){var latest=ReadCredentials();if(latest.ExpiresAt<=DateTimeOffset.UtcNow.AddMinutes(1)){c=await new EtsyOAuth(http).RefreshAsync(latest,lifetime.Token);SetAndSave(c);}else c=latest;}return c;}finally{authorizationGate.Release();}}
  async Task LoadListingsAsync(){var state=listingState.SelectedItem?.ToString()??"active";var c=await AuthorizedAsync();if(loadedListingState!=state||loadedListingShop!=c.ShopId)listingOffset=0;var page=await new EtsyShopClient(http).GetListingsAsync(c,state,listingOffset,lifetime.Token);listings.ItemsSource=page.Listings;listingTotal=page.Count;loadedListingShop=c.ShopId;loadedListingState=state;listingStatus.Text=$"{page.Listings.Count} / {page.Count} ilan • başlangıç {listingOffset}";Log("Etsy ilanları okundu.");}
  CatalogProduct SelectedProduct()=>products.SelectedItem is CatalogProduct p?store.Products().Single(x=>x.Id==p.Id):throw new InvalidOperationException("Önce ürün havuzunda bir ürün seç.");
  void CheckDraft(){ValidBindings(templateEditor);var p=SelectedProduct();var errors=EtsyDrafts.Validate(p,template);if(p.EtsyCreationAttempted&&p.EtsyListingId=="")errors.Add("Önceki oluşturma sonucunu Etsy'den kontrol edip ilanı bağla.");draftStatus.Text=errors.Count==0?$"{p.Sku} • {p.Name}\n{p.Price} {p.Currency} / {p.Stock} adet\nTaslak için yerel kontroller geçti; mağaza dövizi API'de ayrıca kontrol edilir.":string.Join("\n",errors);Navigate("etsy");if(etsyTabs!=null)etsyTabs.SelectedIndex=1;}
