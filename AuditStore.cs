@@ -38,7 +38,7 @@ public sealed class AuditStore
     }
     public IReadOnlyList<AuditEvent> List(int limit = 500, string? query = null)
     {
-        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like) ORDER BY AtUtc DESC LIMIT $limit"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) result.Add(Read(reader)); return result;
+        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like) ORDER BY AtUtc DESC LIMIT $limit"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) result.Add(Read(reader)); return result;
     }
     public AuditEvent? LastFailure()
     {
@@ -60,6 +60,8 @@ public sealed class AuditStore
         safe = Regex.Replace(safe, "(?i)([?&](?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|token)=)[^&#\\s]+", "$1[redacted]");
         safe = Regex.Replace(safe, "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[\\\"']?[^\\\"'\\s,;&}]+", "$1=[redacted]");
         safe = MarketplaceConnectionStore.Redact(safe);
+        safe = Regex.Replace(safe, "(?i)\\b[\\w.%+-]+@[\\w.-]+\\.[a-z]{2,}\\b", "[pii-email]");
+        safe = Regex.Replace(safe, "(?<!\\d)(?:\\+?90[ .-]?)?0?5\\d{2}[ .-]?\\d{3}[ .-]?\\d{2}[ .-]?\\d{2}(?!\\d)", "[pii-phone]");
         safe = Regex.Replace(safe, "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
         return safe.Length > 2000 ? safe[..2000] : safe;
     }
