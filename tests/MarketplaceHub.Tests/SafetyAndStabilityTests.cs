@@ -614,6 +614,18 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void SourceMissingQuarantineUsesGracePeriodAndRecoversLocally()
+    {
+        var q = new SourceMissingQuarantine(); var now = DateTimeOffset.UtcNow; var policy = new MissingSourcePolicy(TimeSpan.FromHours(2));
+        var warning = q.Observe("supplier", "p1", false, 4, 10m, now, policy); Assert.AreEqual("WARNING", warning.State); Assert.IsTrue(warning.ListingPreserved);
+        var pending = q.Observe("supplier", "p1", false, 4, 10m, now.AddHours(3), policy); Assert.AreEqual("PENDING_ACTION", pending.State);
+        Assert.IsTrue(SourceMissingQuarantine.IsMassMissing(100, policy));
+        var preview = q.PreviewDeactivate(pending, "manual review"); Assert.ThrowsException<InvalidOperationException>(() => q.ApplyLocalDeactivate(preview, false)); q.ApplyLocalDeactivate(preview, true);
+        q.Observe("supplier", "p1", true, 4, 10m, now.AddHours(4), policy);
+        Assert.AreEqual("LOCAL_RECOVERY", q.Audits.Last().Action); Assert.AreEqual(0, q.List().Count);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
