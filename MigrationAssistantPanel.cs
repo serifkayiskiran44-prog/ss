@@ -1,0 +1,25 @@
+using Microsoft.Win32;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Media;
+
+namespace TrMarketplaceHubDesktop;
+
+public static class MigrationAssistantPanel
+{
+    public static FrameworkElement Create(string? directory = null)
+    {
+        var service = new MigrationAssistantService(directory); MigrationPreview? preview = null; var root = new DockPanel { Margin = new Thickness(12) }; var header = new StackPanel(); DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
+        header.Children.Add(Text("Güvenli veri geçiş asistanı", 22)); header.Children.Add(Text("Excel, CSV/TSV, JSON ve XML dışa aktarımlarını önce şema ve satır bazında önizler. Credential/token/parola alanları okunmaz; canlı marketplace değişikliği yapılmaz."));
+        var status = Text(""); var file = new TextBox { MinWidth = 560 }; var choose = Button("Dosya seç", () => { var dialog = new OpenFileDialog { Filter = "Desteklenen dosyalar|*.xlsx;*.xlsm;*.csv;*.tsv;*.json;*.xml|Tüm dosyalar|*.*" }; if (dialog.ShowDialog() == true) file.Text = dialog.FileName; }); var controls = new WrapPanel(); controls.Children.Add(file); controls.Children.Add(choose);
+        var sourceId = new TextBox { Text = "migration", Width = 150 }; controls.Children.Add(Text("Kaynak", 12)); controls.Children.Add(sourceId); var analyze = Button("Şemayı analiz et / önizle"); controls.Children.Add(analyze); var apply = Button("Yedek al ve uygula"); controls.Children.Add(apply); var undoId = new TextBox { Width = 220, ToolTip = "Geçiş günlüğü ID" }; controls.Children.Add(undoId); controls.Children.Add(Button("Geçişi geri al", () => { service.Undo(undoId.Text.Trim()); status.Text = "Seçilen geçiş geri alındı."; })); header.Children.Add(controls);
+        header.Children.Add(status);
+        var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, EnableRowVirtualization = true, Height = 430 }; foreach (var column in new[] { ("Satır", "RowNumber", 60d), ("Karar", "Action", 80d), ("SKU", "Product.Sku", 130d), ("Ürün", "Product.Name", 260d), ("Barkod", "Product.Barcode", 130d), ("Hata", "Error", 450d) }) grid.Columns.Add(new DataGridTextColumn { Header = column.Item1, Binding = new Binding(column.Item2), Width = column.Item3 }); root.Children.Add(grid);
+        analyze.Click += async (_, _) => { try { if (string.IsNullOrWhiteSpace(file.Text)) throw new InvalidOperationException("Önce bir dosya seçin."); analyze.IsEnabled = false; status.Text = "Dosya okunuyor ve duplicate kararları hazırlanıyor…"; preview = await Task.Run(() => service.Preview(file.Text, sourceId.Text)); grid.ItemsSource = preview.Lines; status.Text = $"{preview.Format}: {preview.Lines.Count} satır · {preview.ReadyRows.Count} uygulanabilir · {preview.Errors.Count} hata · {preview.IgnoredSecretFields.Count} gizli alan atlandı."; if (preview.IgnoredSecretFields.Count > 0) status.Text += $" Atlanan alanlar: {string.Join(", ", preview.IgnoredSecretFields)}"; } catch (Exception error) { status.Text = MarketplaceConnectionStore.Redact(error.Message); } finally { analyze.IsEnabled = true; } };
+        apply.Click += async (_, _) => { try { if (preview is null) throw new InvalidOperationException("Önce önizleme oluşturun."); if (preview.Errors.Count > 0) throw new InvalidOperationException("Hatalı satırlar düzeltilmeden geçiş uygulanamaz."); if (MessageBox.Show("Mevcut yerel verinin yedeği alınacak ve yalnızca önizlemedeki yerel ürün/metadata uygulanacak. Devam edilsin mi?", "Güvenli veri geçişi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return; var dialog = new SaveFileDialog { Filter = "MonoBridge yedeği|*.zip", FileName = $"MonoBridge-migration-{DateTime.Now:yyyyMMdd-HHmmss}.zip" }; if (dialog.ShowDialog() != true) return; apply.IsEnabled = false; status.Text = "Yedek alınıyor…"; var backup = await Task.Run(() => new DataBackupService(directory).Backup(dialog.FileName)); var result = await Task.Run(() => service.Apply(preview, true, backup)); undoId.Text = result.JournalId; status.Text = $"Tamamlandı: {result.Created} yeni, {result.Updated} güncel, {result.Skipped} aynı; {result.TaxonomyAdded} sözlük, {result.StoresAdded} mağaza. Geçiş ID: {result.JournalId}"; } catch (Exception error) { status.Text = MarketplaceConnectionStore.Redact(error.Message); } finally { apply.IsEnabled = true; } };
+        return root;
+    }
+    static TextBlock Text(string value, int size = 12) => new() { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 7), Foreground = Brushes.DarkSlateGray };
+    static Button Button(string text, Action? action = null) { var button = new Button { Content = text, Margin = new Thickness(3) }; if (action is not null) button.Click += (_, _) => { try { action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Veri geçişi", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
+}

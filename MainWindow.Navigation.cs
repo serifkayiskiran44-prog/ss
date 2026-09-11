@@ -32,6 +32,7 @@ public partial class MainWindow
   Page("listing-matrix","Kanal yayın matrisi","Ürün, kanal ve mağaza bazında mapping, ilan, sync ve bağlantı durumlarını karşılaştırın.",ChannelListingMatrixPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("xml","XML yönetimi","Kaynak bağlantısı → Alan eşleştirme → Fiyat ve stok → Önizleme ve havuza aktarım",builtPages["XML yönetimi"]);
   Page("excel","Excel ürün işlemleri","Excel dışa aktarma ve içe aktarma önizlemesi",BuildExcel());
+  Page("migration","Veri geçiş asistanı","Eski Excel, CSV, JSON veya XML dışa aktarımlarını güvenli önizleme ve geri alma günlüğüyle taşıyın.",MigrationAssistantPanel.Create(dataDirectory));
   Page("taxonomy","Kategori / marka / özellik","Yerel sözlük kayıtları ve harici anahtar eşlemeleri",BuildTaxonomy());
   Page("sync","Sync merkezi","Yerel sync kuyruğu, idempotency ve tekrar deneme durumları",BuildSync());
   Page("automation","Otomasyon","Kanal ve mağaza bazlı stok/fiyat zamanlayıcıları",BuildAutomation());

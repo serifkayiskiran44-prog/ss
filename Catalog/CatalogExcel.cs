@@ -44,6 +44,7 @@ public static class CatalogExcel
         using var book = new XLWorkbook(); var sheet = book.AddWorksheet("Ürünler"); for (var i = 0; i < columns.Length; i++) sheet.Cell(1, i + 1).Value = columns[i].Header; var row = 2; foreach (var product in products) { for (var i = 0; i < columns.Length; i++) sheet.Cell(row, i + 1).Value = columns[i].Value(product)?.ToString() ?? ""; row++; } sheet.Columns().AdjustToContents(); book.SaveAs(path);
     }
     public static ExcelPreview Preview(string path, ExcelColumnMapping? mapping = null) => Preview(path, mapping, CultureInfo.CurrentCulture, null);
+    public static ExcelPreview Preview(string path, CultureInfo culture) => Preview(path, null, culture, null);
     public static ExcelPreview Preview(string path, ExcelImportProfile profile) => Preview(path, null, ExcelProfileStore.Culture(profile.CultureName), profile);
     public static ExcelDecisionPreview PreviewDecisions(CatalogStore store, string path, ExcelImportProfile profile)
     {
