@@ -208,6 +208,7 @@ public partial class MainWindow : Window
    var due=store.Sources().Where(s=>s.Enabled&&s.AutoImport&&DateTime.UtcNow-(s.LastRunUtc??DateTime.MinValue)>=TimeSpan.FromMinutes(s.IntervalMinutes)).ToList();
    if(due.Count==0)return;ModuleTabs.IsEnabled=false;
    foreach(var s in due){try{var text=await new XmlSourceReader(http).ReadAsync(s.Location,XmlAuthStore.Load(s.Id,dataDirectory),lifetime.Token);await UpdateFxAsync(s);var rows=await Task.Run(()=>XmlCatalog.Preview(text,s));var result=await Task.Run(()=>store.Import(s,rows));s.LastStatus=$"Otomatik: {result.Added} yeni / {result.Updated} güncel / {result.Unchanged} aynı";}catch(Exception e){s.LastStatus=Safe(e);}s.LastRunUtc=DateTime.UtcNow;store.SaveSource(s);Log(s.LastStatus);}
+   foreach(var job in new AutomationStore(dataDirectory).List().Where(j=>j.Enabled&&j.NextRunUtc<=DateTime.UtcNow)){try{var result=await Task.Run(()=>AutomationRunner.RunDue(store,new AutomationStore(dataDirectory),new SyncStore(dataDirectory),job.Id,DateTime.UtcNow));Log($"Otomasyon {job.Channel}/{job.Shop}: {result.Queued} iş kuyruğa alındı, {result.Errors.Count} hata.");}catch(Exception e){Log(Safe(e));}}
    // Do not replace ItemsSource or editor clones: unsaved manual edits must survive timer ticks.
    Log("Otomatik kontrol bitti. Güncel listeyi görmek için Havuzu yenile düğmesini kullan.");
   }catch(Exception e){Log(Safe(e));}finally{ModuleTabs.IsEnabled=true;gate.Release();}

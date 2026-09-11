@@ -60,6 +60,13 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] 253 test geçti; Windows-Automation-Policies self-contained publish başarılı.
 - [ ] Otomasyon işlerinin WPF zamanlama ayarlarına ve gerçek connector dispatch katmanına bağlanması sonraki adımdır.
 
+## M1 Etsy dispatch zamanlayıcısı — 2026-09-11
+- [x] WPF otomasyon yönetimi: stok/fiyat türü, kanal/mağaza, aralık, etkinlik, next/last run, kilit ve son hata görünümü.
+- [x] Zamanlayıcı açıkken due otomasyon işleri çalıştırılıp idempotent sync kuyruğuna alınır; Etsy işleri gerçek listing ID eşleşmesi olmadan başarısız kaydedilir.
+- [x] Etsy dispatch için somut önizleme, ürün sürümü doğrulaması ve açık kullanıcı onayı eklendi; onaysız HTTP PATCH yok.
+- [x] Testler ve self-contained Windows-M1-Etsy yayın doğrulaması tamamlandı.
+- [ ] Canlı Etsy credential/scope olmadan production dispatch doğrulanamaz; gerçek mağazada otomatik test çalıştırılmadı.
+
 ## Etsy operasyonları — 2026-09-11
 - [x] Etsy resmi API istemcisine basit ilan stok/fiyat güncellemesi eklendi; `listings_w` yetkisi, PATCH ve resmi API kimlik başlıkları kullanılıyor.
 - [x] Geçersiz stok/fiyat/ilan kimliği için istek göndermeyen testler eklendi.
