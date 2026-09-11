@@ -127,3 +127,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Çoklu seçimle aktif/pasif normal toplu işlem eklendi; canlı marketplace yazımı yapılmıyor.
 - [x] 269 Release testi geçti; self-contained yayın `Windows-M7-Products` altında üretildi.
 - [ ] Varyant, bundle/set, hızlı satır içi düzenleme ve kritik fiyat bu kullanıcı kararıyla kapsam dışıdır.
+
+## M8 sipariş merkezi — 2026-09-11
+- [x] Birleşik sipariş listesine kanal, mağaza, sipariş durumu, stok kararı, kargo/tracking ve son alım filtreleri eklendi; sanallaştırmalı liste korundu.
+- [x] Ortak `OrderStockDecisionService` ile satış stok önizleme/onay/idempotency ve eksik SKU reddi tüm yerel siparişlere bağlandı.
+- [x] İptal/iade otomatik stok geri koymuyor; kargo/tracking yerel gözlem sınırında ve Fulfillment Core kapsamına girmiyor.
+- [x] 271 Release testi geçti; self-contained yayın `Windows-M8-Orders` altında üretildi.
+- [ ] Etsy dışı sipariş API'leri için doğrulanmış credential/contract olmadan otomatik çekme açılmadı.
