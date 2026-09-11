@@ -562,3 +562,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M102 test altyapısı: repo içine gerçek MSTest projesi ve geçici durum gerektirmeyen redaction/stability testleri eklendi (docs/taskpacks/M102.md).
 - [x] M103 parity: global arama indexine sanitized audit olayları ve diagnostics route hedefleri eklendi; parity referansı eksik olduğu için doğrulanmamış akış uydurulmadı (docs/taskpacks/M103.md).
 - [x] M104 product ops: katalog sayfalı aramaya trim/NOCASE kaynak kimliği filtresi eklendi; mevcut seçim-preview-stale-transaction akışları korunuyor (docs/taskpacks/M104.md).
+- [x] M105 data ingestion: Excel Apply ve ApplyWithUndo artık preview hata listesini ve desteklenmeyen döviz değerlerini ortak doğrulamayla reddediyor; hatalı veri kataloğa yazılmıyor (docs/taskpacks/M105.md).
