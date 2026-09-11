@@ -553,6 +553,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ProductQualityScoreIsDeterministicAndExposesBlockedCapabilitySeparately()
+    {
+        var product = new TrMarketplaceHubDesktop.Catalog.CatalogProduct { Id = "p-1", Sku = "S", Barcode = "B", Name = "N", Description = "D", Price = 10, Stock = 1, ImageUrls = "https://x.test/a", Category = "C", Brand = "M", SourceId = "xml" };
+        var score = TrMarketplaceHubDesktop.ProductQualityScoreCalculator.Calculate(product, "amazon", false);
+        Assert.AreEqual(85, score.Score); Assert.AreEqual(TrMarketplaceHubDesktop.ProductQualityScoreCalculator.Version, score.Version);
+        Assert.AreEqual("BLOCKED", score.Items.Single(x => x.Key == "channel").Status); Assert.AreEqual(1, score.FixList.Count);
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
