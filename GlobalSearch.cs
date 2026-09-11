@@ -167,6 +167,11 @@ public sealed class GlobalSearchIndexService
             cancellationToken.ThrowIfCancellationRequested();
             Add("health:" + health.Channel + ":" + health.ShopId, "API sağlığı", "api-health", health.Channel + ":" + health.ShopId, $"{health.Channel} / {health.ShopId}", $"Durum: {health.State} · Auth: {health.AuthStatus} · Hata: {health.LastError}", health.UpdatedUtc);
         }
+        foreach (var audit in new AuditStore(directory).List(AuditStore.RetentionLimit))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Add("audit:" + audit.Id, "Audit olayı", "diagnostics", audit.Id, $"{audit.Module} / {audit.Action}", $"Sonuç: {audit.Outcome} · Ürün: {audit.ProductId} · Sipariş: {audit.OrderId} · Mağaza: {audit.ShopId} · {audit.Detail}", audit.AtUtc);
+        }
         index.ReplaceAll(entries, cancellationToken);
     }
 

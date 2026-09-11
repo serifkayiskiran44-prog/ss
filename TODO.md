@@ -560,3 +560,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M100 final RC: production readiness kalite kontrolü karar öncesi güncel preflight taraması çalıştırıyor; stale kalite kaydıyla publish edilebilir görünme engellendi (docs/taskpacks/M100.md).
 - [x] M101 legacy reconciliation: eski task-pack checklist iddialarını PARTIAL, yeni gerçek-teslimat formatını REAL_DELIVERABLE ve biçimsiz kayıtları UNVERIFIED raporlayan read-only audit helper eklendi (docs/taskpacks/M101.md).
 - [x] M102 test altyapısı: repo içine gerçek MSTest projesi ve geçici durum gerektirmeyen redaction/stability testleri eklendi (docs/taskpacks/M102.md).
+- [x] M103 parity: global arama indexine sanitized audit olayları ve diagnostics route hedefleri eklendi; parity referansı eksik olduğu için doğrulanmamış akış uydurulmadı (docs/taskpacks/M103.md).
