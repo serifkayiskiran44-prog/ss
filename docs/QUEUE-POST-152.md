@@ -1,5 +1,14 @@
-# Post-152 ekran-parite kuyruğu
+# Queue post-152
 
-#153 Ana menü tile dashboard -> #154 Ürün listesi -> #155 Ürün formu -> #156 XML liste/form -> #157 dinamik marketplace ürün paneli -> #158 Etsy ürün/listing yüzeyi -> #159 destek ekranları -> #160 final ekran-parite/Etsy kabul.
+Güncel worker sırası Issue #5'tedir.
 
-Ana worker sözleşmesi GitHub Issue #5'tir. Bu dosya yalnız kısa referanstır.
+Önemli özel sıra:
+- #153 -> #154 -> #155 -> #269 -> #156 -> #160
+- ... devam eden entegrasyon/dropshipping/Entegra full-parity paketleri ...
+- #267 Entegra tam gap closure
+- #270 görsel dashboard/KPI/chart paritesi
+- #271 rapor/analitik/drill-down merkezi
+- #272 güncel WPF açık kaynak audit/adaptasyon
+- #268 final clean-clone/soak/release freeze
+
+Issue numarası tek başına çalışma sırası değildir; Issue #5 ana sözleşmedir.
