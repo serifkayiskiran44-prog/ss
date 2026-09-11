@@ -626,6 +626,17 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void DropshipStockSafetyAppliesBufferCapTextAndStaleBlock()
+    {
+        var now = DateTimeOffset.UtcNow; var policy = new StockSafetyPolicy("channel", "shop", 3, 10);
+        var preview = DropshipStockSafety.Preview("p1", 20, null, policy, now, now, TimeSpan.FromDays(1));
+        Assert.AreEqual(10, preview.SellableStock); Assert.AreEqual("PREVIEW", preview.Status); StringAssert.Contains(preview.Formula, "20-3");
+        var text = DropshipStockSafety.Preview("p2", 20, false, policy, now, now, TimeSpan.FromDays(1)); Assert.AreEqual(0, text.SellableStock);
+        var stale = DropshipStockSafety.Preview("p3", 20, true, policy, now.AddDays(-3), now, TimeSpan.FromDays(1)); Assert.AreEqual("BLOCKED_STALE", stale.Status); Assert.AreEqual(0, stale.SellableStock);
+        Assert.ThrowsException<InvalidOperationException>(() => DropshipStockSafety.EnsureScope(preview, policy with { ShopId = "other" }));
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
