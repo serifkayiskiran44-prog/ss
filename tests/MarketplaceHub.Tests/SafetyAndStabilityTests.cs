@@ -274,6 +274,23 @@ public sealed class SafetyAndStabilityTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [TestMethod]
+    public void DatabaseHealthInspectsReadOnlySqliteAndDetectsMissingDatabase()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-health-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var missing = TrMarketplaceHubDesktop.DatabaseHealth.Inspect(root);
+            Assert.AreEqual("NOT_CONFIGURED", missing.Status);
+            _ = new TrMarketplaceHubDesktop.Catalog.CatalogStore(root).Products();
+            var healthy = TrMarketplaceHubDesktop.DatabaseHealth.Inspect(root);
+            Assert.AreEqual("HEALTHY", healthy.Status);
+            Assert.AreEqual("ok", healthy.QuickCheck);
+            Assert.AreEqual(TrMarketplaceHubDesktop.SchemaVersion.Current, healthy.SchemaVersion);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
