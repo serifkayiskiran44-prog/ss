@@ -6,6 +6,7 @@ public static class AutomationRunner
 {
     public static AutomationRunResult RunDue(CatalogStore catalog, AutomationStore automation, SyncStore sync, string jobId, string channel, string shop, DateTime nowUtc)
     {
+        sync.RecoverAbandonedRunning(TimeSpan.FromMinutes(5), nowUtc);
         if (!automation.TryClaimLease(jobId, nowUtc, TimeSpan.FromMinutes(5), out var leaseToken)) return new(0, Array.Empty<string>());
         var job = automation.Get(jobId);
         return RunClaimed(catalog, automation, sync, job, channel, shop, nowUtc, false, leaseToken);
@@ -13,6 +14,7 @@ public static class AutomationRunner
 
     public static AutomationRunResult RunDue(CatalogStore catalog, AutomationStore automation, SyncStore sync, string jobId, DateTime nowUtc)
     {
+        sync.RecoverAbandonedRunning(TimeSpan.FromMinutes(5), nowUtc);
         if (!automation.TryClaimLease(jobId, nowUtc, TimeSpan.FromMinutes(5), out var leaseToken)) return new(0, Array.Empty<string>());
         var job = automation.Get(jobId);
         return RunClaimed(catalog, automation, sync, job, job.Channel, job.Shop, nowUtc, true, leaseToken);
