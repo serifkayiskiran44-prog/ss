@@ -226,6 +226,23 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual("WORKING", complete.Status);
     }
 
+    [TestMethod]
+    public void PreflightCenterClassifiesBlockedWarningAndReadyWithoutNetwork()
+    {
+        var blocked = TrMarketplaceHubDesktop.PreflightCenter.Evaluate([
+            new("credentials", "PASS", "local"), new("connector", "BLOCKED", "LIVE_API_BLOCKED")]);
+        var partial = TrMarketplaceHubDesktop.PreflightCenter.Evaluate([
+            new("catalog", "PASS", "local"), new("connector", "WARN", "manual verification")]);
+        var ready = TrMarketplaceHubDesktop.PreflightCenter.Evaluate([
+            new("catalog", "PASS", "local"), new("live-write-gate", "PASS", "preview required")]);
+
+        Assert.AreEqual("BLOCKED", blocked.Status);
+        Assert.AreEqual(1, blocked.BlockingItems.Count);
+        Assert.AreEqual("PARTIAL", partial.Status);
+        Assert.AreEqual("CODEX_READY", ready.Status);
+        Assert.IsTrue(ready.IsReady);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler

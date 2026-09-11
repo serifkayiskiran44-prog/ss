@@ -580,3 +580,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M120 Etsy product surface: ürün, Etsy şablonu, credential/shop ve listing mapping’i birleştiren read-only readiness kararı ve wrong-shop negatif testi eklendi (docs/taskpacks/M120.md).
 - [x] M121 supporting screen parity: operasyon sayaçları için ortak gerçek-snapshot özeti eklendi ve dashboard durum satırı bu sözleşmeyi kullanıyor (docs/taskpacks/M121.md).
 - [x] M122 final screen parity: merkezi navigation route audit’i eksik paneli BLOCKED raporlıyor ve mevcut rotaların tam sözleşmesini test ediyor (docs/taskpacks/M122.md).
+- [x] M123 preflight merkezi: yerel Etsy readiness kanıtlarını CODEX_READY/PARTIAL/BLOCKED kararında birleştirip başlangıç loguna ekledi (docs/taskpacks/M123.md).

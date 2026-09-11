@@ -85,6 +85,7 @@ public partial class MainWindow
   Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
+  var readiness=PreflightCenter.FromEtsy(new EtsyReadinessService().Build()); Log($"Yayın öncesi preflight: {readiness.Status}; engel={readiness.BlockingItems.Count}");
   var initial = uiPreferences.Get("last-route");
   Navigate(routes.ContainsKey(initial ?? "") ? initial! : "dashboard", false);
  }
