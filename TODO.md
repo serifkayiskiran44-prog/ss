@@ -68,6 +68,12 @@
 - [x] Release build ve self-contained `Windows-M75-Search-Filter` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; fixture/performance testleri çalıştırılamadı.
 
+## M76 XML parser — 2026-09-11
+- [x] Malformed XML ve reader argument hataları anlaşılır/güvenli import hatasına dönüştürüldü.
+- [x] DTD/resolver/size/row/namespace güvenlik sınırları korundu.
+- [x] Release build ve self-contained `Windows-M76-XML-Parser` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; XML fixture regression testleri çalıştırılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
