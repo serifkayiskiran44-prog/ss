@@ -298,3 +298,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Büyük seçimlerde ilerleme/iptal, audit özeti ve canlı connector'a çıkmayan kanal planı akışı eklendi.
 - [x] Geçici SQLite/stale/kanal planı testleri ile 320 Release testi geçti; self-contained yayın `Windows-M31-Bulk-Products` altında üretildi.
 - [ ] Toplu canlı marketplace write yok; her connector'ın mevcut preview/onay akışı korunuyor.
+
+## M32 stok ve fiyat politika yönetim merkezi — 2026-09-11
+- [x] Kanal/mağaza stok ve fiyat policy listeleri, etkinlik, sürüm ve son değişiklik görünürlüğü eklendi.
+- [x] Policy kopyalama/çoğaltma, optimistic version kontrolü ve hedef mağaza izolasyonu eklendi.
+- [x] Ürün bazlı stok/fiyat preview; policy/product sürüm bilgisi ve pasif policy/write engeli eklendi.
+- [x] Mevcut fiyat formülü, döviz, minimum fiyat ve minimum fark çekirdeği kullanıldı; kritik fiyat kapsam dışı.
+- [x] Geçici SQLite/stale/kopyalama testleri ile 322 Release testi geçti; self-contained yayın `Windows-M32-Policy-Center` altında üretildi.
+- [ ] Canlı dispatch yalnız connector'ın mevcut preview/onay kapısından geçer; bu merkez doğrudan HTTP yazmaz.
