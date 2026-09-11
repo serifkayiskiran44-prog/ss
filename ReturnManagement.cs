@@ -8,6 +8,12 @@ public sealed record ReturnRestockPreview(string Fingerprint, string ShopId, str
 
 public static class ReturnManagement
 {
+    public static IReadOnlyList<ReturnCase> ValidateBatch(IEnumerable<ReturnCase> cases, string shopId)
+    {
+        var rows = cases.Where(x => x.ShopId.Equals(shopId, StringComparison.Ordinal)).Where(x => x.Quantity > 0).ToArray();
+        return rows.GroupBy(Fingerprint, StringComparer.Ordinal).Select(g => g.First()).ToArray();
+    }
+
     public static ReturnRestockPreview CreatePreview(ReturnCase @case, string expectedShopId, bool skuKnown, DateTimeOffset expectedOrderUpdated, DateTimeOffset currentOrderUpdated)
     {
         ArgumentNullException.ThrowIfNull(@case);

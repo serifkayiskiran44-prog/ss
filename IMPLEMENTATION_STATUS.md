@@ -295,3 +295,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M217 — kritik stok/kampanya: oversubscription ve expiry korumalı local policy teslim edildi.
 # M218 — kritik fiyat: `DEFERRED_BY_USER` guard teslim edildi; scheduled write açılmadı.
 # M219 — kanal bazlı update modes: included/excluded alan preview planner teslim edildi.
+# M220 — iade merkezi: shop-scoped idempotent batch validation teslim edildi.

@@ -795,6 +795,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ReturnBatchIsShopScopedAndIdempotent()
+    {
+        var stamp = DateTimeOffset.UtcNow;
+        var row = new ReturnCase("etsy", "shop-a", "o-1", "line-1", "sku", 1, "damaged", "requested", stamp);
+        var result = ReturnManagement.ValidateBatch([row, row, row with { ShopId = "shop-b" }], "shop-a");
+        Assert.AreEqual(1, result.Count);
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
