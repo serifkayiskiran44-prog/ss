@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
 namespace TrMarketplaceHubDesktop.Catalog;
-public sealed class PricePolicy { public string Channel {get;set;}=""; public string Shop {get;set;}=""; public string Formula {get;set;}="x"; public string Currency {get;set;}="TRY"; public decimal TryPerUnit {get;set;}=1; public decimal MinimumPrice {get;set;} public decimal MinimumMarginTry {get;set;} public bool Enabled {get;set;}=true; public DateTime UpdatedUtc {get;set;} public int Version {get;set;} }
+public sealed class PricePolicy { string currency="TRY"; public string Channel {get;set;}=""; public string Shop {get;set;}=""; public string Formula {get;set;}="x"; public string Currency {get=>currency;set=>currency=(value??"").Trim().ToUpperInvariant();} public decimal TryPerUnit {get;set;}=1; public decimal MinimumPrice {get;set;} public decimal MinimumMarginTry {get;set;} public bool Enabled {get;set;}=true; public DateTime UpdatedUtc {get;set;} public int Version {get;set;} }
 public sealed record PricePreview(string Sku, decimal Price, string Currency, decimal FormulaPriceTry, decimal CostTry);
 public partial class CatalogStore {
  static void InitializePricePolicies(SqliteConnection c){using var x=c.CreateCommand();x.CommandText="CREATE TABLE IF NOT EXISTS PricePolicies(Channel TEXT NOT NULL,Shop TEXT NOT NULL,Json TEXT NOT NULL,PRIMARY KEY(Channel,Shop))";x.ExecuteNonQuery();}

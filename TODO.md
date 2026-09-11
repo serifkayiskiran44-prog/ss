@@ -540,3 +540,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 
 - [x] M81 mağaza bağlantı/ayar güvenliği: credential ShopId binding, disabled state ve geçmiş koruyan deactivate akışı (docs/taskpacks/M81.md).
 - [x] M82 çoklu mağaza izolasyonu: SyncJob idempotency ve otomasyon enqueue işlemleri ShopId kapsamına alındı (docs/taskpacks/M82.md).
+- [x] M83 fiyat politikası: policy currency normalize/culture-safe hale getirildi; manuel kur, koruma tabanı ve deterministic rounding korunuyor (docs/taskpacks/M83.md).
