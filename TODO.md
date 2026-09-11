@@ -558,3 +558,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M98 operator flow: veri kalite kayıtlarında tür/kanal/kaynak bağlamına göre ilgili ürün, XML veya bağlantı ekranına tek adım navigasyon eklendi (docs/taskpacks/M98.md).
 - [x] M99 soak/stability: local-only deterministik tekrar ölçümleri için allocation, elapsed ve working-set metrikli StabilityProbe eklendi; marketplace çağrısı yapmaz (docs/taskpacks/M99.md).
 - [x] M100 final RC: production readiness kalite kontrolü karar öncesi güncel preflight taraması çalıştırıyor; stale kalite kaydıyla publish edilebilir görünme engellendi (docs/taskpacks/M100.md).
+- [x] M101 legacy reconciliation: eski task-pack checklist iddialarını PARTIAL, yeni gerçek-teslimat formatını REAL_DELIVERABLE ve biçimsiz kayıtları UNVERIFIED raporlayan read-only audit helper eklendi (docs/taskpacks/M101.md).
