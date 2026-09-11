@@ -212,3 +212,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Geri yükleme geçici staging, mevcut veri için güvenlik yedeği, doğrulama ve atomik klasör değişimiyle uygulanıyor; hata halinde eski klasör korunuyor.
 - [x] Ayarlar ekranına kullanıcı onaylı yedek/geri yükleme ve veri klasörü açma paneli eklendi; 292 Release testi geçti.
 - [ ] Çalışan uygulama dosya kilitleri nedeniyle geri yükleme başarısız olursa uygulama kapatılıp tekrar açılmalı; installer uzak otomatik güncelleme yapmaz.
+
+## M21 üretim öncesi doğrulama ve sertleştirme — 2026-09-11
+- [x] XML/Excel → katalog → kanal planı → sync → sipariş → onaylı stok kararı akışı için mevcut test matrisi ve üretim öncesi kontrol dokümanı eklendi.
+- [x] XML ve otomasyon geçmişi credential desenlerini maskeliyor; repo hata saklama yolları tekrar gözden geçirildi.
+- [x] Kanal/mağaza izolasyonu, idempotency, stale preview, retry, transaction/oversell ve unsupported HTTP sınırları Release testleriyle korunuyor.
+- [x] `installer/Smoke-Test.ps1`, Release testleri, self-contained publish ve installer smoke testi çalıştırıldı; 294 Release testi geçti.
+- [x] `docs/PRODUCTION-READINESS.md` ile canlı, bloklu ve ertelenmiş kapsam açıklandı.
+- [ ] Gerçek marketplace credential/API sözleşmesi olmayan kanallarda LIVE operasyon hâlâ açılmadı.

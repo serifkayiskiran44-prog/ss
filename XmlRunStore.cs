@@ -76,7 +76,7 @@ public sealed class XmlRunStore
 
     public void Fail(string id, string error)
     {
-        Update(id, "Failed", 0, 0, 0, string.IsNullOrWhiteSpace(error) ? "Bilinmeyen XML hatası." : error.Trim());
+        Update(id, "Failed", 0, 0, 0, string.IsNullOrWhiteSpace(error) ? "Bilinmeyen XML hatası." : MarketplaceConnectionStore.Redact(error));
     }
 
     void Update(string id, string status, int added, int updated, int unchanged, string error)
