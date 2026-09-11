@@ -395,6 +395,16 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void SellerRehearsalProducesDeterministicEndToEndReportWithoutLiveWrite()
+    {
+        var report = TrMarketplaceHubDesktop.SellerRehearsal.Run();
+        Assert.IsTrue(report.IsClear);
+        Assert.AreEqual(6, report.Steps.Count);
+        Assert.IsTrue(report.Steps.All(x => x.Status == "PASS"));
+        StringAssert.Contains(report.Steps.Single(x => x.Name == "fault-recovery").Recovery, "429");
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
