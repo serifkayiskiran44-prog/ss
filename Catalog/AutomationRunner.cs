@@ -6,19 +6,19 @@ public static class AutomationRunner
 {
     public static AutomationRunResult RunDue(CatalogStore catalog, AutomationStore automation, SyncStore sync, string jobId, string channel, string shop, DateTime nowUtc)
     {
-        if (!automation.TryClaim(jobId, nowUtc, TimeSpan.FromMinutes(5))) return new(0, Array.Empty<string>());
+        if (!automation.TryClaimLease(jobId, nowUtc, TimeSpan.FromMinutes(5), out var leaseToken)) return new(0, Array.Empty<string>());
         var job = automation.Get(jobId);
-        return RunClaimed(catalog, automation, sync, job, channel, shop, nowUtc, false);
+        return RunClaimed(catalog, automation, sync, job, channel, shop, nowUtc, false, leaseToken);
     }
 
     public static AutomationRunResult RunDue(CatalogStore catalog, AutomationStore automation, SyncStore sync, string jobId, DateTime nowUtc)
     {
-        if (!automation.TryClaim(jobId, nowUtc, TimeSpan.FromMinutes(5))) return new(0, Array.Empty<string>());
+        if (!automation.TryClaimLease(jobId, nowUtc, TimeSpan.FromMinutes(5), out var leaseToken)) return new(0, Array.Empty<string>());
         var job = automation.Get(jobId);
-        return RunClaimed(catalog, automation, sync, job, job.Channel, job.Shop, nowUtc, true);
+        return RunClaimed(catalog, automation, sync, job, job.Channel, job.Shop, nowUtc, true, leaseToken);
     }
 
-    static AutomationRunResult RunClaimed(CatalogStore catalog, AutomationStore automation, SyncStore sync, AutomationJob job, string channel, string shop, DateTime nowUtc, bool requireListingMapping)
+    static AutomationRunResult RunClaimed(CatalogStore catalog, AutomationStore automation, SyncStore sync, AutomationJob job, string channel, string shop, DateTime nowUtc, bool requireListingMapping, string leaseToken)
     {
         var errors = new List<string>(); var queued = 0;
         if (job.Kind is AutomationKind.Xml or AutomationKind.Health or AutomationKind.Sync)
@@ -49,7 +49,7 @@ public static class AutomationRunner
                 }
             }
         }
-        if (errors.Count == 0) automation.Complete(job.Id, nowUtc); else automation.Fail(job.Id, string.Join("; ", errors));
+        if (errors.Count == 0) automation.Complete(job.Id, nowUtc, leaseToken); else automation.Fail(job.Id, string.Join("; ", errors), leaseToken);
         return new(queued, errors);
     }
 }
