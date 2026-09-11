@@ -721,6 +721,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyOrderCompletionDeduplicatesResumesAndPreviewsRefundStock()
+    {
+        var now = DateTimeOffset.UtcNow; var service = new EtsyOrderCompletion(); var state = service.Import("shop", new[] { new EtsyOrderEvent("r1", "t1", "shop", "SKU", 12, "paid", 1, "sale", now), new EtsyOrderEvent("r1", "t1", "shop", "SKU", 12, "paid", 1, "sale", now) }, new("shop", null, "c1", 0, 0));
+        Assert.AreEqual(1, state.Accepted); Assert.AreEqual(1, state.Duplicates); Assert.AreEqual("PAID", service.Events[0].Status);
+        var refund = service.Import("shop", new[] { new EtsyOrderEvent("r1", "t2", "shop", "SKU", 12, "refunded", 1, "refund", now.AddMinutes(1)) }, state); var preview = service.PreviewRefund("shop", service.Events.Last(), 1); Assert.ThrowsException<InvalidOperationException>(() => EtsyOrderCompletion.EnsureApproved(preview, false)); EtsyOrderCompletion.EnsureApproved(preview, true);
+        Assert.AreEqual(2, refund.Accepted); Assert.AreEqual(1, service.Events.Count(x => x.EventType == "refund"));
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
