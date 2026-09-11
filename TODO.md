@@ -32,6 +32,12 @@
 - [x] Release build ve self-contained `Windows-M69-Etsy-Production` publish başarılı.
 - [ ] Gerçek mağazada write/order testi yapılmadı (`LIVE_API_BLOCKED`).
 
+## M70 final QA/release — 2026-09-11
+- [x] Installer smoke EXE yanında runtimeconfig/deps metadata varlığını da doğruluyor.
+- [x] Release runbook eklendi; canlı marketplace write ve gerçek credential testleri yapılmadı.
+- [x] Release build, publish ve installer smoke başarılı.
+- [ ] Harici test projesi bu klonda bulunmadığı için test sayısı doğrulanamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
