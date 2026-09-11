@@ -831,6 +831,13 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void MessageTemplateRendererRequiresAllPlaceholders()
+    {
+        Assert.AreEqual("Merhaba Ada", MessageTemplateRenderer.Render("Merhaba {{name}}", new Dictionary<string, string> { ["name"] = "Ada" }));
+        Assert.ThrowsException<InvalidOperationException>(() => MessageTemplateRenderer.Render("{{name}} {{order}}", new Dictionary<string, string> { ["name"] = "Ada" }));
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

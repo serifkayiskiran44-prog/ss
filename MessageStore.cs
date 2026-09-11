@@ -75,3 +75,15 @@ public static class MessageCapabilityService
     public static bool CanRead(string marketplace) => false;
     public static bool CanWrite(string marketplace) => false;
 }
+
+public static class MessageTemplateRenderer
+{
+    public static string Render(string template, IReadOnlyDictionary<string, string> values)
+    {
+        if (string.IsNullOrWhiteSpace(template)) throw new ArgumentException("Şablon metni zorunlu.", nameof(template));
+        var result = template;
+        foreach (var pair in values) result = result.Replace("{{" + pair.Key + "}}", pair.Value ?? string.Empty, StringComparison.Ordinal);
+        if (result.Contains("{{", StringComparison.Ordinal)) throw new InvalidOperationException("TEMPLATE_PLACEHOLDER_MISSING: doldurulmamış alan var.");
+        return result;
+    }
+}
