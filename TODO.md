@@ -162,3 +162,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Ürün/sipariş API sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP çağrısı yok.
 - [x] 279 Release testi geçti; self-contained yayın `Windows-M12-Fruugo` altında üretildi.
 - [ ] Fruugo production ürün/sipariş/stok/fiyat operasyonları retailer kabulü ve resmi API sözleşmesi doğrulanana kadar kapalı.
+
+## M13 sync, otomasyon ve hata merkezi — 2026-09-11
+- [x] Sync işi listesi; arama/durum filtreleri, kanal/işlem/varlık/sürüm, deneme sayısı, hata sınıfı ve güncelleme zamanı gösterimi eklendi.
+- [x] Network/auth/mapping/validation/rate-limit/stale/idempotency/unsupported sınıflandırması ve retry edilebilir sınıf kapısı eklendi; 3 deneme sınırı korundu.
+- [x] Sync merkezi içinde otomasyon listesi ve XML çalıştırma geçmişi sekmeleri birleştirildi; büyük listelerde satır sanallaştırması kullanılıyor.
+- [x] Sync hata metinleri maskeleniyor; access/refresh token, API key/secret gibi değerler kalıcı hata kaydına yazılmıyor.
+- [x] 281 Release testi geçti; self-contained yayın `Windows-M13-Sync` altında üretildi.
+- [ ] Gerçek kanal dispatch'i yalnız doğrulanmış adapter/credential ve açık önizleme/onay sınırlarında; Fulfillment ve ertelenen alanlar kapsam dışı.
