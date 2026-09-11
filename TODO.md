@@ -170,3 +170,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Sync hata metinleri maskeleniyor; access/refresh token, API key/secret gibi değerler kalıcı hata kaydına yazılmıyor.
 - [x] 281 Release testi geçti; self-contained yayın `Windows-M13-Sync` altında üretildi.
 - [ ] Gerçek kanal dispatch'i yalnız doğrulanmış adapter/credential ve açık önizleme/onay sınırlarında; Fulfillment ve ertelenen alanlar kapsam dışı.
+
+## M14 Ozon connector — 2026-09-11
+- [x] Mevcut Ozon DPAPI ayarı, ürün sayısı ve depo okuma akışı ortak bağlantı panelinden korunarak kullanılıyor.
+- [x] Resmi Seller API ürün listeleme (`/v3/product/list`) için sayfalı read-only ürün özeti ve yanıt doğrulaması eklendi.
+- [x] HTTP 401/403/429, timeout ve hatalı JSON davranışları mevcut güvenli hata sınırında; API key yanıt/loglara sızmıyor.
+- [x] 282 Release testi geçti; self-contained yayın `Windows-M14-Ozon` altında üretildi.
+- [ ] Ozon sipariş, stok/fiyat yazma ve ürün yayınlama için doğrulanmış sözleşme/credential akışı bu fazda açılmadı; desteklenmeyen işlemler `LIVE_API_BLOCKED`.

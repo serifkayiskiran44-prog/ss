@@ -57,3 +57,5 @@ M11 Hepsiburada connector (2026-09-11, Issue #18): merchant/API ayar modeli, DPA
 M12 Fruugo connector (2026-09-11, Issue #19): retailer/API ayar modeli, DPAPI store, bağlantı paneli ve yerel ürün planı eklendi. Resmi ürün/sipariş sözleşmesi doğrulanmadığı için endpoint çağrısı yapılmıyor; `LIVE_API_BLOCKED` açıkça gösteriliyor. 279 Release testi geçti; `Windows-M12-Fruugo` self-contained yayın üretildi.
 
 M13 sync, otomasyon ve hata merkezi (2026-09-11, Issue #20): SyncStore hata sınıfları, maskeli hata saklama, retry edilebilirlik kapısı ve arama/durum filtreli WPF merkezi eklendi. Otomasyon ve XML çalıştırma geçmişi aynı merkezde sekmeler halinde izleniyor. 281 Release testi geçti; `Windows-M13-Sync` self-contained yayın üretildi.
+
+M14 Ozon connector (2026-09-11, Issue #21): mevcut resmi ürün/depo read-only istemcisi sayfalı ürün özeti ve doğrulama ile genişletildi. Ürün yazma, sipariş ve stok/fiyat canlı operasyonları doğrulanmadığı için açılmadı. 282 Release testi geçti; `Windows-M14-Ozon` self-contained yayın üretildi.
