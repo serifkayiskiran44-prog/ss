@@ -730,6 +730,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsySellerCockpitAggregatesReadinessAndKeepsDryRunSeparate()
+    {
+        var scopes = EtsyOAuthReadiness.Evaluate("SellerApp", new[] { "shops_r", "listings_r", "listings_w", "transactions_r" }, true); var snapshot = new EtsyCockpitSnapshot("shop", "PASS", scopes, 3, 2, "HEALTHY", 0, 0, true, DateTimeOffset.UtcNow);
+        Assert.AreEqual("READY_READ_ONLY", EtsySellerCockpit.Evaluate(snapshot).Status); EtsySellerCockpit.EnsureReadOnly(snapshot); Assert.ThrowsException<InvalidOperationException>(() => EtsySellerCockpit.EnsureReadOnly(snapshot with { DryRun = false }));
+        var attention = EtsySellerCockpit.Evaluate(snapshot with { DriftCount = 1, DeadLetterCount = 2 }); Assert.AreEqual("ATTENTION", attention.Status); CollectionAssert.Contains(attention.Missing.ToArray(), "drift");
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
