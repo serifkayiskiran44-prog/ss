@@ -498,6 +498,21 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ProductHistoryTracksProvenanceDiffAndStaleRollback()
+    {
+        var history = new ProductChangeHistory();
+        history.Append("p1", "Name", null, "İlk", "import", "system", "token=secret");
+        var second = history.Append("p1", "Name", "İlk", "Güncel", "manual", "user", "screen");
+        Assert.AreEqual("[redacted]=[redacted]", history.Query("p1")[1].Context);
+        Assert.IsTrue(history.Diff("p1", 1, 2).Single(x => x.Field == "Name").Changed);
+        var preview = history.PreviewRollback("p1", "Name", 1);
+        Assert.ThrowsException<InvalidOperationException>(() => history.ApplyLocalRollback(preview, 1, true));
+        var applied = history.ApplyLocalRollback(preview, second.Version, true);
+        Assert.AreEqual("rollback", applied.Actor);
+        Assert.AreEqual("İlk", applied.NewValue);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]

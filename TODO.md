@@ -609,3 +609,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M149 ürün kalite skoru: versioned deterministic breakdown/fix-list ve capability BLOCKED alt maddesi eklendi; skor canlı write yapmıyor (docs/taskpacks/M149.md).
 - [x] M150 fatura merkezi: Trendyol fatura linki preview/idempotency/scope/stale/HTTP sınıflandırması ve NES/FAST LIVE_API_BLOCKED kapısı eklendi (docs/taskpacks/M150.md).
 - [x] M151 stok mutabakatı: kaynak bazlı hareket karşılaştırması, duplicate/negative/jump tespiti ve onaylı versioned yerel correction audit’i eklendi (docs/taskpacks/M151.md).
+- [x] M152 ürün değişiklik günlüğü: alan/provenance/version journal, diff, retention ve güvenli stale guarded yerel rollback preview/audit eklendi (docs/taskpacks/M152.md).
