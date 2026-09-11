@@ -596,3 +596,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M136 seller rehearsal: onboarding→import→preflight→sync/order/stock→fault recovery→backup/restart zinciri için deterministik sentetik rapor eklendi; canlı write yok (docs/taskpacks/M136.md).
 - [x] M137 GA gate: önceki kanıt, artifact, Release test/publish ve P0/P1 bulgularını birlikte değerlendiren V1_READY/NOT_READY kabul modeli eklendi (docs/taskpacks/M137.md).
 - [x] M138 manuel sipariş arşivi: fiziksel silme yapmadan mağaza/sipariş kimliğiyle arşivle-geri al store’u ve gerçek SQLite fixture’ı eklendi (docs/taskpacks/M138.md).
+- [x] M139 sipariş transferi: izinli yerel sipariş alanları için invariant XML export/import ve malformed-root güvenlik kontrolü eklendi (docs/taskpacks/M139.md).

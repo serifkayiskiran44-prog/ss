@@ -436,6 +436,17 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void OrderTransferXmlRoundTripsInvariantMoneyAndRejectsMalformedRoot()
+    {
+        var rows = new[] { new TrMarketplaceHubDesktop.OrderTransferRow("MANUAL", "shop-a", "o-1", "Yerel / manuel", new DateTimeOffset(2026, 9, 11, 12, 0, 0, TimeSpan.Zero), 1234.56m) };
+        var xml = TrMarketplaceHubDesktop.OrderTransferCodec.Export(rows);
+        var restored = TrMarketplaceHubDesktop.OrderTransferCodec.Import(xml);
+        Assert.AreEqual(1234.56m, restored[0].Total);
+        Assert.AreEqual("shop-a", restored[0].ShopId);
+        Assert.ThrowsException<InvalidDataException>(() => TrMarketplaceHubDesktop.OrderTransferCodec.Import("<wrong/>"));
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
