@@ -111,9 +111,16 @@ public sealed class EbayConnection(HttpClient http)
     async Task<JsonDocument> ApiJsonAsync(EbaySettings settings,EbayTokens tokens,HttpMethod method,string path,HttpContent? content,CancellationToken cancellationToken){Validate(settings);if(tokens.ExpiresAt<=DateTimeOffset.UtcNow||string.IsNullOrWhiteSpace(tokens.AccessToken))throw new InvalidOperationException("eBay erişim anahtarı geçersiz veya süresi dolmuş.");using var request=new HttpRequestMessage(method,Api(settings)+path){Content=content};request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",tokens.AccessToken);return await SendAsync(request,cancellationToken);}
     private async Task<JsonDocument> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        try
+        {
         using var response = await http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"eBay isteği başarısız (HTTP {(int)response.StatusCode}). Anahtar, ortam ve OAuth onayını kontrol edin.");
         try { return JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken)); }
         catch (JsonException) { throw new InvalidOperationException("eBay yanıtı okunamadı; bağlantı doğrulanamadı."); }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        { throw new InvalidOperationException("eBay isteği zaman aşımına uğradı veya iptal edildi; önceki kayıtlar korundu."); }
+        catch (HttpRequestException)
+        { throw new InvalidOperationException("eBay ağına erişilemedi; önceki kayıtlar korundu."); }
     }
 }

@@ -65,6 +65,19 @@ public sealed class SafetyAndStabilityTests
         StringAssert.Contains(requestBodies[1], "price=12.50");
     }
 
+    [TestMethod]
+    public void EbayTimeoutIsReportedWithoutLeakingCredentialDetails()
+    {
+        using var http = new HttpClient(new TimeoutHandler());
+        var connection = new TrMarketplaceHubDesktop.EbayConnection(http);
+        var settings = new TrMarketplaceHubDesktop.EbaySettings("client", "secret", "runame", "https://example.test/callback", true);
+        var tokens = new TrMarketplaceHubDesktop.EbayTokens("access", DateTimeOffset.UtcNow.AddMinutes(5), "refresh", DateTimeOffset.UtcNow.AddDays(1));
+
+        var error = Assert.ThrowsException<InvalidOperationException>(() => connection.GetOrdersAsync(settings, tokens, cancellationToken: new CancellationTokenSource(50).Token).GetAwaiter().GetResult());
+        StringAssert.Contains(error.Message, "zaman aşımı");
+        Assert.IsFalse(error.Message.Contains("access", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
@@ -77,6 +90,15 @@ public sealed class SafetyAndStabilityTests
                 ? "{\"listing_id\":456,\"title\":\"Demo\",\"description\":\"d\",\"state\":\"active\",\"quantity\":2,\"price\":{\"amount\":1250,\"divisor\":100,\"currency_code\":\"USD\"},\"skus\":[\"SKU-1\"]}"
                 : "{\"listing_id\":456}";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) });
+        }
+    }
+
+    private sealed class TimeoutHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
 }
