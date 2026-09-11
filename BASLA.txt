@@ -1,0 +1,27 @@
+MONOBRIDGE MASAÜSTÜ — .NET 8 WPF
+Başlatılacak dosya: Windows\TrMarketplaceHubDesktop.exe
+Tarayıcı veya yerel web sunucusu açılmaz. .NET 8 Windows Desktop Runtime gerekir.
+
+Bu sürümde:
+- Gerçek Windows penceresi, çalışan menü geçişleri.
+- Ürün adı/SKU/barkod araması, stok/hazır durum filtresi.
+- Standart XML dosyası seçme ve yerel ürün listesine alma.
+- Etsy API key, shared secret, OAuth token ve Shop ID giriş alanları.
+- Windows DPAPI ile şifreli kaydetme ve yeniden açılışta yükleme.
+- Etsy gerçek mağaza API'sine salt okunur bağlantı testi.
+- Önceki XML panelinin pool.db dosyasını salt okunur görüntüleme.
+- Salt okunur SQLite sorgu ekranı.
+
+Henüz tamamlanmayanlar:
+- Gelişmiş XML URL/alan eşleştirme/fiyat kurallarının masaüstüne taşınması.
+- OAuth izin alma ve token yenileme; ürün gönderme; pazaryeri eşleştirme ve sipariş alma.
+- eBay/Joom, Navlungo ve Fastfatura.
+
+Doğrulama: 24 test geçti. Release derlemesi başarılı. EXE açıldı; gerçek WPF penceresi, API menüsü ve eksik bilgi doğrulaması incelendi.
+Canlı Etsy hesabına erişim, gerçek kimlik bilgileri olmadan doğrulanmadı.
+Kaynak: https://developer.etsy.com/documentation/essentials/requests/
+Önceki konuşma: https://chatgpt.com/s/cx_6aa2b5a567a0819181cde6398f1056b7
+
+Veri: %LOCALAPPDATA%\MonoBridgeDesktop\hub.db
+Anahtar dosyası: %LOCALAPPDATA%\MonoBridgeDesktop\credentials.bin
+Mevcut Entegra veritabanı ve eski proje verileri değiştirilmedi.

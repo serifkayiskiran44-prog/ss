@@ -1,0 +1,31 @@
+# Uygulama durumu — .NET 8 EXE
+
+Ana program: Windows-Current/TrMarketplaceHubDesktop.exe. Giriş parolası yoktur.
+
+| İşlev | Durum |
+|---|---|
+| Mevcut masaüstü ürün/XML/kanal/sipariş ekranları | PRESERVED; API kapsamı README-YONETIM-MERKEZI.md |
+| Aktif/pasif ve pasif Etsy gönderim engeli | Mevcut kod korundu |
+| Ayrıntılı ürün filtreleri | IMPLEMENTED; gerçek geçici SQLite testi, 218 test toplam |
+| CommerceHub merkezi stok/mağaza politikaları | NOT_PORTED |
+| Normal ürün ek operasyon alanları | PARTIAL: MPN/fatura adı/alt başlık/raf/tarih taşındı; XML koruma ve kayıt testi geçti |
+| Varyant sistemi | DEFERRED_BY_USER |
+| Paket/set/bundle | DEFERRED_BY_USER |
+| Hızlı satır içi düzenleme | DEFERRED_BY_USER |
+| Kritik fiyat | DEFERRED_BY_USER |
+| XML varyant mapping | DEFERRED_BY_USER |
+| Fulfillment core | DEFERRED_BY_USER |
+| Hakediş/mutabakat core | DEFERRED_BY_USER |
+
+Ertelenen alanların tüm alt özellik/ekran/test geliştirmeleri kapsam dışıdır, eksik sayılmaz. Çalışan kod silinmez. Canlı marketplace verisi değiştirilmedi. Görsel masaüstü UI incelemesi bu adımda henüz yapılmadı.
+
+2026-09-11: 219 test geçti. Yeni yayın Windows-Operations/TrMarketplaceHubDesktop.exe; giriş şifresi yok. Açık eski uygulama korunur. Yeni alanların görsel kontrolü yapılmadı.
+
+
+Sipariş stok düşümü PARTIAL: yerel önizleme+atomik düşüm+duplicate koruma+hareket kaydı tamamlandı; rezervasyon/depo/kanallara gönderim eksik. 234 test; docs/ORDER-STOCK.md. Güncel EXE Windows-Stock/TrMarketplaceHubDesktop.exe.
+
+Mağaza stok politikaları PARTIAL: kalıcı güvenlik stoğu/üst sınır/sürüm kontrolü ve yerel önizleme IMPLEMENTED. Dış API dispatch/depo/rezervasyon henüz yok. 235test ve Release publish başarılı. Güncel yayın Windows-Policies.
+
+Fiyat politikası PARTIAL: yerel formül/kayıt/önizleme ve güvenlik koruması eklendi; bağımsız test/görsel kontrol ve canlı dispatch eksik. Windows-Price yayınlandı, mevcut 235 test geçti.
+
+Excel ekranı PARTIAL: XLSX export+preview uygulandı; atomik import/kolon eşleme eksik. Windows-Excel yayınlandı.

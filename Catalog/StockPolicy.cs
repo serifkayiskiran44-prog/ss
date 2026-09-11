@@ -1,0 +1,16 @@
+using Microsoft.Data.Sqlite;
+using System.Text.Json;
+namespace TrMarketplaceHubDesktop.Catalog;
+public sealed class StockPolicy {
+ public string Channel{get;set;}="";public string Shop{get;set;}="";
+ public int SafetyStock{get;set;} public int? MaximumStock{get;set;}
+ public int Version{get;set;}
+}
+public partial class CatalogStore {
+ static void InitializeStockPolicies(SqliteConnection c){using var cmd=c.CreateCommand();cmd.CommandText="CREATE TABLE IF NOT EXISTS StockPolicies(Channel TEXT NOT NULL,Shop TEXT NOT NULL,Json TEXT NOT NULL,PRIMARY KEY(Channel,Shop))";cmd.ExecuteNonQuery();}
+ static (string Channel,string Shop) PolicyKey(string channel,string shop){if(string.IsNullOrWhiteSpace(channel)||string.IsNullOrWhiteSpace(shop)||channel.Length>100||shop.Length>200)throw new ArgumentException("Kanal ve mağaza anahtarı zorunlu (en fazla 100/200 karakter).");return(channel.Trim().ToLowerInvariant(),shop.Trim());}
+ static StockPolicy? ReadPolicy(SqliteConnection c,SqliteTransaction? tx,string channel,string shop){using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Json FROM StockPolicies WHERE Channel=$c AND Shop=$s";cmd.Parameters.AddWithValue("$c",channel);cmd.Parameters.AddWithValue("$s",shop);return cmd.ExecuteScalar() is string json?JsonSerializer.Deserialize<StockPolicy>(json):null;}
+ public StockPolicy? GetStockPolicy(string channel,string shop){var key=PolicyKey(channel,shop);using var c=Open();return ReadPolicy(c,null,key.Channel,key.Shop);}
+ public StockPolicy SaveStockPolicy(StockPolicy value){var key=PolicyKey(value.Channel,value.Shop);if(value.SafetyStock<0||value.MaximumStock<0||value.Version<0)throw new ArgumentException("Stok ve sürüm negatif olamaz.");using var c=Open();using var tx=c.BeginTransaction(deferred:false);var old=ReadPolicy(c,tx,key.Channel,key.Shop);if((old?.Version??0)!=value.Version)throw new InvalidOperationException("Ayar başka bir işlemde değişti. Yeniden yükleyin.");var saved=new StockPolicy{Channel=key.Channel,Shop=key.Shop,SafetyStock=value.SafetyStock,MaximumStock=value.MaximumStock,Version=checked(value.Version+1)};using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="INSERT INTO StockPolicies VALUES($c,$s,$j) ON CONFLICT(Channel,Shop) DO UPDATE SET Json=excluded.Json";cmd.Parameters.AddWithValue("$c",saved.Channel);cmd.Parameters.AddWithValue("$s",saved.Shop);cmd.Parameters.AddWithValue("$j",JsonSerializer.Serialize(saved));cmd.ExecuteNonQuery();tx.Commit();return saved;}
+ public int PreviewStock(string channel,string shop,string productId){var key=PolicyKey(channel,shop);using var c=Open();using var tx=c.BeginTransaction(deferred:true);var policy=ReadPolicy(c,tx,key.Channel,key.Shop)??throw new InvalidOperationException("Önce mağaza stok ayarını kaydedin.");using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";cmd.Parameters.AddWithValue("$id",productId);var p=cmd.ExecuteScalar() is string json?JsonSerializer.Deserialize<CatalogProduct>(json):null;if(p==null)throw new InvalidOperationException("Ürün bulunamadı.");var available=p.Active?Math.Max(0,p.Stock-policy.SafetyStock):0;tx.Commit();return policy.MaximumStock.HasValue?Math.Min(available,policy.MaximumStock.Value):available;}
+}
