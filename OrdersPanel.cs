@@ -1,6 +1,7 @@
 using TrMarketplaceHubDesktop.Catalog;
 using System.Diagnostics;
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -18,6 +19,7 @@ public static class OrdersPanel
   var marketplaceFilter=new ComboBox{Width=130,ItemsSource=new[]{"Tümü"},SelectedIndex=0};bar.Children.Add(marketplaceFilter);
   var shopFilter=new ComboBox{Width=140,ItemsSource=new[]{"Tümü"},SelectedIndex=0};bar.Children.Add(shopFilter);
   var stockFilter=new ComboBox{Width=145,ItemsSource=new[]{"Tümü","Stok düşüldü","Stok bekliyor"},SelectedIndex=0};bar.Children.Add(stockFilter);
+  var viewStore=new UiPreferenceStore(directory);var savedViews=new ComboBox{Width=165,DisplayMemberPath="Name"};var viewName=new TextBox{Width=130,ToolTip="Kayıtlı sipariş görünümü adı"};bar.Children.Add(new TextBlock{Text="Görünüm",Margin=new Thickness(8,4,2,4),VerticalAlignment=VerticalAlignment.Center});bar.Children.Add(savedViews);bar.Children.Add(viewName);
   var refresh=Button(bar,"Etsy'den yenile");var cancel=Button(bar,"İptal");cancel.IsEnabled=false;var add=Button(bar,"+ Yerel sipariş");
   var status=Text("Kayıtlar yükleniyor…");top.Children.Add(status);
   var layout=new Grid();layout.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});layout.ColumnDefinitions.Add(new(){Width=new GridLength(370)});root.Children.Add(layout);
@@ -25,6 +27,8 @@ public static class OrdersPanel
   foreach(var (label,path,width) in new[]{("Pazaryeri","Marketplace",90),("Mağaza","ShopId",100),("Sipariş","OrderId",110),("Sipariş durumu (kaynak)","RawStatus",150),("Ödeme","PaymentStatus",110),("Stok kararı","StockDecisionLabel",130),("Kargo","DeliveryLabel",210),("Taşıyıcı","Carriers",110),("Takip no","TrackingNumbers",130),("Toplam","TotalLabel",100),("Kaynak","Source",120),("Son başarılı alım","SyncLabel",140)})grid.Columns.Add(new DataGridTextColumn{Header=label,Binding=new Binding(path),MinWidth=width,Width=width});
   var detail=new StackPanel{Margin=new Thickness(12,0,0,0)};var scroll=new ScrollViewer{Content=detail,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};Grid.SetColumn(scroll,1);layout.Children.Add(scroll);
   List<OrderSnapshot> all=[];OrderSnapshot? editing=null;CancellationTokenSource? running=null;
+  void ReloadViews()=>savedViews.ItemsSource=viewStore.ListViews("orders");
+  void LoadView(SavedUiView view){using var doc=JsonDocument.Parse(view.Payload);var root=doc.RootElement;search.Text=root.GetProperty("search").GetString()??"";filter.SelectedIndex=root.GetProperty("state").GetInt32();marketplaceFilter.SelectedItem=root.GetProperty("marketplace").GetString()??"Tümü";shopFilter.SelectedItem=root.GetProperty("shop").GetString()??"Tümü";stockFilter.SelectedItem=root.GetProperty("stock").GetString()??"Tümü";}
   void Filter(){string q=search.Text.Trim();var selectedMarketplace=marketplaceFilter.SelectedItem?.ToString()??"Tümü";var selectedShop=shopFilter.SelectedItem?.ToString()??"Tümü";var selectedStock=stockFilter.SelectedItem?.ToString()??"Tümü";grid.ItemsSource=all.Where(o=>(q.Length==0||$"{o.Marketplace} {o.ShopId} {o.OrderId} {o.TrackingNumbers} {string.Join(' ',o.Items.Select(i=>i.Title+" "+i.Sku))}".Contains(q,StringComparison.CurrentCultureIgnoreCase))&&(filter.SelectedIndex<=0||o.Shipments.Any(s=>s.State==OrdersRules.States[filter.SelectedIndex-1])||(filter.SelectedIndex==1&&o.Shipments.Count==0))&&(selectedMarketplace=="Tümü"||o.Marketplace==selectedMarketplace)&&(selectedShop=="Tümü"||o.ShopId==selectedShop)&&(selectedStock=="Tümü"||(selectedStock=="Stok düşüldü"&&o.StockDecisionLabel=="Stok düşüldü")||(selectedStock=="Stok bekliyor"&&o.StockDecisionLabel!="Stok düşüldü"))).ToList();}
   void Load(){all=store.ReadAll();foreach(var order in all)order.StockDecisionLabel=catalog.GetOrderStockStatus(order.Marketplace,order.ShopId,order.OrderId)==null?"Stok bekliyor":"Stok düşüldü";marketplaceFilter.ItemsSource=new[]{"Tümü"}.Concat(all.Select(o=>o.Marketplace).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x)).ToArray();shopFilter.ItemsSource=new[]{"Tümü"}.Concat(all.Select(o=>o.ShopId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x)).ToArray();Filter();status.Text=$"{all.Count} kayıt · Liste son yükleme: {DateTime.Now:g}. Boş liste varsa Etsy'den yenileyin veya yerel sipariş ekleyin.";}
   void Edit(OrderSnapshot order,bool isNew=false)
@@ -73,7 +77,7 @@ public static class OrdersPanel
    var save=Button(detail,"Yerel kaydı / gözlemleri kaydet");save.Click+=(_,_)=>{try{Capture();captureShipment();if(isNew&&store.ReadAll().Any(x=>x.Marketplace==o.Marketplace&&x.ShopId==o.ShopId&&x.OrderId==o.OrderId))throw new ArgumentException("Bu sipariş zaten kayıtlı; listeden açarak düzenleyin.");store.SaveManual(o);Load();var saved=all.First(x=>x.Marketplace==o.Marketplace&&x.ShopId==o.ShopId&&x.OrderId==o.OrderId);Edit(saved);status.Text="Yerel kayıt kaydedildi. Pazaryerine veya taşıyıcıya gönderim yapılmadı.";}catch(ArgumentException ex){status.Text=ex.Message;}catch{status.Text="Yerel kayıt kaydedilemedi; disk erişimini kontrol edin.";}};
    void Capture(){o.Marketplace=marketplace.Text.Trim();o.ShopId=shop.Text.Trim();o.OrderId=id.Text.Trim();o.RawStatus=raw.Text.Trim();o.PaymentStatus=payment.Text.Trim();}
   }
-  grid.SelectionChanged+=(_,_)=>{if(grid.SelectedItem is OrderSnapshot o)Edit(o);};search.TextChanged+=(_,_)=>Filter();filter.SelectionChanged+=(_,_)=>Filter();marketplaceFilter.SelectionChanged+=(_,_)=>Filter();shopFilter.SelectionChanged+=(_,_)=>Filter();stockFilter.SelectionChanged+=(_,_)=>Filter();add.Click+=(_,_)=>Edit(new(){Marketplace="Yerel",ShopId="Mağazam",RawStatus="Açık"},true);
+  var saveView=Button(bar,"Görünümü kaydet");saveView.Click+=(_,_)=>{viewStore.SaveView("orders",viewName.Text,JsonSerializer.Serialize(new{search=search.Text,state=filter.SelectedIndex,marketplace=marketplaceFilter.SelectedItem?.ToString()??"Tümü",shop=shopFilter.SelectedItem?.ToString()??"Tümü",stock=stockFilter.SelectedItem?.ToString()??"Tümü"}));viewName.Clear();ReloadViews();};var deleteView=Button(bar,"Görünümü sil");deleteView.Click+=(_,_)=>{if(savedViews.SelectedItem is not SavedUiView view)throw new InvalidOperationException("Önce görünüm seçin.");viewStore.DeleteView("orders",view.Name);ReloadViews();};bar.Children.Add(saveView);bar.Children.Add(deleteView);grid.SelectionChanged+=(_,_)=>{if(grid.SelectedItem is OrderSnapshot o)Edit(o);};search.TextChanged+=(_,_)=>Filter();filter.SelectionChanged+=(_,_)=>Filter();marketplaceFilter.SelectionChanged+=(_,_)=>Filter();shopFilter.SelectionChanged+=(_,_)=>Filter();stockFilter.SelectionChanged+=(_,_)=>Filter();savedViews.SelectionChanged+=(_,_)=>{if(savedViews.SelectedItem is SavedUiView view)try{LoadView(view);}catch{status.Text="Kayıtlı görünüm okunamadı.";}};add.Click+=(_,_)=>Edit(new(){Marketplace="Yerel",ShopId="Mağazam",RawStatus="Açık"},true);
   cancel.Click+=(_,_)=>running?.Cancel();root.Unloaded+=(_,_)=>running?.Cancel();
   refresh.Click+=async(_,_)=>
   {
@@ -84,7 +88,7 @@ public static class OrdersPanel
    catch{status.Text="Siparişler alınamadı. Bağlantı, mağaza ve transactions_r iznini kontrol edin. Önceki kayıtlar korundu.";}
    finally{running=null;refresh.IsEnabled=add.IsEnabled=true;cancel.IsEnabled=false;detail.IsEnabled=true;}
   };
-  Load();detail.Children.Add(Text("Ayrıntıları ve paket geçmişini görmek için listeden bir sipariş seçin. İlk kaydı eklemek için + Yerel sipariş düğmesini kullanın."));return root;
+  ReloadViews();Load();detail.Children.Add(Text("Ayrıntıları ve paket geçmişini görmek için listeden bir sipariş seçin. İlk kaydı eklemek için + Yerel sipariş düğmesini kullanın."));return root;
  }
  sealed record StateChoice(string Value,string Label);
  static TextBlock Text(string text,int size=12)=>new(){Text=text,FontSize=size,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(3,4,3,7),Foreground=Brushes.DarkSlateGray};
