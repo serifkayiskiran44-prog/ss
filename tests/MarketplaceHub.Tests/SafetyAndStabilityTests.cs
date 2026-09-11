@@ -602,6 +602,18 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ChannelContentProfilesInheritOverrideFallbackAndGuardStale()
+    {
+        var store = new ChannelContentProfiles(); store.Save("shop", "channel", "tr-TR", "p1", new Dictionary<string, string> { ["Title"] = "Yerel", ["Description"] = "Açıklama" }, "manual");
+        var profile = store.Save("shop", "channel", "en-US", "p1", new Dictionary<string, string> { ["Title"] = "English" }, "manual");
+        var preview = store.Preview("shop", "channel", "en-US", "p1", new Dictionary<string, string> { ["Description"] = "Local" }, new Dictionary<string, int> { ["Title"] = 20 });
+        Assert.AreEqual("English", preview.Fields["Title"]); Assert.AreEqual("Local", preview.Fields["Description"]); Assert.AreEqual("READY", preview.Status);
+        Assert.ThrowsException<InvalidOperationException>(() => store.EnsureScope(preview, "other", "channel"));
+        var clone = store.Clone(profile, "other", "en-US", true); Assert.AreEqual("other", clone.ShopId);
+        var stale = store.Preview("shop", "channel", "en-US", "p1", new Dictionary<string, string>(), updatedAt: DateTimeOffset.UtcNow.AddDays(-3)); Assert.AreEqual("BLOCKED", stale.Status);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
