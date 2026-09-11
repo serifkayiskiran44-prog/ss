@@ -74,6 +74,12 @@
 - [x] Release build ve self-contained `Windows-M76-XML-Parser` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; XML fixture regression testleri çalıştırılamadı.
 
+## M77 XML scheduler — 2026-09-11
+- [x] Aynı XML kaynağı için tek Running çalıştırma SQLite partial unique index ile atomik hale getirildi.
+- [x] Paralel yarış sonucu güvenli duplicate-run hatasına dönüştürüldü.
+- [x] Release build ve self-contained `Windows-M77-XML-Scheduler` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; restart/concurrency fixture testleri çalıştırılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11

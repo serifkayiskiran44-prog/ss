@@ -44,7 +44,7 @@ public sealed class XmlRunStore
             """;
         command.ExecuteNonQuery();
         using var index = connection.CreateCommand();
-        index.CommandText = "CREATE INDEX IF NOT EXISTS IX_XmlRuns_SourceStarted ON XmlRuns(SourceId,StartedUtc DESC)";
+        index.CommandText = "CREATE INDEX IF NOT EXISTS IX_XmlRuns_SourceStarted ON XmlRuns(SourceId,StartedUtc DESC);CREATE UNIQUE INDEX IF NOT EXISTS UX_XmlRuns_OneRunningSource ON XmlRuns(SourceId) WHERE Status='Running'";
         index.ExecuteNonQuery();
     }
 
@@ -71,7 +71,9 @@ public sealed class XmlRunStore
         command.Parameters.AddWithValue("$id", id);
         command.Parameters.AddWithValue("$source", sourceId.Trim());
         command.Parameters.AddWithValue("$started", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-        command.ExecuteNonQuery();
+        try { command.ExecuteNonQuery(); }
+        catch (SqliteException error) when (error.SqliteErrorCode == 19)
+        { throw new InvalidOperationException("Bu XML kaynağı zaten çalışıyor; paralel ikinci çalışma engellendi."); }
         return id;
     }
 
