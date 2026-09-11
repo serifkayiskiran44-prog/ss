@@ -704,6 +704,13 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyInventoryVariantWriteRemainsExplicitlyDeferred()
+    {
+        var decision = EtsyInventoryDeferredGuard.Evaluate(3, true); Assert.AreEqual("DEFERRED_BY_USER", decision.Status); Assert.AreEqual(3, decision.PropertyCount);
+        Assert.ThrowsException<InvalidOperationException>(() => EtsyInventoryDeferredGuard.EnsureNoWrite(decision));
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
