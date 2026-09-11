@@ -25,6 +25,7 @@ public partial class MainWindow : Window
  readonly GlobalSearchIndexService globalSearchIndex;
  CancellationTokenSource? globalSearchCts;
  readonly CancellationTokenSource lifetime=new();
+ readonly StartupRecovery startupRecovery;
  readonly ObservableCollection<string> logs=[];
  readonly string logPath;
  readonly string? dataDirectory;
@@ -43,7 +44,7 @@ public partial class MainWindow : Window
  public MainWindow():this(null){}
  public MainWindow(string? directory)
  {
-  dataDirectory=directory;store=new CatalogStore(directory);globalSearchIndex=new GlobalSearchIndexService(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
+  dataDirectory=directory;startupRecovery=new StartupRecovery(directory);store=new CatalogStore(directory);globalSearchIndex=new GlobalSearchIndexService(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
   InitializeComponent();uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
@@ -55,6 +56,7 @@ public partial class MainWindow : Window
   try{template=TemplateStore.Load(directory);templateEditor.DataContext=template;var saved=directory==null?CredentialStore.Load():null;if(saved!=null)SetCredentials(saved);}catch(Exception e){Log(Safe(e));}
   RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};globalSearchTimer.Tick+=SearchTimer_Tick;_ = WarmGlobalSearchAsync();
   Log("Global masaüstü hazır. XML otomasyonu yalnız program açıkken çalışır.");
+  if (startupRecovery.State.UncleanExit) Log("Önceki çalışma normal kapanmamış; yerel recovery kontrolleri uygulandı.");
  }
  void GlobalSearchBox_TextChanged(object sender, TextChangedEventArgs e)
  {
@@ -259,7 +261,8 @@ public partial class MainWindow : Window
  async Task RunAsync(Func<Task> action){if(!await gate.WaitAsync(0)){Log("Önceki işlem sürüyor.");return;}ModuleTabs.IsEnabled=false;try{await action();}catch(Exception e){Log(Safe(e));apiStatus.Text=Safe(e);}finally{ModuleTabs.IsEnabled=true;gate.Release();}}
  static string Safe(Exception e)=>e is InvalidOperationException or ArgumentException?e.Message:"İşlem tamamlanamadı. Dosya biçimini, erişim izinlerini ve bağlantıyı kontrol et.";
  void Log(string text){StatusText.Text=text;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);new AuditStore(dataDirectory).Append(new(){Module="UI",Action="log",Outcome="Info",Detail=text});}catch(IOException){}catch(Exception){ } }
- protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();globalSearchTimer.Stop();globalSearchCts?.Cancel();globalSearchCts?.Dispose();lifetime.Cancel();http.Dispose();base.OnClosed(e);}
+ protected override void OnClosing(System.ComponentModel.CancelEventArgs e){lifetime.Cancel();globalSearchCts?.Cancel();base.OnClosing(e);}
+ protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();globalSearchTimer.Stop();globalSearchCts?.Dispose();startupRecovery.Complete();http.Dispose();base.OnClosed(e);}
 }
 
 

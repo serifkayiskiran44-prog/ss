@@ -38,6 +38,12 @@
 - [x] Release build, publish ve installer smoke başarılı.
 - [ ] Harici test projesi bu klonda bulunmadığı için test sayısı doğrulanamadı.
 
+## M71 startup/shutdown/recovery — 2026-09-11
+- [x] Atomic startup marker ve unclean-exit özeti eklendi.
+- [x] Kapanışta lifetime cancellation önce çalışıyor; temiz kapanış marker’ı kaldırıyor.
+- [x] Release build ve self-contained `Windows-M71-Startup-Recovery` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; crash/restart otomatik testi yapılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
