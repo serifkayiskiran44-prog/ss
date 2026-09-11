@@ -544,3 +544,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M84 stok politikası: pasif policy dispatch engeli, wrong-shop/persisted değer doğrulaması ve safety/maximum korumaları (docs/taskpacks/M84.md).
 - [x] M85 medya pipeline: rate-limit sınıflandırması, bounded cancellation-aware retry ve normalize URL TTL cache/invalidation eklendi (docs/taskpacks/M85.md).
 - [x] M86 sipariş ingestion: source/local timestamp ayrımı ve bounded order normalization eklendi; shop/order idempotency korunuyor (docs/taskpacks/M86.md).
+- [x] M87 sipariş istisna güvenliği: bounded/redacted exception kayıtları ve invariant cancel/return detection eklendi; restock onay/stale/idempotency korunuyor (docs/taskpacks/M87.md).
