@@ -70,7 +70,10 @@ public sealed class BulkProductOperations
         if (preview.Request.Kind == BulkProductOperationKind.SetChannelMapping)
         {
             foreach (var line in ready) { cancellationToken.ThrowIfCancellationRequested(); var current = catalog.Products().SingleOrDefault(x => x.Id == line.ProductId) ?? throw new InvalidOperationException("Ürün silinmiş; yeni önizleme alınmalı."); if (current.UpdatedUtc != line.ExpectedUpdatedUtc) throw new InvalidOperationException($"{line.Sku} önizlemeden sonra değişti; işlem iptal edildi."); }
-            var count = 0; foreach (var line in ready) { cancellationToken.ThrowIfCancellationRequested(); plans.Save(line.ChannelPlan!); count++; progress?.Report(count * 100 / ready.Count); } return new(count, skipped, errors);
+            // Validation is cancellable, but the commit phase is deliberately non-cancellable:
+            // ChannelPlans has one-row upserts, so stopping halfway would leave a partial batch.
+            // Once all optimistic checks pass, finish the local commit and report cancellation on the next run.
+            var count = 0; foreach (var line in ready) { plans.Save(line.ChannelPlan!); count++; progress?.Report(count * 100 / ready.Count); } return new(count, skipped, errors);
         }
         var result = catalog.ApplyBulkSnapshots(ready, cancellationToken, progress); return new(result.Applied, skipped, errors);
     }

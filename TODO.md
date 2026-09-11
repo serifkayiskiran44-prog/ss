@@ -419,3 +419,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Fake adapter kullanıldı; gerçek marketplace HTTP write ve PII yok; 346/346 Release testi geçiyor.
 
 - [x] M51 ürün listesi/arama paketi: filtre eşleşmelerinde NOCASE, cancellation kapısı ve 100 maddelik checklist (docs/taskpacks/M51.md).
+
+- [x] M52 toplu ürün işlemleri: channel mapping batch commit cancellation kapısı ve atomiklik testi (docs/taskpacks/M52.md).

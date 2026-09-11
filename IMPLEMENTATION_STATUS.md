@@ -133,3 +133,5 @@ M50 uçtan uca satıcı dry-run (2026-09-11, Issue #85): Sentetik XML/katalog/or
 M51 ürün listesi/arama (Issue #86, 2026-09-11): CatalogStore.Search artık cancellation token kabul ediyor; kanal/mağaza benzeri liste filtreleri NOCASE ile eşleşiyor; Unicode arama ve iptal testleri eklendi. docs/taskpacks/M51.md 100/100 kanıt checklist'i. Canlı marketplace write yok.
 
 M51 doğrulama: Release test 348/348 geçti; self-contained win-x64 yayın Windows-M51-Product-List oluşturuldu.
+
+M52 toplu ürün işlemleri (Issue #87, 2026-09-11): kanal/mağaza mapping batch'inde tüm optimistic kontroller tamamlanmadan commit başlamıyor; commit başladıktan sonra cancellation ile yarım batch bırakılmıyor. Cancellation/atomiklik testi eklendi. docs/taskpacks/M52.md 100/100.
