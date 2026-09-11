@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -112,7 +113,27 @@ public sealed class SafetyAndStabilityTests
             Assert.AreEqual("before", File.ReadAllText(Path.Combine(data, "marker.txt")));
             Assert.IsTrue(Directory.GetDirectories(root, "data.pre-restore-*").Length == 1);
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
+    public void SupportExportDoesNotContainSecretAuditValues()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-export-" + Guid.NewGuid().ToString("N"));
+        var export = Path.Combine(root, "support.zip");
+        try
+        {
+            Directory.CreateDirectory(root);
+            var audit = new TrMarketplaceHubDesktop.AuditStore(root);
+            audit.Append(new() { Module = "redteam", Action = "error", Detail = "Authorization: Bearer live-secret password=hidden" });
+            TrMarketplaceHubDesktop.SupportPackageService.Export(export, root);
+            using var archive = ZipFile.OpenRead(export);
+            var content = string.Join("\n", archive.Entries.Select(entry => { using var reader = new StreamReader(entry.Open()); return reader.ReadToEnd(); }));
+            Assert.IsFalse(content.Contains("live-secret", StringComparison.Ordinal));
+            Assert.IsFalse(content.Contains("hidden", StringComparison.Ordinal));
+            Assert.IsTrue(content.Contains("[redacted]", StringComparison.OrdinalIgnoreCase));
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
     private static readonly List<string> requestBodies = new();

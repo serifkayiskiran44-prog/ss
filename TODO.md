@@ -570,3 +570,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M110 major connectors: eBay ağ timeout/cancel hataları credential sızdırmadan sınıflandırıldı; Amazon/Hepsiburada doğrulanmamış sözleşmeleri LIVE_API_BLOCKED kaldı (docs/taskpacks/M110.md).
 - [x] M111 secondary connectors: Ozon/Allegro/Joom/Wish/Fruugo/Navlungo için read-only PARTIAL veya LIVE_API_BLOCKED durum matrisi eklendi; doğrulanmamış kanallar HTTP çağrısından korunuyor (docs/taskpacks/M111.md).
 - [x] M112 disaster drill: geçici SQLite veri klasöründe yedek manifest/hash, restore ve pre-restore rollback dizini gerçek testle doğrulandı (docs/taskpacks/M112.md).
+- [x] M113 security red-team: destek export’unda audit secret redaction ve geçici DB temizliği negatif fixture ile doğrulandı; canlı write yapılmadı (docs/taskpacks/M113.md).
