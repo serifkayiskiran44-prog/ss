@@ -136,6 +136,20 @@ public sealed class SafetyAndStabilityTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [TestMethod]
+    public void ReleaseFreezeRequiresArtifactAndNoP0P1Blocker()
+    {
+        var blocked = TrMarketplaceHubDesktop.ReleaseFreezeGate.Evaluate(
+            [new TrMarketplaceHubDesktop.ProductionReadinessCheck("security", "BLOCKED", "P1")],
+            artifactVerified: true);
+        var ready = TrMarketplaceHubDesktop.ReleaseFreezeGate.Evaluate(
+            [new TrMarketplaceHubDesktop.ProductionReadinessCheck("security", "PASS", "ok")],
+            artifactVerified: true);
+
+        Assert.AreEqual("FROZEN", blocked.Status);
+        Assert.AreEqual("V1_READY", ready.Status);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
