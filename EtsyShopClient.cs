@@ -6,6 +6,7 @@ namespace TrMarketplaceHubDesktop;
 public sealed record EtsyListing(long ListingId, string Title, string State, int Quantity, decimal Price, string Currency, string Sku);
 public sealed record EtsyListingPage(int Count, IReadOnlyList<EtsyListing> Listings);
 public sealed record EtsyListingUpdateResult(long ListingId);
+public sealed record EtsyListingDetail(long ListingId,string Title,string Description,string State,int Quantity,decimal Price,string Currency,IReadOnlyList<string> Skus);
 public sealed record EtsyListingUpdatePreview(string ProductId,long ListingId,int Quantity,decimal Price,string Currency,DateTime ProductUpdatedUtc);
 public sealed class EtsyListingSyncService(EtsyShopClient client)
 {
@@ -15,6 +16,14 @@ public sealed class EtsyListingSyncService(EtsyShopClient client)
 }
 public sealed class EtsyShopClient(HttpClient client)
 {
+    public async Task<EtsyListingDetail> GetListingAsync(EtsyCredentials credentials,long listingId,CancellationToken cancellationToken=default)
+    {
+        if(listingId<=0)throw new ArgumentException("Etsy ilan kimliği pozitif olmalı.");
+        if(!long.TryParse(credentials.ShopId,NumberStyles.None,CultureInfo.InvariantCulture,out var shopId)||shopId<=0)throw new ArgumentException("Mağaza kimliği pozitif bir sayı olmalıdır.");
+        using var request=new HttpRequestMessage(HttpMethod.Get,$"https://openapi.etsy.com/v3/application/shops/{shopId}/listings/{listingId.ToString(CultureInfo.InvariantCulture)}");EtsyHttp.AddHeaders(request,credentials,true);
+        using var document=await EtsyHttp.SendJsonAsync(client,request,4*1024*1024,cancellationToken).ConfigureAwait(false);
+        try{var root=document.RootElement;var money=root.GetProperty("price");var divisor=money.GetProperty("divisor").GetDecimal();var skus=root.TryGetProperty("skus",out var skuArray)&&skuArray.ValueKind==JsonValueKind.Array?skuArray.EnumerateArray().Select(x=>x.GetString()??"").Where(x=>x.Length>0).ToArray():Array.Empty<string>();var result=new EtsyListingDetail(root.GetProperty("listing_id").GetInt64(),root.GetProperty("title").GetString()??"",root.GetProperty("description").GetString()??"",root.GetProperty("state").GetString()??"",root.GetProperty("quantity").GetInt32(),money.GetProperty("amount").GetDecimal()/divisor,money.GetProperty("currency_code").GetString()??"",skus);if(result.ListingId!=listingId||result.Title.Length==0||result.Quantity<0||divisor<=0)throw new FormatException();return result;}catch(Exception e) when(e is JsonException or KeyNotFoundException or FormatException or InvalidOperationException or OverflowException){throw new InvalidOperationException("Etsy ilan detay yanıtı eksik veya tutarsız.");}
+    }
     public async Task<EtsyListingPage> GetListingsAsync(EtsyCredentials credentials, string state = "active", int offset = 0, CancellationToken cancellationToken = default)
     {
         if (!long.TryParse(credentials.ShopId, NumberStyles.None, CultureInfo.InvariantCulture, out var shopId) || shopId <= 0)
