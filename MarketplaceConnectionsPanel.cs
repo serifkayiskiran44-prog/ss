@@ -29,7 +29,10 @@ public static class MarketplaceConnectionsPanel
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
         var capability = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
         var result = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
-        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var health = new ApiHealthStore(dataDirectory);
+        foreach (var connection in rows) health.EnsureConnection(connection.Channel, connection.ShopId, connection.Status, connection.LastError);
+        var capture = new ApiHealthCaptureHandler { InnerHandler = new HttpClientHandler() };
+        var http = new HttpClient(capture) { Timeout = TimeSpan.FromSeconds(30) };
 
         void Show(MarketplaceConnection? item)
         {
@@ -79,9 +82,16 @@ public static class MarketplaceConnectionsPanel
         actions.Children.Add(AsyncButton("Salt okunur bağlantı testi", async () =>
         {
             if (grid.SelectedItem is not MarketplaceConnection item) throw new InvalidOperationException("Önce kayıtlı mağaza seçin.");
+            if (health.ShouldDefer(item.Channel, item.ShopId, DateTimeOffset.UtcNow))
+            {
+                var deferred = health.Get(item.Channel, item.ShopId);
+                result.Text = $"Bağlantı testi ertelendi: rate-limit/backoff etkin ({deferred?.BackoffSummary}).";
+                return;
+            }
             result.Text = "Salt okunur bağlantı testi çalışıyor...";
-            try { var message = await ProbeAsync(item, http); store.RecordTest(item.Id, true); result.Text = "Bağlantı testi başarılı: " + message; Reload(); }
-            catch (Exception ex) { store.RecordTest(item.Id, false, ex.Message); result.Text = "Bağlantı testi: " + MarketplaceConnectionStore.Redact(ex.Message); Reload(); }
+            capture.Reset();
+            try { var message = await ProbeAsync(item, http); health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? new ApiHealthObservation { State = "HEALTHY", AuthStatus = "VALID" }); store.RecordTest(item.Id, true); result.Text = "Bağlantı testi başarılı: " + message; Reload(); }
+            catch (Exception ex) { health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? ApiHealthClassifier.FromException(ex)); store.RecordTest(item.Id, false, ex.Message); result.Text = "Bağlantı testi: " + MarketplaceConnectionStore.Redact(ex.Message); Reload(); }
         }));
         form.Children.Add(actions);
         form.Children.Add(result);

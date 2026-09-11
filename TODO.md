@@ -314,3 +314,12 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Kalite mesajları redacted saklanıyor; sahte endpoint veya otomatik canlı düzeltme yok.
 - [x] Geçici SQLite testleri ile 324 Release testi geçti; self-contained yayın `Windows-M33-Data-Quality` altında üretilecek.
 - [ ] Düzeltme önerilerinin uygulanması kullanıcı onayı ve ilgili modül preview'i olmadan yapılmayacak.
+
+## M34 API bağlantı sağlığı, kota ve rate-limit merkezi — 2026-09-11
+- [x] Kanal/mağaza bazında auth, son deneme, son başarılı istek, HTTP kodu, hata sınıfı ve son hata kaydı eklendi.
+- [x] Salt okunur connector testlerinin response başlıklarından rate-limit, reset ve Retry-After güvenli biçimde yakalanıyor.
+- [x] 401/403/408/429/5xx, timeout ve DNS/ağ hataları sınıflandırılıyor; credential/response body saklanmıyor.
+- [x] Rate-limit/backoff etkinken bağlantı testinin gereksiz tekrar isteği yapması engelleniyor; `ApiHealthStore.ShouldDefer` kuyruk üst katmanına kapı sağlıyor.
+- [x] API bağlantı sağlığı WPF ekranı; arama, durum filtresi, sayaç, backoff ve mağaza/kanal hızlı geçişlerini içeriyor.
+- [x] Fake HTTP header/exception ve geçici SQLite testleri ile 327 Release testi geçti; self-contained yayın `Windows-M34-Api-Health` altında üretilecek.
+- [ ] Doğrulanmamış marketplace endpointleri ve canlı write işlemleri açılmadı.
