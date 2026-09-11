@@ -302,3 +302,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M224 — mesaj merkezi: güvenli template renderer teslim edildi; kanal write açılmadı.
 # M225 — competition/buybox: unavailable provenance ayrımı ve regression testi teslim edildi.
 # M226 — ürün mevzuat/güvenlik: local metadata readiness validator teslim edildi.
+# M227 — gelişmiş sipariş operasyonları: duplicate tracking anomaly detection teslim edildi.

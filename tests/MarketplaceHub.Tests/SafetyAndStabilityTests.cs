@@ -855,6 +855,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void OrderAnomalyDetectorFindsTrackingUsedByDifferentOrders()
+    {
+        var a = new OrderSnapshot { OrderId = "o-1", ShopId = "shop", Marketplace = "etsy", Items = [new() { Title = "A", Quantity = 1 }], Shipments = [new() { Id = "s1", TrackingNumber = "trk" }] };
+        var b = a.Copy(); b.OrderId = "o-2";
+        var anomalies = OrderAnomalyDetector.FindDuplicateTracking([a, b]);
+        Assert.AreEqual("DUPLICATE_TRACKING", anomalies.Single().Status);
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
