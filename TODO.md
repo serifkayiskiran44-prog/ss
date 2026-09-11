@@ -196,3 +196,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Güncel Wish API kimlik/endpoint sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP yok.
 - [x] 288 Release testi geçti; self-contained yayın `Windows-M17-Wish` altında üretildi.
 - [ ] Wish ürün/sipariş/stok/fiyat canlı operasyonları resmi credential ve API sözleşmesi doğrulanana kadar kapalı.
+
+## M18 Navlungo yerel tracking geçmişi — 2026-09-11
+- [x] Navlungo paneli uygulamanın veri dizinine bağlandı; ayarlar mevcut DPAPI store ile korunuyor.
+- [x] Kanal/mağaza/sipariş/paket/tracking taşıyıcısı/durum alanlarıyla yerel tracking kaydı eklendi; composite shipment upsert ve sipariş filtresi var.
+- [x] Sipariş panelindeki yerel paket gözlemi kaydedildiğinde tracking geçmişine aynı kanal/mağaza/sipariş/paket anahtarıyla yazılıyor.
+- [x] Hata alanı kalıcılaştırılmadan önce credential/token desenleri maskeleniyor; dış API çağrısı yok ve satırlar `LIVE_API_BLOCKED` sınırında yerel olarak gösteriliyor.
+- [x] 290 Release testi geçti; self-contained yayın `Windows-M18-Navlungo` altında üretildi.
+- [ ] Navlungo token, kargo oluşturma, teklif ve canlı tracking dispatch'i resmi read-only/yazma sözleşmesi ve açık preview/onay olmadan kapalı.

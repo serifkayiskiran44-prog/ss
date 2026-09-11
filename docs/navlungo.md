@@ -13,4 +13,8 @@ Resmi kaynaklar (10 Eylül 2026 kontrolü):
 - [Token](https://github.com/Navlungo/public-api-docs/blob/main/token.md)
 - [Teklif işlemi](https://github.com/Navlungo/public-api-docs/blob/main/quote.md)
 
-WPF bağlama: içerik alanına `NavlungoPanel.Create()` eklenir. Otomatik bağlantı/test çağrısı yoktur.
+WPF bağlama: içerik alanına `NavlungoPanel.Create(dataDirectory)` eklenir. Otomatik bağlantı/test çağrısı yoktur.
+
+## Yerel tracking geçmişi
+
+Paneldeki yerel tracking görünümü, marketplace siparişindeki paket durumunu kullanıcı tarafından kaydetmek ve aramak için `navlungo.db` içindeki `NavlungoTracking` tablosunu kullanır. Kayıt anahtarı kanal + mağaza + sipariş + paket birleşimidir; aynı paket yeniden işlendiğinde satır çoğaltılmaz. Bu kayıtlar `Source=Yerel / manuel` olarak işaretlenir ve Navlungo'ya HTTP isteği göndermez. Read-only tracking sözleşmesi doğrulanana kadar ekran ile dış API arasında otomatik senkronizasyon yoktur.
