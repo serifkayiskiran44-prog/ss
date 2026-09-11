@@ -417,3 +417,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 ## M50 uçtan uca satıcı dry-run — 2026-09-11
 - [x] Sentetik XML → katalog → Etsy sipariş stok kararı → restart/idempotency fixture testi eklendi.
 - [x] Fake adapter kullanıldı; gerçek marketplace HTTP write ve PII yok; 346/346 Release testi geçiyor.
+
+- [x] M51 ürün listesi/arama paketi: filtre eşleşmelerinde NOCASE, cancellation kapısı ve 100 maddelik checklist (docs/taskpacks/M51.md).

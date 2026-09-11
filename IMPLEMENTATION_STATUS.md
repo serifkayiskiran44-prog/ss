@@ -129,3 +129,5 @@ M48 Etsy listing yaşam döngüsü (2026-09-11, Issue #83): Etsy listing publish
 M49 Etsy sipariş senkronu (2026-09-11, Issue #84): `OrdersEtsyClient` resmi receipts read akışına 100'lü pagination ve `min_last_modified` incremental filtresi eklendi. `OrdersStore` mağaza+receipt idempotent upsert ve eski yerel kargo olaylarını korur; stok/iptal/iade karar kapıları değişmedi. 345 Release testi geçti; canlı credential olmadan gerçek API çağrısı yapılmadı.
 
 M50 uçtan uca satıcı dry-run (2026-09-11, Issue #85): Sentetik XML/katalog/order fixture ile ürün alma, Etsy stok kararı, transaction ve restart sonrası duplicate koruması baştan sona doğrulandı. Fake adapter kullanıldı; canlı marketplace write/credential/PII yok. 346 Release testi geçti; `docs/SELLER-DRY-RUN.md`.
+
+M51 ürün listesi/arama (Issue #86, 2026-09-11): CatalogStore.Search artık cancellation token kabul ediyor; kanal/mağaza benzeri liste filtreleri NOCASE ile eşleşiyor; Unicode arama ve iptal testleri eklendi. docs/taskpacks/M51.md 100/100 kanıt checklist'i. Canlı marketplace write yok.

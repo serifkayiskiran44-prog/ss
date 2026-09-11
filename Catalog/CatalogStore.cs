@@ -5,8 +5,9 @@ namespace TrMarketplaceHubDesktop.Catalog;
 public partial class CatalogStore
 {
  readonly string connectionString;
- public CatalogPage Search(string search,int offset=0,int limit=200,CatalogFilter? filter=null)
+ public CatalogPage Search(string search,int offset=0,int limit=200,CatalogFilter? filter=null, CancellationToken cancellationToken=default)
  {
+  cancellationToken.ThrowIfCancellationRequested();
   if(offset<0||limit<1||limit>1000)throw new ArgumentOutOfRangeException(nameof(limit),"Sayfa boyutu 1–1000, başlangıç sıfır veya daha büyük olmalı.");
   filter??=new();
   foreach(var values in new[]{filter.Brands,filter.Categories,filter.Skus})if(values.Length>100||values.Sum(v=>v.Length)>6000)throw new ArgumentException("Filtre en fazla 100 değer ve 6000 karakter olabilir.");
@@ -18,13 +19,13 @@ public partial class CatalogStore
   foreach(var (field,values) in new[]{("Brand",filter.Brands),("Category",filter.Categories),("Sku",filter.Skus)}){
    if(values.Length==0)continue;
    var names=new List<string>();foreach(var value in values){var key="$filter"+extra.Count;extra.Add(key,value);names.Add(key);}
-   where+=$" AND json_extract(Json,'$.{field}') IN ({string.Join(",",names)})";
+   where+=$" AND json_extract(Json,'$.{field}') COLLATE NOCASE IN ({string.Join(",",names)})";
   }
   var pattern="%"+search.Replace("\\","\\\\").Replace("%","\\%").Replace("_","\\_")+"%";
   void Params(SqliteCommand cmd){cmd.Transaction=tx;cmd.Parameters.AddWithValue("$all",search.Length==0?1:0);cmd.Parameters.AddWithValue("$q",pattern);cmd.Parameters.AddWithValue("$active",filter.Active.HasValue?(filter.Active.Value?1:0):-1);cmd.Parameters.AddWithValue("$description",filter.DescriptionPresent.HasValue?(filter.DescriptionPresent.Value?1:0):-1);cmd.Parameters.AddWithValue("$image",filter.ImagePresent.HasValue?(filter.ImagePresent.Value?1:0):-1);foreach(var pair in extra)cmd.Parameters.AddWithValue(pair.Key,pair.Value);}
   int total,inStock,linked;
-  using(var count=c.CreateCommand()){Params(count);count.CommandText="SELECT COUNT(*),COALESCE(SUM(CASE WHEN json_extract(Json,'$.Stock')>0 THEN 1 ELSE 0 END),0),COALESCE(SUM(CASE WHEN COALESCE(json_extract(Json,'$.EtsyListingId'),'')<>'' THEN 1 ELSE 0 END),0) FROM CatalogProducts"+where;using var reader=count.ExecuteReader();reader.Read();total=reader.GetInt32(0);inStock=reader.GetInt32(1);linked=reader.GetInt32(2);}
-  var items=new List<CatalogProduct>();using(var page=c.CreateCommand()){Params(page);page.CommandText="SELECT Json FROM CatalogProducts"+where+" ORDER BY json_extract(Json,'$.Name') COLLATE NOCASE,Id LIMIT $limit OFFSET $offset";page.Parameters.AddWithValue("$limit",limit);page.Parameters.AddWithValue("$offset",offset);using var reader=page.ExecuteReader();while(reader.Read())items.Add(JsonSerializer.Deserialize<CatalogProduct>(reader.GetString(0))!);}
+  using(var count=c.CreateCommand()){cancellationToken.ThrowIfCancellationRequested();Params(count);count.CommandText="SELECT COUNT(*),COALESCE(SUM(CASE WHEN json_extract(Json,'$.Stock')>0 THEN 1 ELSE 0 END),0),COALESCE(SUM(CASE WHEN COALESCE(json_extract(Json,'$.EtsyListingId'),'')<>'' THEN 1 ELSE 0 END),0) FROM CatalogProducts"+where;using var reader=count.ExecuteReader();reader.Read();total=reader.GetInt32(0);inStock=reader.GetInt32(1);linked=reader.GetInt32(2);}
+  var items=new List<CatalogProduct>();using(var page=c.CreateCommand()){cancellationToken.ThrowIfCancellationRequested();Params(page);page.CommandText="SELECT Json FROM CatalogProducts"+where+" ORDER BY json_extract(Json,'$.Name') COLLATE NOCASE,Id LIMIT $limit OFFSET $offset";page.Parameters.AddWithValue("$limit",limit);page.Parameters.AddWithValue("$offset",offset);using var reader=page.ExecuteReader();while(reader.Read()){cancellationToken.ThrowIfCancellationRequested();items.Add(JsonSerializer.Deserialize<CatalogProduct>(reader.GetString(0))!);}}
   tx.Commit();return new(items,total,inStock,linked);
  }
  public CatalogStore(string? directory=null){directory??=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");Directory.CreateDirectory(directory);connectionString=new SqliteConnectionStringBuilder{DataSource=System.IO.Path.Combine(directory,"catalog.db")}.ToString();using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="CREATE TABLE IF NOT EXISTS Sources(Id TEXT PRIMARY KEY, Json TEXT NOT NULL);CREATE TABLE IF NOT EXISTS CatalogProducts(Id TEXT PRIMARY KEY, Json TEXT NOT NULL);";cmd.ExecuteNonQuery();InitializeOrderStock(c);InitializeStockPolicies(c);InitializePricePolicies(c);}
