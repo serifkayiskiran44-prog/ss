@@ -369,3 +369,9 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] WPF `Üretim hazırlığı` ekranı kontrol durumlarını, bloklu doğrulanmamış connector'ları ve güvenlik sınırını görünür kılıyor.
 - [x] Açık secret ve kritik veri kalite kaydı için bloklayıcı testler eklendi; rapor değerleri dışarı sızdırmıyor.
 - [ ] `LIVE_API_BLOCKED` kanallar için resmi credential/scope/endpoint sözleşmesi doğrulanmadıkça canlı write açılmayacak.
+
+## M41 teknik borç ve güvenlik düzeltme turu — 2026-09-11
+- [x] Merkezi audit/support redaction; Authorization bearer/basic başlıkları, JSON credential alanları ve query tokenları dışa aktarımlarda maskeleniyor.
+- [x] Son başarısız audit kaydı Outcome=`Failed` ile doğrudan sorgulanıyor; arama metnindeki tesadüfi eşleşmeler sonucu bozmaz.
+- [x] Audit, tanılama ve destek ZIP sentinel testleri eklendi; Release testleri 344/344 geçti.
+- [ ] Resmi credential/scope/endpoint sözleşmesi doğrulanmadıkça `LIVE_API_BLOCKED` kanallarda canlı write açılmayacak.

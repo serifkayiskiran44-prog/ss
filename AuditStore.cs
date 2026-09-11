@@ -40,12 +40,28 @@ public sealed class AuditStore
     {
         if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like) ORDER BY AtUtc DESC LIMIT $limit"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) result.Add(Read(reader)); return result;
     }
-    public AuditEvent? LastFailure() => List(1, "Failed").FirstOrDefault();
+    public AuditEvent? LastFailure()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE Outcome = $outcome ORDER BY AtUtc DESC LIMIT 1";
+        command.Parameters.AddWithValue("$outcome", "Failed");
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? Read(reader) : null;
+    }
     static AuditEvent Read(SqliteDataReader reader) => new() { Id = reader.GetString(0), AtUtc = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), Module = reader.GetString(2), Action = reader.GetString(3), ProductId = reader.GetString(4), OrderId = reader.GetString(5), Marketplace = reader.GetString(6), ShopId = reader.GetString(7), Outcome = reader.GetString(8), Detail = reader.GetString(9) };
     static string Clean(string value, int max) { var clean = Sanitize(value); return clean.Length > max ? clean[..max] : clean; }
     public static string Sanitize(string? value)
     {
-        var safe = Regex.Replace(value ?? "", "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[^\\s,;&]+", "$1=[redacted]"); safe = MarketplaceConnectionStore.Redact(safe); safe = Regex.Replace(safe, "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[^\\s,;&]+", "$1=[redacted]"); return safe.Length > 2000 ? safe[..2000] : safe;
+        var safe = value ?? "";
+        // Normalize transport credentials before the generic key/value pass so
+        // support packages and audit rows cannot retain bearer/query secrets.
+        safe = Regex.Replace(safe, "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
+        safe = Regex.Replace(safe, "(?i)([?&](?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|token)=)[^&#\\s]+", "$1[redacted]");
+        safe = Regex.Replace(safe, "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[\\\"']?[^\\\"'\\s,;&}]+", "$1=[redacted]");
+        safe = MarketplaceConnectionStore.Redact(safe);
+        safe = Regex.Replace(safe, "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
+        return safe.Length > 2000 ? safe[..2000] : safe;
     }
 }
 
