@@ -244,3 +244,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] 20 MB sınırı, timeout, 404, geçersiz adres, desteklenmeyen biçim ve HTTP hata sınıfları; doğrulama/retry yalnız dosya okur, canlı marketplace yazmaz.
 - [x] Fake HTTP ve geçici SQLite senaryoları ile 301 Release testi geçti; self-contained yayın `Windows-M24-Media` altında üretilecek.
 - [ ] Marketplace görsel yazımı bu modülde açılmadı; yalnız ilgili connector'ın mevcut preview/onay kapısından geçebilir.
+
+## M25 Excel şablon ve gelişmiş aktarım merkezi — 2026-09-11
+- [x] SQLite tabanlı Excel profilleri: kolon eşlemeleri, başlık alias'ları, kültür, varsayılan değerler ve dışa aktarım görünür alanları kaydediliyor.
+- [x] Profil önizlemesi SKU/barkod üzerinden `CREATE`, `UPDATE`, `SKIP` ve `ERROR` kararlarını satır bazında gösteriyor.
+- [x] Filtrelenmiş ürün seti ve profil alanlarıyla dışa aktarım; hatalı satırlar ayrı Excel raporu; geçerli satırlar mevcut atomik/undo akışına gidiyor.
+- [x] Gerçek XLSX fixture + geçici SQLite testleri ile 303 Release testi geçti; self-contained yayın `Windows-M25-Excel` altında üretilecek.
+- [ ] Varyant/bundle ve diğer `DEFERRED_BY_USER` alanları Excel profiline eklenmedi.
