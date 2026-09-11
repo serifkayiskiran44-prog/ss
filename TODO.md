@@ -80,6 +80,12 @@
 - [x] Release build ve self-contained `Windows-M77-XML-Scheduler` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; restart/concurrency fixture testleri çalıştırılamadı.
 
+## M78 Excel import — 2026-09-11
+- [x] Excel undo/apply akışı provenance alanlarını koruyor.
+- [x] 100 MB üzeri XLSX dosyaları parser öncesi reddediliyor.
+- [x] Release build ve self-contained `Windows-M78-Excel-Import` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; XLSX fixture/cancellation testleri çalıştırılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
