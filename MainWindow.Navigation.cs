@@ -57,6 +57,7 @@ public partial class MainWindow
   var wishTabs=new TabControl();wishTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("wish",dataDirectory)});wishTabs.Items.Add(new TabItem{Header="Bağlantı",Content=WishPanel.Create(dataDirectory)});Page("wish","Wish","Merchant ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",wishTabs);
   Page("channels","Diğer pazaryerleri","Wish, Allegro ve Fruugo: hesap başvuruları ve entegrasyon gereksinimleri.",MarketplaceSetupPanel.CreateOther(dataDirectory));
   Page("connections","Mağaza bağlantıları","Tüm kanal ve mağaza kayıtları, yetenekler ve salt okunur bağlantı testleri.",MarketplaceConnectionsPanel.Create(dataDirectory,key=>Navigate(key)));
+  Page("api-health","API bağlantı sağlığı","Auth, erişilebilirlik, rate-limit, kota ve son hata durumu",ApiHealthPanel.Create(dataDirectory,key=>Navigate(key)));
   Group("OPERASYON");
   Page("price-policies","Mağaza fiyat kuralları","CASE formülü, kur ve güvenli fiyat önizlemesi",BuildPricePolicies());
   Page("stock-policies","Mağaza stok ayarları","Güvenlik stoğu, üst sınır ve yerel önizleme",BuildStockPolicies());
