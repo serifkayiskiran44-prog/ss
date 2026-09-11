@@ -61,6 +61,7 @@ public partial class MainWindow
   Page("price-policies","Mağaza fiyat kuralları","CASE formülü, kur ve güvenli fiyat önizlemesi",BuildPricePolicies());
   Page("stock-policies","Mağaza stok ayarları","Güvenlik stoğu, üst sınır ve yerel önizleme",BuildStockPolicies());
   Page("policy-center","Stok / fiyat politika merkezi","Kanal + mağaza politikaları, kopyalama ve ürün preview'i",PolicyCenterPanel.Create(dataDirectory));
+  Page("data-quality","Veri kalite merkezi","Duplicate, zorunlu alan, fiyat/stok/döviz, URL ve kaynak hataları",DataQualityPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("orders","Sipariş ve kargo","Sipariş kayıtları, paket ve kargo takibi",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts));
   Page("order-exceptions","Sipariş istisnaları","Eksik SKU, iptal/iade ve stok kararlarını önizleme/onay ile yönetin.",OrderExceptionsPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("messages","Mesaj merkezi","Müşteri mesajları, sistem bildirimleri ve yerel yanıt şablonları",MessagePanel.Create(dataDirectory,key=>Navigate(key)));

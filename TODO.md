@@ -306,3 +306,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Mevcut fiyat formülü, döviz, minimum fiyat ve minimum fark çekirdeği kullanıldı; kritik fiyat kapsam dışı.
 - [x] Geçici SQLite/stale/kopyalama testleri ile 322 Release testi geçti; self-contained yayın `Windows-M32-Policy-Center` altında üretildi.
 - [ ] Canlı dispatch yalnız connector'ın mevcut preview/onay kapısından geçer; bu merkez doğrudan HTTP yazmaz.
+
+## M33 veri kalite merkezi — 2026-09-11
+- [x] Duplicate SKU/barkod/listing, eksik zorunlu alan, negatif sayı, döviz, görsel URL'si, XML run ve canlı API capability uyarıları tek taramada toplanıyor.
+- [x] Fingerprint tabanlı upsert aynı sorunu tekrar taramada çoğaltmıyor; `Resolved` durumu korunuyor.
+- [x] WPF merkezinde arama, önem/durum/tür filtreleri, sayaçlar, detay, ürün/XML navigasyonu ve manuel çözüldü işareti eklendi.
+- [x] Kalite mesajları redacted saklanıyor; sahte endpoint veya otomatik canlı düzeltme yok.
+- [x] Geçici SQLite testleri ile 324 Release testi geçti; self-contained yayın `Windows-M33-Data-Quality` altında üretilecek.
+- [ ] Düzeltme önerilerinin uygulanması kullanıcı onayı ve ilgili modül preview'i olmadan yapılmayacak.
