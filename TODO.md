@@ -44,6 +44,12 @@
 - [x] Release build ve self-contained `Windows-M71-Startup-Recovery` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; crash/restart otomatik testi yapılamadı.
 
+## M72 SQLite schema/migration — 2026-09-11
+- [x] Catalog, sync ve orders store’larında ortak `quick_check`/`user_version` schema gate’i eklendi.
+- [x] Unsupported newer schema için güvenli fail ve transaction içi version set’i eklendi.
+- [x] Release build ve self-contained `Windows-M72-Schema` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; eski fixture/disk dolu/izin senaryoları otomatik çalıştırılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
