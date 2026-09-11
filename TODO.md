@@ -380,3 +380,8 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Etsy sekmesine credential, ilan şablonu, ürün eşleme ve yerel dry-run geçidini tek ekranda gösteren satışa hazırlık paneli eklendi.
 - [x] Onaysız/stale canlı yazma engeli ve `LIVE_API_BLOCKED` görünürlüğü korunuyor; dry-run HTTP write çağrısı yapmıyor.
 - [x] Yeni connector veya ertelenmiş alanlara dokunulmadı; 344 Release testi geçiyor.
+
+## M43 XML kullanım paritesi kabul turu — 2026-09-11
+- [x] XML kaynak → test → düğüm/alan eşleme → önizleme → create/update/skip/error → onay → geçmiş akışı ve kullanıcı farkları dokümante edildi.
+- [x] Sipariş kaynaklı stok düşümünün XML yenilemesiyle ezilmemesi, duplicate/bozuk XML/timeout/gzip sınırları mevcut test ve transaction akışıyla doğrulandı.
+- [x] XML varyant mapping ve doğrulanmamış marketplace write kapsam dışı bırakıldı; Release testleri 344/344.
