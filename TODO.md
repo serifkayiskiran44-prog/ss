@@ -573,3 +573,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M113 security red-team: destek export’unda audit secret redaction ve geçici DB temizliği negatif fixture ile doğrulandı; canlı write yapılmadı (docs/taskpacks/M113.md).
 - [x] M114 final freeze: P0/P1 blocker ve doğrulanmış self-contained artifact yoksa V1_READY kararı verilmiyor; mevcut soak/safety/backup/connector test suite’i 9/9 geçti (docs/taskpacks/M114.md).
 - [x] M115 home tile dashboard: gerçek local store sayaçları ve dinamik hızlı erişim kartları eklendi; kartlar klavye focus ve AutomationProperties adı taşıyor (docs/taskpacks/M115.md).
+- [x] M116 product list parity: ürün dashboard/list erişimi yoğun kart ve hızlı navigasyonla genişletildi; mevcut SQLite-side filtre, sayfalama, async/cancel ve deferred guard’lar korundu (docs/taskpacks/M116.md).
