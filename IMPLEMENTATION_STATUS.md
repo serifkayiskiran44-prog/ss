@@ -161,3 +161,5 @@ M57 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windo
 M58 sipariş liste/detay (Issue #93, 2026-09-11): OrdersStore.ReadPage birleşik filtreleme ve sayfalama sağlar; mevcut order validation, tracking güvenliği ve stale merge korunuyor. docs/taskpacks/M58.md 100/100.
 
 M58 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M58-Orders oluşturuldu.
+
+M59 rebase doğrulama: #94 branch’i #93 güncel head’i üzerine taşındı; önceki M59 test/publish kanıtı korunuyor.
