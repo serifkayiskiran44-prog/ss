@@ -23,6 +23,8 @@ PR #4 review follow-up (2026-09-11): SyncJob status is now atomically claimed an
 
 M2 Etsy order/stock (stacked on PR #4, 2026-09-11): listing detail read and explicit sale stock decision service implemented. Existing atomic receipt/idempotency path is reused; cancellation/return never restores stock automatically. Live production order scope remains LIVE_API_BLOCKED until official credentials are available.
 
+M3 eBay safe parity (stacked on Issue #7, 2026-09-11): official Inventory/Fulfillment API read/write methods, explicit preview/approval, stale version guard and SyncJob idempotency implemented. 263 Release tests pass; production scope/credential validation remains LIVE_API_BLOCKED.
+
 Ertelenen alanların tüm alt özellik/ekran/test geliştirmeleri kapsam dışıdır, eksik sayılmaz. Çalışan kod silinmez. Canlı marketplace verisi değiştirilmedi. Görsel masaüstü UI incelemesi bu adımda henüz yapılmadı.
 
 2026-09-11: 219 test geçti. Yeni yayın Windows-Operations/TrMarketplaceHubDesktop.exe; giriş şifresi yok. Açık eski uygulama korunur. Yeni alanların görsel kontrolü yapılmadı.

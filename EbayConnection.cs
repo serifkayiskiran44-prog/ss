@@ -25,7 +25,7 @@ public sealed class EbayAuthorization
 /// <summary>OAuth token operations and read-only seller privileges. No listing writes.</summary>
 public sealed class EbayConnection(HttpClient http)
 {
-    public const string Scope = "https://api.ebay.com/oauth/api_scope/sell.account.readonly";
+ public const string Scope = "https://api.ebay.com/oauth/api_scope/sell.account.readonly https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly";
     public static void Validate(EbaySettings settings)
     {
         if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret) || string.IsNullOrWhiteSpace(settings.RuName)
@@ -102,6 +102,13 @@ public sealed class EbayConnection(HttpClient http)
             throw new InvalidOperationException("eBay yanıtında satıcı kayıt durumu yok; bağlantı doğrulanamadı.");
         return flag.GetBoolean();
     }
+    public async Task<JsonDocument> GetInventoryItemAsync(EbaySettings settings,EbayTokens tokens,string sku,CancellationToken cancellationToken=default)
+    {if(string.IsNullOrWhiteSpace(sku))throw new ArgumentException("eBay SKU zorunlu.");return await ApiJsonAsync(settings,tokens,HttpMethod.Get,$"/sell/inventory/v1/inventory_item/{Uri.EscapeDataString(sku)}",null,cancellationToken);}
+    public async Task<JsonDocument> GetOrdersAsync(EbaySettings settings,EbayTokens tokens,string? filter=null,CancellationToken cancellationToken=default)
+    {var suffix=string.IsNullOrWhiteSpace(filter)?"":"?filter="+Uri.EscapeDataString(filter);return await ApiJsonAsync(settings,tokens,HttpMethod.Get,"/sell/fulfillment/v1/order"+suffix,null,cancellationToken);}
+    public async Task UpdateInventoryQuantityAsync(EbaySettings settings,EbayTokens tokens,string sku,int quantity,CancellationToken cancellationToken=default)
+    {if(quantity<0)throw new ArgumentException("eBay stok negatif olamaz.");using var content=new StringContent(JsonSerializer.Serialize(new{availability=new{shipToLocationAvailability=new{quantity}}}),Encoding.UTF8,"application/json");using var json=await ApiJsonAsync(settings,tokens,HttpMethod.Put,$"/sell/inventory/v1/inventory_item/{Uri.EscapeDataString(sku)}",content,cancellationToken);}
+    async Task<JsonDocument> ApiJsonAsync(EbaySettings settings,EbayTokens tokens,HttpMethod method,string path,HttpContent? content,CancellationToken cancellationToken){Validate(settings);if(tokens.ExpiresAt<=DateTimeOffset.UtcNow||string.IsNullOrWhiteSpace(tokens.AccessToken))throw new InvalidOperationException("eBay erişim anahtarı geçersiz veya süresi dolmuş.");using var request=new HttpRequestMessage(method,Api(settings)+path){Content=content};request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",tokens.AccessToken);return await SendAsync(request,cancellationToken);}
     private async Task<JsonDocument> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         using var response = await http.SendAsync(request, cancellationToken);
