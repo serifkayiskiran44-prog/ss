@@ -50,6 +50,12 @@
 - [x] Release build ve self-contained `Windows-M72-Schema` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; eski fixture/disk dolu/izin senaryoları otomatik çalıştırılamadı.
 
+## M73 katalog CRUD/integrity — 2026-09-11
+- [x] Product update’te non-empty SKU/barkod duplicate kontrolü optimistic transaction içine alındı.
+- [x] Mevcut required-field, stale/version, provenance ve safe-delete korumaları korundu.
+- [x] Release build ve self-contained `Windows-M73-Catalog-Integrity` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; CRUD regression test sayısı doğrulanamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
