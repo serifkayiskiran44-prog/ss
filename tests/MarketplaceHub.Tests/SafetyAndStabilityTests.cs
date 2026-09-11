@@ -358,6 +358,17 @@ public sealed class SafetyAndStabilityTests
         Assert.IsTrue(restored.Top + restored.Height <= area.Height);
     }
 
+    [TestMethod]
+    public void LargeScalePerformanceMeasures100kSyntheticProductsWithoutMarketplaceAccess()
+    {
+        var metrics = TrMarketplaceHubDesktop.LargeScalePerformance.Measure();
+        Assert.AreEqual(100_000, metrics.ProductCount);
+        Assert.IsTrue(metrics.MatchingCount > metrics.PageCount);
+        Assert.AreEqual(100, metrics.PageCount);
+        Assert.IsTrue(metrics.Elapsed < TimeSpan.FromSeconds(5));
+        Assert.IsTrue(metrics.WorkingSetBytes > 0);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
