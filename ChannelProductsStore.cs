@@ -17,6 +17,10 @@ public sealed class ChannelProductsStore
  {
   Identity(channel,shop,product);using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT Json FROM ChannelPlans WHERE ChannelId=$channel AND ShopId=$shop AND ProductId=$product";cmd.Parameters.AddWithValue("$channel",channel.Trim().ToLowerInvariant());cmd.Parameters.AddWithValue("$shop",shop.Trim());cmd.Parameters.AddWithValue("$product",product);return cmd.ExecuteScalar() is string json?JsonSerializer.Deserialize<ChannelProductPlan>(json):null;
  }
+ public IReadOnlyList<ChannelProductPlan> List(string? channel=null,string? shop=null,string? product=null)
+ {
+  using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT Json FROM ChannelPlans WHERE ($channel='' OR ChannelId=$channel) AND ($shop='' OR ShopId=$shop) AND ($product='' OR ProductId=$product) ORDER BY ChannelId,ShopId,ProductId";cmd.Parameters.AddWithValue("$channel",channel?.Trim().ToLowerInvariant()??"");cmd.Parameters.AddWithValue("$shop",shop?.Trim()??"");cmd.Parameters.AddWithValue("$product",product?.Trim()??"");using var r=cmd.ExecuteReader();var result=new List<ChannelProductPlan>();while(r.Read()){var plan=JsonSerializer.Deserialize<ChannelProductPlan>(r.GetString(0));if(plan is not null)result.Add(plan);}return result;
+ }
  public void Save(ChannelProductPlan plan)
  {
   Identity(plan.ChannelId,plan.ShopId,plan.ProductId);
