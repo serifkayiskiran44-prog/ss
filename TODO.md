@@ -88,6 +88,13 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] 263 Release testi geçti; self-contained yayın hazırlanıyor.
 - [ ] eBay uygulamasında gerekli production scope/credential doğrulaması ortam bağımlı (`LIVE_API_BLOCKED`).
 
+## M4 ortak marketplace adapter çekirdeği — 2026-09-11
+- [x] Ozon/Joom/Allegro/Wish/Navlungo için ortak adapter sözleşmesi ve capability modeli eklendi.
+- [x] Kanal+mağaza izole yerel eşleme store'u eklendi; desteklenmeyen operasyon HTTP üretmeden reddediliyor.
+- [x] Ortak preview/onay ve `LIVE_API_BLOCKED` davranışı ile fake adapter/SQLite testleri eklendi.
+- [x] 265 Release testi geçti; Windows-M4-Adapters self-contained publish başarılı.
+- [ ] Bu beş kanal için resmi production endpoint/credential doğrulaması yapılmadı; canlı yazma `LIVE_API_BLOCKED`.
+
 ## Etsy operasyonları — 2026-09-11
 - [x] Etsy resmi API istemcisine basit ilan stok/fiyat güncellemesi eklendi; `listings_w` yetkisi, PATCH ve resmi API kimlik başlıkları kullanılıyor.
 - [x] Geçersiz stok/fiyat/ilan kimliği için istek göndermeyen testler eklendi.
