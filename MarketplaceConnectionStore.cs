@@ -125,11 +125,14 @@ public sealed class MarketplaceConnectionStore
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE MarketplaceConnections SET Enabled=$enabled WHERE Id=$id";
+        command.CommandText = "UPDATE MarketplaceConnections SET Enabled=$enabled,Status=CASE WHEN $enabled=0 THEN 'DISABLED' WHEN Status='DISABLED' THEN 'NOT_CONFIGURED' ELSE Status END WHERE Id=$id";
         command.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
         command.Parameters.AddWithValue("$id", id);
         if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
     }
+
+    /// <summary>Deactivates a shop without deleting its metadata or historical health result.</summary>
+    public void Deactivate(string id) => SetEnabled(id, false);
 
     public void RecordTest(string id, bool success, string? error = null)
     {

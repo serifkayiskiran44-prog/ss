@@ -79,6 +79,11 @@ public static class MarketplaceConnectionsPanel
             if (string.IsNullOrWhiteSpace(selectedId)) throw new InvalidOperationException("Önce kayıtlı mağaza seçin.");
             var next = !(grid.SelectedItem as MarketplaceConnection)?.Enabled ?? true; store.SetEnabled(selectedId, next); Reload(); result.Text = next ? "Bağlantı etkinleştirildi." : "Bağlantı pasife alındı.";
         }));
+        actions.Children.Add(Button("Devre dışı bırak (geçmişi koru)", () =>
+        {
+            if (string.IsNullOrWhiteSpace(selectedId)) throw new InvalidOperationException("Önce kayıtlı mağaza seçin.");
+            store.Deactivate(selectedId); Reload(); result.Text = "Mağaza devre dışı bırakıldı; metadata ve geçmiş sağlık kaydı korundu.";
+        }));
         actions.Children.Add(AsyncButton("Salt okunur bağlantı testi", async () =>
         {
             if (grid.SelectedItem is not MarketplaceConnection item) throw new InvalidOperationException("Önce kayıtlı mağaza seçin.");
@@ -88,6 +93,7 @@ public static class MarketplaceConnectionsPanel
                 result.Text = $"Bağlantı testi ertelendi: rate-limit/backoff etkin ({deferred?.BackoffSummary}).";
                 return;
             }
+            if (!item.Enabled) throw new InvalidOperationException("DISABLED: Devre dışı mağaza için bağlantı testi çalıştırılamaz.");
             result.Text = "Salt okunur bağlantı testi çalışıyor...";
             capture.Reset();
             try { var message = await ProbeAsync(item, http); health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? new ApiHealthObservation { State = "HEALTHY", AuthStatus = "VALID" }); store.RecordTest(item.Id, true); result.Text = "Bağlantı testi başarılı: " + message; Reload(); }
@@ -118,6 +124,8 @@ public static class MarketplaceConnectionsPanel
         {
             case "etsy":
                 var etsy = CredentialStore.Load() ?? throw new InvalidOperationException("NOT_CONFIGURED: Etsy şifreli bağlantısı bulunamadı.");
+                if (!string.Equals(etsy.ShopId.Trim(), item.ShopId.Trim(), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("WRONG_SHOP: Şifreli Etsy credential bu mağaza kimliğiyle eşleşmiyor.");
                 return "Etsy mağazası: " + await new EtsyConnector(http).TestAsync(etsy);
             case "ebay":
                 var ebay = new EbaySettingsStore().Load() ?? throw new InvalidOperationException("NOT_CONFIGURED: eBay şifreli ayarı bulunamadı.");
