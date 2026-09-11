@@ -147,3 +147,5 @@ M54 XML kaynak/mapping (Issue #89, 2026-09-11): XmlCatalog kaynak adresini güve
 M54 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M54-XML oluşturuldu.
 
 M55 Excel (Issue #90, 2026-09-11): CatalogExcel.Preview artık dosya içi yinelenen SKU/barkodları satır hatası olarak raporlar; hatalı önizleme Apply tarafından atomik biçimde reddedilir. docs/taskpacks/M55.md 100/100.
+
+M55 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M55-Excel oluşturuldu.
