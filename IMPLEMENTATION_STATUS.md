@@ -313,3 +313,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M235 — project agent/skills: repo-local sözleşmeler ve read-only reviewer teslim edildi.
 # M236 — agent/skill eval: temsilî senaryo matrix ve düşük risk fan-out ayrımı teslim edildi.
 # M237 — acceptance evidence: issue/head/test/publish zorunluluk gate’i teslim edildi.
+# M238 — Etsy live safety: currency guard ve zero-stock preview düzeltmesi teslim edildi.

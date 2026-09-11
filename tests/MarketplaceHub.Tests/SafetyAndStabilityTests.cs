@@ -937,6 +937,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyLiveSafetyGateBlocksUnknownOrMismatchedCurrency()
+    {
+        Assert.AreEqual("READY", EtsyLiveSafetyGate.ValidateCurrency("USD", "usd").Status);
+        Assert.AreEqual("BLOCKED", EtsyLiveSafetyGate.ValidateCurrency("USD", "EUR").Status);
+        Assert.AreEqual("BLOCKED", EtsyLiveSafetyGate.ValidateCurrency("", "USD").Status);
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
