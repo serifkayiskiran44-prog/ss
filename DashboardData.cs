@@ -23,6 +23,15 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<DashboardNotification> Notifications,
     IReadOnlyList<DashboardTrendPoint> OrderTrend);
 
+public static class DashboardFreshnessEvaluator
+{
+    public static string Status(DateTime? lastDataUtc, DateTime nowUtc, TimeSpan maxAge)
+    {
+        if (!lastDataUtc.HasValue) return "NO_DATA";
+        return nowUtc - lastDataUtc.Value > maxAge ? "STALE" : "FRESH";
+    }
+}
+
 /// <summary>Builds a read-only, local dashboard snapshot from existing stores.</summary>
 public sealed class DashboardDataService
 {

@@ -897,6 +897,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void DashboardFreshnessDistinguishesMissingAndStaleData()
+    {
+        var now = DateTime.UtcNow;
+        Assert.AreEqual("NO_DATA", DashboardFreshnessEvaluator.Status(null, now, TimeSpan.FromHours(1)));
+        Assert.AreEqual("STALE", DashboardFreshnessEvaluator.Status(now.AddHours(-2), now, TimeSpan.FromHours(1)));
+        Assert.AreEqual("FRESH", DashboardFreshnessEvaluator.Status(now, now, TimeSpan.FromHours(1)));
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
