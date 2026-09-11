@@ -369,6 +369,22 @@ public sealed class SafetyAndStabilityTests
         Assert.IsTrue(metrics.WorkingSetBytes > 0);
     }
 
+    [TestMethod]
+    public void UpdateChannelRequiresHttpsAndVerifiedPackageHash()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-update-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root); var package = Path.Combine(root, "package.bin"); File.WriteAllBytes(package, [1, 2, 3]);
+            var notConfigured = TrMarketplaceHubDesktop.UpdateChannel.ValidateSource(null, null, package);
+            var blocked = TrMarketplaceHubDesktop.UpdateChannel.ValidateSource(new Uri("http://example.test/update"), null, package);
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(package)));
+            var verified = TrMarketplaceHubDesktop.UpdateChannel.ValidateSource(new Uri("https://example.test/update"), hash, package);
+            Assert.AreEqual("NOT_CONFIGURED", notConfigured.Status); Assert.AreEqual("BLOCKED", blocked.Status); Assert.AreEqual("VERIFIED", verified.Status);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler

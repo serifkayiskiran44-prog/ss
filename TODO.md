@@ -590,3 +590,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M130 yerel kültür: tr-TR/invariant amount parse ayrımı, TRY formatı ve UTC→Türkiye yerel saat dönüşümü eklendi (docs/taskpacks/M130.md).
 - [x] M131 DPI/erişilebilirlik: kayıtlı pencere geometrisini geçerli çalışma alanına clamp eden ve bozuk değerleri güvenli varsayılana çeviren yardımcı eklendi (docs/taskpacks/M131.md).
 - [x] M132 ölçek fixture’ı: 100k sentetik ürün üzerinde filtreleme ve sayfalama latency/allocation/working-set metriği ölçülüyor (docs/taskpacks/M132.md).
+- [x] M133 update kanalı: yalnız HTTPS ve dosya SHA-256 eşleşmesi doğrulanınca VERIFIED kararı veren, kaynak yoksa NOT_CONFIGURED kalan kontrol eklendi (docs/taskpacks/M133.md).
