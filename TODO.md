@@ -645,3 +645,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M222: Fulfillment Core `DEFERRED_BY_USER` guard ile ertelendi; provider request yok.
 # M223: Hakediş/Mutabakat Core `DEFERRED_BY_USER` guard ile ertelendi; payment write yok.
 # M224: message template placeholder validation eklendi; kanal write yok.
+# M225: competition gözleminde provenance yokluğu UNAVAILABLE ayrımı eklendi; scraping/write yok.

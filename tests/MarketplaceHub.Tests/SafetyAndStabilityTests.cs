@@ -838,6 +838,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void CompetitionObserverDistinguishesUnavailableSourceFromStaleData()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var result = CompetitionObserver.Evaluate([new("etsy", "shop", "p", "offer", 10, "USD", now, "")], "etsy", "shop", "p", 12, now);
+        Assert.AreEqual("UNAVAILABLE", result.Single().Status);
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

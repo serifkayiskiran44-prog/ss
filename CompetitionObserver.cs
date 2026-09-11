@@ -11,7 +11,7 @@ public static class CompetitionObserver
         var scoped = offers.Where(x => x.Channel.Equals(channel, StringComparison.OrdinalIgnoreCase) && x.ShopId.Equals(shopId, StringComparison.Ordinal) && x.ProductId.Equals(productId, StringComparison.Ordinal)).GroupBy(x => x.OfferId).Select(x => x.OrderByDescending(y => y.ObservedAt).First());
         return scoped.Select(x =>
         {
-            if (x.Price <= 0 || x.Currency.Length == 0) return new CompetitionObservation(x.OfferId, "ERROR", 0, 0, x.ObservedAt);
+            if (x.Price <= 0 || x.Currency.Length == 0 || string.IsNullOrWhiteSpace(x.Source)) return new CompetitionObservation(x.OfferId, "UNAVAILABLE", 0, 0, x.ObservedAt);
             var delta = x.Price - localPrice;
             return new CompetitionObservation(x.OfferId, nowUtc - x.ObservedAt > TimeSpan.FromHours(24) ? "STALE" : "OBSERVED", delta, localPrice == 0 ? 0 : delta / localPrice * 100, x.ObservedAt);
         }).ToArray();
