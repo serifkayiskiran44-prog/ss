@@ -581,6 +581,17 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void FieldSourcePolicyBlocksLowerPriorityAndSupportsApprovedApply()
+    {
+        var policy = new FieldSourcePolicy(); policy.Configure("p1", "Name", "manual", true);
+        var blocked = policy.Preview("p1", "Name", "xml"); Assert.AreEqual("BLOCKED", blocked.Decision);
+        policy.Configure("p1", "Name", "xml", false); var applied = policy.Preview("p1", "Name", "xml");
+        Assert.AreEqual("APPLY", applied.Decision); Assert.AreEqual("APPLIED", policy.ApplyApproved(applied, applied.Version, true).Decision);
+        Assert.ThrowsException<InvalidOperationException>(() => policy.ApplyApproved(applied, applied.Version - 1, true));
+        Assert.AreEqual(1, policy.PreviewBulk(new[] { ("p1", "Name", "manual") }).Count);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
