@@ -21,6 +21,7 @@ public partial class MainWindow : Window
  readonly SemaphoreSlim gate=new(1,1);
  readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMinutes(1)};
  readonly DispatcherTimer searchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
+ readonly DispatcherTimer globalSearchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
  readonly GlobalSearchIndexService globalSearchIndex;
  CancellationTokenSource? globalSearchCts;
  readonly CancellationTokenSource lifetime=new();
@@ -46,13 +47,19 @@ public partial class MainWindow : Window
   InitializeComponent();uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
+  GlobalSearchBox.TextChanged += GlobalSearchBox_TextChanged;
   LogList.ItemsSource=logs;
   try{if(File.Exists(logPath))foreach(var line in File.ReadLines(logPath).TakeLast(100))logs.Insert(0,line);}catch(IOException){}
   BuildProducts();BuildSources();BuildApi();BuildListings();BuildTemplate();BuildNavigation();
   if (directory is null && new OnboardingStore(dataDirectory).ShouldPrompt()) Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) OnboardingPanel.ShowWizard(this, dataDirectory, key => Navigate(key)); }));
   try{template=TemplateStore.Load(directory);templateEditor.DataContext=template;var saved=directory==null?CredentialStore.Load():null;if(saved!=null)SetCredentials(saved);}catch(Exception e){Log(Safe(e));}
-  RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};_ = WarmGlobalSearchAsync();
+  RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};globalSearchTimer.Tick+=SearchTimer_Tick;_ = WarmGlobalSearchAsync();
   Log("Global masaüstü hazır. XML otomasyonu yalnız program açıkken çalışır.");
+ }
+ void GlobalSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+ {
+  globalSearchTimer.Stop();
+  if (GlobalSearchBox.Text.Trim().Length >= 2) globalSearchTimer.Start();
  }
  static TextBlock Hint(string text)=>new(){Text=text,TextWrapping=TextWrapping.Wrap,Foreground=new SolidColorBrush(Color.FromRgb(87,112,125)),Margin=new Thickness(4,8,4,8)};
  static TextBlock Heading(string text)=>new(){Text=text,FontSize=20,FontWeight=FontWeights.SemiBold,Margin=new Thickness(4,8,4,12)};
@@ -252,7 +259,7 @@ public partial class MainWindow : Window
  async Task RunAsync(Func<Task> action){if(!await gate.WaitAsync(0)){Log("Önceki işlem sürüyor.");return;}ModuleTabs.IsEnabled=false;try{await action();}catch(Exception e){Log(Safe(e));apiStatus.Text=Safe(e);}finally{ModuleTabs.IsEnabled=true;gate.Release();}}
  static string Safe(Exception e)=>e is InvalidOperationException or ArgumentException?e.Message:"İşlem tamamlanamadı. Dosya biçimini, erişim izinlerini ve bağlantıyı kontrol et.";
  void Log(string text){StatusText.Text=text;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);new AuditStore(dataDirectory).Append(new(){Module="UI",Action="log",Outcome="Info",Detail=text});}catch(IOException){}catch(Exception){ } }
- protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();globalSearchCts?.Cancel();globalSearchCts?.Dispose();lifetime.Cancel();http.Dispose();base.OnClosed(e);}
+ protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();globalSearchTimer.Stop();globalSearchCts?.Cancel();globalSearchCts?.Dispose();lifetime.Cancel();http.Dispose();base.OnClosed(e);}
 }
 
 

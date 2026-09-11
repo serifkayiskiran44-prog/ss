@@ -14,6 +14,12 @@
 - [x] Release build ve self-contained Windows-M66-Performance publish başarılı.
 - [ ] Harici test projesinde hedefli restart/concurrency test paketi bu klonda bulunmadığı için eklenemedi; gerçek test sayısı bu nedenle doğrulanamadı.
 
+## M67 navigasyon/erişilebilirlik/global arama — 2026-09-11
+- [x] Global arama için bağımsız debounce timer, cancellation ve stale-result revision koruması eklendi.
+- [x] Ana pencere, menü araması, global arama ve geri düğmesine erişilebilir adlar eklendi.
+- [x] Release build ve self-contained `Windows-M67-UX-Search` publish başarılı.
+- [ ] Harici UI smoke/test projesi bu klonda bulunmuyor; gerçek kullanıcı arayüzü testi yapılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11

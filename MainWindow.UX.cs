@@ -22,7 +22,15 @@ public partial class MainWindow
         if (e.Key == Key.Enter) { GlobalSearch_Click(sender, e); e.Handled = true; }
     }
 
-    async void GlobalSearch_Click(object? sender, RoutedEventArgs e)
+    async void SearchTimer_Tick(object? sender, EventArgs e)
+    {
+        globalSearchTimer.Stop();
+        if (GlobalSearchBox.IsKeyboardFocusWithin) await GlobalSearch_ClickAsync();
+    }
+
+    async void GlobalSearch_Click(object? sender, RoutedEventArgs e) => await GlobalSearch_ClickAsync();
+
+    async Task GlobalSearch_ClickAsync()
     {
         var query = GlobalSearchBox.Text.Trim();
         if (query.Length < 2) { StatusText.Text = "Arama için en az 2 karakter girin."; GlobalSearchBox.Focus(); return; }
