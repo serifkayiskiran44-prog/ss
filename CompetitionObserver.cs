@@ -9,6 +9,11 @@ public static class CompetitionObserver
     {
         ArgumentNullException.ThrowIfNull(offers);
         var scoped = offers.Where(x => x.Channel.Equals(channel, StringComparison.OrdinalIgnoreCase) && x.ShopId.Equals(shopId, StringComparison.Ordinal) && x.ProductId.Equals(productId, StringComparison.Ordinal)).GroupBy(x => x.OfferId).Select(x => x.OrderByDescending(y => y.ObservedAt).First());
-        return scoped.Select(x => x.Price <= 0 || x.Currency.Length == 0 ? new(x.OfferId, "ERROR", 0, 0, x.ObservedAt) : new(x.OfferId, nowUtc - x.ObservedAt > TimeSpan.FromHours(24) ? "STALE" : "OBSERVED", x.Price - localPrice, localPrice == 0 ? 0 : (x.Price - localPrice) / localPrice * 100, x.ObservedAt)).ToArray();
+        return scoped.Select(x =>
+        {
+            if (x.Price <= 0 || x.Currency.Length == 0) return new CompetitionObservation(x.OfferId, "ERROR", 0, 0, x.ObservedAt);
+            var delta = x.Price - localPrice;
+            return new CompetitionObservation(x.OfferId, nowUtc - x.ObservedAt > TimeSpan.FromHours(24) ? "STALE" : "OBSERVED", delta, localPrice == 0 ? 0 : delta / localPrice * 100, x.ObservedAt);
+        }).ToArray();
     }
 }
