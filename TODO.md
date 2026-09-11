@@ -204,3 +204,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Sync, XML, stok ve bağlantı bildirimleri ilgili ekranlara yönlendiren aksiyonlarla birleştirildi; veri okuma arka planda yapılıyor.
 - [x] 290 Release testi geçti; self-contained yayın `Windows-M19-Dashboard` altında üretildi.
 - [ ] Canlı marketplace mutation ve fulfillment dashboard işlemlerinden açılmadı; dashboard salt-okunur yerel özet olarak kalır.
+
+## M20 Windows kurulum, yedekleme ve taşıma — 2026-09-11
+- [x] Self-contained `win-x64` paket için publish/build ve kurulum-kaldırma PowerShell akışı eklendi; kaldırma LocalAppData kullanıcı verisini silmiyor.
+- [x] Uygulama sürümü `1.0.0` ve yerel kurulum manifesti gösteriliyor; doğrulanmamış uzak güncelleme endpoint'i çağrılmıyor.
+- [x] Veritabanları, ayar dosyaları ve DPAPI ile şifreli credential byte'ları manifest + SHA-256 doğrulamalı zip yedeğine alınabiliyor.
+- [x] Geri yükleme geçici staging, mevcut veri için güvenlik yedeği, doğrulama ve atomik klasör değişimiyle uygulanıyor; hata halinde eski klasör korunuyor.
+- [x] Ayarlar ekranına kullanıcı onaylı yedek/geri yükleme ve veri klasörü açma paneli eklendi; 292 Release testi geçti.
+- [ ] Çalışan uygulama dosya kilitleri nedeniyle geri yükleme başarısız olursa uygulama kapatılıp tekrar açılmalı; installer uzak otomatik güncelleme yapmaz.
