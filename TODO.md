@@ -103,3 +103,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [ ] Etsy ürün detay okuma ve siparişden yerel stok karar/iptal-iade akışı sonraki adımdır.
 - [x] İlan stok/fiyat dispatch preview sözleşmesi eklendi; ilan kimliği, ürün sürümü, stok/fiyat değişmezliği ve açık onay doğrulanıyor.
 - [x] 257 test geçti; Windows-Etsy-Preview self-contained publish başarılı.
+
+## M5 XML tedarikçi merkezi — 2026-09-11
+- [x] Mevcut XML ekranı, güvenli HTTP/XML okuma, şifreli kimlik bilgisi, alan eşleme, filtre ve önizleme akışları korundu.
+- [x] HTTP gzip içerik desteği eklendi; XML boyutu, timeout, HTTPS/file ve DTD güvenlik sınırları korunuyor.
+- [x] Manuel ve zamanlanmış içe aktarmalar `XmlRuns` tablosunda Running/Succeeded/Failed geçmişi ve sonuç sayaçlarıyla kaydediliyor.
+- [x] 266 Release testi geçti; self-contained yayın `Windows-M5-XML` altında üretildi.
+- [ ] XML varyant mapping `DEFERRED_BY_USER`; normal XML dışı tedarikçi API'leri bu fazın kapsamında değil.
