@@ -41,17 +41,34 @@ jobs:
 
           COMMENTS="$(gh api "repos/$REPO/issues/$ISSUE_NO/comments" --paginate --jq '.[].body' || true)"
           if ! printf '%s\n' "$COMMENTS" | grep -q '^CODEX_CLAIMED'; then
-            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_CLAIMED: branch $BRANCH"
+            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_CLAIMED: branch $BRANCH" || true
           fi
 
           PR_NO="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
-          if [[ -z "$PR_NO" ]]; then
-            PR_URL="$(gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "$TITLE" --body "Relates to #$ISSUE_NO.\n\nCodex branch push ile otomatik açıldı.\n\nHead: $HEAD_SHA")"
-            PR_NO="${PR_URL##*/}"
-            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_OPEN: PR #$PR_NO"
-          else
+          if [[ -n "$PR_NO" ]]; then
             echo "PR #$PR_NO already open for $BRANCH"
+            if ! printf '%s\n' "$COMMENTS" | grep -q '^CODEX_PR_OPEN'; then
+              gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_OPEN: PR #$PR_NO" || true
+            fi
+            exit 0
           fi
+
+          set +e
+          PR_OUTPUT="$(gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "$TITLE" --body "Relates to #$ISSUE_NO.\n\nCodex branch push ile otomatik açıldı.\n\nHead: $HEAD_SHA" 2>&1)"
+          CREATE_STATUS=$?
+          set -e
+
+          if [[ $CREATE_STATUS -eq 0 ]]; then
+            PR_NO="${PR_OUTPUT##*/}"
+            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_OPEN: PR #$PR_NO" || true
+            exit 0
+          fi
+
+          echo "::warning::CODEX_PR_ROUTER_BLOCKED: $PR_OUTPUT"
+          if ! printf '%s\n' "$COMMENTS" | grep -q '^CODEX_PR_ROUTER_BLOCKED'; then
+            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_ROUTER_BLOCKED: GitHub Actions tokenı PR oluşturamıyor; branch push tamamlandı. Harici denetleyici PR açmalı; Codex kuyruğu bu nedenle durmamalı." || true
+          fi
+          exit 0
 
   close-issue-on-merge:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
@@ -68,6 +85,6 @@ jobs:
           set -euo pipefail
           if [[ "$BRANCH" =~ ^codex/issue-([0-9]+)- ]]; then
             ISSUE_NO="${BASH_REMATCH[1]}"
-            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_DONE: PR #$PR_NO"
+            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_DONE: PR #$PR_NO" || true
             gh issue close "$ISSUE_NO" --repo "$REPO" --reason completed || true
           fi
