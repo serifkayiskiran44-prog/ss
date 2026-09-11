@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+
 namespace TrMarketplaceHubDesktop;
 
 /// <summary>Validates installer-selected locations without touching user data.</summary>
