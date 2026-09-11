@@ -309,6 +309,19 @@ public sealed class SafetyAndStabilityTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [TestMethod]
+    public void OfflineModeSeparatesNetworkAuthAndRateLimitAndBlocksDispatch()
+    {
+        var offline = TrMarketplaceHubDesktop.OfflineMode.Classify(new HttpRequestException("DNS unavailable"));
+        var auth = TrMarketplaceHubDesktop.OfflineMode.Classify(new InvalidOperationException("HTTP 401 credential expired"));
+        var rate = TrMarketplaceHubDesktop.OfflineMode.Classify(new InvalidOperationException("HTTP 429 rate limit"));
+
+        Assert.AreEqual(TrMarketplaceHubDesktop.ConnectivityMode.Offline, offline.Mode);
+        Assert.AreEqual(TrMarketplaceHubDesktop.ConnectivityMode.AuthRequired, auth.Mode);
+        Assert.AreEqual(TrMarketplaceHubDesktop.ConnectivityMode.RateLimited, rate.Mode);
+        Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.OfflineMode.EnsureDispatchAllowed(offline));
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
