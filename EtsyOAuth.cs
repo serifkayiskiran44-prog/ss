@@ -78,7 +78,9 @@ public sealed class EtsyOAuth(HttpClient client)
 
     private async Task<EtsyCredentials> TokenAsync(EtsyCredentials credentials, Dictionary<string,string> form, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://openapi.etsy.com/v3/public/oauth/token") { Content = new FormUrlEncodedContent(form) };
+        // Etsy's current OAuth 2.0 token endpoint is served from api.etsy.com.
+        // Keep the API key header and PKCE exchange unchanged; no fallback endpoint is guessed.
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.etsy.com/v3/public/oauth/token") { Content = new FormUrlEncodedContent(form) };
         EtsyHttp.AddHeaders(request, credentials, false);
         using var document = await EtsyHttp.SendJsonAsync(client, request, 64 * 1024, cancellationToken).ConfigureAwait(false);
         try

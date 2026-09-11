@@ -399,3 +399,8 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 ## M46 günlük kullanım parite matrisi — 2026-09-11
 - [x] Ürün, toplu işlem, arama, kategori/marka, XML, ayar, Excel ve sipariş günlük akışları TAM/KAPSAM matrisiyle belgelendi.
 - [x] Preview/onay/stale/idempotency, sayfalama ve ertelenmiş alan sınırları korunuyor; `docs/DAILY-PARITY-MATRIX.md` eklendi.
+
+## M47 Etsy resmi OAuth ve read doğrulaması — 2026-09-11
+- [x] Güncel resmi OAuth token endpoint'i ve scope sözleşmesi kontrol edildi; token URL'si `api.etsy.com` olarak düzeltildi.
+- [x] PKCE/state/HTTPS callback, DPAPI credential saklama ve fake HTTP contract testleri korunuyor.
+- [ ] Gerçek mağaza read testi için kullanıcı credential/scope gerekir; eksik durumda canlı çağrı yapılmaz.

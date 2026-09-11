@@ -121,3 +121,5 @@ M44 Core UI kullanılabilirlik smoke turu (2026-09-11, Issue #64): Ürün/sipari
 M45 release integration (2026-09-11, Issue #80): M1–M44 stacked zinciri `codex/issue-80-release-integration` üzerinde konsolide edilip SQLite migration sırası, secret redaction, explicit approval, stale/idempotency ve transaction güvenlikleri mevcut regresyon testleriyle doğrulandı. 344/344 Release testi, Release build ve self-contained win-x64 publish başarılı; ayrıntı `docs/RELEASE-INTEGRATION.md`.
 
 M46 günlük kullanım parite matrisi (2026-09-11, Issue #81): Ürün/toplu işlem/arama/kategori/marka/XML/ayar/Excel/sipariş başlıkları mevcut ekranlarla TAM olarak eşleştirildi ve `docs/DAILY-PARITY-MATRIX.md` kaydedildi. Riskli akış kapıları, performans ve `DEFERRED_BY_USER` sınırları korunuyor.
+
+M47 Etsy resmi OAuth ve read doğrulaması (2026-09-11, Issue #82): Resmi dokümana göre OAuth token endpoint'i `https://api.etsy.com/v3/public/oauth/token` olarak güncellendi; PKCE/state/HTTPS callback ve scope doğrulaması korundu. Credential gerektiren gerçek mağaza read testi çalıştırılmadı; fake HTTP contract testleri kullanıldı.
