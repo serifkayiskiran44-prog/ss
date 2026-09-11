@@ -55,6 +55,12 @@
 - [x] Mevcut required-field, stale/version, provenance ve safe-delete korumaları korundu.
 - [x] Release build ve self-contained `Windows-M73-Catalog-Integrity` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; CRUD regression test sayısı doğrulanamadı.
+ 
+## M74 provenance — 2026-09-11
+- [x] Ürünlerde kaynak türü/zamanı ve bağımsız fiyat-stok-medya kaynak alanları eklendi.
+- [x] XML/Excel import kaynak damgası ve ürün gridinde kaynak görünürlüğü eklendi.
+- [x] Release build ve self-contained `Windows-M74-Provenance` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; provenance regression testleri çalıştırılamadı.
 
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 

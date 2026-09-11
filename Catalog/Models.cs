@@ -29,7 +29,7 @@ public class CatalogProduct {
  public decimal? AppliedTryRate {get;set;}
  public DateTime? FxRateDate {get;set;}
  public bool EtsyCreationAttempted {get;set;}
- public string Id {get;set;}=Guid.NewGuid().ToString("N");public string SourceId {get;set;}="";public string Sku {get;set;}="";public string Barcode {get;set;}="";public string Name {get;set;}="";public string Description {get;set;}="";public string Brand {get;set;}="";public string Category {get;set;}="";public string Currency {get;set;}="USD";public decimal VatRate {get;set;}=20;public string ImageUrls {get;set;}="";
+ public string Id {get;set;}=Guid.NewGuid().ToString("N");public string SourceId {get;set;}="";public string SourceKind {get;set;}="manual";public string PriceSource {get;set;}="manual";public string StockSource {get;set;}="manual";public string MediaSource {get;set;}="manual";public DateTime? SourceUpdatedUtc {get;set;}public string Sku {get;set;}="";public string Barcode {get;set;}="";public string Name {get;set;}="";public string Description {get;set;}="";public string Brand {get;set;}="";public string Category {get;set;}="";public string Currency {get;set;}="USD";public decimal VatRate {get;set;}=20;public string ImageUrls {get;set;}="";
  public decimal Cost {get;set;} public decimal Price {get;set;} public int Stock {get;set;} public bool LockName {get;set;} public bool LockDescription {get;set;} public bool LockPrice {get;set;} public bool LockStock {get;set;} public bool LockImages {get;set;} public string EtsyListingId {get;set;}=""; public DateTime UpdatedUtc {get;set;}
 }
 public record XmlScan(string ItemPath,IReadOnlyList<string> Paths,Dictionary<string,string> SuggestedFields);
