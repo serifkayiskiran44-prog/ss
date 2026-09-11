@@ -2,22 +2,12 @@
 
 Bu belge kullanıcı tarafından sağlanan eğitim transkriptleri, statik analiz/decompile notları ve veritabanı bulgularından çıkarılmış **davranışsal referanstır**. Entegra kaynak kodu, marka varlıkları, metinleri, ikonları veya ekranlarının birebir kopyası değildir. MonoBridgeDesktop özgün WPF mimarisini korur.
 
-## Codex zorunlu okuma sırası
-Entegra-parite veya eski backlog kapatma görevi çalıştırılırken aşağıdaki repo belgeleri birlikte okunmalıdır:
-1. `docs/ENTEGRA3-ANALYSIS.md`
-2. `docs/ENTEGRA3-ARCHITECTURE.md`
-3. `docs/ENTEGRA-WORKFLOW-PARITY.md`
-4. `PROJECT_SPEC.md`
-5. `TODO.md`
-6. `IMPLEMENTATION_STATUS.md`
-
-`ENTEGRA3-ANALYSIS.md` içindeki tablo/modül bulguları davranış ve veri modeli ipucudur; özel/decompile kod satırları kopyalanmaz. Eksik izinli işlev varsa mevcut proje mimarisine özgün kodla eklenir. Resmi marketplace API sözleşmesi doğrulanmayan hiçbir endpoint/scope uydurulmaz.
-
 ## Kaynak ve güven sınırı
 
 - Kullanıcı tarafından sağlanan `Entegrasyon-160-Transkript(1).txt` günlük kullanım akışlarının ana davranış kaynağıdır.
 - Kullanıcı tarafından sağlanan `ANALYSIS(1).md` decompile çıktısının .NET Framework/WPF olduğunu ve statik inceleme yapıldığını belirtir; decompile çıktı özgün kaynak kod değildir.
 - `DATABASE_FINDINGS(1).md` ürün, sipariş, XML/Excel, mağaza, mesaj, fiyat/stok ve kategori cache tablolarının varlığını gösterir; tablo adı tek başına işlem semantiği sayılmaz.
+- Kullanıcının paylaştığı ana menü, ürün listesi, ürün formu ve XML ekran görüntülerinden çıkarılan özgün ekran gereksinimleri `docs/ENTEGRA-SCREEN-PARITY.md` içindedir ve bu belgeyle birlikte okunmalıdır.
 - Resmi marketplace API sözleşmesi doğrulanmayan hiçbir endpoint/scope uydurulmaz; ilgili capability `LIVE_API_BLOCKED` / `NOT_CONFIGURED` kalır.
 
 ## Hedef günlük kullanım omurgası
