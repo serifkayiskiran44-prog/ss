@@ -62,6 +62,12 @@
 - [x] Release build ve self-contained `Windows-M74-Provenance` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; provenance regression testleri çalıştırılamadı.
 
+## M75 search/filter — 2026-09-11
+- [x] Query ve multi-value filter input trim/empty-safe oldu.
+- [x] Exact Brand/Category/SKU filtreleri için SQLite expression index’leri eklendi.
+- [x] Release build ve self-contained `Windows-M75-Search-Filter` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; fixture/performance testleri çalıştırılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
