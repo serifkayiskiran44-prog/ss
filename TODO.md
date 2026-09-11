@@ -621,3 +621,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M198 source-missing quarantine: first/last seen, grace period, warning/pending action, listing preservation, recovery audit ve local deactivate preview eklendi (docs/taskpacks/M198.md).
 - [x] M199 dropship stok güvenliği: safety stock, max displayed, text availability, shop/channel policy, stale block, formula açıklaması ve bulk preview eklendi (docs/taskpacks/M199.md).
 - [x] M200 dropship fiyat formülleri: çarpan/yüzde/sabit/KDV/kur/yuvarlama/psychological preview, minimum marj/overflow/bulk guard eklendi; otomatik repricing yok (docs/taskpacks/M200.md).
+- [x] M201 kanal ücret kataloğu: doğrulanmış provenance, effective date/stale lookup, komisyon+sabit ücret hesabı, import/export ve audit history eklendi (docs/taskpacks/M201.md).

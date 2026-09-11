@@ -648,6 +648,16 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ChannelFeeCatalogValidatesProvenanceAndStaleLookup()
+    {
+        var now = DateTimeOffset.UtcNow; var catalog = new ChannelFeeCatalog(); var fee = new ChannelFee("channel", "cat", 12.5m, 2m, "TRY", now.AddDays(-1), now.AddDays(10), "official-csv", now);
+        catalog.Import(new[] { fee }); var lookup = catalog.Lookup("CHANNEL", "CAT", now, now, TimeSpan.FromDays(2)); Assert.AreEqual("READY", lookup.Status); Assert.AreEqual(27m, ChannelFeeCatalog.Apply(200m, fee));
+        var staleCatalog = new ChannelFeeCatalog(); staleCatalog.Import(new[] { fee with { CapturedUtc = now.AddDays(-10) } }); var stale = staleCatalog.Lookup("channel", "cat", now, now, TimeSpan.FromDays(2)); Assert.AreEqual("STALE", stale.Status);
+        Assert.ThrowsException<ArgumentException>(() => catalog.Import(new[] { fee with { Provenance = "guessed" } }));
+        Assert.AreEqual(1, catalog.Export().Count);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
