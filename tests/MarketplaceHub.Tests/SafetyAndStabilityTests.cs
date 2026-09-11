@@ -170,6 +170,27 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual(1, maximum);
     }
 
+    [TestMethod]
+    public void DynamicMarketplacePanelIsShopScopedAndCapabilityAware()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-panel-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var connections = new TrMarketplaceHubDesktop.MarketplaceConnectionStore(root);
+            connections.Save("allegro", "shop-a", "A", true);
+            connections.Save("allegro", "shop-b", "B", true);
+            connections.Save("amazon", "shop-a", "Amazon", true);
+            new TrMarketplaceHubDesktop.MarketplaceMappingStore(root).Save(new("allegro", "shop-a", "product-1", "offer-1"));
+
+            var rows = TrMarketplaceHubDesktop.MarketplaceProductPanelModel.Build("product-1", root);
+
+            Assert.AreEqual("offer-1", rows.Single(x => x.Channel == "allegro" && x.ShopId == "shop-a").MappingId);
+            Assert.AreEqual("MAPPING_REQUIRED", rows.Single(x => x.Channel == "allegro" && x.ShopId == "shop-b").Readiness);
+            Assert.IsTrue(rows.Where(x => x.Channel == "amazon").All(x => x.Status == "LIVE_API_BLOCKED"));
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
