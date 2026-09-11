@@ -405,6 +405,18 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void GaAcceptanceRequiresAllEvidenceAndBlocksP1()
+    {
+        var blocked = TrMarketplaceHubDesktop.GaAcceptance.Evaluate(new(false, true, true, true,
+            [new("SEC-1", "P1", "write", "stale preview") ]));
+        var ready = TrMarketplaceHubDesktop.GaAcceptance.Evaluate(new(true, true, true, true, []));
+        Assert.AreEqual("NOT_READY", blocked.Status);
+        Assert.IsTrue(blocked.Blockers.Count >= 2);
+        Assert.AreEqual("V1_READY", ready.Status);
+        Assert.IsTrue(ready.IsReady);
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([

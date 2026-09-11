@@ -594,3 +594,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M134 güvenlik tehdit modeli: severity sınıflı bulguları sanitize edip P0/P1 bulgularında BLOCKED release değerlendirmesi yapan negatif sözleşme eklendi (docs/taskpacks/M134.md).
 - [x] M135 yardım/runbook: gerçek route’larla sınırlı context-help başlıkları, ön koşul ve recovery bilgileri eklendi; ölü/deferred özellik referansı yok (docs/taskpacks/M135.md).
 - [x] M136 seller rehearsal: onboarding→import→preflight→sync/order/stock→fault recovery→backup/restart zinciri için deterministik sentetik rapor eklendi; canlı write yok (docs/taskpacks/M136.md).
+- [x] M137 GA gate: önceki kanıt, artifact, Release test/publish ve P0/P1 bulgularını birlikte değerlendiren V1_READY/NOT_READY kabul modeli eklendi (docs/taskpacks/M137.md).
