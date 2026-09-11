@@ -429,3 +429,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M55 Excel içe/dışa aktarma: önizlemede yinelenen SKU/barkod satırları raporlanıyor; atomik import ve undo korunuyor (docs/taskpacks/M55.md).
 
 - [x] M56 kategori/marka/özellik eşleme: öneri normalizasyonunda Unicode ve ardışık boşluklar normalize ediliyor (docs/taskpacks/M56.md).
+
+- [x] M57 ürün medya/görsel: medya liste araması % ve _ karakterlerini literal işler (docs/taskpacks/M57.md).

@@ -74,7 +74,8 @@ public sealed class MediaStore
         command.Parameters.AddWithValue("$product", productId?.Trim() ?? "");
         var normalizedQuery = query?.Trim() ?? "";
         command.Parameters.AddWithValue("$query", normalizedQuery);
-        command.Parameters.AddWithValue("$like", $"%{normalizedQuery}%");
+        command.CommandText = command.CommandText.Replace("Url LIKE $like OR Source LIKE $like OR Status LIKE $like", "Url LIKE $like ESCAPE '\\' OR Source LIKE $like ESCAPE '\\' OR Status LIKE $like ESCAPE '\\'");
+        command.Parameters.AddWithValue("$like", $"%{normalizedQuery.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%");
         using var reader = command.ExecuteReader();
         var rows = new List<ProductMediaRecord>();
         while (reader.Read()) rows.Add(Read(reader));
