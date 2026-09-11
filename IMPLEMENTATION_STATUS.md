@@ -151,3 +151,5 @@ M55 Excel (Issue #90, 2026-09-11): CatalogExcel.Preview artık dosya içi yinele
 M55 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M55-Excel oluşturuldu.
 
 M56 taxonomy (Issue #91, 2026-09-11): TaxonomyStore öneri normalizasyonu aksanları ve ardışık boşlukları tek biçime getiriyor; mevcut stale/invalid/store izolasyonu korunuyor. docs/taskpacks/M56.md 100/100.
+
+M56 doğrulama: yeniden çalıştırılan Release test 349/349 geçti; self-contained win-x64 yayın Windows-M56-Taxonomy oluşturuldu.
