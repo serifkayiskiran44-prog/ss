@@ -145,3 +145,5 @@ M53 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windo
 M54 XML kaynak/mapping (Issue #89, 2026-09-11): XmlCatalog kaynak adresini güvenli şemalarla sınırlar ve URL şemasını sınırlar; credential metni indekslenmez; XML variant mapping kapsam dışıdır. docs/taskpacks/M54.md 100/100.
 
 M54 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M54-XML oluşturuldu.
+
+M55 Excel (Issue #90, 2026-09-11): CatalogExcel.Preview artık dosya içi yinelenen SKU/barkodları satır hatası olarak raporlar; hatalı önizleme Apply tarafından atomik biçimde reddedilir. docs/taskpacks/M55.md 100/100.

@@ -425,3 +425,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M53 ürün detay düzenleme: metin alanı uzunlukları ve ISO 4217 üç karakter döviz doğrulaması (docs/taskpacks/M53.md).
 
 - [x] M54 XML kaynak/mapping: kaynak adresi yalnız http/https/file; URL şeması doğrulanıyor; credential metni arama indeksine alınmıyor (docs/taskpacks/M54.md).
+
+- [x] M55 Excel içe/dışa aktarma: önizlemede yinelenen SKU/barkod satırları raporlanıyor; atomik import ve undo korunuyor (docs/taskpacks/M55.md).
