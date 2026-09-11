@@ -439,3 +439,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M61 otomasyon scheduler: due-job sorgusu, enable/lease filtreleri ve gece yarısını aşan çalışma penceresi doğrulaması (docs/taskpacks/M61.md).
 
 - [x] M62 hata merkezi/tanılama: SyncErrorClass için güvenli kullanıcı açıklamaları eklendi; redaction, retry ve idempotency korunuyor (docs/taskpacks/M62.md).
+
+- [x] M63 credential/secret security: Authorization and secret query values are redacted before metadata, audit, and support export persistence (docs/taskpacks/M63.md).

@@ -171,3 +171,5 @@ M60 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windo
 M61 otomasyon (Issue #96, 2026-09-11): AutomationStore.Due yalnız etkin, vadesi gelmiş ve lease'i boş işleri döndürür; AutomationSchedule.WindowContains gece yarısı pencerelerini kapsar. docs/taskpacks/M61.md 100/100.
 
 M62 tanılama (Issue #97, 2026-09-11): SyncStore.Explain hata sınıflarını Türkçe, credential içermeyen açıklamalara dönüştürüyor; mevcut redaction/retry/idempotency korunuyor. docs/taskpacks/M62.md 100/100.
+
+M63 güvenlik (Issue #98, 2026-09-11): MarketplaceConnectionStore.Redact Authorization Bearer/Basic ve secret query parametrelerini temizler; destek/audit sanitization zinciri korunur. docs/taskpacks/M63.md 100/100.

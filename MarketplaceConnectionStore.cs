@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace TrMarketplaceHubDesktop;
 
@@ -167,7 +168,9 @@ public sealed class MarketplaceConnectionStore
 
     internal static string Redact(string value)
     {
-        var safe = value.Replace("access_token", "[redacted]", StringComparison.OrdinalIgnoreCase)
+        var safe = Regex.Replace(value ?? "", "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
+        safe = Regex.Replace(safe, "(?i)([?&](?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|token)=)[^&#\\s]+", "$1[redacted]");
+        safe = safe.Replace("access_token", "[redacted]", StringComparison.OrdinalIgnoreCase)
             .Replace("refresh_token", "[redacted]", StringComparison.OrdinalIgnoreCase)
             .Replace("api-key", "[redacted]", StringComparison.OrdinalIgnoreCase)
             .Replace("api_key", "[redacted]", StringComparison.OrdinalIgnoreCase)
