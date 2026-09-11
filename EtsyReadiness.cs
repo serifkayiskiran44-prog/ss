@@ -51,6 +51,7 @@ public sealed class EtsyReadinessService
         catch (Exception error) { checks.Add(new("catalog", "ERROR", AuditStore.Sanitize(error.Message))); }
 
         checks.Add(new("live-write-gate", "PASS", "Onaylı preview olmadan canlı Etsy write çalıştırılmaz; stale veya belirsiz sonuçta işlem durur."));
+        checks.Add(new("capability-manifest", "PASS", $"Official-only capability matrisi yüklendi: {EtsyCapabilityAudit.OfficialManifest.Count} capability; {EtsyCapabilityAudit.MissingOrBlocked().Count} preview/block."));
         checks.Add(new("connector", "WARN", "Etsy API yalnız credential ve resmi kapsam doğrulandığında çağrılır; diğer kanallar bu kontrolde değiştirilmez."));
         return new(DateTime.UtcNow, checks);
     }

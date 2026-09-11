@@ -658,6 +658,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyCapabilityAuditKeepsOfficialInventoryPathAndWriteGates()
+    {
+        Assert.IsTrue(EtsyCapabilityAudit.UsesDedicatedInventoryPath("/v3/application/listings/123/inventory"));
+        Assert.IsFalse(EtsyCapabilityAudit.UsesDedicatedInventoryPath("/v3/application/listings/123?includes=Inventory"));
+        var update = EtsyCapabilityAudit.OfficialManifest.Single(x => x.Name == "listing-update"); Assert.AreEqual("PREVIEW_ONLY", update.Status); Assert.AreEqual("listings_w", update.Scope);
+        Assert.IsTrue(EtsyCapabilityAudit.MissingOrBlocked().Any(x => x.Name == "images-write"));
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]

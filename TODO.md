@@ -622,3 +622,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M199 dropship stok güvenliği: safety stock, max displayed, text availability, shop/channel policy, stale block, formula açıklaması ve bulk preview eklendi (docs/taskpacks/M199.md).
 - [x] M200 dropship fiyat formülleri: çarpan/yüzde/sabit/KDV/kur/yuvarlama/psychological preview, minimum marj/overflow/bulk guard eklendi; otomatik repricing yok (docs/taskpacks/M200.md).
 - [x] M201 kanal ücret kataloğu: doğrulanmış provenance, effective date/stale lookup, komisyon+sabit ücret hesabı, import/export ve audit history eklendi (docs/taskpacks/M201.md).
+- [x] M202 Etsy gap audit: official-only capability manifest, inventory migration path assertion, readiness binding ve blocked/preview write matrisi eklendi; üçüncü taraf kodu kopyalanmadı (docs/taskpacks/M202.md).
