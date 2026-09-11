@@ -349,3 +349,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Ctrl+K/üst arama sonuçları ilgili ekrana yönlendiriyor; ürün güncellemesi indeksi geçersiz kılıyor.
 - [x] Geçici SQLite, cancellation ve secret-safety testleri ile 334 Release testi geçti; self-contained yayın `Windows-M37-Global-Search` altında üretilecek.
 - [ ] Arama yalnız yerel metadata üzerinde çalışır; marketplace'e canlı write veya doğrulanmamış endpoint yoktur.
+
+## M38 eski veri içe alma ve güvenli geçiş asistanı — 2026-09-11
+- [x] Excel, CSV/TSV, JSON ve normal XML için dosya/şema okuma, alan tanıma ve satır bazlı CREATE/UPDATE/SKIP/ERROR önizlemesi eklendi.
+- [x] SKU/barkod duplicate ve stale `UpdatedUtc` kontrolleri; marka/kategori normal sözlük planı ve güvenli mağaza metadata planı eklendi.
+- [x] Credential/token/password alanları filtreleniyor; geçiş öncesi kullanıcı seçmeli yedek, transaction katalog uygulaması ve migration journal geri alma eklendi.
+- [x] Veri geçiş WPF ekranı, hata raporu ve geri alma ID'si eklendi; geçici fixture testleri ile 336 Release testi geçti; self-contained yayın `Windows-M38-Migration-Assistant` altında üretilecek.
+- [ ] Proprietary Entegra veritabanı/decompile dosyası doğrudan okunmaz; canlı marketplace write yapılmaz.
