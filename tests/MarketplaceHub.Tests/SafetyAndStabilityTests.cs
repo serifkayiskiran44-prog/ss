@@ -553,6 +553,19 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ProfitabilitySimulatorCalculatesScenarioAndStaleMargin()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var input = new ProfitabilityInput("SKU-1", "trendyol", 200m, 100m, 10m, 10m, 15m, 2m, "try", now, now);
+        var result = ProfitabilitySimulator.Simulate(input, now);
+        Assert.AreEqual(100m, result.GrossContribution); Assert.AreEqual(43m, result.NetContribution); Assert.AreEqual(21.5m, result.MarginPercent); Assert.AreEqual("OK", result.Status);
+        Assert.AreEqual("43 TRY", ProfitabilitySimulator.Format(result.NetContribution, result.Input.Currency));
+        Assert.AreEqual(1, ProfitabilitySimulator.Filter(new[] { result }, channel: "TRENDYOL").Count);
+        var negative = ProfitabilitySimulator.Simulate(input with { Cost = 250m }, now); Assert.AreEqual("NEGATIVE_MARGIN", negative.Status);
+        var stale = ProfitabilitySimulator.Simulate(input with { CommissionAtUtc = now.AddDays(-3) }, now); Assert.AreEqual("STALE", stale.Status);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
