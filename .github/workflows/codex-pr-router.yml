@@ -30,6 +30,7 @@ jobs:
             echo "Not an issue branch: $BRANCH"
             exit 0
           fi
+
           ISSUE_NO="${BASH_REMATCH[1]}"
           ISSUE_JSON="$(gh api "repos/$REPO/issues/$ISSUE_NO")"
           TITLE="$(printf '%s' "$ISSUE_JSON" | jq -r '.title')"
@@ -38,16 +39,32 @@ jobs:
           if [[ -z "$BASE" ]]; then BASE="main"; fi
           if ! gh api "repos/$REPO/branches/$BASE" >/dev/null 2>&1; then BASE="main"; fi
 
+          COMMENTS="$(gh api "repos/$REPO/issues/$ISSUE_NO/comments" --paginate --jq '.[].body' || true)"
+          if ! printf '%s\n' "$COMMENTS" | grep -q '^CODEX_CLAIMED'; then
+            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_CLAIMED: branch $BRANCH"
+          fi
+
           PR_NO="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [[ -z "$PR_NO" ]]; then
-            PR_URL="$(gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "$TITLE" --body "Relates to #$ISSUE_NO.\n\nCodex branch push ile otomatik açıldı.\n\nCLAUDE_REVIEW_REQUIRED $HEAD_SHA")"
-            PR_NO="${PR_URL##*/}"
-            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_OPEN: PR #$PR_NO"
+            set +e
+            PR_URL="$(gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "$TITLE" --body "Relates to #$ISSUE_NO.\n\nCodex branch push ile otomatik açıldı.\n\nHead: $HEAD_SHA" 2>&1)"
+            CREATE_STATUS=$?
+            set -e
+            if [[ $CREATE_STATUS -eq 0 ]]; then
+              PR_NO="${PR_URL##*/}"
+              gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_OPEN: PR #$PR_NO"
+            else
+              echo "::warning::GitHub Actions PR oluşturamadı; harici denetleyici PR açacak. $PR_URL"
+              if ! printf '%s\n' "$COMMENTS" | grep -q '^CODEX_PR_ROUTER_BLOCKED'; then
+                gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_ROUTER_BLOCKED: GitHub Actions tokenı PR oluşturamıyor; branch pushlandı ve harici denetleyici PR açmalı."
+              fi
+            fi
           else
-            CURRENT_BODY="$(gh pr view "$PR_NO" --repo "$REPO" --json body --jq '.body // ""')"
-            gh pr edit "$PR_NO" --repo "$REPO" --body "$CURRENT_BODY\n\nCLAUDE_REVIEW_REQUIRED $HEAD_SHA"
+            echo "PR #$PR_NO already open for $BRANCH"
+            if ! printf '%s\n' "$COMMENTS" | grep -q '^CODEX_PR_OPEN'; then
+              gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_OPEN: PR #$PR_NO"
+            fi
           fi
-          gh pr comment "$PR_NO" --repo "$REPO" --body "CLAUDE_REVIEW_REQUIRED $HEAD_SHA"
 
   close-issue-on-merge:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
