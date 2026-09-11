@@ -100,13 +100,13 @@ public static class MediaPanel
         {
             if (selected is null) throw new InvalidOperationException("Önce görsel seçin.");
             status.Text = "Görsel doğrulanıyor…";
-            var result = await validation.ValidateAsync(selected);
+            validation.Invalidate(selected.Url); var result = await validation.ValidateWithRetryAsync(selected);
             media.UpdateValidation(selected.Id, result); RefreshMedia(); status.Text = $"{result.Status}: {result.Error}";
         });
         var validateAll = AsyncButton("Ürünün tüm görsellerini doğrula", async () =>
         {
             var product = productPicker.SelectedItem as ProductChoice ?? throw new InvalidOperationException("Önce ürün seçin.");
-            foreach (var row in media.List(product.Id)) { var result = await validation.ValidateAsync(row); media.UpdateValidation(row.Id, result); }
+            foreach (var row in media.List(product.Id)) { var result = await validation.ValidateWithRetryAsync(row); media.UpdateValidation(row.Id, result); }
             RefreshMedia(); status.Text = "Ürün görsellerinin doğrulaması tamamlandı.";
         });
         var primary = Button("Ana görsel yap", () => { if (selected is null) throw new InvalidOperationException("Önce görsel seçin."); media.SetPrimary(selected.Id); RefreshMedia(); });

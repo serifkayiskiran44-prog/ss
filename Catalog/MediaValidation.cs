@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.IO;
+using System.Collections.Concurrent;
 
 namespace TrMarketplaceHubDesktop.Catalog;
 
@@ -12,8 +13,30 @@ public sealed class MediaValidationService
     public const long MaxBytes = 20 * 1024 * 1024;
     static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/tiff" };
     readonly HttpClient http;
+    readonly ConcurrentDictionary<string, (DateTimeOffset At, MediaValidationResult Result)> cache = new(StringComparer.Ordinal);
 
     public MediaValidationService(HttpClient? httpClient = null) => http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+
+    public void Invalidate(string url)
+    {
+        var key = MediaStore.NormalizeUrl(url);
+        if (key.Length > 0) cache.TryRemove(key, out _);
+    }
+
+    public async Task<MediaValidationResult> ValidateWithRetryAsync(ProductMediaRecord media, CancellationToken cancellationToken = default)
+    {
+        var key = MediaStore.NormalizeUrl(media.Url);
+        if (key.Length > 0 && cache.TryGetValue(key, out var cached) && DateTimeOffset.UtcNow - cached.At < TimeSpan.FromMinutes(5)) return cached.Result;
+        MediaValidationResult result = default!;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            result = await ValidateAsync(media, cancellationToken).ConfigureAwait(false);
+            if (result.Status is not (MediaStatus.Timeout or MediaStatus.Error or MediaStatus.RateLimited) || attempt == 1) break;
+            await Task.Delay(TimeSpan.FromMilliseconds(250 * (attempt + 1)), cancellationToken).ConfigureAwait(false);
+        }
+        if (key.Length > 0 && result.Status == MediaStatus.Ready) cache[key] = (DateTimeOffset.UtcNow, result);
+        return result;
+    }
 
     public async Task<MediaValidationResult> ValidateAsync(ProductMediaRecord media, CancellationToken cancellationToken = default)
     {
@@ -39,6 +62,7 @@ public sealed class MediaValidationService
                 timeout.CancelAfter(TimeSpan.FromSeconds(15));
                 using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
                 if (response.StatusCode == HttpStatusCode.NotFound) return new(MediaStatus.NotFound, "Görsel adresi 404 döndürdü.");
+                if ((int)response.StatusCode == 429) return new(MediaStatus.RateLimited, "Görsel sunucusu istek sınırı uyguluyor.");
                 if (!response.IsSuccessStatusCode) return new(MediaStatus.Error, $"Görsel adresi HTTP {(int)response.StatusCode} döndürdü.");
                 if (response.Content.Headers.ContentLength is > MaxBytes) return new(MediaStatus.TooLarge, "Görsel 20 MB sınırını aşıyor.", Bytes: response.Content.Headers.ContentLength);
                 await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);

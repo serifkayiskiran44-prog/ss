@@ -542,3 +542,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M82 çoklu mağaza izolasyonu: SyncJob idempotency ve otomasyon enqueue işlemleri ShopId kapsamına alındı (docs/taskpacks/M82.md).
 - [x] M83 fiyat politikası: policy currency normalize/culture-safe hale getirildi; manuel kur, koruma tabanı ve deterministic rounding korunuyor (docs/taskpacks/M83.md).
 - [x] M84 stok politikası: pasif policy dispatch engeli, wrong-shop/persisted değer doğrulaması ve safety/maximum korumaları (docs/taskpacks/M84.md).
+- [x] M85 medya pipeline: rate-limit sınıflandırması, bounded cancellation-aware retry ve normalize URL TTL cache/invalidation eklendi (docs/taskpacks/M85.md).

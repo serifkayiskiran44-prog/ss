@@ -12,6 +12,7 @@ public enum MediaStatus
     Timeout,
     NotFound,
     TooLarge,
+    RateLimited,
     UnsupportedFormat,
     Error
 }
