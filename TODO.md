@@ -582,3 +582,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M122 final screen parity: merkezi navigation route audit’i eksik paneli BLOCKED raporlıyor ve mevcut rotaların tam sözleşmesini test ediyor (docs/taskpacks/M122.md).
 - [x] M123 preflight merkezi: yerel Etsy readiness kanıtlarını CODEX_READY/PARTIAL/BLOCKED kararında birleştirip başlangıç loguna ekledi (docs/taskpacks/M123.md).
 - [x] M124 onboarding hazırlığı: credential içermeyen mağaza bağlantı metadata’sı ve yerel preflight kararı birlikte kullanılıyor; canlı onboarding doğrulanmadı (docs/taskpacks/M124.md).
+- [x] M125 sync operasyonları: retry edilebilir failed işler için güvenli önizleme, açık onay ve stale kimlik/sürüm kontrolü eklendi (docs/taskpacks/M125.md).

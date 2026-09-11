@@ -256,6 +256,24 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual("CAPABILITY_DISCOVERY", resumed.Stage);
     }
 
+    [TestMethod]
+    public void SyncRetryPreviewRequiresApprovalAndRejectsStalePayload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-sync-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new TrMarketplaceHubDesktop.Catalog.SyncStore(root);
+            var job = store.Enqueue(new TrMarketplaceHubDesktop.Catalog.SyncRequest("etsy", "shop-a", "stock", "p-1", "v1"));
+            store.TryStart(job.Id); store.Fail(job.Id, "network timeout");
+            var preview = TrMarketplaceHubDesktop.Catalog.SyncOperations.CreateRetryPreview(store.List());
+            Assert.AreEqual(1, preview.Count);
+            Assert.AreEqual(0, TrMarketplaceHubDesktop.Catalog.SyncOperations.ApplyApprovedRetry(store, preview, false));
+            Assert.AreEqual(1, TrMarketplaceHubDesktop.Catalog.SyncOperations.ApplyApprovedRetry(store, preview, true));
+            Assert.AreEqual(TrMarketplaceHubDesktop.Catalog.SyncStatus.Pending, store.Get(job.Id).Status);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
