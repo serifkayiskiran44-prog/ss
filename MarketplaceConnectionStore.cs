@@ -21,7 +21,7 @@ public static class MarketplaceConnectionCatalog
         new MarketplaceConnectionDefinition("amazon", "Amazon", "amazon", MarketplaceCapabilities.LocalOnly, "https://developer-docs.amazon.com/sp-api/", true),
         new MarketplaceConnectionDefinition("trendyol", "Trendyol", "trendyol", MarketplaceCapabilities.LocalOnly, "https://developers.trendyol.com/", true),
         new MarketplaceConnectionDefinition("hepsiburada", "Hepsiburada", "hepsiburada", MarketplaceCapabilities.LocalOnly, "https://developers.hepsiburada.com/", true),
-        new MarketplaceConnectionDefinition("allegro", "Allegro", "channels", MarketplaceCapabilities.LocalOnly, "https://developer.allegro.pl/", true),
+        new MarketplaceConnectionDefinition("allegro", "Allegro", "allegro", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead }), "https://developer.allegro.pl/", false),
         new MarketplaceConnectionDefinition("ozon", "Ozon", "ozon", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead }), "https://docs.ozon.ru/api/seller/", false),
         new MarketplaceConnectionDefinition("joom", "Joom", "joom", MarketplaceCapabilities.LocalOnly, "https://merchant.joom.com/docs/api", true),
         new MarketplaceConnectionDefinition("wish", "Wish", "channels", MarketplaceCapabilities.LocalOnly, "https://merchant.wish.com/documentation/api/v3/oauth", true),

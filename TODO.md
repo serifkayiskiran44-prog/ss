@@ -177,3 +177,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] HTTP 401/403/429, timeout ve hatalı JSON davranışları mevcut güvenli hata sınırında; API key yanıt/loglara sızmıyor.
 - [x] 282 Release testi geçti; self-contained yayın `Windows-M14-Ozon` altında üretildi.
 - [ ] Ozon sipariş, stok/fiyat yazma ve ürün yayınlama için doğrulanmış sözleşme/credential akışı bu fazda açılmadı; desteklenmeyen işlemler `LIVE_API_BLOCKED`.
+
+## M15 Allegro connector — 2026-09-11
+- [x] Allegro OAuth bilgileri DPAPI ile saklanan mağaza paneline bağlandı; çoklu mağaza metadata korunuyor.
+- [x] Resmi public API `GET /sale/offers` ve `GET /order/checkout-forms` read-only operasyonları, sayfalama ve JSON doğrulaması eklendi.
+- [x] 401/403/429/timeout/bozuk yanıt sınırları mevcut hata merkezine uyumlu; yazma ve fulfillment metotları yok.
+- [x] 284 Release testi geçti; self-contained yayın `Windows-M15-Allegro` altında üretildi.
+- [ ] OAuth refresh akışı ve stok/fiyat/listing write için açık preview/onay/idempotent dispatch sonraki resmi credential doğrulamasına bağlı.
