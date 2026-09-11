@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Xml;
@@ -25,7 +26,7 @@ public class XmlSourceReader(HttpClient client)
    if((int)response.StatusCode is >=300 and <400)throw new InvalidOperationException("XML adresi yönlendiriliyor. Son HTTPS adresini kullanın.");
    if(!response.IsSuccessStatusCode)throw new InvalidOperationException($"XML alınamadı (HTTP {(int)response.StatusCode}).");
    if(response.Content.Headers.ContentLength>Limit)throw new InvalidOperationException("XML 25 MB sınırını aşıyor.");
-   await using var stream=await response.Content.ReadAsStreamAsync(timeout.Token);return await ParseAsync(stream,timeout.Token);
+   await using var raw=await response.Content.ReadAsStreamAsync(timeout.Token);await using var stream=response.Content.Headers.ContentEncoding.Any(x=>string.Equals(x,"gzip",StringComparison.OrdinalIgnoreCase))?new GZipStream(raw,CompressionMode.Decompress):raw;return await ParseAsync(stream,timeout.Token);
   }catch(XmlException){throw new InvalidOperationException("XML biçimi geçersiz veya DTD içeriyor. Hiçbir ürün değiştirilmedi.");}
    catch(HttpRequestException){throw new InvalidOperationException("XML sunucusuna erişilemedi. Adresi ve bağlantıyı kontrol edin.");}
    catch(OperationCanceledException){throw new InvalidOperationException("XML işlemi iptal edildi veya zaman aşımına uğradı.");}
