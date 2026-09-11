@@ -4,3 +4,6 @@ Her değişiklikte ilgili anlamlı testleri ve Release publish çalıştır. Tes
 Test: dotnet test ../MonoBridgeDesktop.Tests/MonoBridgeDesktop.Tests.csproj -c Release
 Yayın: dotnet publish TrMarketplaceHubDesktop.csproj -c Release -r win-x64 --self-contained true -o Windows-Current
 TODO ve IMPLEMENTATION_STATUS güncel tutulur; yerel kanal planlarını gerçek API olarak raporlama.
+
+## Codex GitHub çalışma kuralı
+Codex yerel `gh` oturumu, PAT/GITHUB_TOKEN veya etkileşimli GitHub girişi istemeyecek. Kullanıcıdan `gh auth login`, token veya GitHub oturumu talep etme. Kod/test/publish tamamlanınca branch'i commit edip `git push` yapman yeterlidir. `codex/issue-<numara>-<kisa-ad>` branch push'ları `.github/workflows/codex-pr-router.yml` tarafından otomatik PR'a çevrilir, issue/PR yorumları ve Claude review tetikleyicisi GitHub Actions tarafından yazılır. PR/issue yorumu yazamadığın için işi durdurma veya kullanıcıya soru sorma.
