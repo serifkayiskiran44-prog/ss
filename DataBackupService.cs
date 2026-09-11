@@ -60,7 +60,7 @@ public sealed class DataBackupService
         var manifestEntry = archive.GetEntry("manifest.json") ?? throw new InvalidDataException("Yedek manifestosu bulunamadı.");
         DataBackupManifest? manifest;
         using (var reader = new StreamReader(manifestEntry.Open())) manifest = JsonSerializer.Deserialize<DataBackupManifest>(reader.ReadToEnd());
-        if (manifest is null || manifest.Format != Format) throw new InvalidDataException("Yedek formatı bu sürümle uyumlu değil.");
+        if (manifest is null || manifest.Format != Format || manifest.Files is null) throw new InvalidDataException("Yedek formatı bu sürümle uyumlu değil.");
         if (manifest.Files.Count > 100_000 || manifest.Files.Sum(x => x.Length) > 2L * 1024 * 1024 * 1024) throw new InvalidDataException("Yedek boyutu güvenli sınırı aşıyor.");
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in manifest.Files)
@@ -70,6 +70,9 @@ public sealed class DataBackupService
             if (file.Length < 0 || file.Sha256.Length != 64 || file.Sha256.Any(c => !Uri.IsHexDigit(c))) throw new InvalidDataException($"Yedek dosya özeti geçersiz: {file.Path}");
             var entry = archive.GetEntry("data/" + file.Path.Replace(Path.DirectorySeparatorChar, '/')) ?? throw new InvalidDataException($"Yedek dosyası eksik: {file.Path}");
             if (entry.Length != file.Length) throw new InvalidDataException($"Yedek dosyası boyutu değişmiş: {file.Path}");
+            using var stream = entry.Open();
+            var actualHash = Convert.ToHexString(SHA256.HashData(stream));
+            if (!actualHash.Equals(file.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException($"Yedek dosya özeti eşleşmiyor: {file.Path}");
         }
         return manifest;
     }
@@ -101,7 +104,8 @@ public sealed class DataBackupService
             Backup(safety);
             if (Directory.Exists(DataDirectory)) Directory.Move(DataDirectory, old);
             Directory.Move(staging, DataDirectory);
-            if (Directory.Exists(old)) Directory.Delete(old, true);
+            // Keep the pre-restore directory as a recoverable rollback point.
+            // It is deliberately not deleted during the restore transaction.
         }
         catch
         {
