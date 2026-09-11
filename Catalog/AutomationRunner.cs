@@ -1,0 +1,6 @@
+namespace TrMarketplaceHubDesktop.Catalog;
+public sealed record AutomationRunResult(int Queued,IReadOnlyList<string> Errors);
+public static class AutomationRunner
+{
+ public static AutomationRunResult RunDue(CatalogStore catalog,AutomationStore automation,SyncStore sync,string jobId,string channel,string shop,DateTime nowUtc){if(!automation.TryClaim(jobId,nowUtc,TimeSpan.FromMinutes(5)))return new(0,Array.Empty<string>());var job=automation.Get(jobId);var errors=new List<string>();var queued=0;foreach(var product in catalog.Products()){var operation=job.Kind==AutomationKind.Stock?"stock":"price";try{var payload=job.Kind==AutomationKind.Stock?catalog.PreviewStock(channel,shop,product.Id).ToString(System.Globalization.CultureInfo.InvariantCulture):catalog.PreviewPrice(channel,shop,product.Id).Price.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture);sync.Enqueue(new SyncRequest(channel,operation,product.Id,$"{product.UpdatedUtc.Ticks}:{payload}"));queued++;}catch(Exception e){var failed=sync.Enqueue(new SyncRequest(channel,operation,product.Id,$"{product.UpdatedUtc.Ticks}:error"));sync.Fail(failed.Id,e.Message);errors.Add($"{product.Sku}: {e.Message}");}}automation.Complete(jobId,nowUtc);return new(queued,errors);}
+}

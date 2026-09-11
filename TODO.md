@@ -48,3 +48,23 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Excel uygulaması için optimistic kontrollü geri alma snapshot/journal akışı eklendi; katalog sonradan değiştiyse geri alma güvenli biçimde reddediliyor.
 - [x] 244 test geçti; Windows-Excel-Complete self-contained publish başarılı.
 - [ ] Kategori, marka ve özellik yönetimi/eşleme sonraki ana modüldür.
+
+## Kategori / marka / özellik ve Sync — 2026-09-11
+- [x] Yerel kategori, marka ve özellik kayıtları; normalize edilmiş ad/değer doğrulaması ve harici anahtar eşlemesi eklendi.
+- [x] WPF kategori/marka/özellik yönetim ekranı eklendi.
+- [x] Idempotent sync kuyruğu, hata kaydı, üç deneme sınırı ve tekrar kuyruğa alma eklendi.
+- [x] WPF Sync merkezi eklendi; canlı marketplace yazımı yapılmıyor.
+- [x] Kalıcı otomasyon zamanlama çekirdeği eklendi: tekil lease, due kontrolü, tamamlanınca sonraki çalışma ve hata sonrası yeniden deneme zamanı.
+- [x] 251 test geçti; Windows-Core-249 self-contained publish başarılı.
+- [x] Otomasyon çekirdeği stok/fiyat politikası önizlemelerine bağlandı; katalog değiştirmeden idempotent sync işi üretir ve politika hatalarını retry edilebilir kayda çevirir.
+- [x] 253 test geçti; Windows-Automation-Policies self-contained publish başarılı.
+- [ ] Otomasyon işlerinin WPF zamanlama ayarlarına ve gerçek connector dispatch katmanına bağlanması sonraki adımdır.
+
+## Etsy operasyonları — 2026-09-11
+- [x] Etsy resmi API istemcisine basit ilan stok/fiyat güncellemesi eklendi; `listings_w` yetkisi, PATCH ve resmi API kimlik başlıkları kullanılıyor.
+- [x] Geçersiz stok/fiyat/ilan kimliği için istek göndermeyen testler eklendi.
+- [x] 256 test geçti; Windows-Etsy-Operations self-contained publish başarılı.
+- [ ] Etsy otomasyon sync işlerini gerçek ilan eşlemesi ve kullanıcı onaylı dispatch ekranına bağlamak gerekiyor.
+- [ ] Etsy ürün detay okuma ve siparişden yerel stok karar/iptal-iade akışı sonraki adımdır.
+- [x] İlan stok/fiyat dispatch preview sözleşmesi eklendi; ilan kimliği, ürün sürümü, stok/fiyat değişmezliği ve açık onay doğrulanıyor.
+- [x] 257 test geçti; Windows-Etsy-Preview self-contained publish başarılı.
