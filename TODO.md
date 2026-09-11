@@ -251,3 +251,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Filtrelenmiş ürün seti ve profil alanlarıyla dışa aktarım; hatalı satırlar ayrı Excel raporu; geçerli satırlar mevcut atomik/undo akışına gidiyor.
 - [x] Gerçek XLSX fixture + geçici SQLite testleri ile 303 Release testi geçti; self-contained yayın `Windows-M25-Excel` altında üretilecek.
 - [ ] Varyant/bundle ve diğer `DEFERRED_BY_USER` alanları Excel profiline eklenmedi.
+
+## M26 kanal yayın durumu ve ürün listeleme matrisi — 2026-09-11
+- [x] Ürün × kanal × mağaza matrisi; yerel plan/listing ID, mapping durumu, sync sonucu, son hata ve bağlantı sağlığı gösteriliyor.
+- [x] `MISSING`, `ERROR`, `STALE`, `AUTH_ERROR`, `PENDING`, `SYNCED` ve `DRAFT` filtreleri ile SKU/kanal/mağaza araması eklendi.
+- [x] Ürün ve seçili kanal ekranına hızlı geçiş; capability listesi doğrulanmamış yazımı başarı gibi göstermeden görünür.
+- [x] `ChannelProductsStore` kanal/mağaza izolasyonlu listeleme sağlıyor; geçici SQLite testleri ile 305 Release testi geçti; self-contained yayın `Windows-M26-Listing-Matrix` altında üretilecek.
+- [ ] Toplu canlı yayın yok; connector preview/onay kapısı ve kullanıcı ertelemeleri korunuyor.

@@ -23,6 +23,7 @@ public partial class MainWindow
   Page("dashboard","Genel bakış","Ürün, sipariş, XML, bağlantı ve sync durumunu tek ekranda izleyin.",DashboardPanel.Create(dataDirectory,Navigate));
   Page("products","Ürün yönetimi","Ortak ürün havuzu • Ürün seçerek kartını, fiyatını ve stok kilitlerini düzenleyin.",builtPages["Ürün havuzu"]);
   Page("media","Görsel / medya","Ürün görsellerini kaynak, doğrulama durumu, sıra ve ana görsel olarak yönetin.",MediaPanel.Create(dataDirectory,key=>Navigate(key)));
+  Page("listing-matrix","Kanal yayın matrisi","Ürün, kanal ve mağaza bazında mapping, ilan, sync ve bağlantı durumlarını karşılaştırın.",ChannelListingMatrixPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("xml","XML yönetimi","Kaynak bağlantısı → Alan eşleştirme → Fiyat ve stok → Önizleme ve havuza aktarım",builtPages["XML yönetimi"]);
   Page("excel","Excel ürün işlemleri","Excel dışa aktarma ve içe aktarma önizlemesi",BuildExcel());
   Page("taxonomy","Kategori / marka / özellik","Yerel sözlük kayıtları ve harici anahtar eşlemeleri",BuildTaxonomy());
