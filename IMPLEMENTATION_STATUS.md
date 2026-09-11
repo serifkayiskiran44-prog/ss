@@ -41,3 +41,5 @@ Fiyat politikası PARTIAL: yerel formül/kayıt/önizleme ve güvenlik koruması
 Excel ekranı PARTIAL: XLSX export+preview uygulandı; atomik import/kolon eşleme eksik. Windows-Excel yayınlandı.
 
 M5 XML tedarikçi merkezi (2026-09-11, Issue #12): mevcut normal XML akışı korunarak gzip kaynak okuma ve kalıcı `XmlRuns` geçmişi eklendi. Manuel/zamanlanmış çalıştırmalar sonuç sayaçları veya hata ile kaydediliyor. XML varyant mapping `DEFERRED_BY_USER`; doğrulanmamış tedarikçi API'leri için endpoint uydurulmadı. 266 Release testi geçti; `Windows-M5-XML` self-contained yayın üretildi.
+
+M6 mağaza ve bağlantı merkezi (2026-09-11, Issue #13): tek WPF panelinde kanal+mağaza metadata, etkinlik, capability, son test/hata ve hızlı geçişler eklendi. Secret değerler yeni tabloya yazılmıyor; mevcut DPAPI tabanlı store'lar kullanılıyor. Etsy/eBay/Ozon salt okunur testleri mevcut resmi istemciler üzerinden çalışıyor; diğer kanallar `LIVE_API_BLOCKED/NOT_CONFIGURED`. 268 Release testi geçti; `Windows-M6-Connections` self-contained yayın üretildi.

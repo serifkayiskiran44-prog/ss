@@ -110,3 +110,12 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Manuel ve zamanlanmış içe aktarmalar `XmlRuns` tablosunda Running/Succeeded/Failed geçmişi ve sonuç sayaçlarıyla kaydediliyor.
 - [x] 266 Release testi geçti; self-contained yayın `Windows-M5-XML` altında üretildi.
 - [ ] XML varyant mapping `DEFERRED_BY_USER`; normal XML dışı tedarikçi API'leri bu fazın kapsamında değil.
+
+## M6 mağaza ve bağlantı merkezi — 2026-09-11
+- [x] Etsy, eBay, Amazon, Trendyol, Hepsiburada, Allegro, Ozon, Joom, Wish, Fruugo ve Navlungo için kanal kataloğu ve varsayılan mağaza kayıtları eklendi.
+- [x] Kanal+mağaza bazlı etkinlik, görünen ad, durum, son test ve hata geçmişi `MarketplaceConnections` tablosunda tutuluyor; çoklu mağaza kaydı destekleniyor.
+- [x] Gizli bilgiler yeni tabloya yazılmıyor; mevcut DPAPI/CredentialStore ayarları okunuyor ve hata metinleri maskeleniyor.
+- [x] Salt okunur Etsy/eBay/Ozon bağlantı testleri eklendi; doğrulanmamış kanallar `LIVE_API_BLOCKED` olarak işaretleniyor.
+- [x] Yeni WPF Mağaza bağlantıları paneli ve kanal/yardım hızlı geçişleri eklendi.
+- [x] 268 Release testi geçti; self-contained yayın `Windows-M6-Connections` altında üretildi.
+- [ ] Amazon, Trendyol, Hepsiburada, Allegro, Joom, Wish, Fruugo ve Navlungo için doğrulanmış resmi API credential/contract olmadan canlı operasyon açılmadı.

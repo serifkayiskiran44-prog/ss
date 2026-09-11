@@ -41,6 +41,7 @@ public partial class MainWindow
    Page(id,channel.Name,id=="joom"?"Satıcı kaydı / kabulü bekleniyor • Canlı ürün aktarımı etkin değil.":"Yerel kanal ürün planları • API bağlantı kontrolü ayrı; canlı ürün aktarımı etkin değil.",tabs);
   }
   Page("channels","Diğer pazaryerleri","Wish, Allegro ve Fruugo: hesap başvuruları ve entegrasyon gereksinimleri.",MarketplaceSetupPanel.CreateOther(dataDirectory));
+  Page("connections","Mağaza bağlantıları","Tüm kanal ve mağaza kayıtları, yetenekler ve salt okunur bağlantı testleri.",MarketplaceConnectionsPanel.Create(dataDirectory,key=>Navigate(key)));
   Group("OPERASYON");
   Page("price-policies","Mağaza fiyat kuralları","CASE formülü, kur ve güvenli fiyat önizlemesi",BuildPricePolicies());
   Page("stock-policies","Mağaza stok ayarları","Güvenlik stoğu, üst sınır ve yerel önizleme",BuildStockPolicies());
