@@ -631,3 +631,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M208 Etsy batch drift: official 100 ID chunking, remote/local field diff, drift classification, stale ve wrong-scope guard eklendi; legacy includes kullanılmadı (docs/taskpacks/M208.md).
 - [x] M209 Etsy sipariş: receipt/transaction dedup, status normalization, unknown item queue, checkpoint ve cancel/refund local stock preview/onay guard eklendi (docs/taskpacks/M209.md).
 - [x] M210 Etsy seller cockpit: auth/shop/scope/listing/order/sync/drift/dead-letter aggregate readiness, dry-run ayrımı ve operator gate eklendi (docs/taskpacks/M210.md).
+# M211: ortak varyant/seçenek domain çekirdeği `DEFERRED_BY_USER` guard ile ertelendi; write/migration yok.
