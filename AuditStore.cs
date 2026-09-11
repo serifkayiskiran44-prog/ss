@@ -45,7 +45,7 @@ public sealed class AuditStore
     static string Clean(string value, int max) { var clean = Sanitize(value); return clean.Length > max ? clean[..max] : clean; }
     public static string Sanitize(string? value)
     {
-        var safe = MarketplaceConnectionStore.Redact(value ?? ""); safe = Regex.Replace(safe, "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[^\\s,;&]+", "$1=[redacted]"); return safe.Length > 2000 ? safe[..2000] : safe;
+        var safe = Regex.Replace(value ?? "", "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[^\\s,;&]+", "$1=[redacted]"); safe = MarketplaceConnectionStore.Redact(safe); safe = Regex.Replace(safe, "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[^\\s,;&]+", "$1=[redacted]"); return safe.Length > 2000 ? safe[..2000] : safe;
     }
 }
 

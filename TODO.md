@@ -282,3 +282,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Boş arama, route geri dönüşü ve mevcut preview/onay/iptal kapıları korunuyor; canlı marketplace mutation yok.
 - [x] UiPreferenceStore için 314 Release testi geçti; self-contained yayın `Windows-M29-Navigation` altında üretildi.
 - [ ] Görsel WPF smoke testleri gerçek masaüstü oturumu gerektirdiği için otomatikleştirilmedi; veri/tercih akışları test edildi.
+
+## M30 mesaj ve müşteri iletişim merkezi — 2026-09-11
+- [x] Kanal/mağaza/sipariş/ürün/müşteri/konu/durum/zaman filtreli yerel mesaj merkezi eklendi.
+- [x] Harici ID duplicate koruması, okundu/taslak/hata durumları ve PII/secret-safe audit sınırı eklendi.
+- [x] Yerel mesaj şablonları ve sipariş/ürün ekranına bağlam geçişleri eklendi.
+- [x] Doğrulanmış mesaj capability'si olmayan kanallarda okuma/yazma `NOT_SUPPORTED/LIVE_API_BLOCKED`; HTTP isteği yok.
+- [x] Fake SQLite/capability/redaction testleri ile 317 Release testi geçti; self-contained yayın `Windows-M30-Messages` altında üretildi.
+- [ ] Gerçek marketplace inbox/mesaj API'leri resmi capability/scope doğrulanana kadar açılmayacak.

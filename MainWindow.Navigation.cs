@@ -61,6 +61,7 @@ public partial class MainWindow
   Page("stock-policies","Mağaza stok ayarları","Güvenlik stoğu, üst sınır ve yerel önizleme",BuildStockPolicies());
   Page("orders","Sipariş ve kargo","Sipariş kayıtları, paket ve kargo takibi",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts));
   Page("order-exceptions","Sipariş istisnaları","Eksik SKU, iptal/iade ve stok kararlarını önizleme/onay ile yönetin.",OrderExceptionsPanel.Create(dataDirectory,key=>Navigate(key)));
+  Page("messages","Mesaj merkezi","Müşteri mesajları, sistem bildirimleri ve yerel yanıt şablonları",MessagePanel.Create(dataDirectory,key=>Navigate(key)));
   Page("shipping","Navlungo","Kargo bağlantısı ve mevcut hizmet işlemleri",NavlungoPanel.Create(),"Kargo bağlantısı");
   Group("YÖNETİM");
   Page("diagnostics","Tanılama / audit","Güvenli sistem sağlık özeti, audit trail ve destek paketi",DiagnosticsPanel.Create(dataDirectory,key=>Navigate(key)));
