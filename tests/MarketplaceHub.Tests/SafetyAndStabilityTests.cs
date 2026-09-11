@@ -61,16 +61,18 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual("/v3/application/shops/123/listings/456", requests[0].RequestUri!.AbsolutePath);
         Assert.AreEqual("PATCH", requests[1].Method.Method);
         Assert.AreEqual("/v3/application/shops/123/listings/456", requests[1].RequestUri!.AbsolutePath);
-        var body = requests[1].Content!.ReadAsStringAsync().GetAwaiter().GetResult();
-        StringAssert.Contains(body, "quantity=7");
-        StringAssert.Contains(body, "price=12.50");
+        StringAssert.Contains(requestBodies[1], "quantity=7");
+        StringAssert.Contains(requestBodies[1], "price=12.50");
     }
+
+    private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             requests.Add(request);
+            requestBodies.Add(request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "");
             var json = request.Method == HttpMethod.Get
                 ? "{\"listing_id\":456,\"title\":\"Demo\",\"description\":\"d\",\"state\":\"active\",\"quantity\":2,\"price\":{\"amount\":1250,\"divisor\":100,\"currency_code\":\"USD\"},\"skus\":[\"SKU-1\"]}"
                 : "{\"listing_id\":456}";
