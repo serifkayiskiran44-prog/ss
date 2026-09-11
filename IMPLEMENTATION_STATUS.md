@@ -65,3 +65,5 @@ M15 Allegro connector (2026-09-11, Issue #22): Allegro public API teklif ve sipa
 M16 Joom connector (2026-09-11, Issue #23): merchant/API ayar store'u, WPF bağlantı paneli ve yerel ürün planı eklendi. Güncel API kimlik/endpoint sözleşmesi doğrulanmadığı için canlı çağrı yok; `LIVE_API_BLOCKED`. 286 Release testi geçti; `Windows-M16-Joom` self-contained yayın üretildi.
 
 M17 Wish connector (2026-09-11, Issue #24): güvenli merchant/API ayar store'u, WPF bağlantı paneli ve yerel ürün planı eklendi. Resmi sözleşme doğrulanmadığı için canlı endpoint çağrısı yapılmıyor; `LIVE_API_BLOCKED`. 288 Release testi geçti; `Windows-M17-Wish` self-contained yayın üretildi.
+
+M19 ana dashboard ve rapor/bildirim merkezi (2026-09-11, Issue #26): program açılışına ürün, sipariş, XML, sync ve bağlantı metriklerini salt-okunur yerel snapshot olarak gösteren özgün Genel Bakış ekranı eklendi. Kanal sağlığı, maskeli hata bildirimleri, ilgili modüle hızlı aksiyonlar ve 14 günlük sipariş trendi bulunuyor; ağır BI veya canlı marketplace değişikliği yok. 290 Release testi geçti; `Windows-M19-Dashboard` self-contained yayın üretildi.

@@ -196,3 +196,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Güncel Wish API kimlik/endpoint sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP yok.
 - [x] 288 Release testi geçti; self-contained yayın `Windows-M17-Wish` altında üretildi.
 - [ ] Wish ürün/sipariş/stok/fiyat canlı operasyonları resmi credential ve API sözleşmesi doğrulanana kadar kapalı.
+
+## M19 ana dashboard ve rapor/bildirim merkezi — 2026-09-11
+- [x] Program açılışında ürün, sipariş, stok, XML, sync ve mağaza bağlantı özetlerini gösteren özgün Genel Bakış ekranı eklendi.
+- [x] Kanal/mağaza sağlığı, son test ve maskeli hata görünümü eklendi; varsayılan/engelli hesaplar ilgili kanal ekranına açılıyor.
+- [x] Son 14 gün yerel sipariş trendi ve mevcut stok özeti eklendi; ağır BI veya uzak rapor API'si eklenmedi.
+- [x] Sync, XML, stok ve bağlantı bildirimleri ilgili ekranlara yönlendiren aksiyonlarla birleştirildi; veri okuma arka planda yapılıyor.
+- [x] 290 Release testi geçti; self-contained yayın `Windows-M19-Dashboard` altında üretildi.
+- [ ] Canlı marketplace mutation ve fulfillment dashboard işlemlerinden açılmadı; dashboard salt-okunur yerel özet olarak kalır.

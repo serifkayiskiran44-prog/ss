@@ -20,6 +20,7 @@ public partial class MainWindow
    item.Selected+=(_,_)=>{ModuleTabs.SelectedItem=page;PageTitle.Text=title;PageDescription.Text=description;};
   }
   Group("KATALOG VE TEDARİK");
+  Page("dashboard","Genel bakış","Ürün, sipariş, XML, bağlantı ve sync durumunu tek ekranda izleyin.",DashboardPanel.Create(dataDirectory,Navigate));
   Page("products","Ürün yönetimi","Ortak ürün havuzu • Ürün seçerek kartını, fiyatını ve stok kilitlerini düzenleyin.",builtPages["Ürün havuzu"]);
   Page("xml","XML yönetimi","Kaynak bağlantısı → Alan eşleştirme → Fiyat ve stok → Önizleme ve havuza aktarım",builtPages["XML yönetimi"]);
   Page("excel","Excel ürün işlemleri","Excel dışa aktarma ve içe aktarma önizlemesi",BuildExcel());
@@ -62,7 +63,7 @@ public partial class MainWindow
   settings.Children.Add(Heading("Görseller"));settings.Children.Add(MarketplaceImagePanel.Create());
   settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML yönetimi / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));
   Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
-  Navigate("products");
+  Navigate("dashboard");
  }
  void Navigate(string key)
  {
