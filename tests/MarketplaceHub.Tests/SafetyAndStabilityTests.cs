@@ -483,6 +483,21 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public async Task StockReconciliationDetectsDuplicateAndRequiresVersionedApproval()
+    {
+        var center = new StockReconciliationCenter();
+        var movements = new[] { new StockMovement("m1", "shop", "trendyol", "p1", "order", -2, DateTimeOffset.UtcNow), new StockMovement("m1", "shop", "trendyol", "p1", "order", -2, DateTimeOffset.UtcNow) };
+        var row = center.Reconcile("shop", "trendyol", "p1", 5, 10, movements);
+        CollectionAssert.Contains(row.Causes.ToArray(), "duplicate-movement");
+        var preview = center.PreviewCorrection(row, "sayım");
+        Assert.ThrowsException<InvalidOperationException>(() => center.ApplyApproved(preview, 0, false));
+        var audit = center.ApplyApproved(preview, 0, true);
+        Assert.AreEqual("LOCAL_CORRECTION", audit.Action);
+        var page = await center.PageAsync(new[] { row }, "p1", 0, 10);
+        Assert.AreEqual(1, page.Count);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
