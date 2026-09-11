@@ -236,3 +236,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Mapping geçmişi tutuluyor ve aynı harici anahtar farklı kanal/mağazalarda birbirinden izole ediliyor.
 - [x] 298 Release testi geçti; self-contained yayın `Windows-M23-Taxonomy` altında üretilecek.
 - [ ] Resmi marketplace metadata endpointleri doğrulanmadan kategori/özellik/marka uzaktan yazımı açılmayacak; XML Variant Mapping `DEFERRED_BY_USER`.
+
+## M24 ürün görsel ve medya merkezi — 2026-09-11
+- [x] Ürün görselleri ayrı `media.db` içinde URL, kaynak, sıra, ana görsel, hash, son doğrulama ve hata durumu ile tutuluyor; mevcut `ImageUrls` verisi ilk açılışta içeri alınıyor.
+- [x] HTTPS/file URL normalizasyonu ve ürün bazlı duplicate engeli; ana görsel silinirse sıradaki kayıt otomatik yükseltiliyor.
+- [x] Tek WPF panelinde ürün arama, kaynak görünürlüğü, önizleme, ana görsel/sıra işlemleri ve kaydı kaldırma mevcut.
+- [x] 20 MB sınırı, timeout, 404, geçersiz adres, desteklenmeyen biçim ve HTTP hata sınıfları; doğrulama/retry yalnız dosya okur, canlı marketplace yazmaz.
+- [x] Fake HTTP ve geçici SQLite senaryoları ile 301 Release testi geçti; self-contained yayın `Windows-M24-Media` altında üretilecek.
+- [ ] Marketplace görsel yazımı bu modülde açılmadı; yalnız ilgili connector'ın mevcut preview/onay kapısından geçebilir.
