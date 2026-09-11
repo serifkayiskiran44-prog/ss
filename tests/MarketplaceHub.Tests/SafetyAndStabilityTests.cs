@@ -945,6 +945,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ShadowDataAuditWarnsWithoutDeletingUserDatabase()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "mh-shadow-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(directory);
+        try { File.WriteAllText(Path.Combine(directory, "hub.db"), "fixture"); var result = ShadowDataAudit.Inspect(directory); Assert.AreEqual("WARNING", result.Status); Assert.IsTrue(File.Exists(Path.Combine(directory, "hub.db"))); }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

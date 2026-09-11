@@ -314,3 +314,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M236 — agent/skill eval: temsilî senaryo matrix ve düşük risk fan-out ayrımı teslim edildi.
 # M237 — acceptance evidence: issue/head/test/publish zorunluluk gate’i teslim edildi.
 # M238 — Etsy live safety: currency guard ve zero-stock preview düzeltmesi teslim edildi.
+# M239 — shadow data cleanup: legacy HubData shipping assembly’den çıkarıldı, silme yapılmadı.

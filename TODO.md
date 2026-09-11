@@ -659,3 +659,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M236: altı senaryolu agent/skill evaluation matrix ve KEEP/MERGE raporu eklendi.
 # M237: acceptance evidence gate zero/partial test ve eksik head/artifact kanıtını engelliyor.
 # M238: Etsy currency mismatch/unknown guard ve zero-stock preview safety eklendi; FX/live write yok.
+# M239: HubData.cs production compile’dan çıkarıldı; hub.db read-only audit ile korunuyor.
