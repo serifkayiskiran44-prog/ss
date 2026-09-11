@@ -633,3 +633,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M210 Etsy seller cockpit: auth/shop/scope/listing/order/sync/drift/dead-letter aggregate readiness, dry-run ayrımı ve operator gate eklendi (docs/taskpacks/M210.md).
 # M211: ortak varyant/seçenek domain çekirdeği `DEFERRED_BY_USER` guard ile ertelendi; write/migration yok.
 # M212: XML varyant mapping/import `DEFERRED_BY_USER` guard ile ertelendi; normal XML akışı korunuyor.
+# M213: Excel varyant workflows `DEFERRED_BY_USER` guard ile ertelendi; workbook apply yok.
