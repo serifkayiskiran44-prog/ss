@@ -526,6 +526,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ReturnManagementBlocksWrongShopMissingSkuAndStaleButAllowsPartialPreview()
+    {
+        var @case = new TrMarketplaceHubDesktop.ReturnCase("etsy", "shop-a", "order-1", "line-1", "SKU-1", 2, "customer", "OPEN", DateTimeOffset.UtcNow);
+        var preview = TrMarketplaceHubDesktop.ReturnManagement.CreatePreview(@case, "shop-a", true, DateTimeOffset.Parse("2026-09-11T12:00:00Z"), DateTimeOffset.Parse("2026-09-11T12:00:00Z"));
+        var wrongShop = TrMarketplaceHubDesktop.ReturnManagement.CreatePreview(@case, "shop-b", true, expectedOrderUpdated: DateTimeOffset.Parse("2026-09-11T12:00:00Z"), currentOrderUpdated: DateTimeOffset.Parse("2026-09-11T12:00:00Z"));
+        Assert.AreEqual("PREVIEW_ONLY", preview.Status); Assert.AreEqual(2, preview.Quantity); Assert.AreEqual("BLOCKED", wrongShop.Status);
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
