@@ -375,3 +375,8 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Son başarısız audit kaydı Outcome=`Failed` ile doğrudan sorgulanıyor; arama metnindeki tesadüfi eşleşmeler sonucu bozmaz.
 - [x] Audit, tanılama ve destek ZIP sentinel testleri eklendi; Release testleri 344/344 geçti.
 - [ ] Resmi credential/scope/endpoint sözleşmesi doğrulanmadıkça `LIVE_API_BLOCKED` kanallarda canlı write açılmayacak.
+
+## M42 Etsy satışa hazırlık dry-run — 2026-09-11
+- [x] Etsy sekmesine credential, ilan şablonu, ürün eşleme ve yerel dry-run geçidini tek ekranda gösteren satışa hazırlık paneli eklendi.
+- [x] Onaysız/stale canlı yazma engeli ve `LIVE_API_BLOCKED` görünürlüğü korunuyor; dry-run HTTP write çağrısı yapmıyor.
+- [x] Yeni connector veya ertelenmiş alanlara dokunulmadı; 344 Release testi geçiyor.

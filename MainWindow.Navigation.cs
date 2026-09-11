@@ -41,6 +41,7 @@ public partial class MainWindow
   etsyTabs=new TabControl();
   etsyTabs.Items.Add(new TabItem{Header="Ürünler",Content=builtPages["Etsy ilanları"]});
   etsyTabs.Items.Add(new TabItem{Header="Şablon ve eşleştirme",Content=builtPages["Global Etsy şablonu"]});
+  etsyTabs.Items.Add(new TabItem{Header="Satışa hazırlık",Content=EtsyReadinessPanel.Create(dataDirectory,key=>Navigate(key))});
   etsyTabs.Items.Add(new TabItem{Header="Bağlantı",Content=builtPages["Etsy bağlantısı"]});
   Page("etsy","Etsy","Mağaza ilanları, ortak havuzdan taslak ve hesap yetkilendirmesi. Bağlantı durumu Bağlantı sekmesinde doğrulanır.",etsyTabs);
   foreach(var id in new[]{"ebay","ozon","joom"})
