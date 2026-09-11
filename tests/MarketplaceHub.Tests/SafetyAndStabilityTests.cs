@@ -78,6 +78,17 @@ public sealed class SafetyAndStabilityTests
         Assert.IsFalse(error.Message.Contains("access", StringComparison.OrdinalIgnoreCase));
     }
 
+    [TestMethod]
+    public void SecondaryConnectorSnapshotExposesPartialAndBlockedStates()
+    {
+        var rows = TrMarketplaceHubDesktop.SecondaryConnectorAudit.Snapshot();
+
+        Assert.AreEqual(6, rows.Count);
+        Assert.AreEqual("PARTIAL", rows.Single(x => x.Channel == "allegro").Status);
+        Assert.IsTrue(rows.Where(x => x.Channel is "joom" or "wish" or "fruugo" or "navlungo")
+            .All(x => x.Status == "LIVE_API_BLOCKED" && x.Detail.Contains("HTTP isteği oluşturulmaz")));
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
