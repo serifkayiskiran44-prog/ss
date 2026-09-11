@@ -291,6 +291,24 @@ public sealed class SafetyAndStabilityTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [TestMethod]
+    public void AuditPagingUsesStableCursorAndDoesNotReplayEvents()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-audit-page-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new TrMarketplaceHubDesktop.AuditStore(root);
+            for (var i = 0; i < 3; i++) store.Append(new() { AtUtc = DateTime.UtcNow.AddMinutes(-i), Action = "action-" + i });
+            var first = TrMarketplaceHubDesktop.AuditPaging.Read(store, 2);
+            var second = TrMarketplaceHubDesktop.AuditPaging.Read(store, 2, first.NextBeforeUtc);
+            Assert.AreEqual(2, first.Items.Count);
+            Assert.IsTrue(first.HasMore);
+            Assert.AreEqual(1, second.Items.Count);
+            Assert.IsFalse(second.Items.Any(x => first.Items.Any(y => y.Id == x.Id)));
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
