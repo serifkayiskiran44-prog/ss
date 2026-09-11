@@ -431,3 +431,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M56 kategori/marka/özellik eşleme: öneri normalizasyonunda Unicode ve ardışık boşluklar normalize ediliyor (docs/taskpacks/M56.md).
 
 - [x] M57 ürün medya/görsel: medya liste araması % ve _ karakterlerini literal işler (docs/taskpacks/M57.md).
+
+- [x] M58 sipariş liste/detay: OrdersStore.ReadPage ile kanal/mağaza/durum/metin filtreleri ve sayfalama eklendi (docs/taskpacks/M58.md).

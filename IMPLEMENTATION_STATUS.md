@@ -157,3 +157,5 @@ M56 doğrulama: yeniden çalıştırılan Release test 349/349 geçti; self-cont
 M57 medya (Issue #92, 2026-09-11): MediaStore.List arama sorgusu SQL wildcard injection/yanlış eşleşmeye karşı escape edildi; URL normalize, duplicate/hash, doğrulama durumları korunuyor. docs/taskpacks/M57.md 100/100.
 
 M57 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M57-Media oluşturuldu.
+
+M58 sipariş liste/detay (Issue #93, 2026-09-11): OrdersStore.ReadPage birleşik filtreleme ve sayfalama sağlar; mevcut order validation, tracking güvenliği ve stale merge korunuyor. docs/taskpacks/M58.md 100/100.

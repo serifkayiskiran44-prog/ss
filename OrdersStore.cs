@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 namespace TrMarketplaceHubDesktop;
 public sealed class OrdersStore
 {
+ public sealed record OrderPage(IReadOnlyList<OrderSnapshot> Items,int Total);
  readonly string connectionString;
  public OrdersStore(string? directory=null)
  {
@@ -13,6 +14,8 @@ public sealed class OrdersStore
  }
  SqliteConnection Open(){var c=new SqliteConnection(connectionString);c.Open();return c;}
  public List<OrderSnapshot> ReadAll(){using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT payload FROM orders";using var r=cmd.ExecuteReader();var rows=new List<OrderSnapshot>();while(r.Read())rows.Add(JsonSerializer.Deserialize<OrderSnapshot>(r.GetString(0))!);return rows.OrderByDescending(o=>o.UpdatedAt).ToList();}
+ public OrderPage ReadPage(string? marketplace=null,string? shopId=null,string? status=null,string? query=null,int offset=0,int limit=100)
+ { if(offset<0||limit<1||limit>1000)throw new ArgumentOutOfRangeException(nameof(limit)); var text=query?.Trim()??""; var rows=ReadAll().Where(o=>(string.IsNullOrWhiteSpace(marketplace)||o.Marketplace.Equals(marketplace.Trim(),StringComparison.OrdinalIgnoreCase))&&(string.IsNullOrWhiteSpace(shopId)||o.ShopId.Equals(shopId.Trim(),StringComparison.OrdinalIgnoreCase))&&(string.IsNullOrWhiteSpace(status)||o.RawStatus.Equals(status.Trim(),StringComparison.OrdinalIgnoreCase))&&(text.Length==0||o.OrderId.Contains(text,StringComparison.CurrentCultureIgnoreCase)||o.Items.Any(i=>i.Sku.Contains(text,StringComparison.CurrentCultureIgnoreCase)||i.Title.Contains(text,StringComparison.CurrentCultureIgnoreCase)))).ToList(); return new(rows.Skip(offset).Take(limit).ToList(),rows.Count); }
  public void SaveManual(OrderSnapshot order)
  {
   var copy=order.Copy();OrdersRules.Validate(copy);
