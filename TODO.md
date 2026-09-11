@@ -642,3 +642,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M219: kanal bazlı update mode planner local preview olarak eklendi; dış write yok.
 # M220: iade batch shop izolasyonu ve duplicate suppression eklendi; dış write yok.
 # M221: shipping label preview ve duplicate tracking guard eklendi; carrier write yok.
+# M222: Fulfillment Core `DEFERRED_BY_USER` guard ile ertelendi; provider request yok.

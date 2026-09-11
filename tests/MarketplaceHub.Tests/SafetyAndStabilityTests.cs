@@ -813,6 +813,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void FulfillmentCoreRemainsDeferredWithoutProviderRequest()
+    {
+        var decision = FulfillmentCoreDeferredGuard.Evaluate("o-1");
+        Assert.AreEqual("DEFERRED_BY_USER", decision.Status);
+        Assert.AreEqual("o-1", decision.OrderId);
+        Assert.ThrowsException<InvalidOperationException>(() => FulfillmentCoreDeferredGuard.EnsureNoRequest(decision));
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
