@@ -459,6 +459,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void TrendyolPilotValidatesOfficialProductV2AndInvoicePreviewWithoutHttp()
+    {
+        TrMarketplaceHubDesktop.TrendyolPilot.ValidateProductBatch([new("869000000001", "SKU-1", "Ürün", "Marka", 3, 120, 100)]);
+        TrMarketplaceHubDesktop.TrendyolPilot.ValidateInvoice(new(123, 456, "https://invoice.example.test/a.pdf", "TY42024567890123", 1700000000));
+        Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.TrendyolPilot.ValidateProductBatch([new("b", "s", "t", "m", 1, 99, 100)]));
+        Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.TrendyolPilot.ValidateInvoice(new(123, 456, "http://invoice.example.test/a", null, null)));
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
