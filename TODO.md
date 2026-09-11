@@ -385,3 +385,8 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] XML kaynak → test → düğüm/alan eşleme → önizleme → create/update/skip/error → onay → geçmiş akışı ve kullanıcı farkları dokümante edildi.
 - [x] Sipariş kaynaklı stok düşümünün XML yenilemesiyle ezilmemesi, duplicate/bozuk XML/timeout/gzip sınırları mevcut test ve transaction akışıyla doğrulandı.
 - [x] XML varyant mapping ve doğrulanmamış marketplace write kapsam dışı bırakıldı; Release testleri 344/344.
+
+## M44 Core UI kullanılabilirlik smoke turu — 2026-09-11
+- [x] Büyük listelerde sanallaştırma/sayfalama, uzun işlerde iptal/ilerleme ve async işlem kapıları doğrulandı.
+- [x] Navigasyon, global arama, boş/loading/hata/başarı durumları ve riskli butonların çift tetikleme koruması gözden geçirildi; `docs/UI-SMOKE.md` eklendi.
+- [x] UI kodu derlendi, 344 Release testi geçti ve self-contained publish üretildi; fiziksel DPI/ekran smoke bu ortamda çalıştırılmadı.
