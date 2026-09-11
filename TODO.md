@@ -119,3 +119,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Yeni WPF Mağaza bağlantıları paneli ve kanal/yardım hızlı geçişleri eklendi.
 - [x] 268 Release testi geçti; self-contained yayın `Windows-M6-Connections` altında üretildi.
 - [ ] Amazon, Trendyol, Hepsiburada, Allegro, Joom, Wish, Fruugo ve Navlungo için doğrulanmış resmi API credential/contract olmadan canlı operasyon açılmadı.
+
+## M7 ürün yönetimi ana paneli — 2026-09-11
+- [x] Ürün listesine XML kaynak kimliği, son güncelleme zamanı ve kanal planı özeti eklendi; mevcut SKU/barkod/marka/kategori/stok/fiyat filtreleri korundu.
+- [x] Filtreler SQLite içinde isimli görünüm olarak kaydedilebilir, yüklenebilir ve silinebilir.
+- [x] Büyük listede 200 kayıt sayfalama + WPF satır sanallaştırması etkinleştirildi; detay paneli seçili ürünün normal alanlarını ve kanal planlarını gösteriyor.
+- [x] Çoklu seçimle aktif/pasif normal toplu işlem eklendi; canlı marketplace yazımı yapılmıyor.
+- [x] 269 Release testi geçti; self-contained yayın `Windows-M7-Products` altında üretildi.
+- [ ] Varyant, bundle/set, hızlı satır içi düzenleme ve kritik fiyat bu kullanıcı kararıyla kapsam dışıdır.
