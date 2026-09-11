@@ -266,3 +266,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Geri koyma transaction + ürün sürümü kontrolü + tek sipariş idempotency kaydı ile stale/duplicate stok hareketi engellendi.
 - [x] 308 Release testi geçti; self-contained yayın `Windows-M27-Order-Exceptions` altında üretilecek.
 - [ ] Fulfillment, hakediş/mutabakat ve otomatik canlı iptal/iade API yazımı kapsam dışı.
+
+## M28 tanılama, audit trail ve destek merkezi — 2026-09-11
+- [x] Kritik UI/işlem kayıtları için credential/PII redaction ve 5000 kayıt retention sınırı olan yerel `AuditStore` eklendi.
+- [x] DB, migration/okuma, sync kuyruğu, son hata ve disk durumu `DiagnosticsService` ile salt-okunur özetleniyor.
+- [x] Tanılama/audit ekranı; arama, yenileme, destek paketi dışa aktarma ve ilgili merkezlere geçiş içeriyor.
+- [x] Destek zip'i yalnız maskeli metadata, audit ve son operasyon logunu içeriyor; yerel DB/şifreli credential byte'ları dahil edilmiyor.
+- [x] 311 Release testi geçti; self-contained yayın `Windows-M28-Diagnostics` altında üretildi.
+- [ ] Canlı marketplace değişikliği, credential çözme veya otomatik kurtarma bu merkezden açılmadı.

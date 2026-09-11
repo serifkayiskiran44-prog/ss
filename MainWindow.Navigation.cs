@@ -58,6 +58,7 @@ public partial class MainWindow
   Page("order-exceptions","Sipariş istisnaları","Eksik SKU, iptal/iade ve stok kararlarını önizleme/onay ile yönetin.",OrderExceptionsPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("shipping","Navlungo","Kargo bağlantısı ve mevcut hizmet işlemleri",NavlungoPanel.Create(),"Kargo bağlantısı");
   Group("YÖNETİM");
+  Page("diagnostics","Tanılama / audit","Güvenli sistem sağlık özeti, audit trail ve destek paketi",DiagnosticsPanel.Create(dataDirectory,key=>Navigate(key)));
   var settings=new StackPanel{Margin=new Thickness(20)};
   settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
   settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));

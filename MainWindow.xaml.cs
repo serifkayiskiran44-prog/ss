@@ -246,7 +246,7 @@ public partial class MainWindow : Window
  }
  async Task RunAsync(Func<Task> action){if(!await gate.WaitAsync(0)){Log("Önceki işlem sürüyor.");return;}ModuleTabs.IsEnabled=false;try{await action();}catch(Exception e){Log(Safe(e));apiStatus.Text=Safe(e);}finally{ModuleTabs.IsEnabled=true;gate.Release();}}
  static string Safe(Exception e)=>e is InvalidOperationException or ArgumentException?e.Message:"İşlem tamamlanamadı. Dosya biçimini, erişim izinlerini ve bağlantıyı kontrol et.";
- void Log(string text){StatusText.Text=text;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);}catch(IOException){} }
+ void Log(string text){StatusText.Text=text;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);new AuditStore(dataDirectory).Append(new(){Module="UI",Action="log",Outcome="Info",Detail=text});}catch(IOException){}catch(Exception){ } }
  protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();lifetime.Cancel();http.Dispose();base.OnClosed(e);}
 }
 
