@@ -592,3 +592,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M132 ölçek fixture’ı: 100k sentetik ürün üzerinde filtreleme ve sayfalama latency/allocation/working-set metriği ölçülüyor (docs/taskpacks/M132.md).
 - [x] M133 update kanalı: yalnız HTTPS ve dosya SHA-256 eşleşmesi doğrulanınca VERIFIED kararı veren, kaynak yoksa NOT_CONFIGURED kalan kontrol eklendi (docs/taskpacks/M133.md).
 - [x] M134 güvenlik tehdit modeli: severity sınıflı bulguları sanitize edip P0/P1 bulgularında BLOCKED release değerlendirmesi yapan negatif sözleşme eklendi (docs/taskpacks/M134.md).
+- [x] M135 yardım/runbook: gerçek route’larla sınırlı context-help başlıkları, ön koşul ve recovery bilgileri eklendi; ölü/deferred özellik referansı yok (docs/taskpacks/M135.md).

@@ -386,6 +386,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void HelpTopicsOnlyReferenceKnownSafeRoutes()
+    {
+        Assert.IsTrue(TrMarketplaceHubDesktop.HelpTopics.All.Count >= 5);
+        Assert.IsTrue(TrMarketplaceHubDesktop.HelpTopics.All.All(x => TrMarketplaceHubDesktop.ScreenParityAudit.RequiredRoutes.Contains(x.Route)));
+        Assert.AreEqual("Sync merkezi", TrMarketplaceHubDesktop.HelpTopics.ForRoute("SYNC")!.Title);
+        StringAssert.Contains(TrMarketplaceHubDesktop.HelpTopics.ForRoute("connections")!.Recovery, "LIVE_API_BLOCKED");
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
