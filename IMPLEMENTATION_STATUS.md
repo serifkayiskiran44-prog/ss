@@ -311,3 +311,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M233 — reporting analytics: deterministic selected-row aggregate teslim edildi.
 # M234 — WPF açık kaynak audit: bounded paging adaptasyonu teslim edildi; dependency spike reddedildi.
 # M235 — project agent/skills: repo-local sözleşmeler ve read-only reviewer teslim edildi.
+# M236 — agent/skill eval: temsilî senaryo matrix ve düşük risk fan-out ayrımı teslim edildi.
