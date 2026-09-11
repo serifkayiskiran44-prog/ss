@@ -165,3 +165,5 @@ M58 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windo
 M59 rebase doğrulama: #94 branch’i #93 güncel head’i üzerine taşındı; önceki M59 test/publish kanıtı korunuyor.
 
 M60 sync kuyruğu (Issue #95, 2026-09-11): SyncStore retry sınıflandırmasına 5s tabanlı, 300s üst sınırlı RetryDelay eklendi; atomic claim, duplicate key, failure cap ve secret redaction korunuyor. docs/taskpacks/M60.md 100/100.
+
+M60 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M60-Sync oluşturuldu.
