@@ -804,6 +804,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ShippingPreviewRejectsDuplicateTrackingWithoutCarrierWrite()
+    {
+        var known = new HashSet<string>(StringComparer.Ordinal) { "trk-1" };
+        var preview = ShippingLabelCenter.CreatePreview("carrier-fixture", "o-1", "trk-1", 1, known);
+        Assert.AreEqual("BLOCKED_DUPLICATE", preview.Status);
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => ShippingLabelCenter.CreatePreview("carrier-fixture", "o-1", null, 0, known));
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
