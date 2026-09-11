@@ -184,3 +184,9 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] 401/403/429/timeout/bozuk yanıt sınırları mevcut hata merkezine uyumlu; yazma ve fulfillment metotları yok.
 - [x] 284 Release testi geçti; self-contained yayın `Windows-M15-Allegro` altında üretildi.
 - [ ] OAuth refresh akışı ve stok/fiyat/listing write için açık preview/onay/idempotent dispatch sonraki resmi credential doğrulamasına bağlı.
+
+## M16 Joom connector sınırı — 2026-09-11
+- [x] Merchant ID/API key için DPAPI şifreli ayar store'u, bağlantı paneli ve yerel ürün planı bağlantısı eklendi.
+- [x] Joom API sözleşmesi/kimlik akışı doğrulanmadığı için read-only test `LIVE_API_BLOCKED` döndürüyor; endpoint uydurulmadı.
+- [x] 286 Release testi geçti; self-contained yayın `Windows-M16-Joom` altında üretildi.
+- [ ] Joom ürün/sipariş/stok/fiyat canlı operasyonları resmi credential ve güncel API sözleşmesi doğrulanana kadar kapalı.

@@ -61,3 +61,5 @@ M13 sync, otomasyon ve hata merkezi (2026-09-11, Issue #20): SyncStore hata sın
 M14 Ozon connector (2026-09-11, Issue #21): mevcut resmi ürün/depo read-only istemcisi sayfalı ürün özeti ve doğrulama ile genişletildi. Ürün yazma, sipariş ve stok/fiyat canlı operasyonları doğrulanmadığı için açılmadı. 282 Release testi geçti; `Windows-M14-Ozon` self-contained yayın üretildi.
 
 M15 Allegro connector (2026-09-11, Issue #22): Allegro public API teklif ve sipariş GET akışları resmi içerik tipi/bearer auth ile eklendi; DPAPI ayar paneli ve yerel ürün planı bağlandı. Yazma/fulfillment yapılmadı, OAuth refresh ve canlı credential doğrulaması sonraki adıma bırakıldı. 284 Release testi geçti; `Windows-M15-Allegro` self-contained yayın üretildi.
+
+M16 Joom connector (2026-09-11, Issue #23): merchant/API ayar store'u, WPF bağlantı paneli ve yerel ürün planı eklendi. Güncel API kimlik/endpoint sözleşmesi doğrulanmadığı için canlı çağrı yok; `LIVE_API_BLOCKED`. 286 Release testi geçti; `Windows-M16-Joom` self-contained yayın üretildi.
