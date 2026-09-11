@@ -500,6 +500,17 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void TransformRuleEngineHandlesCultureSafeRulesAndRowErrors()
+    {
+        var multiplied = TrMarketplaceHubDesktop.TransformRuleEngine.Apply("12.50", new("r1", 1, "multiply", Number: 2));
+        var text = TrMarketplaceHubDesktop.TransformRuleEngine.Apply(" Ürün ", new("r2", 1, "trim"));
+        var invalid = TrMarketplaceHubDesktop.TransformRuleEngine.Apply("not-number", new("r3", 1, "multiply", Number: 2));
+        var unsupported = TrMarketplaceHubDesktop.TransformRuleEngine.Apply("x", new("r4", 1, "eval"));
+        Assert.AreEqual("25", multiplied.Value); Assert.AreEqual("READY", multiplied.Status);
+        Assert.AreEqual("Ürün", text.Value); Assert.AreEqual("ERROR", invalid.Status); Assert.AreEqual("ERROR", unsupported.Status);
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
