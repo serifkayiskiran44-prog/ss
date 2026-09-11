@@ -205,6 +205,17 @@ public sealed class SafetyAndStabilityTests
         CollectionAssert.Contains(result.Missing.ToList(), "shop-scoped listing mapping");
     }
 
+    [TestMethod]
+    public void OperationsSummaryUsesRealSnapshotCountersAndEmptyState()
+    {
+        var snapshot = new TrMarketplaceHubDesktop.DashboardSnapshot(0, 0, 0, 2, 1, 3, 0, 0, "Henüz çalışmadı", null, 1, DateTime.UtcNow, [],
+            [new("Hata", "Sync başarısız", "x", "sync")], []);
+        var summary = TrMarketplaceHubDesktop.OperationsSummaryService.From(snapshot);
+        Assert.AreEqual(3, summary.OpenOrders);
+        Assert.AreEqual(2, summary.FailedSyncs);
+        Assert.IsTrue(summary.HasAction);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler

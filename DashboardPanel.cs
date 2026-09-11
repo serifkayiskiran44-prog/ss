@@ -51,7 +51,8 @@ public static class DashboardPanel
                 channels.ItemsSource = snapshot.Connections.Select(x => new { x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError }).ToList();
                 notifications.Children.Clear(); foreach (var item in snapshot.Notifications) AddNotification(notifications, item, navigate);
                 trends.ItemsSource = snapshot.OrderTrend.Select(x => new { DateLabel = x.Date.ToString("dd.MM.yyyy"), x.Orders, StockLabel = x.CurrentStock < 0 ? "—" : x.CurrentStock.ToString("N0") }).ToList();
-                status.Text = $"{snapshot.TotalProducts:N0} toplam ürün · {snapshot.PendingSyncs:N0} bekleyen/çalışan sync · Son XML: {snapshot.LastXmlStatus} ({snapshot.LastXmlUtc?.ToLocalTime().ToString("g") ?? "yok"}) · {snapshot.GeneratedUtc.ToLocalTime():g}";
+                var ops = OperationsSummaryService.From(snapshot);
+                status.Text = ops.HasAction ? $"{snapshot.TotalProducts:N0} toplam ürün · {snapshot.PendingSyncs:N0} bekleyen/çalışan sync · Açık sipariş {ops.OpenOrders:N0} · Sync hata {ops.FailedSyncs:N0} · Son XML: {snapshot.LastXmlStatus} ({snapshot.LastXmlUtc?.ToLocalTime().ToString("g") ?? "yok"})" : ops.EmptyState.Length > 0 ? ops.EmptyState : $"{snapshot.TotalProducts:N0} toplam ürün · Açık uyarı yok · {snapshot.GeneratedUtc.ToLocalTime():g}";
             }
             catch (Exception error)
             {
