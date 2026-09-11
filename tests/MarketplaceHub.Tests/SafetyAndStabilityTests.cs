@@ -150,6 +150,26 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual("V1_READY", ready.Status);
     }
 
+    [TestMethod]
+    public async Task XmlSourceGateSerializesSameSourceAndAllowsDifferentSources()
+    {
+        var active = 0;
+        var maximum = 0;
+        async Task Work(string source)
+        {
+            await TrMarketplaceHubDesktop.XmlSourceExecutionGate.RunAsync(source, async () =>
+            {
+                var current = Interlocked.Increment(ref active);
+                Interlocked.Exchange(ref maximum, Math.Max(maximum, current));
+                await Task.Delay(20);
+                Interlocked.Decrement(ref active);
+            });
+        }
+
+        await Task.WhenAll(Work("same"), Work("same"));
+        Assert.AreEqual(1, maximum);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler

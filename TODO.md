@@ -575,3 +575,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M115 home tile dashboard: gerçek local store sayaçları ve dinamik hızlı erişim kartları eklendi; kartlar klavye focus ve AutomationProperties adı taşıyor (docs/taskpacks/M115.md).
 - [x] M116 product list parity: ürün dashboard/list erişimi yoğun kart ve hızlı navigasyonla genişletildi; mevcut SQLite-side filtre, sayfalama, async/cancel ve deferred guard’lar korundu (docs/taskpacks/M116.md).
 - [x] M117 product form parity: ürün editörü gerçek alan bağlarını koruyan Genel, Görsel/Açıklama, Pazaryeri, XML/provenance ve Sipariş raporu sekmelerine ayrıldı (docs/taskpacks/M117.md).
+- [x] M118 XML UI parity: aynı XML kaynağına ait import işlemleri kaynak kimliği bazında serialize edildi; mevcut preview/mapping/provenance güvenlikleri korundu (docs/taskpacks/M118.md).

@@ -46,6 +46,12 @@ public partial class CatalogStore
  static void Index(Dictionary<string,List<CatalogProduct>> index,string key,CatalogProduct product){if(key=="")return;if(!index.TryGetValue(key,out var values))index[key]=values=new();values.Add(product);}
  public ImportSummary Import(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
  {
+  ImportSummary? result=null;
+  XmlSourceExecutionGate.RunAsync(source.Id,()=>{result=ImportCore(source,incoming);return Task.CompletedTask;}).GetAwaiter().GetResult();
+  return result!;
+ }
+ internal ImportSummary ImportCore(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
+ {
   XmlCatalog.ValidateSource(source);using var c=Open();using var tx=c.BeginTransaction();var products=Read<CatalogProduct>(c,"CatalogProducts",tx);int added=0,updated=0,unchanged=0;var skus=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var bars=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var touched=new HashSet<string>();var skuIndex=new Dictionary<string,List<CatalogProduct>>(StringComparer.OrdinalIgnoreCase);var barcodeIndex=new Dictionary<string,List<CatalogProduct>>(StringComparer.OrdinalIgnoreCase);foreach(var p in products.Where(p=>p.SourceId==source.Id)){Index(skuIndex,p.Sku,p);Index(barcodeIndex,p.Barcode,p);}
   foreach(var row in incoming){Valid(row);if(row.SourceId!=source.Id)throw new InvalidOperationException("Kaynak kimliği uyuşmuyor.");if((row.Sku!=""&&!skus.Add(row.Sku))||(row.Barcode!=""&&!bars.Add(row.Barcode)))throw new InvalidOperationException("Yinelenen SKU veya barkod; aktarım iptal edildi.");var matches=skuIndex.GetValueOrDefault(row.Sku)??new List<CatalogProduct>();if(matches.Count==0&&row.Barcode!="")matches=barcodeIndex.GetValueOrDefault(row.Barcode)??new List<CatalogProduct>();var barcodeMatches=barcodeIndex.GetValueOrDefault(row.Barcode)??new List<CatalogProduct>();if(matches.Count==1&&barcodeMatches.Any(p=>p.Id!=matches[0].Id))throw new InvalidOperationException("SKU ve barkod farklı ürünlerle eşleşiyor.");if(matches.Count>1)throw new InvalidOperationException("Barkod veya SKU birden fazla ürünle eşleşiyor.");
    var old=matches.SingleOrDefault();if(old==null){var p=JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(row))!;p.Id=Guid.NewGuid().ToString("N");p.UpdatedUtc=DateTime.UtcNow;products.Add(p);Index(skuIndex,p.Sku,p);Index(barcodeIndex,p.Barcode,p);Put(c,"CatalogProducts",p.Id,p,tx);touched.Add(p.Id);added++;continue;}
