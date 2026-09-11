@@ -298,3 +298,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M220 — iade merkezi: shop-scoped idempotent batch validation teslim edildi.
 # M221 — kargo çıktı merkezi: write-free shipment preview ve duplicate guard teslim edildi.
 # M222 — Fulfillment Core: `DEFERRED_BY_USER` guard teslim edildi; routing/request açılmadı.
+# M223 — Hakediş/Mutabakat Core: `DEFERRED_BY_USER` guard teslim edildi; write açılmadı.
