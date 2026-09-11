@@ -243,6 +243,19 @@ public sealed class SafetyAndStabilityTests
         Assert.IsTrue(ready.IsReady);
     }
 
+    [TestMethod]
+    public void StoreOnboardingResumesAfterReadOnlyFailureWithoutSecrets()
+    {
+        var started = TrMarketplaceHubDesktop.StoreOnboardingLifecycle.Begin("etsy", "shop-a");
+        var blocked = TrMarketplaceHubDesktop.StoreOnboardingLifecycle.CompleteReadOnlyTest(started, false, "LIVE_API_BLOCKED token=secret");
+        var resumed = TrMarketplaceHubDesktop.StoreOnboardingLifecycle.CompleteReadOnlyTest(blocked, true, "ok");
+
+        Assert.AreEqual("BLOCKED", blocked.Status);
+        Assert.IsFalse(blocked.Detail.Contains("secret", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(blocked.CanResume);
+        Assert.AreEqual("CAPABILITY_DISCOVERY", resumed.Stage);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
