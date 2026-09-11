@@ -26,6 +26,12 @@
 - [x] Release build ve self-contained `Windows-M68-Etsy-OAuth` publish başarılı.
 - [ ] Gerçek credential/mağaza read testi yapılmadı; canlı ortam `LIVE_API_BLOCKED`.
 
+## M69 Etsy listing üretim akışı — 2026-09-11
+- [x] Etsy readiness geçidi artık süresi dolmuş/dolmak üzere olan token’ı canlı işlem öncesi BLOCKED gösteriyor.
+- [x] Mevcut resmi listing create/update/publish preview, stale, wrong-shop ve idempotency kapıları korundu.
+- [x] Release build ve self-contained `Windows-M69-Etsy-Production` publish başarılı.
+- [ ] Gerçek mağazada write/order testi yapılmadı (`LIVE_API_BLOCKED`).
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
