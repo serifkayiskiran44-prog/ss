@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 
 namespace TrMarketplaceHubDesktop;
 
@@ -25,6 +26,10 @@ public sealed class DataBackupService
         if (IsInside(outputPath, DataDirectory)) throw new InvalidOperationException("Yedek dosyası uygulama veri klasörünün içine yazılamaz.");
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         Directory.CreateDirectory(DataDirectory);
+        // SQLite keeps pooled handles open after short-lived stores are disposed.
+        // Release idle handles before hashing/copying so a user initiated backup
+        // does not fail with a Windows file-lock error.
+        SqliteConnection.ClearAllPools();
         var files = EnumerateDataFiles().Select(path => new DataBackupFile(path, new FileInfo(Path.Combine(DataDirectory, path)).Length, Hash(Path.Combine(DataDirectory, path)))).ToList();
         var manifest = new DataBackupManifest(Format, AppVersion.Current, DateTime.UtcNow, files);
         var temporary = outputPath + ".tmp-" + Guid.NewGuid().ToString("N");

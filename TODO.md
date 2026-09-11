@@ -363,3 +363,9 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Credential/token/parola state'e alınmıyor; XML URL'sinde inline secret reddediliyor; bilinmeyen API capability'si NOT_CONFIGURED/LIVE_API_BLOCKED olarak gösteriliyor.
 - [x] Son sağlık özeti ve ilgili panellere hızlı geçiş eklendi; UI smoke/state testleri ile 338 Release testi geçti; self-contained yayın `Windows-M39-Onboarding` altında üretilecek.
 - [ ] Sihirbaz canlı marketplace write yapmaz; credential girişi ilgili kanalın mevcut güvenli ekranındadır.
+
+## M40 son üretim sertleştirmesi — 2026-09-11
+- [x] Yerel üretim hazırlığı servisi; veri klasörü, core SQLite depoları, secret taraması, veri kalite, connector capability ve API sağlık kontrollerini tek raporda topluyor.
+- [x] WPF `Üretim hazırlığı` ekranı kontrol durumlarını, bloklu doğrulanmamış connector'ları ve güvenlik sınırını görünür kılıyor.
+- [x] Açık secret ve kritik veri kalite kaydı için bloklayıcı testler eklendi; rapor değerleri dışarı sızdırmıyor.
+- [ ] `LIVE_API_BLOCKED` kanallar için resmi credential/scope/endpoint sözleşmesi doğrulanmadıkça canlı write açılmayacak.
