@@ -322,6 +322,19 @@ public sealed class SafetyAndStabilityTests
         Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.OfflineMode.EnsureDispatchAllowed(offline));
     }
 
+    [TestMethod]
+    public void WorkspaceStateRestoresValidStateAndFallsBackOnCorruption()
+    {
+        var state = new TrMarketplaceHubDesktop.WorkspaceState("products", "shop-a", 100, "active");
+        var restored = TrMarketplaceHubDesktop.WorkspaceStateCodec.Restore(TrMarketplaceHubDesktop.WorkspaceStateCodec.Serialize(state));
+        var fallback = TrMarketplaceHubDesktop.WorkspaceStateCodec.Restore("{bad json");
+
+        Assert.AreEqual("products", restored.Route);
+        Assert.AreEqual("shop-a", restored.ShopId);
+        Assert.AreEqual(100, restored.PageSize);
+        Assert.AreEqual("dashboard", fallback.Route);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler

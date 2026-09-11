@@ -586,3 +586,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M126 DB sağlık merkezi: catalog.db için salt-okunur quick_check, schema/WAL/foreign-key özeti ve missing/blocked/error sınıflaması eklendi (docs/taskpacks/M126.md).
 - [x] M127 audit/support: retention’a tabi audit kayıtları için cursor tabanlı, tekrar etmeyen sayfalama eklendi; redaction/export güvenliği korunuyor (docs/taskpacks/M127.md).
 - [x] M128 offline/degraded: network, auth ve rate-limit durumlarını ayıran bağlantı snapshot’ı ve online olmayan dispatch engeli eklendi (docs/taskpacks/M128.md).
+- [x] M129 workspace: kayıtlı route/shop/page/filter state için bounded JSON codec ve bozuk/eski state fallback’i eklendi (docs/taskpacks/M129.md).
