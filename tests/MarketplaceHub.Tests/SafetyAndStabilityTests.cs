@@ -766,6 +766,17 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void CriticalStockCampaignPolicyPreventsOversubscriptionAndHonorsExpiry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var result = CriticalStockCampaignPolicy.Evaluate(10, 2, [new("active", 6, now.AddHours(-1), now.AddHours(1)), new("expired", 8, now.AddHours(-2), now.AddMinutes(-1))], now);
+        Assert.AreEqual("AVAILABLE", result.Status);
+        Assert.AreEqual(2, result.AvailableToChannel);
+        var blocked = CriticalStockCampaignPolicy.Evaluate(5, 0, [new("too-many", 6, now.AddHours(-1), now.AddHours(1))], now);
+        Assert.AreEqual("BLOCKED_OVERSUBSCRIBED", blocked.Status);
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

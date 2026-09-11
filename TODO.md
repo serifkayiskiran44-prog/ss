@@ -637,3 +637,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M214: marketplace varyant eşleme `DEFERRED_BY_USER` guard ile ertelendi; publish yok.
 # M215: paket/set/bundle `DEFERRED_BY_USER` guard ile ertelendi; stok hareketi yok.
 # M216: hızlı satır içi düzenleme `DEFERRED_BY_USER` guard ile ertelendi.
+# M217: kritik stok ve kampanya allocation policy local preview olarak eklendi; dış write yok.
