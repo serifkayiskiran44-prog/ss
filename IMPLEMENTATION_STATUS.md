@@ -25,6 +25,8 @@ M2 Etsy order/stock (stacked on PR #4, 2026-09-11): listing detail read and expl
 
 M3 eBay safe parity (stacked on Issue #7, 2026-09-11): official Inventory/Fulfillment API read/write methods, explicit preview/approval, stale version guard and SyncJob idempotency implemented. 263 Release tests pass; production scope/credential validation remains LIVE_API_BLOCKED.
 
+M4 marketplace adapter core (stacked on Issue #8, 2026-09-11): shared capability/preview contract, encrypted-credential-compatible local metadata boundary and channel/shop isolated mapping for Ozon, Joom, Allegro, Wish and Navlungo. Unsupported or unverified operations produce no HTTP request and remain LIVE_API_BLOCKED. 265 Release tests pass.
+
 Ertelenen alanların tüm alt özellik/ekran/test geliştirmeleri kapsam dışıdır, eksik sayılmaz. Çalışan kod silinmez. Canlı marketplace verisi değiştirilmedi. Görsel masaüstü UI incelemesi bu adımda henüz yapılmadı.
 
 2026-09-11: 219 test geçti. Yeni yayın Windows-Operations/TrMarketplaceHubDesktop.exe; giriş şifresi yok. Açık eski uygulama korunur. Yeni alanların görsel kontrolü yapılmadı.
