@@ -73,6 +73,14 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Preview ürün sürümü/stok/fiyat/döviz değişirse dispatch reddediliyor.
 - [x] Fake HTTP + geçici SQLite idempotency/status testi eklendi; toplam 259 Release testi geçti.
 
+## M2 Etsy ürün/sipariş stok karar akışı — 2026-09-11
+- [x] Resmi Etsy listing detay okuma (`GET listings/{listing_id}`) eklendi; yanıt şeması doğrulanıyor.
+- [x] Etsy satış stok kararı preview → açık onay → atomik mevcut CatalogStore receipt/movement akışına bağlandı.
+- [x] Aynı receipt ikinci kez stok düşmüyor; iptal/iade için otomatik stok geri koyma yok.
+- [x] Eksik SKU, bilinmeyen Etsy siparişi ve pasif/uygunsuz ürün durumlarında işlem reddediliyor.
+- [x] 261 Release testi geçti; M2 stacked branch publish doğrulanacak.
+- [ ] Etsy gerçek mağaza credential/scope olmadan canlı sipariş yazma doğrulanamaz (`LIVE_API_BLOCKED`).
+
 ## Etsy operasyonları — 2026-09-11
 - [x] Etsy resmi API istemcisine basit ilan stok/fiyat güncellemesi eklendi; `listings_w` yetkisi, PATCH ve resmi API kimlik başlıkları kullanılıyor.
 - [x] Geçersiz stok/fiyat/ilan kimliği için istek göndermeyen testler eklendi.
