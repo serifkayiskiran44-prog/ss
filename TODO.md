@@ -636,3 +636,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M213: Excel varyant workflows `DEFERRED_BY_USER` guard ile ertelendi; workbook apply yok.
 # M214: marketplace varyant eşleme `DEFERRED_BY_USER` guard ile ertelendi; publish yok.
 # M215: paket/set/bundle `DEFERRED_BY_USER` guard ile ertelendi; stok hareketi yok.
+# M216: hızlı satır içi düzenleme `DEFERRED_BY_USER` guard ile ertelendi.

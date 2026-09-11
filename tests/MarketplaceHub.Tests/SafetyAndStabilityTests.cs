@@ -757,6 +757,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void InlineBulkEditRemainsDeferredWithoutLocalMutation()
+    {
+        var decision = InlineBulkEditDeferredGuard.Evaluate("stock");
+        Assert.AreEqual("DEFERRED_BY_USER", decision.Status);
+        Assert.AreEqual("stock", decision.Field);
+        Assert.ThrowsException<InvalidOperationException>(() => InlineBulkEditDeferredGuard.EnsureNoEdit(decision));
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
