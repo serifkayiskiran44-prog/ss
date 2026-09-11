@@ -468,6 +468,21 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
+    {
+        var templates = new[]
+        {
+            new TrMarketplaceHubDesktop.MetadataTemplate("etsy", "*", "cat", 1, new Dictionary<string,string>{{"brand","Default"},{"color","red"}}),
+            new TrMarketplaceHubDesktop.MetadataTemplate("etsy", "shop-a", "cat", 2, new Dictionary<string,string>{{"brand","Shop A"}}),
+            new TrMarketplaceHubDesktop.MetadataTemplate("etsy", "shop-a", "cat", 1, new Dictionary<string,string>{{"color","stale"}}, true),
+            new TrMarketplaceHubDesktop.MetadataTemplate("ebay", "shop-a", "cat", 9, new Dictionary<string,string>{{"brand","Wrong"}})
+        };
+        var resolved = TrMarketplaceHubDesktop.MetadataTemplateResolver.Resolve("etsy", "shop-a", "cat", "p-1", templates);
+        Assert.AreEqual("Shop A", resolved["brand"]);
+        Assert.AreEqual("red", resolved["color"]);
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([

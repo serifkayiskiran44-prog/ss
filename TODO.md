@@ -599,3 +599,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M139 sipariş transferi: izinli yerel sipariş alanları için invariant XML export/import ve malformed-root güvenlik kontrolü eklendi (docs/taskpacks/M139.md).
 - [x] M140 tanımsız çözüm: SKU/barkod/isim önerileri, fingerprint dedup ve shop-scoped açık onay kapısı eklendi; ambiguous/wrong-shop otomatik bağlanmıyor (docs/taskpacks/M140.md).
 - [x] M141 Trendyol pilot sözleşmesi: resmi Product V2 batch sınırı/listPrice≥salePrice ve sendInvoiceLink seller/package/HTTPS/invoice format önizleme doğrulamaları eklendi (docs/taskpacks/M141.md).
+- [x] M142 metadata şablonları: kanal+mağaza kategori profillerinde default/override önceliği, stale ve wrong-channel izolasyonu eklendi (docs/taskpacks/M142.md).
