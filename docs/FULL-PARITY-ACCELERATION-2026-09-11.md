@@ -20,6 +20,8 @@ Uygulama login/password sistemi ayrıca istenmediği için eklenmez. Güvenlik s
 ## Mevcut repo kod envanteri ve gözlenen açıklıklar
 Ana dalda ürün, XML/Excel, taxonomy, stok/fiyat policy, sipariş, sync/automation, credential store ve bazı connector iskeletleri var. Etsy tarafında `EtsyConnector.cs`, `EtsyOAuth.cs`, `EtsyShopClient.cs`, `EtsyDrafts.cs`, `OrdersEtsyClient.cs` mevcut. Kod şu anda mağaza testi, PKCE OAuth, listing listesi, basit listing stok/fiyat patch'i, draft oluşturma + ilk görsel, receipt/order okuma gibi temel akışları içeriyor.
 
+Görsel tarafta ana dal `MainWindow.xaml` sol menü + üst başlık + içerik paneli yapısında; gerçek chart/dashboard KPI altyapısı yok. `TrMarketplaceHubDesktop.csproj` içinde chart/UI paketi bulunmuyor. Bu nedenle görsel/dashboard/reporting paritesi ayrıca gerçek geliştirme gerektiriyor; `docs/VISUAL-REPORTING-PARITY-2026-09-11.md` zorunlu referanstır.
+
 Önemli Etsy gap'leri:
 1. Listing'in tüm alanlarını tam okuma/update etme ve lifecycle state yönetimi ortak bir service olarak tamamlanmalı.
 2. Inventory ayrı model olmalı; SKU/property_values/offerings/price_on_property/quantity_on_property/sku_on_property desteklenmeli.
@@ -82,6 +84,13 @@ Aşağıdaki başlıklar Entegra'nın güncel eğitim merkezi ve sürüm notlar�
 - ürün bazlı bağlı XML'ler
 - duplicate integration ID/kargo kodu filtreleri
 - stok tükenme süresi raporları
+- rapor ekranlarında sipariş durumu filtresi, alış fiyatı/KDV'li alış fiyatı/sipariş tarihi kolonları ve kolon açma-gizleme
+
+## Görsel ve raporlama açık kaynak araştırma yönü
+- `Live-Charts/LiveCharts2`: MIT, aktif WPF chart library; dashboard grafiklerinde aday.
+- `lepoco/wpfui`: MIT, .NET 8 dahil modern WPF controls/theme/icons; yalnız mevcut bilgi yoğunluğunu bozmadan sınırlı adaptasyon adayı.
+- `Koichi-Kobayashi/DataGridPerfLab`: 100k WPF DataGrid virtualization/refresh performansı için güncel referans.
+- `macgile/DataGridFilter`: MIT, .NET 8 demo; header filter/preset UX referansı. Ana data stratejisi yine SQLite-side filter/sort/page kalmalı.
 
 ## Mevcut koddaki mimari riskler
 - `MainWindow.xaml.cs` çok büyümüş; yeni modüller feature/service/panel olarak ayrılmalı.
@@ -90,6 +99,7 @@ Aşağıdaki başlıklar Entegra'nın güncel eğitim merkezi ve sürüm notlar�
 - Eski TODO/IMPLEMENTATION_STATUS'ta artık geçersiz DEFERRED satırları var; worker her ilgili paket sonunda güncellemeli.
 - Etsy'nin simple PATCH akışı inventory/variation semantiğini karşılamıyor; simple listing ve inventory write ayrılmalı.
 - Test command dokümanda dış test projesine bakıyor; clean-clone test altyapısı kesin olarak repo içinde olmalı.
+- Dashboard/chart olmadığı için Entegra benzeri görsel karar desteği ve drill-down raporlama henüz tamamlanmış sayılamaz.
 
 ## Hızlandırılmış uygulama sırası
 1. Kapsam/queue düzeltme + test altyapısı.
@@ -101,7 +111,9 @@ Aşağıdaki başlıklar Entegra'nın güncel eğitim merkezi ve sürüm notlar�
 7. Sipariş/iade/fatura/kargo/fulfillment.
 8. Hakediş/mutabakat + kârlılık ve operasyon raporları.
 9. Mesaj/bildirim/rekabet/ürün güvenliği.
-10. Full Entegra parity audit, clean clone, soak, installer ve release freeze.
+10. Full Entegra parity audit.
+11. Görsel dashboard KPI/chart + raporlama/drill-down + güncel WPF OSS adaptasyon turu.
+12. Clean clone, soak, installer ve release freeze.
 
 ## Kanıt modeli
 Her issue sonunda `REAL_WORK_COUNT`, `VERIFICATION_ONLY_COUNT`, `FILES_CHANGED`, `TESTS_ADDED_OR_CHANGED`, `TEST_RESULT`, `PUBLISH`, `BLOCKER` zorunlu. Hızlı kapanış tek başına başarı değildir; gerçek diff + hedefli test + publish kanıtı gerekir.
