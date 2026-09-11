@@ -614,3 +614,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M191 satın alma planlama: days-of-cover, min/target stok, supplier maliyet/lead-time, stale uyarısı, filtre ve CSV draft export eklendi; ERP order yok (docs/taskpacks/M191.md).
 - [x] M192 çoklu depo stok: location snapshot, toplam/görünür ayrımı, provenance filtresi, timeline ve scope anomaly tespiti eklendi; transfer/fulfillment yok (docs/taskpacks/M192.md).
 - [x] M193 kârlılık simülasyonu: SKU/kanal maliyet, KDV, komisyon, kargo/işlem katkısı, stale/marj uyarıları ve filtreli simülasyon eklendi; repricing yok (docs/taskpacks/M193.md).
+- [x] M194 döviz/fiyat dönüşümü: kur provenance/stale, manuel override audit, culture-safe parse, yuvarlama ve canlı yazma blokajı eklendi (docs/taskpacks/M194.md).

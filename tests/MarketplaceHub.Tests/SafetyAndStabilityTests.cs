@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -563,6 +564,20 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual(1, ProfitabilitySimulator.Filter(new[] { result }, channel: "TRENDYOL").Count);
         var negative = ProfitabilitySimulator.Simulate(input with { Cost = 250m }, now); Assert.AreEqual("NEGATIVE_MARGIN", negative.Status);
         var stale = ProfitabilitySimulator.Simulate(input with { CommissionAtUtc = now.AddDays(-3) }, now); Assert.AreEqual("STALE", stale.Status);
+    }
+
+    [TestMethod]
+    public void CurrencyPriceCenterConvertsWithProvenanceOverrideAndStaleGuard()
+    {
+        var now = DateTimeOffset.UtcNow; var center = new CurrencyPriceCenter();
+        center.SetRate(new CurrencyRate("USD", "TRY", 32.5m, "fixture", now));
+        var converted = center.Convert(10m, "USD", "TRY", now, TimeSpan.FromDays(1));
+        Assert.AreEqual(325m, converted.ConvertedAmount); Assert.AreEqual("READY", converted.Status); Assert.IsFalse(converted.Stale);
+        var audit = center.Override("USD", "TRY", 33m, "tester"); Assert.AreEqual(32.5m, audit.OldValue); Assert.AreEqual(33m, audit.NewValue);
+        Assert.AreEqual(330m, center.Convert(10m, "USD", "TRY", now, TimeSpan.FromDays(1)).ConvertedAmount);
+        var stale = center.Convert(1m, "USD", "TRY", now.AddDays(3), TimeSpan.FromDays(1)); Assert.AreEqual("STALE_LIVE_WRITE_BLOCKED", stale.Status);
+        Assert.AreEqual(1234.56m, CurrencyPriceCenter.Parse("1.234,56", CultureInfo.GetCultureInfo("tr-TR")));
+        Assert.AreEqual(1.01m, CurrencyPriceCenter.Round(1.005m));
     }
 
     [TestMethod]
