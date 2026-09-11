@@ -628,3 +628,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M205 Etsy metadata: taxonomy/property cache, section/shipping/return/processing profilleri, physical/digital validation, stale history ve READY approval gate eklendi (docs/taskpacks/M205.md).
 - [x] M206 Etsy medya: image/digital/video rank/hash preview, physical/digital guard, video contract blokajı, retry ve destructive approval gate eklendi (docs/taskpacks/M206.md).
 - [x] M207 Etsy inventory kapsam koruması: DEFERRED_BY_USER varyant write guard ve HTTP’siz regresyon testi eklendi; varyant motoru açılmadı (docs/taskpacks/M207.md).
+- [x] M208 Etsy batch drift: official 100 ID chunking, remote/local field diff, drift classification, stale ve wrong-scope guard eklendi; legacy includes kullanılmadı (docs/taskpacks/M208.md).

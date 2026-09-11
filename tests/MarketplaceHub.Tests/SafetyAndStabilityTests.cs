@@ -711,6 +711,16 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
+    {
+        var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
+        var at = DateTimeOffset.UtcNow; var local = new EtsyLocalSnapshot(1, "shop", "Old", 10, 2, "active", "cat", "a", "1", at); var remote = new EtsyRemoteSnapshot(1, "shop", "New", 11, 2, "active", "cat", "a", "1", at);
+        var drift = EtsyBatchDrift.Compare(remote, local, at, TimeSpan.FromDays(1)); Assert.AreEqual("MANUAL_REMOTE", drift.Classification); CollectionAssert.Contains(drift.Fields.ToArray(), "title");
+        Assert.AreEqual("STALE", EtsyBatchDrift.Compare(remote with { CheckedUtc = at.AddDays(-3) }, local, at, TimeSpan.FromDays(1)).Classification);
+        Assert.ThrowsException<InvalidOperationException>(() => EtsyBatchDrift.Compare(remote with { ShopId = "other" }, local, at, TimeSpan.FromDays(1)));
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
