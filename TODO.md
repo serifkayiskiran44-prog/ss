@@ -323,3 +323,12 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] API bağlantı sağlığı WPF ekranı; arama, durum filtresi, sayaç, backoff ve mağaza/kanal hızlı geçişlerini içeriyor.
 - [x] Fake HTTP header/exception ve geçici SQLite testleri ile 327 Release testi geçti; self-contained yayın `Windows-M34-Api-Health` altında üretilecek.
 - [ ] Doğrulanmamış marketplace endpointleri ve canlı write işlemleri açılmadı.
+
+## M35 otomasyon takvimi, şablonlar ve çalışma pencereleri — 2026-09-11
+- [x] XML yenileme, stok, fiyat, bağlantı sağlığı ve normal sync için tekrar kullanılabilir yerel şablonlar eklendi.
+- [x] Interval/Daily/Weekly zamanlama, yerel saat, haftalık gün seçimi ve isteğe bağlı çalışma penceresi eklendi.
+- [x] AutomationStore migration'ı ile kanal+mağaza+tür, sonraki çalışma, etkinlik, lease ve retry alanları kalıcı saklanıyor.
+- [x] Atomik lease duplicate çalışmayı engelliyor; hatalarda sınırlı exponential backoff, retry limiti ve redacted hata kaydı uygulanıyor.
+- [x] Otomasyon WPF ekranında şablon, takvim, pencere, sonraki çalışma, retry ve audit görünürlüğü sağlandı; uygulama kapalı çalışma modeli açıkça belirtiliyor.
+- [x] Geçici SQLite/takvim/retry testleri ile 330 Release testi geçti; self-contained yayın `Windows-M35-Automation-Calendar` altında üretilecek.
+- [ ] Arka plan Windows servisi veya doğrulanmamış marketplace write işlemi açılmadı.
