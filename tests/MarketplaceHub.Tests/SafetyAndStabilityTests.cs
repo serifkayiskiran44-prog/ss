@@ -335,6 +335,18 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual("dashboard", fallback.Route);
     }
 
+    [TestMethod]
+    public void LocalCultureKeepsTurkishAmountAndUtcDisplayDeterministic()
+    {
+        Assert.IsTrue(TrMarketplaceHubDesktop.LocalCulture.TryParseAmount("1.234,56", out var turkish));
+        Assert.AreEqual(1234.56m, turkish);
+        Assert.IsTrue(TrMarketplaceHubDesktop.LocalCulture.TryParseAmount("1234.56", out var invariant));
+        Assert.AreEqual(1234.56m, invariant);
+        StringAssert.Contains(TrMarketplaceHubDesktop.LocalCulture.FormatAmount(1234.56m, "try"), "1.234,56 TRY");
+        var local = TrMarketplaceHubDesktop.LocalCulture.ToIstanbul(new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc));
+        Assert.AreEqual(15, local.Hour);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
