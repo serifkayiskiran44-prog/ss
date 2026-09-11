@@ -637,6 +637,17 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void DropshipPriceFormulasPreviewVatPsychologicalAndOverflow()
+    {
+        var formula = new DropshipPriceFormula(Multiplier: 1.5m, FixedCost: 5m, VatPercent: 20m, OutputIncludesVat: true, Decimals: 2, PsychologicalEnding: true, MinimumMarginPercent: 10m);
+        var preview = DropshipPriceFormulas.Preview("shop", "channel", "p1", 100m, 1m, "try", formula, 80m);
+        Assert.AreEqual(186.99m, preview.ResultPrice); Assert.AreEqual("READY", preview.Status); Assert.AreEqual("TRY", preview.Currency);
+        var blocked = DropshipPriceFormulas.Preview("shop", "channel", "p2", 100m, 1m, "try", formula, 180m); Assert.AreEqual("BLOCKED_LOW_MARGIN", blocked.Status);
+        Assert.ThrowsException<InvalidOperationException>(() => DropshipPriceFormulas.Preview("shop", "channel", "p3", decimal.MaxValue, decimal.MaxValue, "try", formula));
+        Assert.AreEqual(2, DropshipPriceFormulas.Bulk(new[] { ("p1", 10m), ("p2", 20m) }, "shop", "channel", 1m, formula, "try").Count);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
