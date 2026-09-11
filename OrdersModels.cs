@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace TrMarketplaceHubDesktop;
 public sealed class OrderSnapshot
 {
@@ -13,6 +14,7 @@ public sealed class OrderSnapshot
  public string TotalLabel=>Total.HasValue?$"{Total:0.00} {Currency}":"—";
  public DateTimeOffset UpdatedAt {get;set;}=DateTimeOffset.UtcNow;
  public DateTimeOffset LastSync {get;set;}
+ [JsonIgnore] public string StockDecisionLabel {get;set;}="Bilinmiyor";
  public List<OrderItem> Items {get;set;}=[];
  public List<OrderShipment> Shipments {get;set;}=[];
  public string DeliveryLabel=>Shipments.Count==0?"Bilinmiyor":string.Join(", ",Shipments.Select(s=>OrdersRules.Label(s.State)).Distinct());

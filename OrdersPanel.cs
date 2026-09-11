@@ -14,16 +14,19 @@ public static class OrdersPanel
   top.Children.Add(Text("Siparişler ve kargo takibi",22));
   top.Children.Add(Text("Etsy siparişleri salt okunur alınır. Yolda / teslim edildi gözlemleri yerel olarak kaydedilir. Ozon ve Navlungo otomatik takip bağlantısı henüz yok."));
   var bar=new WrapPanel();top.Children.Add(bar);var search=new TextBox{Width=220,ToolTip="Sipariş, mağaza, ürün, SKU veya takip numarası ara"};bar.Children.Add(search);
-  var filter=new ComboBox{Width=200,ItemsSource=new[]{"Tümü"}.Concat(OrdersRules.States.Select(OrdersRules.Label)).ToArray(),SelectedIndex=0};bar.Children.Add(filter);
+  var filter=new ComboBox{Width=170,ItemsSource=new[]{"Tümü"}.Concat(OrdersRules.States.Select(OrdersRules.Label)).ToArray(),SelectedIndex=0};bar.Children.Add(filter);
+  var marketplaceFilter=new ComboBox{Width=130,ItemsSource=new[]{"Tümü"},SelectedIndex=0};bar.Children.Add(marketplaceFilter);
+  var shopFilter=new ComboBox{Width=140,ItemsSource=new[]{"Tümü"},SelectedIndex=0};bar.Children.Add(shopFilter);
+  var stockFilter=new ComboBox{Width=145,ItemsSource=new[]{"Tümü","Stok düşüldü","Stok bekliyor"},SelectedIndex=0};bar.Children.Add(stockFilter);
   var refresh=Button(bar,"Etsy'den yenile");var cancel=Button(bar,"İptal");cancel.IsEnabled=false;var add=Button(bar,"+ Yerel sipariş");
   var status=Text("Kayıtlar yükleniyor…");top.Children.Add(status);
   var layout=new Grid();layout.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});layout.ColumnDefinitions.Add(new(){Width=new GridLength(370)});root.Children.Add(layout);
   var grid=new DataGrid{IsReadOnly=true,AutoGenerateColumns=false,EnableRowVirtualization=true,EnableColumnVirtualization=false,SelectionMode=DataGridSelectionMode.Single};VirtualizingPanel.SetIsVirtualizing(grid,true);VirtualizingPanel.SetVirtualizationMode(grid,VirtualizationMode.Recycling);ScrollViewer.SetCanContentScroll(grid,true);layout.Children.Add(grid);
-  foreach(var (label,path,width) in new[]{("Pazaryeri","Marketplace",90),("Mağaza","ShopId",100),("Sipariş","OrderId",110),("Sipariş durumu (kaynak)","RawStatus",150),("Ödeme","PaymentStatus",110),("Kargo","DeliveryLabel",210),("Taşıyıcı","Carriers",110),("Takip no","TrackingNumbers",130),("Toplam","TotalLabel",100),("Kaynak","Source",120),("Son başarılı alım","SyncLabel",140)})grid.Columns.Add(new DataGridTextColumn{Header=label,Binding=new Binding(path),MinWidth=width,Width=width});
+  foreach(var (label,path,width) in new[]{("Pazaryeri","Marketplace",90),("Mağaza","ShopId",100),("Sipariş","OrderId",110),("Sipariş durumu (kaynak)","RawStatus",150),("Ödeme","PaymentStatus",110),("Stok kararı","StockDecisionLabel",130),("Kargo","DeliveryLabel",210),("Taşıyıcı","Carriers",110),("Takip no","TrackingNumbers",130),("Toplam","TotalLabel",100),("Kaynak","Source",120),("Son başarılı alım","SyncLabel",140)})grid.Columns.Add(new DataGridTextColumn{Header=label,Binding=new Binding(path),MinWidth=width,Width=width});
   var detail=new StackPanel{Margin=new Thickness(12,0,0,0)};var scroll=new ScrollViewer{Content=detail,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};Grid.SetColumn(scroll,1);layout.Children.Add(scroll);
   List<OrderSnapshot> all=[];OrderSnapshot? editing=null;CancellationTokenSource? running=null;
-  void Filter(){string q=search.Text.Trim();grid.ItemsSource=all.Where(o=>(q.Length==0||$"{o.Marketplace} {o.ShopId} {o.OrderId} {o.TrackingNumbers} {string.Join(' ',o.Items.Select(i=>i.Title+" "+i.Sku))}".Contains(q,StringComparison.CurrentCultureIgnoreCase))&&(filter.SelectedIndex<=0||o.Shipments.Any(s=>s.State==OrdersRules.States[filter.SelectedIndex-1])||(filter.SelectedIndex==1&&o.Shipments.Count==0))).ToList();}
-  void Load(){all=store.ReadAll();Filter();status.Text=$"{all.Count} kayıt · Liste son yükleme: {DateTime.Now:g}. Boş liste varsa Etsy'den yenileyin veya yerel sipariş ekleyin.";}
+  void Filter(){string q=search.Text.Trim();var selectedMarketplace=marketplaceFilter.SelectedItem?.ToString()??"Tümü";var selectedShop=shopFilter.SelectedItem?.ToString()??"Tümü";var selectedStock=stockFilter.SelectedItem?.ToString()??"Tümü";grid.ItemsSource=all.Where(o=>(q.Length==0||$"{o.Marketplace} {o.ShopId} {o.OrderId} {o.TrackingNumbers} {string.Join(' ',o.Items.Select(i=>i.Title+" "+i.Sku))}".Contains(q,StringComparison.CurrentCultureIgnoreCase))&&(filter.SelectedIndex<=0||o.Shipments.Any(s=>s.State==OrdersRules.States[filter.SelectedIndex-1])||(filter.SelectedIndex==1&&o.Shipments.Count==0))&&(selectedMarketplace=="Tümü"||o.Marketplace==selectedMarketplace)&&(selectedShop=="Tümü"||o.ShopId==selectedShop)&&(selectedStock=="Tümü"||(selectedStock=="Stok düşüldü"&&o.StockDecisionLabel=="Stok düşüldü")||(selectedStock=="Stok bekliyor"&&o.StockDecisionLabel!="Stok düşüldü"))).ToList();}
+  void Load(){all=store.ReadAll();foreach(var order in all)order.StockDecisionLabel=catalog.GetOrderStockStatus(order.Marketplace,order.ShopId,order.OrderId)==null?"Stok bekliyor":"Stok düşüldü";marketplaceFilter.ItemsSource=new[]{"Tümü"}.Concat(all.Select(o=>o.Marketplace).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x)).ToArray();shopFilter.ItemsSource=new[]{"Tümü"}.Concat(all.Select(o=>o.ShopId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x)).ToArray();Filter();status.Text=$"{all.Count} kayıt · Liste son yükleme: {DateTime.Now:g}. Boş liste varsa Etsy'den yenileyin veya yerel sipariş ekleyin.";}
   void Edit(OrderSnapshot order,bool isNew=false)
   {
    editing=order.Copy();var o=editing;Action captureShipment=()=>{};detail.Children.Clear();detail.Children.Add(Text(isNew?"Yeni yerel sipariş":"Sipariş ayrıntısı",18));
@@ -50,7 +53,7 @@ public static class OrdersPanel
     var applyStock=Button(detail,"Kaydedilmiş siparişi stoktan düş");applyStock.IsEnabled=receipt==null;
     applyStock.Click+=(_,_)=>{try{
      var saved=store.ReadAll().Single(x=>x.Marketplace==o.Marketplace&&x.ShopId==o.ShopId&&x.OrderId==o.OrderId);
-     var result=catalog.ApplyOrderStock(saved.Marketplace,saved.ShopId,saved.OrderId,saved.Items);
+     var preview=new OrderStockDecisionService(catalog).CreatePreview(saved);var result=new OrderStockDecisionService(catalog).ApplyApproved(preview,true);
      catalogChanged?.Invoke();Edit(saved);status.Text=result.AlreadyApplied?"Bu sipariş zaten işlendi; stok tekrar düşmedi.":"Sipariş stoğu tek işlemde düşüldü. XML stok kilidi etkin; dış pazaryerlerine gönderim yapılmadı.";
     }catch(InvalidOperationException ex){status.Text=ex.Message;}catch(ArgumentException ex){status.Text=ex.Message;}catch{status.Text="Stok işlemi tamamlanamadı; kayıtlar korunur. Yenileyip tekrar deneyin.";}};
    }
@@ -70,7 +73,7 @@ public static class OrdersPanel
    var save=Button(detail,"Yerel kaydı / gözlemleri kaydet");save.Click+=(_,_)=>{try{Capture();captureShipment();if(isNew&&store.ReadAll().Any(x=>x.Marketplace==o.Marketplace&&x.ShopId==o.ShopId&&x.OrderId==o.OrderId))throw new ArgumentException("Bu sipariş zaten kayıtlı; listeden açarak düzenleyin.");store.SaveManual(o);Load();var saved=all.First(x=>x.Marketplace==o.Marketplace&&x.ShopId==o.ShopId&&x.OrderId==o.OrderId);Edit(saved);status.Text="Yerel kayıt kaydedildi. Pazaryerine veya taşıyıcıya gönderim yapılmadı.";}catch(ArgumentException ex){status.Text=ex.Message;}catch{status.Text="Yerel kayıt kaydedilemedi; disk erişimini kontrol edin.";}};
    void Capture(){o.Marketplace=marketplace.Text.Trim();o.ShopId=shop.Text.Trim();o.OrderId=id.Text.Trim();o.RawStatus=raw.Text.Trim();o.PaymentStatus=payment.Text.Trim();}
   }
-  grid.SelectionChanged+=(_,_)=>{if(grid.SelectedItem is OrderSnapshot o)Edit(o);};search.TextChanged+=(_,_)=>Filter();filter.SelectionChanged+=(_,_)=>Filter();add.Click+=(_,_)=>Edit(new(){Marketplace="Yerel",ShopId="Mağazam",RawStatus="Açık"},true);
+  grid.SelectionChanged+=(_,_)=>{if(grid.SelectedItem is OrderSnapshot o)Edit(o);};search.TextChanged+=(_,_)=>Filter();filter.SelectionChanged+=(_,_)=>Filter();marketplaceFilter.SelectionChanged+=(_,_)=>Filter();shopFilter.SelectionChanged+=(_,_)=>Filter();stockFilter.SelectionChanged+=(_,_)=>Filter();add.Click+=(_,_)=>Edit(new(){Marketplace="Yerel",ShopId="Mağazam",RawStatus="Açık"},true);
   cancel.Click+=(_,_)=>running?.Cancel();root.Unloaded+=(_,_)=>running?.Cancel();
   refresh.Click+=async(_,_)=>
   {
