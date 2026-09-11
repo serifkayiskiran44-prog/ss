@@ -96,7 +96,21 @@ public partial class MainWindow : Window
   productEditor.Children.Add(Button("Tarihi temizle",()=>expires.SelectedDate=null));
   productEditor.Children.Add(Hint("Operasyon bilgileri XML yenilemesinde korunur. Fatura adı yerel kayıttır; fatura entegrasyonuna otomatik gönderilmez."));
   productEditor.Children.Add(Button("Ürünü ve kilitleri kaydet",()=>{ValidBindings(productEditor);if(edit==null)return;store.SaveProduct(edit);RefreshProducts();Log("Ürün ve alan kilitleri kaydedildi.");}));productEditor.IsEnabled=false;
-  Tab("Ürün havuzu",Split(Dock(bar,products),Scroll(productEditor),350));
+  Tab("Ürün havuzu",Split(Dock(bar,products),BuildProductWorkspace(),350));
+ }
+ TabControl BuildProductWorkspace()
+ {
+  var tabs=new TabControl();
+  tabs.Items.Add(new TabItem{Header="Genel",Content=Scroll(productEditor)});
+  tabs.Items.Add(new TabItem{Header="Görseller / açıklama",Content=Scroll(ProductReadOnlyFields(("Açıklama","Description"),("Görsel URL'leri","ImageUrls")))});
+  tabs.Items.Add(new TabItem{Header="Pazaryerleri",Content=Scroll(new StackPanel{Children={Heading("Kanal ve mağaza bağları"),productChannelSummary,Hint("Eşleştirme ve ilan durumları yerel kanal planlarından okunur; canlı write bu sekmeden başlatılmaz.")}})});
+  tabs.Items.Add(new TabItem{Header="XML / provenance",Content=Scroll(ProductReadOnlyFields(("Kaynak kimliği","SourceId"),("Kaynak türü","SourceKind"),("Fiyat kaynağı","PriceSource"),("Stok kaynağı","StockSource"),("Medya kaynağı","MediaSource")))});
+  tabs.Items.Add(new TabItem{Header="Sipariş raporu",Content=Scroll(new StackPanel{Children={Heading("Ürün sipariş raporu"),Hint("Ürün seçildiğinde sipariş ve stok hareketleri ilgili operasyon merkezlerinden güvenli şekilde izlenir; bu sekme canlı marketplace çağrısı yapmaz."),ProductReadOnlyFields(("SKU","Sku"),("Ürün adı","Name"))}})});
+  return tabs;
+ }
+ static StackPanel ProductReadOnlyFields(params (string Label,string Property)[] fields)
+ {
+  var panel=new StackPanel(); foreach(var field in fields){panel.Children.Add(new TextBlock{Text=field.Label,Margin=new Thickness(4,7,4,0)});var box=new TextBox{IsReadOnly=true,MinHeight=28,TextWrapping=TextWrapping.Wrap};box.SetBinding(TextBox.TextProperty,new Binding(field.Property));panel.Children.Add(box);} return panel;
  }
  void ShowProductChannelStatus(CatalogProduct? product){if(product==null){productChannelSummary.Text="Ürün seçince kanal planları burada görünür.";return;}var plans=new ChannelProductsStore(dataDirectory);var rows=MarketplaceConnectionCatalog.All.Select(channel=>{var plan=plans.Find(channel.Id,"default",product.Id);return plan==null?$"{channel.Name}: plan yok":$"{channel.Name}: yerel plan"+(string.IsNullOrWhiteSpace(plan.ListingId)?" (ilan eşleşmesi yok)":$" #{plan.ListingId}");});productChannelSummary.Text=string.Join("\n",rows);}
  void SetProductActive(bool active){var selected=products.SelectedItems.OfType<CatalogProduct>().ToList();if(selected.Count==0&&edit!=null)selected.Add(edit);if(selected.Count==0)throw new InvalidOperationException("Önce ürün seç.");ValidBindings(productEditor);foreach(var row in selected){var copy=Clone(row);copy.Active=active;store.SaveProduct(copy);}RefreshProducts();Log($"{selected.Count} ürün yerel havuzda {(active?"aktif":"pasif")} yapıldı. Canlı ilan durumu değiştirilmedi.");}
