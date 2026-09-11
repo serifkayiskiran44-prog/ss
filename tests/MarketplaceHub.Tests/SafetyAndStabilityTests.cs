@@ -592,6 +592,16 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void DropshipAnomalyGuardFailsClosedAndAuditsOverride()
+    {
+        var guard = new DropshipAnomalyGuard(); guard.SetProfile("s1", new AnomalyProfile(MaxCountDeltaPercent: 20, MaxZeroStockPercent: 60, MaxPriceDeltaPercent: 10, MaxTaxonomyChanges: 2));
+        var old = new FeedRunMetrics("s1", 100, 5, 100m, 0, 0, DateTimeOffset.UtcNow.AddHours(-1));
+        var current = old with { ProductCount = 70, ZeroStockCount = 70, AveragePrice = 120m, CategoryChanges = 2, BrandChanges = 1 };
+        var report = guard.Evaluate(current, old); Assert.IsTrue(report.ApplyBlocked); CollectionAssert.Contains(report.Reasons.ToArray(), "MISSING_PRODUCTS"); CollectionAssert.Contains(report.Reasons.ToArray(), "MASS_ZERO_STOCK"); CollectionAssert.Contains(report.Reasons.ToArray(), "PRICE_JUMP");
+        Assert.AreEqual("reason", guard.ApproveOverride(report, "manual feed review", "reason").Actor == "reason" ? "reason" : "");
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]

@@ -616,3 +616,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M193 kârlılık simülasyonu: SKU/kanal maliyet, KDV, komisyon, kargo/işlem katkısı, stale/marj uyarıları ve filtreli simülasyon eklendi; repricing yok (docs/taskpacks/M193.md).
 - [x] M194 döviz/fiyat dönüşümü: kur provenance/stale, manuel override audit, culture-safe parse, yuvarlama ve canlı yazma blokajı eklendi (docs/taskpacks/M194.md).
 - [x] M195 alan sahipliği: source-of-truth önceliği, ürün field-lock, default policy, APPLY/SKIP/BLOCKED preview, bulk apply ve stale version guard eklendi (docs/taskpacks/M195.md).
+- [x] M196 dropshipping anomali guard: feed delta, mass zero-stock/price/taxonomy riskleri, supplier threshold profili, fail-closed apply ve override audit eklendi (docs/taskpacks/M196.md).
