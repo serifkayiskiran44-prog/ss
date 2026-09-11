@@ -1,0 +1,69 @@
+name: Codex PR Router
+
+on:
+  push:
+    branches:
+      - 'codex/issue-*'
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  open-or-refresh-pr:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Route Codex branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$BRANCH" =~ ^codex/issue-([0-9]+)- ]]; then
+            echo "Not an issue branch: $BRANCH"
+            exit 0
+          fi
+          ISSUE_NO="${BASH_REMATCH[1]}"
+          ISSUE_JSON="$(gh api "repos/$REPO/issues/$ISSUE_NO")"
+          TITLE="$(printf '%s' "$ISSUE_JSON" | jq -r '.title')"
+          BODY="$(printf '%s' "$ISSUE_JSON" | jq -r '.body // ""')"
+          BASE="$(printf '%s\n' "$BODY" | sed -n 's/^PR_BASE:[[:space:]]*//p' | head -n1)"
+          if [[ -z "$BASE" ]]; then BASE="main"; fi
+          if ! gh api "repos/$REPO/branches/$BASE" >/dev/null 2>&1; then BASE="main"; fi
+
+          PR_NO="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [[ -z "$PR_NO" ]]; then
+            PR_URL="$(gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "$TITLE" --body "Relates to #$ISSUE_NO.\n\nCodex branch push ile otomatik açıldı.\n\nCLAUDE_REVIEW_REQUIRED $HEAD_SHA")"
+            PR_NO="${PR_URL##*/}"
+            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_PR_OPEN: PR #$PR_NO"
+          else
+            CURRENT_BODY="$(gh pr view "$PR_NO" --repo "$REPO" --json body --jq '.body // ""')"
+            gh pr edit "$PR_NO" --repo "$REPO" --body "$CURRENT_BODY\n\nCLAUDE_REVIEW_REQUIRED $HEAD_SHA"
+          fi
+          gh pr comment "$PR_NO" --repo "$REPO" --body "CLAUDE_REVIEW_REQUIRED $HEAD_SHA"
+
+  close-issue-on-merge:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close matching issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_NO: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BRANCH" =~ ^codex/issue-([0-9]+)- ]]; then
+            ISSUE_NO="${BASH_REMATCH[1]}"
+            gh issue comment "$ISSUE_NO" --repo "$REPO" --body "CODEX_DONE: PR #$PR_NO"
+            gh issue close "$ISSUE_NO" --repo "$REPO" --reason completed || true
+          fi
