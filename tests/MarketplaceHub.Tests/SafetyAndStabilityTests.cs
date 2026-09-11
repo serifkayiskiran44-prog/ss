@@ -880,6 +880,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ReleaseArtifactManifestVerifiesPublishedFileHashes()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "mh-artifact-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try { File.WriteAllText(Path.Combine(directory, "app.txt"), "fixture"); var manifest = ReleaseArtifactManifest.Create(directory); Assert.IsTrue(manifest.Verify(directory)); File.WriteAllText(Path.Combine(directory, "app.txt"), "tampered"); Assert.IsFalse(manifest.Verify(directory)); }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

@@ -20,4 +20,16 @@ public sealed record ReleaseArtifactManifest(string ApplicationVersion, string R
     }
 
     public void Write(string outputPath) => File.WriteAllText(outputPath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+
+    public bool Verify(string publishDirectory)
+    {
+        var root = Path.GetFullPath(publishDirectory);
+        return Files.All(file =>
+        {
+            var path = Path.Combine(root, file.Path.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(path) || new FileInfo(path).Length != file.Length) return false;
+            using var stream = File.OpenRead(path);
+            return Convert.ToHexString(SHA256.HashData(stream)).Equals(file.Sha256, StringComparison.OrdinalIgnoreCase);
+        });
+    }
 }
