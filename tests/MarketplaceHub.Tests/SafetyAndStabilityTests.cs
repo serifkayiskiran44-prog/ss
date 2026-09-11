@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Linq;
 
 namespace MarketplaceHub.Tests;
 
@@ -24,5 +25,17 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual(3, calls);
         Assert.AreEqual(3, result.Iterations);
         Assert.IsTrue(result.Elapsed >= TimeSpan.Zero);
+    }
+
+    [TestMethod]
+    public void CapabilityAuditRejectsUnsupportedOperationsAndPreservesBlockedChannels()
+    {
+        var audit = TrMarketplaceHubDesktop.MarketplaceCapabilityAudit.Run();
+
+        Assert.IsTrue(audit.IsValid, string.Join("; ", audit.Errors));
+        Assert.IsTrue(audit.Rows.All(row => row.Capabilities.All(operation =>
+            TrMarketplaceHubDesktop.MarketplaceConnectionCatalog.Get(row.Channel).Capabilities.Supports(operation))));
+        Assert.IsTrue(audit.Rows.Where(row => row.LiveApiBlocked).All(row => row.Decision == "LIVE_API_BLOCKED"));
+        Assert.IsTrue(audit.Rows.Any(row => row.Channel == "navlungo" && row.Decision == "LIVE_API_BLOCKED"));
     }
 }

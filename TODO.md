@@ -565,3 +565,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M105 data ingestion: Excel Apply ve ApplyWithUndo artık preview hata listesini ve desteklenmeyen döviz değerlerini ortak doğrulamayla reddediyor; hatalı veri kataloğa yazılmıyor (docs/taskpacks/M105.md).
 - [x] M106 order/stock: iptal-iade restock preview kimlikleri trim/kanonik mağaza-kaynak bağlamıyla oluşturuluyor; Apply kimlik doğrulaması ve mevcut onay/stale/idempotency kapıları korunuyor (docs/taskpacks/M106.md).
 - [x] M107 ops/settings: Dashboard artık açık veri kalite kritik/hata kayıtlarını ilgili kalite merkezine aksiyon bildirimi olarak taşıyor (docs/taskpacks/M107.md).
+- [x] M108 capability audit: tüm katalog kanalları için HTTPS dokümantasyon, blocked-state ve duplicate kayıt denetimi eklendi; doğrulanmayan kanallar LIVE_API_BLOCKED kalıyor (docs/taskpacks/M108.md).
