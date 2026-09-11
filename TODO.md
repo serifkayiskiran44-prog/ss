@@ -561,3 +561,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M101 legacy reconciliation: eski task-pack checklist iddialarını PARTIAL, yeni gerçek-teslimat formatını REAL_DELIVERABLE ve biçimsiz kayıtları UNVERIFIED raporlayan read-only audit helper eklendi (docs/taskpacks/M101.md).
 - [x] M102 test altyapısı: repo içine gerçek MSTest projesi ve geçici durum gerektirmeyen redaction/stability testleri eklendi (docs/taskpacks/M102.md).
 - [x] M103 parity: global arama indexine sanitized audit olayları ve diagnostics route hedefleri eklendi; parity referansı eksik olduğu için doğrulanmamış akış uydurulmadı (docs/taskpacks/M103.md).
+- [x] M104 product ops: katalog sayfalı aramaya trim/NOCASE kaynak kimliği filtresi eklendi; mevcut seçim-preview-stale-transaction akışları korunuyor (docs/taskpacks/M104.md).

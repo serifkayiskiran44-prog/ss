@@ -10,13 +10,13 @@ public partial class CatalogStore
   cancellationToken.ThrowIfCancellationRequested();
   if(offset<0||limit<1||limit>1000)throw new ArgumentOutOfRangeException(nameof(limit),"Sayfa boyutu 1–1000, başlangıç sıfır veya daha büyük olmalı.");
   filter??=new();
-  foreach(var values in new[]{filter.Brands,filter.Categories,filter.Skus})if(values.Length>100||values.Sum(v=>v.Length)>6000)throw new ArgumentException("Filtre en fazla 100 değer ve 6000 karakter olabilir.");
+  foreach(var values in new[]{filter.Brands,filter.Categories,filter.Skus,filter.SourceIds})if(values.Length>100||values.Sum(v=>v.Length)>6000)throw new ArgumentException("Filtre en fazla 100 değer ve 6000 karakter olabilir.");
   using var c=Open();using var tx=c.BeginTransaction(deferred:true);
   // Substring search cannot use a B-tree index; filter/count in SQLite and deserialize only the requested page.
   var where=" WHERE ($all=1 OR json_extract(Json,'$.Name') LIKE $q ESCAPE '\\' OR json_extract(Json,'$.Sku') LIKE $q ESCAPE '\\' OR json_extract(Json,'$.Barcode') LIKE $q ESCAPE '\\' OR json_extract(Json,'$.Brand') LIKE $q ESCAPE '\\' OR json_extract(Json,'$.Category') LIKE $q ESCAPE '\\'";
   where += ") AND ($active=-1 OR COALESCE(json_extract(Json,'$.Active'),1)=$active) AND ($description=-1 OR (length(trim(COALESCE(json_extract(Json,'$.Description'),'')))>0)=$description) AND ($image=-1 OR (length(trim(COALESCE(json_extract(Json,'$.ImageUrls'),'')))>0)=$image)";
   var extra=new Dictionary<string,string>();
-  foreach(var (field,values) in new[]{("Brand",filter.Brands),("Category",filter.Categories),("Sku",filter.Skus)}){
+  foreach(var (field,values) in new[]{("Brand",filter.Brands),("Category",filter.Categories),("Sku",filter.Skus),("SourceId",filter.SourceIds)}){
    if(values.Length==0)continue;
    var names=new List<string>();foreach(var value in values){var clean=value.Trim();if(clean.Length==0)continue;var key="$filter"+extra.Count;extra.Add(key,clean);names.Add(key);}if(names.Count==0)continue;
    where+=$" AND json_extract(Json,'$.{field}') COLLATE NOCASE IN ({string.Join(",",names)})";
