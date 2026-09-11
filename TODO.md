@@ -566,3 +566,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M106 order/stock: iptal-iade restock preview kimlikleri trim/kanonik mağaza-kaynak bağlamıyla oluşturuluyor; Apply kimlik doğrulaması ve mevcut onay/stale/idempotency kapıları korunuyor (docs/taskpacks/M106.md).
 - [x] M107 ops/settings: Dashboard artık açık veri kalite kritik/hata kayıtlarını ilgili kalite merkezine aksiyon bildirimi olarak taşıyor (docs/taskpacks/M107.md).
 - [x] M108 capability audit: tüm katalog kanalları için HTTPS dokümantasyon, blocked-state ve duplicate kayıt denetimi eklendi; doğrulanmayan kanallar LIVE_API_BLOCKED kalıyor (docs/taskpacks/M108.md).
+- [x] M109 Etsy readiness: satış hazırlığı sonucu artık SATIŞA HAZIR/EKSİK/LIVE_API_BLOCKED ayrımı yapıyor; shop-scoped read/update payload fake HTTP contract testi eklendi (docs/taskpacks/M109.md).

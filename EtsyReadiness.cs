@@ -9,7 +9,8 @@ public sealed record EtsyReadinessCheck(string Key, string Status, string Detail
 
 public sealed record EtsyReadinessReport(DateTime AtUtc, IReadOnlyList<EtsyReadinessCheck> Checks)
 {
-    public bool Ready => Checks.All(x => x.Status is "PASS" or "WARN");
+    public bool Ready => OverallStatus == "SATIŞA HAZIR";
+    public string OverallStatus => Checks.Any(x => x.Status is "BLOCKED" or "ERROR") ? "EKSİK / LIVE_API_BLOCKED" : Checks.Any(x => x.Status == "WARN") ? "EKSİK" : "SATIŞA HAZIR";
 }
 
 public sealed class EtsyReadinessService
@@ -64,7 +65,7 @@ public static class EtsyReadinessPanel
         var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 8, 4, 10) };
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, MinHeight = 240 };
         foreach (var c in new[] { ("Kontrol", "Key", 170d), ("Durum", "Status", 100d), ("Açıklama", "Detail", 900d) }) grid.Columns.Add(new DataGridTextColumn { Header = c.Item1, Binding = new Binding(c.Item2), Width = c.Item3 });
-        void Refresh() { var r = service.Build(); grid.ItemsSource = r.Checks; summary.Text = $"{r.AtUtc.ToLocalTime():g} · {(r.Ready ? "Etsy satışa hazırlık geçidi açık" : "Etsy satışa hazırlıkta eksikler var")}"; }
+        void Refresh() { var r = service.Build(); grid.ItemsSource = r.Checks; summary.Text = $"{r.AtUtc.ToLocalTime():g} · {r.OverallStatus}"; }
         root.Children.Add(new TextBlock { Text = "Etsy satışa hazırlık", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 8, 4, 12) });
         root.Children.Add(new TextBlock { Text = "Credential, ilan şablonu, ürün eşleme ve dry-run kontrolleri tek ekranda gösterilir. Bu ekran canlı marketplace değişikliği yapmaz.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 8, 4, 8) });
         var buttons = new WrapPanel(); var refresh = new Button { Content = "Kontrolleri yenile", Margin = new Thickness(3) }; refresh.Click += (_, _) => { try { Refresh(); } catch (Exception e) { MessageBox.Show(AuditStore.Sanitize(e.Message)); } }; buttons.Children.Add(refresh);
