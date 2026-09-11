@@ -309,3 +309,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M231 — ürün workspace acceptance: screenshot/UI smoke kanıt kapısı teslim edildi.
 # M232 — visual dashboard: freshness state evaluator teslim edildi; tam görsel parite kanıtı bekliyor.
 # M233 — reporting analytics: deterministic selected-row aggregate teslim edildi.
+# M234 — WPF açık kaynak audit: bounded paging adaptasyonu teslim edildi; dependency spike reddedildi.

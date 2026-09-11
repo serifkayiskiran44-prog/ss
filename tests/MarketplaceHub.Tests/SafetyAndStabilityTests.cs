@@ -913,6 +913,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void PagedQueryBoundsPageSizeAndPreservesTotal()
+    {
+        var result = PagedQuery.Execute(Enumerable.Range(0, 5), 1, 2);
+        CollectionAssert.AreEqual(new[] { 2, 3 }, result.Items.ToArray()); Assert.AreEqual(5, result.Total);
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => PagedQuery.Execute([1], 0, 0));
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
