@@ -1,0 +1,32 @@
+name: Windows Release Evidence
+
+on:
+  push:
+    branches: ['codex/issue-*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-evidence:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj
+      - name: Release test with TRX
+        run: dotnet test tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj -c Release --logger "trx;LogFileName=results.trx" --results-directory TestResults --no-restore
+      - name: Release self-contained publish
+        run: dotnet publish TrMarketplaceHubDesktop.csproj -c Release -r win-x64 --self-contained true -o publish --no-restore
+      - name: Upload same-SHA evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketplacehub-${{ github.sha }}
+          path: |
+            TestResults/**/*.trx
+            publish/**
