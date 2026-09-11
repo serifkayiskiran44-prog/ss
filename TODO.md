@@ -341,3 +341,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Veri kalite merkezine geçersiz KDV kontrolü eklendi; geçersiz döviz kontrolü yerel ayarlarla tutarlı hale geldi.
 - [x] Geçici SQLite/kültür/kopyalama testleri ile 332 Release testi geçti; self-contained yayın `Windows-M36-Locale-Settings` altında üretilecek.
 - [ ] Hakediş/mutabakat, kritik fiyat ve muhasebe motoru kapsam dışıdır.
+
+## M37 global arama, hızlı erişim ve yerel indeksleme — 2026-09-11
+- [x] Ürün, sipariş, mağaza, kanal ilanı, XML kaynak/çalışma, sync, veri kalite ve API sağlığı kayıtlarını birleştiren migration-safe `search-index.db` eklendi.
+- [x] Credential, token, parola, XML URL kimlik bilgisi, müşteri ve mesaj gövdesi indekslenmiyor; hata metinleri redacted tutuluyor.
+- [x] 30 saniyelik yerel cache, iptal edilebilir async rebuild/query ve transaction ile atomik indeks yenileme eklendi.
+- [x] Ctrl+K/üst arama sonuçları ilgili ekrana yönlendiriyor; ürün güncellemesi indeksi geçersiz kılıyor.
+- [x] Geçici SQLite, cancellation ve secret-safety testleri ile 334 Release testi geçti; self-contained yayın `Windows-M37-Global-Search` altında üretilecek.
+- [ ] Arama yalnız yerel metadata üzerinde çalışır; marketplace'e canlı write veya doğrulanmamış endpoint yoktur.

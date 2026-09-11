@@ -21,6 +21,8 @@ public partial class MainWindow : Window
  readonly SemaphoreSlim gate=new(1,1);
  readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMinutes(1)};
  readonly DispatcherTimer searchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
+ readonly GlobalSearchIndexService globalSearchIndex;
+ CancellationTokenSource? globalSearchCts;
  readonly CancellationTokenSource lifetime=new();
  readonly ObservableCollection<string> logs=[];
  readonly string logPath;
@@ -36,11 +38,11 @@ public partial class MainWindow : Window
  readonly TextBox sampleCost=new(){Text="100",Width=130};
  readonly TextBlock calculationStatus=Hint("Alış fiyatını girip hesaplamayı test edebilirsin."),fxStatus=Hint("Kur henüz alınmadı.");
  XmlSource? source; CatalogProduct? edit; EtsyListingTemplate template=new(); EtsyCredentials credentials=new("","","",""); OAuthAttempt? attempt;
- List<MappingEntry> mappings=[]; string xml="",loadedLocation="",previewRevision=""; int listingOffset,listingTotal,productOffset,productTotal,searchRevision; string loadedListingShop="",loadedListingState="";
+ List<MappingEntry> mappings=[]; string xml="",loadedLocation="",previewRevision=""; int listingOffset,listingTotal,productOffset,productTotal,searchRevision,globalSearchRevision; string loadedListingShop="",loadedListingState="";
  public MainWindow():this(null){}
  public MainWindow(string? directory)
  {
-  dataDirectory=directory;store=new CatalogStore(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
+  dataDirectory=directory;store=new CatalogStore(directory);globalSearchIndex=new GlobalSearchIndexService(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
   InitializeComponent();uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
@@ -48,7 +50,7 @@ public partial class MainWindow : Window
   try{if(File.Exists(logPath))foreach(var line in File.ReadLines(logPath).TakeLast(100))logs.Insert(0,line);}catch(IOException){}
   BuildProducts();BuildSources();BuildApi();BuildListings();BuildTemplate();BuildNavigation();
   try{template=TemplateStore.Load(directory);templateEditor.DataContext=template;var saved=directory==null?CredentialStore.Load():null;if(saved!=null)SetCredentials(saved);}catch(Exception e){Log(Safe(e));}
-  RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};
+  RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};_ = WarmGlobalSearchAsync();
   Log("Global masaüstü hazır. XML otomasyonu yalnız program açıkken çalışır.");
  }
  static TextBlock Hint(string text)=>new(){Text=text,TextWrapping=TextWrapping.Wrap,Foreground=new SolidColorBrush(Color.FromRgb(87,112,125)),Margin=new Thickness(4,8,4,8)};
@@ -215,7 +217,7 @@ public partial class MainWindow : Window
  async Task PreviewAsync(){var s=CurrentSource();if(xml==""||loadedLocation!=s.Location)throw new InvalidOperationException("Bu kaynak adresi için önce XML'i oku.");previewRevision="";preview.ItemsSource=null;previewStatus.Text="Fiyat ve kur hesaplanıyor…";await UpdateFxAsync(s);BindSource();var snapshot=Clone(s);var rows=await Task.Run(()=>XmlCatalog.Preview(xml,snapshot));preview.ItemsSource=rows;previewRevision=JsonSerializer.Serialize(snapshot);previewStatus.Text=$"{rows.Count} ürün • Fiyat/stok hesaplandı. Kaydetmeden önce satırları seç. Etsy'ye gönderim yapılmaz.";Log($"XML önizlemesi: {rows.Count} ürün.");}
  async Task ImportAsync(){var s=CurrentSource();if(previewRevision==""||previewRevision!=JsonSerializer.Serialize(s))throw new InvalidOperationException("Ayarlar değişti veya önizleme yok. Önizlemeyi yeniden hesapla.");CatalogPricing.ValidateRate(s);var rows=preview.SelectedItems.Cast<CatalogProduct>().Select(Clone).ToList();if(rows.Count==0)throw new InvalidOperationException("Önizlemeden en az bir ürün seç.");XmlAuthStore.Save(s.Id,new(xmlUser.Text,xmlPassword.Password),dataDirectory);store.SaveSource(s);var runs=new XmlRunStore(dataDirectory);var run=runs.Start(s.Id);try{var result=await Task.Run(()=>store.Import(s,rows));runs.Complete(run,result);s.LastRunUtc=DateTime.UtcNow;s.LastStatus=$"{result.Added} yeni / {result.Updated} güncel / {result.Unchanged} aynı";store.SaveSource(s);previewRevision="";RefreshSources(false);_ = RefreshXmlSourceHealthAsync(s);RefreshProducts();Log(s.LastStatus);Navigate("products");}catch(Exception e){runs.Fail(run,e.Message);throw;}}
  void ShowProducts(CatalogPage page){var id=edit?.Id;productTotal=page.Total;products.ItemsSource=page.Items;if(id!=null)products.SelectedItem=page.Items.FirstOrDefault(p=>p.Id==id);SummaryText.Text=$"{page.Total:N0} sonuç   •   {page.InStock:N0} stokta   •   {page.Linked:N0} Etsy ile eşleşen   •   Sayfa {productOffset/200+1} / {Math.Max(1,(page.Total+199)/200)}";}
- void RefreshProducts(){searchRevision++;ShowProducts(store.Search(search.Text.Trim(),productOffset,200,productFilter));}
+ void RefreshProducts(){globalSearchIndex.Invalidate();searchRevision++;ShowProducts(store.Search(search.Text.Trim(),productOffset,200,productFilter));}
  async Task SearchProductsAsync(){var revision=++searchRevision;var q=search.Text.Trim();var offset=productOffset;var filter=productFilter;try{var page=await Task.Run(()=>store.Search(q,offset,200,filter));if(revision==searchRevision)ShowProducts(page);}catch(Exception e){Log(Safe(e));}}
  void Refresh_Click(object sender,RoutedEventArgs e){try{RefreshProducts();}catch(Exception ex){Log(Safe(ex));}}
  EtsyCredentials ReadCredentials(){var key=apiKey.Password.Trim();var secret=apiSecret.Password.Trim();var token=apiToken.Password.Trim();var changedApp=key!=credentials.Key||secret!=credentials.Secret;var changedToken=token!=credentials.Token;var refresh=refreshToken.Password.Trim();return credentials with{Key=key,Secret=secret,Token=token,RefreshToken=(changedApp||changedToken)&&refresh==credentials.RefreshToken?"":refresh,ExpiresAt=changedApp||changedToken?null:credentials.ExpiresAt,ShopId=shopId.Text.Trim(),RedirectUri=redirect.Text.Trim()};}
@@ -249,7 +251,7 @@ public partial class MainWindow : Window
  async Task RunAsync(Func<Task> action){if(!await gate.WaitAsync(0)){Log("Önceki işlem sürüyor.");return;}ModuleTabs.IsEnabled=false;try{await action();}catch(Exception e){Log(Safe(e));apiStatus.Text=Safe(e);}finally{ModuleTabs.IsEnabled=true;gate.Release();}}
  static string Safe(Exception e)=>e is InvalidOperationException or ArgumentException?e.Message:"İşlem tamamlanamadı. Dosya biçimini, erişim izinlerini ve bağlantıyı kontrol et.";
  void Log(string text){StatusText.Text=text;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);new AuditStore(dataDirectory).Append(new(){Module="UI",Action="log",Outcome="Info",Detail=text});}catch(IOException){}catch(Exception){ } }
- protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();lifetime.Cancel();http.Dispose();base.OnClosed(e);}
+ protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();globalSearchCts?.Cancel();globalSearchCts?.Dispose();lifetime.Cancel();http.Dispose();base.OnClosed(e);}
 }
 
 

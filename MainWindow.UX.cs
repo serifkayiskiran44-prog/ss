@@ -6,8 +6,6 @@ namespace TrMarketplaceHubDesktop;
 
 public partial class MainWindow
 {
-    sealed record GlobalHit(string Type, string Label, string Detail, string Route);
-
     void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.K)
@@ -24,24 +22,35 @@ public partial class MainWindow
         if (e.Key == Key.Enter) { GlobalSearch_Click(sender, e); e.Handled = true; }
     }
 
-    void GlobalSearch_Click(object? sender, RoutedEventArgs e)
+    async void GlobalSearch_Click(object? sender, RoutedEventArgs e)
     {
         var query = GlobalSearchBox.Text.Trim();
         if (query.Length < 2) { StatusText.Text = "Arama için en az 2 karakter girin."; GlobalSearchBox.Focus(); return; }
-        var comparison = StringComparison.CurrentCultureIgnoreCase;
-        var hits = new List<GlobalHit>();
-        foreach (var product in store.Search(query, 0, 30).Items)
-            hits.Add(new("Ürün", $"{product.Sku} · {product.Name}", $"Barkod: {product.Barcode} · {product.Brand} · {product.Category}", "products"));
-        foreach (var order in new OrdersStore(dataDirectory).ReadAll().Where(x => $"{x.Marketplace} {x.ShopId} {x.OrderId} {x.TrackingNumbers} {string.Join(' ', x.Items.Select(i => i.Sku))}".Contains(query, comparison)).Take(30))
-            hits.Add(new("Sipariş", $"{order.Marketplace} / {order.OrderId}", $"Mağaza: {order.ShopId} · {order.RawStatus}", "orders"));
-        foreach (var plan in new ChannelProductsStore(dataDirectory).List().Where(x => $"{x.ChannelId} {x.ShopId} {x.ProductId} {x.ListingId}".Contains(query, comparison)).Take(30))
-            hits.Add(new("İlan", $"{plan.ChannelId} / {plan.ListingId}", $"Ürün: {plan.ProductId} · Mağaza: {plan.ShopId}", routes.ContainsKey(plan.ChannelId) ? plan.ChannelId : "listing-matrix"));
-        foreach (var connection in new MarketplaceConnectionStore(dataDirectory).List().Where(x => $"{x.Channel} {x.ShopId} {x.DisplayName}".Contains(query, comparison)).Take(30))
-            hits.Add(new("Mağaza", $"{connection.Channel} / {connection.DisplayName}", $"Kimlik: {connection.ShopId} · Durum: {connection.Status}", "connections"));
-        ShowGlobalResults(query, hits.Take(80).ToList());
+        var previous = globalSearchCts; globalSearchCts = null; previous?.Cancel(); previous?.Dispose();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); globalSearchCts = cancellation; var revision = ++globalSearchRevision; GlobalSearchButton.IsEnabled = false; StatusText.Text = "Yerel arama hazırlanıyor…";
+        try
+        {
+            await Task.Delay(150, cancellation.Token);
+            var hits = await globalSearchIndex.SearchAsync(query, 80, cancellation.Token);
+            if (revision != globalSearchRevision || cancellation.IsCancellationRequested) return;
+            ShowGlobalResults(query, hits);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { if (revision == globalSearchRevision) StatusText.Text = $"Arama yapılamadı: {Safe(error)}"; }
+        finally
+        {
+            if (ReferenceEquals(globalSearchCts, cancellation)) { globalSearchCts = null; GlobalSearchButton.IsEnabled = true; }
+        }
     }
 
-    void ShowGlobalResults(string query, IReadOnlyList<GlobalHit> hits)
+    async Task WarmGlobalSearchAsync()
+    {
+        try { await globalSearchIndex.EnsureFreshAsync(lifetime.Token); }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { Log($"Global arama indeksi hazırlanamadı: {Safe(error)}"); }
+    }
+
+    void ShowGlobalResults(string query, IReadOnlyList<GlobalSearchHit> hits)
     {
         var window = new Window { Owner = this, Title = $"Arama · {query}", Width = 720, Height = 560, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.CanResize };
         var root = new DockPanel { Margin = new Thickness(14) };
@@ -50,7 +59,7 @@ public partial class MainWindow
         var list = new ListBox { BorderThickness = new Thickness(0) };
         foreach (var hit in hits)
         {
-            var button = new Button { HorizontalContentAlignment = HorizontalAlignment.Left, Background = System.Windows.Media.Brushes.White, Foreground = System.Windows.Media.Brushes.DarkSlateGray, Content = new StackPanel { Children = { new TextBlock { Text = $"{hit.Type}  ·  {hit.Label}", FontWeight = FontWeights.SemiBold }, new TextBlock { Text = hit.Detail, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 3, 0, 0) } } } };
+            var button = new Button { HorizontalContentAlignment = HorizontalAlignment.Left, Background = System.Windows.Media.Brushes.White, Foreground = System.Windows.Media.Brushes.DarkSlateGray, Content = new StackPanel { Children = { new TextBlock { Text = $"{hit.Type}  ·  {hit.Title}", FontWeight = FontWeights.SemiBold }, new TextBlock { Text = hit.Detail, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 3, 0, 0) } } } };
             button.Click += (_, _) => { window.Close(); Navigate(hit.Route); };
             list.Items.Add(button);
         }
