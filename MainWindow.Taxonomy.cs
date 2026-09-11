@@ -3,16 +3,46 @@ using System.Windows.Controls;
 using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
+
 public partial class MainWindow
 {
- FrameworkElement BuildTaxonomy()
- {
-  var taxonomy=new TaxonomyStore(dataDirectory);var panel=new StackPanel{Margin=new Thickness(20),MaxWidth=1050};panel.Children.Add(Heading("Kategori, marka ve özellik yönetimi"));panel.Children.Add(Hint("Bu ekran yerel katalog sözlüğünü ve harici anahtar eşlemelerini yönetir. Canlı pazaryeri kategorisi indirme/uygulama connector sözleşmesi olmadan yapılmaz."));
-  var kind=new ComboBox{ItemsSource=Enum.GetValues<TaxonomyKind>(),SelectedItem=TaxonomyKind.Category,Width=180};var name=new TextBox{Width=220};var value=new TextBox{Width=220};var external=new TextBox{Width=220};var status=Hint("");var grid=new DataGrid{AutoGenerateColumns=true,IsReadOnly=true,Height=300};
-  void Refresh(){var selected=(TaxonomyKind)kind.SelectedItem!;grid.ItemsSource=taxonomy.List(selected);status.Text=$"{taxonomy.List(selected).Count} kayıt";}
-  kind.SelectionChanged+=(_,_)=>Refresh();
-  var save=Button("Kaydet",()=>{taxonomy.Save(new TaxonomyEntry{Kind=(TaxonomyKind)kind.SelectedItem!,Name=name.Text,Value=value.Text});name.Clear();value.Clear();Refresh();});
-  var map=Button("Harici anahtarı seçili yerel kayda eşle",()=>{if(grid.SelectedItem is not TaxonomyEntry entry)throw new InvalidOperationException("Önce listeden yerel kayıt seçin.");taxonomy.Map((TaxonomyKind)kind.SelectedItem!,external.Text,entry.Id);external.Clear();status.Text="Harici anahtar eşlendi.";});
-  var row=new WrapPanel();row.Children.Add(new TextBlock{Text="Tür",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(4)});row.Children.Add(kind);row.Children.Add(new TextBlock{Text="Ad",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(4)});row.Children.Add(name);row.Children.Add(new TextBlock{Text="Değer",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(4)});row.Children.Add(value);row.Children.Add(save);panel.Children.Add(row);var mappingRow=new WrapPanel();mappingRow.Children.Add(new TextBlock{Text="Harici anahtar",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(4)});mappingRow.Children.Add(external);mappingRow.Children.Add(map);panel.Children.Add(mappingRow);panel.Children.Add(grid);panel.Children.Add(status);Refresh();return Scroll(panel);
- }
+    FrameworkElement BuildTaxonomy()
+    {
+        var taxonomy = new TaxonomyStore(dataDirectory);
+        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1200 };
+        panel.Children.Add(Heading("Kategori, marka ve özellik merkezi"));
+        panel.Children.Add(Hint("Yerel sözlük, kanal/mağaza eşlemeleri ve eksik/stale durumları tek ekranda izlenir. Öneriler yalnız isim normalizasyonuna dayanır; canlı marketplace yazımı yapılmaz."));
+        var kind = new ComboBox { ItemsSource = Enum.GetValues<TaxonomyKind>(), SelectedItem = TaxonomyKind.Category, Width = 180 };
+        var marketplace = new TextBox { Text = "etsy", Width = 120 };
+        var shop = new TextBox { Text = "default", Width = 140 };
+        var search = new TextBox { Width = 180, ToolTip = "Yerel ad, değer veya harici anahtar ara" };
+        var name = new TextBox { Width = 180 }; var value = new TextBox { Width = 180 }; var external = new TextBox { Width = 220 };
+        var externalBatch = new TextBox { Width = 420, Height = 65, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, ToolTip = "Her satıra bir harici kategori/marka adı" };
+        var status = Hint("");
+        var localGrid = new DataGrid { AutoGenerateColumns = true, IsReadOnly = true, Height = 230, EnableRowVirtualization = true };
+        var mappingGrid = new DataGrid { AutoGenerateColumns = true, IsReadOnly = true, Height = 250, EnableRowVirtualization = true };
+        var historyGrid = new DataGrid { AutoGenerateColumns = true, IsReadOnly = true, Height = 200, EnableRowVirtualization = true };
+        IReadOnlyList<TaxonomySuggestion> pendingSuggestions = [];
+        void Refresh()
+        {
+            var selected = (TaxonomyKind)kind.SelectedItem!; var market = marketplace.Text.Trim(); var shopId = shop.Text.Trim();
+            var local = taxonomy.List(selected).Where(x => string.IsNullOrWhiteSpace(search.Text) || $"{x.Name} {x.Value}".Contains(search.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)).ToList();
+            localGrid.ItemsSource = local; var views = taxonomy.MappingViews(selected, market, shopId, search.Text.Trim()); mappingGrid.ItemsSource = views; historyGrid.ItemsSource = taxonomy.History(selected, market, shopId);
+            var mapped = views.Count(x => x.Status == "MAPPED");
+            var missing = views.Count(x => x.Status == "MISSING");
+            var stale = views.Count(x => x.Status == "STALE");
+            var invalid = views.Count(x => x.Status == "INVALID");
+            status.Text = $"{local.Count} yerel kayıt · {mapped} eşleşmiş · {missing} eksik · {stale} stale · {invalid} geçersiz";
+        }
+        kind.SelectionChanged += (_, _) => Refresh(); marketplace.TextChanged += (_, _) => Refresh(); shop.TextChanged += (_, _) => Refresh(); search.TextChanged += (_, _) => Refresh();
+        var save = Button("Yerel kaydı kaydet", () => { taxonomy.Save(new TaxonomyEntry { Kind = (TaxonomyKind)kind.SelectedItem!, Name = name.Text, Value = value.Text }); name.Clear(); value.Clear(); Refresh(); });
+        var map = Button("Harici anahtarı eşle", () => { if (localGrid.SelectedItem is not TaxonomyEntry entry) throw new InvalidOperationException("Önce yerel listeden kayıt seçin."); taxonomy.Map((TaxonomyKind)kind.SelectedItem!, external.Text, entry.Id, marketplace.Text, shop.Text); external.Clear(); Refresh(); });
+        var suggest = Button("İsim önerisi oluştur", () => { pendingSuggestions = taxonomy.SuggestBulk((TaxonomyKind)kind.SelectedItem!, externalBatch.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)); mappingGrid.ItemsSource = pendingSuggestions; var suggested = pendingSuggestions.Count(x => x.Status == "SUGGESTED"); var unmatched = pendingSuggestions.Count(x => x.Status == "UNMATCHED"); status.Text = $"{suggested} öneri · {unmatched} eşleşmeyen; henüz yazılmadı."; });
+        var bulk = Button("Toplu eşlemeyi önizle / onayla", () => { if (pendingSuggestions.Count == 0) throw new InvalidOperationException("Önce harici anahtar listesinden öneri oluşturun."); var text = string.Join("\n", pendingSuggestions.Select(x => $"{x.ExternalKey} → {x.LocalName ?? "eşleşme yok"}")); if (MessageBox.Show(text + "\n\nSadece önerilen eşleşmeler yerel veritabanına yazılsın mı?", "Eşleme önizlemesi", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return; taxonomy.MapBulk((TaxonomyKind)kind.SelectedItem!, marketplace.Text, shop.Text, pendingSuggestions, true); Refresh(); status.Text += " · Toplu eşleme uygulandı."; });
+        var row = new WrapPanel(); row.Children.Add(new TextBlock { Text = "Tür", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); row.Children.Add(kind); row.Children.Add(new TextBlock { Text = "Kanal", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); row.Children.Add(marketplace); row.Children.Add(new TextBlock { Text = "Mağaza", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); row.Children.Add(shop); row.Children.Add(new TextBlock { Text = "Ara", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); row.Children.Add(search); panel.Children.Add(row);
+        var localRow = new WrapPanel(); localRow.Children.Add(new TextBlock { Text = "Yerel ad", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); localRow.Children.Add(name); localRow.Children.Add(new TextBlock { Text = "Değer", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); localRow.Children.Add(value); localRow.Children.Add(save); panel.Children.Add(localRow);
+        var mappingRow = new WrapPanel(); mappingRow.Children.Add(new TextBlock { Text = "Harici anahtar", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); mappingRow.Children.Add(external); mappingRow.Children.Add(map); panel.Children.Add(mappingRow);
+        var bulkRow = new StackPanel(); bulkRow.Children.Add(new TextBlock { Text = "Toplu öneri listesi (satır başına bir değer)", Margin = new Thickness(4) }); bulkRow.Children.Add(externalBatch); var bulkButtons = new WrapPanel(); bulkButtons.Children.Add(suggest); bulkButtons.Children.Add(bulk); bulkRow.Children.Add(bulkButtons); panel.Children.Add(bulkRow);
+        var tabs = new TabControl(); tabs.Items.Add(new TabItem { Header = "Yerel sözlük", Content = localGrid }); tabs.Items.Add(new TabItem { Header = "Kanal / mağaza eşleme", Content = mappingGrid }); tabs.Items.Add(new TabItem { Header = "Eşleme geçmişi", Content = historyGrid }); panel.Children.Add(tabs); panel.Children.Add(status); Refresh(); return Scroll(panel);
+    }
 }

@@ -228,3 +228,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Aynı kaynak için eşzamanlı Running XML import `XmlRunStore` tarafından reddediliyor; mevcut snapshot/LockStock davranışı korunuyor.
 - [x] 295 Release testi geçti; self-contained yayın `Windows-M22-XML-Center` altında üretildi.
 - [ ] XML Variant Mapping ve diğer `DEFERRED_BY_USER` alt özellikleri kapsam dışıdır.
+
+## M23 kategori / marka / özellik eşleme merkezi — 2026-09-11
+- [x] Yerel kategori, marka ve özellik sözlükleri tek WPF merkezinde kanal ve mağaza bağlamıyla yönetiliyor.
+- [x] Eşleme listesi aranabilir; `MISSING`, `STALE` ve `INVALID` durumları görünür; pasif yerel kayıt eşlenemiyor.
+- [x] İsim normalizasyonu yalnız öneri üretir; toplu eşleme önizleme ve kullanıcı onayı olmadan veritabanına yazılmaz.
+- [x] Mapping geçmişi tutuluyor ve aynı harici anahtar farklı kanal/mağazalarda birbirinden izole ediliyor.
+- [x] 298 Release testi geçti; self-contained yayın `Windows-M23-Taxonomy` altında üretilecek.
+- [ ] Resmi marketplace metadata endpointleri doğrulanmadan kategori/özellik/marka uzaktan yazımı açılmayacak; XML Variant Mapping `DEFERRED_BY_USER`.
