@@ -25,7 +25,7 @@ public static class MarketplaceConnectionCatalog
         new MarketplaceConnectionDefinition("ozon", "Ozon", "ozon", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead }), "https://docs.ozon.ru/api/seller/", false),
         new MarketplaceConnectionDefinition("joom", "Joom", "joom", MarketplaceCapabilities.LocalOnly, "https://merchant.joom.com/docs/api", true),
         new MarketplaceConnectionDefinition("wish", "Wish", "channels", MarketplaceCapabilities.LocalOnly, "https://merchant.wish.com/documentation/api/v3/oauth", true),
-        new MarketplaceConnectionDefinition("fruugo", "Fruugo", "channels", MarketplaceCapabilities.LocalOnly, "https://developer.fruugo.com/", true),
+        new MarketplaceConnectionDefinition("fruugo", "Fruugo", "fruugo", MarketplaceCapabilities.LocalOnly, "https://developer.fruugo.com/", true),
         new MarketplaceConnectionDefinition("navlungo", "Navlungo", "shipping", MarketplaceCapabilities.LocalOnly, "https://navlungo.com/", true)
     });
 
