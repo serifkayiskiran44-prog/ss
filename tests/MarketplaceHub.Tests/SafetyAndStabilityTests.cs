@@ -540,6 +540,19 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void MultiLocationStockSeparatesVisibleTotalAndScopeAnomalies()
+    {
+        var locations = new[] { new StockLocation("a", "shop", "Ana", "warehouse"), new StockLocation("b", "shop", "Şube", "branch") };
+        var now = DateTimeOffset.UtcNow;
+        var rows = new[] { new LocationStock("a", "shop", "p", 10, "xml", now.AddMinutes(-2)), new LocationStock("b", "shop", "p", 5, "manual", now), new LocationStock("b", "shop", "p", 4, "manual", now.AddMinutes(-1)), new LocationStock("x", "other", "p", 99, "channel", now) };
+        var view = MultiLocationStock.Summarize(locations, rows, "shop", "p", x => x.Id == "a");
+        Assert.AreEqual(15, view.Total); Assert.AreEqual(10, view.Visible); Assert.AreEqual(0, view.NegativeLocations);
+        CollectionAssert.Contains(view.Anomalies.ToArray(), "MULTIPLE_SNAPSHOTS");
+        CollectionAssert.Contains(view.Anomalies.ToArray(), "WRONG_LOCATION_OR_SHOP");
+        Assert.AreEqual(2, MultiLocationStock.Timeline(rows, "b", "shop", "p").Count);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
