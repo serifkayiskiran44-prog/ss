@@ -148,3 +148,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Resmi endpoint/scope sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP çağrısı yok.
 - [x] 275 Release testi geçti; self-contained yayın `Windows-M10-Trendyol` altında üretildi.
 - [ ] Trendyol production ürün/sipariş/stok/fiyat operasyonları resmi credential ve güncel API sözleşmesi doğrulanana kadar kapalı.
+
+## M11 Hepsiburada connector sınırı — 2026-09-11
+- [x] Merchant ID, API kullanıcı adı/şifresi ve User-Agent için doğrulamalı model, DPAPI şifreli store ve WPF bağlantı paneli eklendi.
+- [x] Hepsiburada kanal kartı/yerel ürün planı ve connection center hızlı geçişi eklendi.
+- [x] Resmi endpoint/scope sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP çağrısı yok.
+- [x] 277 Release testi geçti; self-contained yayın `Windows-M11-Hepsiburada` altında üretildi.
+- [ ] Hepsiburada production ürün/sipariş/stok/fiyat operasyonları resmi credential ve güncel API sözleşmesi doğrulanana kadar kapalı.

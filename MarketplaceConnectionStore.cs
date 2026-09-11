@@ -20,7 +20,7 @@ public static class MarketplaceConnectionCatalog
         new MarketplaceConnectionDefinition("ebay", "eBay", "ebay", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead, MarketplaceOperation.StockWrite }), "https://developer.ebay.com/api-docs/", false),
         new MarketplaceConnectionDefinition("amazon", "Amazon", "amazon", MarketplaceCapabilities.LocalOnly, "https://developer-docs.amazon.com/sp-api/", true),
         new MarketplaceConnectionDefinition("trendyol", "Trendyol", "trendyol", MarketplaceCapabilities.LocalOnly, "https://developers.trendyol.com/", true),
-        new MarketplaceConnectionDefinition("hepsiburada", "Hepsiburada", null, MarketplaceCapabilities.LocalOnly, "https://developers.hepsiburada.com/", true),
+        new MarketplaceConnectionDefinition("hepsiburada", "Hepsiburada", "hepsiburada", MarketplaceCapabilities.LocalOnly, "https://developers.hepsiburada.com/", true),
         new MarketplaceConnectionDefinition("allegro", "Allegro", "channels", MarketplaceCapabilities.LocalOnly, "https://developer.allegro.pl/", true),
         new MarketplaceConnectionDefinition("ozon", "Ozon", "ozon", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead }), "https://docs.ozon.ru/api/seller/", false),
         new MarketplaceConnectionDefinition("joom", "Joom", "joom", MarketplaceCapabilities.LocalOnly, "https://merchant.joom.com/docs/api", true),
