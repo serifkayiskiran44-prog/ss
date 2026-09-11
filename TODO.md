@@ -655,3 +655,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M232: dashboard freshness NO_DATA/STALE/FRESH ayrımı eklendi; sahte KPI yok.
 # M233: rapor seçili satır count/total/average aggregate footer eklendi; dış write yok.
 # M234: dependency-free bounded paging ile DataGrid virtualization ilkesi adapte edildi; üçüncü taraf kopyası yok.
+# M235: repo-local safety/parity/performance/release skills ve read-only reviewer agent eklendi.
