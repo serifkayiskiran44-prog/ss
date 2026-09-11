@@ -49,3 +49,5 @@ M7 ürün yönetimi ana paneli (2026-09-11, Issue #14): ürün listesi/filtre/de
 M8 sipariş merkezi (2026-09-11, Issue #15): mevcut WPF sipariş ekranı ortak stok karar önizleme/onay servisine bağlandı. Kanal/mağaza/stok kararı filtreleri ve listede durum görünürlüğü eklendi; duplicate satış ikinci kez stok düşürmüyor, eksik SKU işlem üretmiyor. Fulfillment ve hakediş/mutabakat geliştirilmedi. 271 Release testi geçti; `Windows-M8-Orders` self-contained yayın üretildi.
 
 M9 Amazon connector (2026-09-11, Issue #16): seller/LWA/region/marketplace ayarları DPAPI ile saklanan bağımsız sınır ve WPF bağlantı paneli olarak eklendi. Doğrulanmamış sözleşme nedeniyle hiçbir Amazon endpointi çağrılmıyor; bağlantı testi açıkça `LIVE_API_BLOCKED`. 273 Release testi geçti; `Windows-M9-Amazon` self-contained yayın üretildi.
+
+M10 Trendyol connector (2026-09-11, Issue #17): güvenli Supplier/API ayar modeli, DPAPI store, bağlantı paneli ve yerel ürün planı eklendi. Doğrulanmamış resmi sözleşme nedeniyle endpoint çağrısı yapılmıyor; kullanıcıya `LIVE_API_BLOCKED` açıkça gösteriliyor. 275 Release testi geçti; `Windows-M10-Trendyol` self-contained yayın üretildi.

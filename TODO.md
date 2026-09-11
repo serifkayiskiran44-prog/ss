@@ -141,3 +141,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Resmi region/credential sözleşmesi doğrulanmadığı için read-only test bilinçli olarak `LIVE_API_BLOCKED` döndürüyor; endpoint/scope uydurulmadı.
 - [x] 273 Release testi geçti; self-contained yayın `Windows-M9-Amazon` altında üretildi.
 - [ ] Amazon SP-API production read/write, credential onayı ve gerçek mağaza testi resmi bilgiler sağlanana kadar kapalı.
+
+## M10 Trendyol connector sınırı — 2026-09-11
+- [x] Supplier ID, API key/secret ve User-Agent doğrulamalı model, DPAPI şifreli store ve WPF bağlantı paneli eklendi.
+- [x] Trendyol kanal kartı/yerel ürün planı ve connection center hızlı geçişi eklendi.
+- [x] Resmi endpoint/scope sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP çağrısı yok.
+- [x] 275 Release testi geçti; self-contained yayın `Windows-M10-Trendyol` altında üretildi.
+- [ ] Trendyol production ürün/sipariş/stok/fiyat operasyonları resmi credential ve güncel API sözleşmesi doğrulanana kadar kapalı.
