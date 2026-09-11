@@ -395,3 +395,7 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M1–M44 stacked zinciri `codex/issue-80-release-integration` üzerinde doğrulandı; eksik/çakışan çalışan özellik bulunmadı.
 - [x] SQLite migration, secret redaction, explicit approval, stale/idempotency ve transaction regresyon matrisi kontrol edildi.
 - [x] 344/344 Release testi, Release build ve self-contained win-x64 publish tamamlandı; ayrıntı `docs/RELEASE-INTEGRATION.md` içinde.
+
+## M46 günlük kullanım parite matrisi — 2026-09-11
+- [x] Ürün, toplu işlem, arama, kategori/marka, XML, ayar, Excel ve sipariş günlük akışları TAM/KAPSAM matrisiyle belgelendi.
+- [x] Preview/onay/stale/idempotency, sayfalama ve ertelenmiş alan sınırları korunuyor; `docs/DAILY-PARITY-MATRIX.md` eklendi.

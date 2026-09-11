@@ -119,3 +119,5 @@ M43 XML kullanım paritesi kabul turu (2026-09-11, Issue #63): XML kaynak/test/�
 M44 Core UI kullanılabilirlik smoke turu (2026-09-11, Issue #64): Ürün/sipariş/XML/Excel ve ayar ekranlarında sanallaştırma/sayfalama, uzun işlem iptal/ilerleme, global navigasyon ve async çift tetikleme kapıları doğrulandı. `docs/UI-SMOKE.md` fiziksel DPI smoke sınırını ve mevcut davranışı kaydeder. 344 Release testi geçti; self-contained publish `Windows-M44-UI-Smoke` olarak üretildi.
 
 M45 release integration (2026-09-11, Issue #80): M1–M44 stacked zinciri `codex/issue-80-release-integration` üzerinde konsolide edilip SQLite migration sırası, secret redaction, explicit approval, stale/idempotency ve transaction güvenlikleri mevcut regresyon testleriyle doğrulandı. 344/344 Release testi, Release build ve self-contained win-x64 publish başarılı; ayrıntı `docs/RELEASE-INTEGRATION.md`.
+
+M46 günlük kullanım parite matrisi (2026-09-11, Issue #81): Ürün/toplu işlem/arama/kategori/marka/XML/ayar/Excel/sipariş başlıkları mevcut ekranlarla TAM olarak eşleştirildi ve `docs/DAILY-PARITY-MATRIX.md` kaydedildi. Riskli akış kapıları, performans ve `DEFERRED_BY_USER` sınırları korunuyor.
