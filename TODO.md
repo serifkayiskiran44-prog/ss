@@ -577,3 +577,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M117 product form parity: ürün editörü gerçek alan bağlarını koruyan Genel, Görsel/Açıklama, Pazaryeri, XML/provenance ve Sipariş raporu sekmelerine ayrıldı (docs/taskpacks/M117.md).
 - [x] M118 XML UI parity: aynı XML kaynağına ait import işlemleri kaynak kimliği bazında serialize edildi; mevcut preview/mapping/provenance güvenlikleri korundu (docs/taskpacks/M118.md).
 - [x] M119 dynamic marketplace product UI: ürün kanal özeti ortak connection/mapping/capability/health metadata’sından dinamik üretiliyor; iki mağazalı wrong-shop fixture doğrulandı (docs/taskpacks/M119.md).
+- [x] M120 Etsy product surface: ürün, Etsy şablonu, credential/shop ve listing mapping’i birleştiren read-only readiness kararı ve wrong-shop negatif testi eklendi (docs/taskpacks/M120.md).

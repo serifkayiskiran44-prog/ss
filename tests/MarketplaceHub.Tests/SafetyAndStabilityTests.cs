@@ -191,6 +191,20 @@ public sealed class SafetyAndStabilityTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [TestMethod]
+    public void EtsyProductReadinessBlocksMissingOrWrongShopMapping()
+    {
+        var product = new TrMarketplaceHubDesktop.Catalog.CatalogProduct { Name = "Ürün", Description = "Açıklama", Price = 10, Stock = 2, Currency = "USD", ImageUrls = "https://example.test/p.jpg" };
+        var template = new TrMarketplaceHubDesktop.EtsyListingTemplate { TaxonomyId = 1, ShippingProfileId = 2, ReadinessStateId = 3 };
+        var credentials = new TrMarketplaceHubDesktop.EtsyCredentials("k", "s", "t", "123");
+        var wrongShop = new TrMarketplaceHubDesktop.MarketplaceMapping("etsy", "999", product.Id, "listing");
+
+        var result = TrMarketplaceHubDesktop.EtsyProductReadiness.Evaluate(product, template, credentials, wrongShop);
+
+        Assert.AreEqual("BLOCKED", result.Status);
+        CollectionAssert.Contains(result.Missing.ToList(), "shop-scoped listing mapping");
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
