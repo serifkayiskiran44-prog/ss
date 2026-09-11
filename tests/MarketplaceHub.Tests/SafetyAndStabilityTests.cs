@@ -511,6 +511,21 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void NotificationStoreDeduplicatesPersistsAndAcknowledgesRedactedEvents()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-notify-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new TrMarketplaceHubDesktop.NotificationStore(root);
+            var first = store.Add("fp-1", "ERROR", "etsy", "shop-a", "Sync", "Authorization: Bearer synthetic-secret");
+            var duplicate = store.Add("fp-1", "ERROR", "etsy", "shop-a", "Sync", "same");
+            Assert.AreEqual(first.Id, duplicate.Id); Assert.IsFalse(store.List()[0].Acknowledged); Assert.IsFalse(store.List()[0].Detail.Contains("synthetic-secret", StringComparison.Ordinal));
+            store.Acknowledge(first.Id); Assert.IsTrue(new TrMarketplaceHubDesktop.NotificationStore(root).List()[0].Acknowledged);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
