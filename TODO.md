@@ -274,3 +274,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Destek zip'i yalnız maskeli metadata, audit ve son operasyon logunu içeriyor; yerel DB/şifreli credential byte'ları dahil edilmiyor.
 - [x] 311 Release testi geçti; self-contained yayın `Windows-M28-Diagnostics` altında üretildi.
 - [ ] Canlı marketplace değişikliği, credential çözme veya otomatik kurtarma bu merkezden açılmadı.
+
+## M29 gezinme, kayıtlı görünümler ve UX — 2026-09-11
+- [x] Sol menü araması, son route tercihi, breadcrumb ve geri bağlamı eklendi.
+- [x] Ürün/sipariş/sync/XML için yerel kayıtlı görünüm profilleri; ürün kolon görünürlüğü tercihi eklendi.
+- [x] Ctrl+K global arama (SKU, barkod, sipariş, listing, mağaza) ve temel klavye kısayolları eklendi.
+- [x] Boş arama, route geri dönüşü ve mevcut preview/onay/iptal kapıları korunuyor; canlı marketplace mutation yok.
+- [x] UiPreferenceStore için 314 Release testi geçti; self-contained yayın `Windows-M29-Navigation` altında üretildi.
+- [ ] Görsel WPF smoke testleri gerçek masaüstü oturumu gerektirdiği için otomatikleştirilmedi; veri/tercih akışları test edildi.

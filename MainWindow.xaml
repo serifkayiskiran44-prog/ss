@@ -15,10 +15,11 @@
  <Border Background="#142D3A"><DockPanel>
   <StackPanel DockPanel.Dock="Top" Margin="22,24,15,23"><TextBlock Text="MONOBRIDGE" Foreground="White" FontWeight="Bold" FontSize="21"/><TextBlock Text="Ticaret yönetim merkezi" Foreground="#92AFBC" Margin="0,7,0,0"/></StackPanel>
   <TextBlock DockPanel.Dock="Bottom" Text="Yerel çalışma alanı" Foreground="#92AFBC" Margin="22,15"/>
+  <TextBox x:Name="NavigationSearchBox" DockPanel.Dock="Top" Margin="12,0,12,8" ToolTip="Menüde ara" Height="30"/>
   <ListBox x:Name="NavigationList" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource NavigationItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
  </DockPanel></Border>
  <DockPanel Grid.Column="1">
-  <Border DockPanel.Dock="Top" Background="White" Padding="24,18"><StackPanel><TextBlock x:Name="PageTitle" Text="Ürün yönetimi" FontSize="25" FontWeight="SemiBold" Foreground="#173646"/><TextBlock x:Name="PageDescription" Margin="0,5,0,0" Foreground="#627986" TextWrapping="Wrap"/></StackPanel></Border>
+  <Border DockPanel.Dock="Top" Background="White" Padding="24,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="430"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="BreadcrumbText" Text="Ana sayfa" Foreground="#718795" FontSize="11"/><TextBlock x:Name="PageTitle" Text="Ürün yönetimi" FontSize="25" FontWeight="SemiBold" Foreground="#173646"/><TextBlock x:Name="PageDescription" Margin="0,5,0,0" Foreground="#627986" TextWrapping="Wrap"/></StackPanel><DockPanel Grid.Column="1" VerticalAlignment="Center"><Button x:Name="BackButton" DockPanel.Dock="Right" Content="‹ Geri" Click="Back_Click" IsEnabled="False"/><Button x:Name="GlobalSearchButton" DockPanel.Dock="Right" Content="Ara" Click="GlobalSearch_Click"/><TextBox x:Name="GlobalSearchBox" ToolTip="SKU, barkod, sipariş, listing veya mağaza ara (Ctrl+K)"/></DockPanel></Grid></Border>
   <StatusBar DockPanel.Dock="Bottom" Background="#EAF0F4" Padding="12,5"><TextBlock x:Name="StatusText" Text="Hazır" TextWrapping="Wrap"/></StatusBar>
   <Expander DockPanel.Dock="Bottom" Header="İşlem geçmişi" Background="White" Margin="16,0,16,8"><ListBox x:Name="LogList" Height="100" BorderThickness="0"/></Expander>
   <Border DockPanel.Dock="Top" Background="White" Margin="16,12,16,10" Padding="12,5" CornerRadius="6"><DockPanel><Button DockPanel.Dock="Right" Content="Havuzu yenile" Click="Refresh_Click"/><TextBlock x:Name="SummaryText" Foreground="#4C6676" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel></Border>

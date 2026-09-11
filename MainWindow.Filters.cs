@@ -25,7 +25,33 @@ public partial class MainWindow {
   panel.Children.Add(Button("Filtreyi kaydet",()=>{filterStore.Save(filterName.Text,Current());ReloadSaved();filterName.Clear();}));
   panel.Children.Add(Button("Filtreyi yükle",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");Apply(selected.Filter);productFilter=selected.Filter;productOffset=0;RefreshProducts();}));
   panel.Children.Add(Button("Filtreyi sil",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");filterStore.Delete(selected.Name);ReloadSaved();}));
+  panel.Children.Add(Button("Kolon görünürlüğü",OpenProductColumnChooser));
+  ApplyProductColumnPreferences();
   ReloadSaved();
   host.Children.Add(new Expander{Header="Detaylı ürün arama",Content=panel,HorizontalAlignment=HorizontalAlignment.Stretch});
+ }
+ void ApplyProductColumnPreferences()
+ {
+  var hidden = (uiPreferences.Get("columns:products") ?? "").Split('\u001f', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+  foreach (var column in products.Columns)
+  {
+   var header = column.Header?.ToString() ?? "";
+   column.Visibility = hidden.Contains(header) ? Visibility.Collapsed : Visibility.Visible;
+  }
+ }
+ void OpenProductColumnChooser()
+ {
+  var checks = products.Columns.Select(column => new CheckBox { Content = column.Header?.ToString() ?? "", IsChecked = column.Visibility == Visibility.Visible, Margin = new Thickness(5) }).ToList();
+  var panel = new StackPanel { Margin = new Thickness(14) };
+  panel.Children.Add(new TextBlock { Text = "Ürün tablosunda gösterilecek kolonları seçin.", Margin = new Thickness(3, 3, 3, 9) });
+  var list = new ScrollViewer { Content = new StackPanel { Children = { } }, Height = 360, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+  var fields = (StackPanel)list.Content;
+  foreach (var check in checks) fields.Children.Add(check);
+  panel.Children.Add(list);
+  var save = new Button { Content = "Kaydet", HorizontalAlignment = HorizontalAlignment.Right };
+  panel.Children.Add(save);
+  var dialog = new Window { Owner = this, Title = "Ürün kolonları", Width = 360, Height = 500, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
+  save.Click += (_, _) => { var hidden = products.Columns.Zip(checks).Where(x => x.Second.IsChecked != true).Select(x => x.First.Header?.ToString() ?? ""); uiPreferences.Set("columns:products", string.Join('\u001f', hidden)); ApplyProductColumnPreferences(); dialog.DialogResult = true; };
+  dialog.ShowDialog();
  }
 }
