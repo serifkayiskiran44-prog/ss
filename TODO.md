@@ -604,3 +604,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M144 dönüşüm kuralları: sınırlı numeric/text/default operasyonları, invariant çıktı ve satır bazlı ERROR sonucu eklendi; arbitrary eval yok (docs/taskpacks/M144.md).
 - [x] M145 bildirim merkezi: local SQLite bildirimleri severity/fingerprint dedup, redaction, acknowledge ve restart persistence ile eklendi (docs/taskpacks/M145.md).
 - [x] M146 iade merkezi: mağaza/sipariş/line/sku bazlı partial return restock preview ve fingerprint eklendi; wrong-shop/missing-SKU/stale otomatik bloklanıyor (docs/taskpacks/M146.md).
+- [x] M147 rekabet gözlemi: kanal+shop+product scope, duplicate offer dedup, stale durumu ve yerel fiyat farkı/yüzde hesaplayan read-only evaluator eklendi (docs/taskpacks/M147.md).

@@ -535,6 +535,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void CompetitionObserverScopesOffersDeduplicatesAndMarksStaleReadOnly()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var rows = new[] { new TrMarketplaceHubDesktop.OfferSnapshot("etsy", "shop-a", "p-1", "offer-1", 90, "USD", now, "fixture"), new("etsy", "shop-a", "p-1", "offer-1", 95, "USD", now.AddMinutes(1), "fixture"), new("etsy", "shop-b", "p-1", "offer-2", 80, "USD", now, "fixture"), new("etsy", "shop-a", "p-1", "offer-3", 110, "USD", now.AddDays(-2), "fixture") };
+        var result = TrMarketplaceHubDesktop.CompetitionObserver.Evaluate(rows, "etsy", "shop-a", "p-1", 100, now);
+        Assert.AreEqual(2, result.Count); Assert.AreEqual("OBSERVED", result.Single(x => x.OfferId == "offer-1").Status); Assert.AreEqual("STALE", result.Single(x => x.OfferId == "offer-3").Status); Assert.AreEqual(-5, result.Single(x => x.OfferId == "offer-1").Difference);
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
