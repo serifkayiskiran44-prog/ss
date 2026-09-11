@@ -483,6 +483,23 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ImageHealthScannerClassifiesFailuresDuplicatesAndRedactsUrl()
+    {
+        var findings = TrMarketplaceHubDesktop.ImageHealthScanner.Evaluate([
+            new("p-1", "https://cdn.example/a.jpg", "image/jpeg", 1000, 200),
+            new("p-2", "https://cdn.example/a.jpg/", "image/jpeg", 1000, 200),
+            new("p-3", "https://cdn.example/b", "text/html", 100, 200),
+            new("p-4", "https://cdn.example/c", "image/png", 20_000_000, 200),
+            new("p-5", "https://cdn.example/d", "image/png", 100, 404),
+            new("p-6", "https://cdn.example/d?token=secret", "image/png", 100, 200)]);
+        Assert.AreEqual("DUPLICATE", findings.Single(x => x.ProductId == "p-1").Status);
+        Assert.AreEqual("WRONG_CONTENT", findings.Single(x => x.ProductId == "p-3").Status);
+        Assert.AreEqual("OVERSIZE", findings.Single(x => x.ProductId == "p-4").Status);
+        Assert.AreEqual("NOT_FOUND", findings.Single(x => x.ProductId == "p-5").Status);
+        Assert.IsFalse(findings.Single(x => x.ProductId == "p-6").Url.Contains("secret", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
