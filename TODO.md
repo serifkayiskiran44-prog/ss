@@ -554,3 +554,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M94 release artifact: self-contained win-x64 çıktısı için sürüm/runtime ve sıralı SHA-256 manifest üreticisi eklendi (docs/taskpacks/M94.md).
 - [x] M95 Etsy listing mapping: resmi draft listing geçiş parametresi ve materyal/tag doğrulaması eklendi; preview/onay/stale ve canlı-write blokları korundu (docs/taskpacks/M95.md).
 - [x] M96 Etsy dispatch: SyncJob ürün/mağaza/kanal bağlamı dispatch öncesi doğrulanıyor; preview, onay, stale ve idempotency korumaları korunuyor (docs/taskpacks/M96.md).
+- [x] M97 Etsy order recovery: eşit veya daha eski kaynak zaman damgalı tekrar alımlar mevcut siparişi overwrite etmiyor; sayfalama, shop scope ve istisna/preview stok kuralları korunuyor (docs/taskpacks/M97.md).

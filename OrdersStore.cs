@@ -33,7 +33,7 @@ public sealed class OrdersStore
   {
    var o=original.Copy();using var get=c.CreateCommand();get.Transaction=tx;get.CommandText="SELECT payload FROM orders WHERE marketplace=$m AND shop=$s AND id=$i";Key(get,o);
    var payload=get.ExecuteScalar() as string;
-   if(payload!=null&&!manual){var previous=JsonSerializer.Deserialize<OrderSnapshot>(payload)!;if(previous.UpdatedAt>o.UpdatedAt)continue;
+   if(payload!=null&&!manual){var previous=JsonSerializer.Deserialize<OrderSnapshot>(payload)!;if(previous.UpdatedAt>=o.UpdatedAt)continue;
     foreach(var old in previous.Shipments){var current=o.Shipments.FirstOrDefault(s=>s.Id==old.Id);if(current==null){o.Shipments.Add(old);continue;}current.Events=old.Events;
      if(old.Source=="Yerel / manuel"&&old.Events.Count>0){current.State=old.State;current.Source=old.Source;current.TrackingUrl=old.TrackingUrl;current.Carrier=old.Carrier;current.TrackingNumber=old.TrackingNumber;}
     }
