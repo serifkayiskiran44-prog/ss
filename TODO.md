@@ -547,3 +547,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M87 sipariş istisna güvenliği: bounded/redacted exception kayıtları ve invariant cancel/return detection eklendi; restock onay/stale/idempotency korunuyor (docs/taskpacks/M87.md).
 - [x] M88 sync recovery: atomic cancellation state eklendi; cancelled işler restart recovery/retry ile yeniden dispatch edilmiyor (docs/taskpacks/M88.md).
 - [x] M89 automation reliability: lease token ownership ile stale worker completion/failure overwrite engellendi (docs/taskpacks/M89.md).
+- [x] M90 API health: cancellation ayrı state, Retry-After/reset/remaining header validation ve shop-scoped backoff görünümü (docs/taskpacks/M90.md).

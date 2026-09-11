@@ -97,7 +97,7 @@ public static class ApiHealthClassifier
 
     static int? ParseIntHeader(HttpResponseHeaders headers, params string[] names)
     {
-        foreach (var name in names) if (headers.TryGetValues(name, out var values) && int.TryParse(values.FirstOrDefault(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var result)) return result;
+        foreach (var name in names) if (headers.TryGetValues(name, out var values) && int.TryParse(values.FirstOrDefault(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) && result >= 0) return result;
         return null;
     }
     static DateTimeOffset? ParseResetHeader(HttpResponseHeaders headers, DateTimeOffset now, params string[] names)
@@ -105,7 +105,7 @@ public static class ApiHealthClassifier
         foreach (var name in names) if (headers.TryGetValues(name, out var values))
         {
             var raw = values.FirstOrDefault();
-            if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number)) return number > 1_000_000_000 ? DateTimeOffset.FromUnixTimeSeconds(number) : now.AddSeconds(number);
+            if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) && number >= 0 && number <= 31_536_000) return number > 1_000_000_000 ? DateTimeOffset.FromUnixTimeSeconds(number) : now.AddSeconds(number);
             if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)) return date.ToUniversalTime();
         }
         return null;
@@ -114,7 +114,7 @@ public static class ApiHealthClassifier
     {
         if (headers.RetryAfter?.Delta is { } delta) return delta;
         if (headers.RetryAfter?.Date is { } date) return date - now;
-        if (headers.TryGetValues("Retry-After", out var values) && int.TryParse(values.FirstOrDefault(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds)) return TimeSpan.FromSeconds(seconds);
+        if (headers.TryGetValues("Retry-After", out var values) && int.TryParse(values.FirstOrDefault(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds is >= 0 and <= 86400) return TimeSpan.FromSeconds(seconds);
         return null;
     }
 }
@@ -130,6 +130,11 @@ public sealed class ApiHealthCaptureHandler : DelegatingHandler
             var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
             LastObservation = ApiHealthClassifier.FromResponse(response);
             return response;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            LastObservation = new ApiHealthObservation { State = "CANCELLED", AuthStatus = "UNKNOWN", ErrorClass = "Cancelled", ErrorMessage = "İstek kullanıcı tarafından iptal edildi." };
+            throw;
         }
         catch (Exception error)
         {

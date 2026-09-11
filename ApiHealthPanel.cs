@@ -17,7 +17,7 @@ public static class ApiHealthPanel
         top.Children.Add(Text("Auth, erişilebilirlik, rate-limit, son başarılı istek ve güvenli hata sınıflarını tek görünümde izleyin. Salt okunur testler Mağaza bağlantıları ekranındaki mevcut resmi connector akışından çalışır; bu merkez endpoint uydurmaz ve credential göstermez."));
         var bar = new WrapPanel(); top.Children.Add(bar);
         var query = new TextBox { Width = 220, ToolTip = "Kanal, mağaza, durum veya hata ara" };
-        var state = new ComboBox { Width = 150, ItemsSource = new[] { "Tümü", "HEALTHY", "NOT_CONFIGURED", "LIVE_API_BLOCKED", "AUTH_ERROR", "RATE_LIMITED", "SERVER_ERROR", "NETWORK_ERROR", "TIMEOUT", "CLIENT_ERROR", "UNKNOWN" }, SelectedIndex = 0 };
+        var state = new ComboBox { Width = 150, ItemsSource = new[] { "Tümü", "HEALTHY", "NOT_CONFIGURED", "LIVE_API_BLOCKED", "AUTH_ERROR", "RATE_LIMITED", "SERVER_ERROR", "NETWORK_ERROR", "TIMEOUT", "CANCELLED", "CLIENT_ERROR", "UNKNOWN" }, SelectedIndex = 0 };
         var refresh = Button("Yenile"); var openConnections = Button("Salt okunur test ekranı");
         bar.Children.Add(query); bar.Children.Add(state); bar.Children.Add(refresh); bar.Children.Add(openConnections);
         var summary = Text(""); top.Children.Add(summary);
