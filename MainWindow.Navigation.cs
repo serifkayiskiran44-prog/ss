@@ -25,6 +25,7 @@ public partial class MainWindow
   Page("excel","Excel ürün işlemleri","Excel dışa aktarma ve içe aktarma önizlemesi",BuildExcel());
   Page("taxonomy","Kategori / marka / özellik","Yerel sözlük kayıtları ve harici anahtar eşlemeleri",BuildTaxonomy());
   Page("sync","Sync merkezi","Yerel sync kuyruğu, idempotency ve tekrar deneme durumları",BuildSync());
+  Page("automation","Otomasyon","Kanal ve mağaza bazlı stok/fiyat zamanlayıcıları",BuildAutomation());
   Group("PAZARYERLERİ");
   etsyTabs=new TabControl();
   etsyTabs.Items.Add(new TabItem{Header="Ürünler",Content=builtPages["Etsy ilanları"]});
