@@ -137,3 +137,5 @@ M51 doğrulama: Release test 348/348 geçti; self-contained win-x64 yayın Windo
 M52 toplu ürün işlemleri (Issue #87, 2026-09-11): kanal/mağaza mapping batch'inde tüm optimistic kontroller tamamlanmadan commit başlamıyor; commit başladıktan sonra cancellation ile yarım batch bırakılmıyor. Cancellation/atomiklik testi eklendi. docs/taskpacks/M52.md 100/100.
 
 M52 doğrulama: Release test 349/349 geçti; self-contained win-x64 yayın Windows-M52-Bulk-Ops oluşturuldu.
+
+M53 ürün detay/düzenleme (Issue #88, 2026-09-11): SaveProduct ürün adı/SKU/barkod/marka/kategori/açıklama ve 3 karakter döviz sınırlarını doğruluyor; mevcut UpdatedUtc stale guard korunuyor. docs/taskpacks/M53.md 100/100.
