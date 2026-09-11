@@ -54,6 +54,7 @@ public sealed class DashboardDataService
         var lastXmlStatus = latestXml?.Status ?? latestSourceRun?.LastStatus ?? "Henüz çalışmadı";
         var lastXmlUtc = latestXml?.FinishedUtc ?? latestXml?.StartedUtc ?? latestSourceRun?.LastRunUtc;
         var connectionIssues = connectionRows.Count(x => !string.Equals(x.Status, "CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase));
+        var quality = new DataQualityStore(directory).Summary();
         var notifications = new List<DashboardNotification>();
 
         foreach (var job in failedSync.Take(20))
@@ -66,6 +67,8 @@ public sealed class DashboardDataService
             notifications.Add(new("Uyarı", "Kritik stok", $"{products.Count(x => x.Active && x.Stock <= 0):N0} aktif ürün stokta yok.", "products"));
         if (stockWaiting > 0)
             notifications.Add(new("Bilgi", "Sipariş stoğu bekliyor", $"{stockWaiting:N0} sipariş için yerel stok kararı uygulanmamış.", "orders"));
+        if (quality.Critical > 0 || quality.Error > 0)
+            notifications.Add(new("Hata", "Veri kalite engeli", $"{quality.Critical:N0} kritik ve {quality.Error:N0} hatalı kayıt satış öncesi incelenmeli.", "data-quality"));
         if (notifications.Count == 0)
             notifications.Add(new("Başarılı", "Açık uyarı yok", "Yerel veri kaynaklarında gösterilecek hata bulunamadı.", "dashboard"));
 
