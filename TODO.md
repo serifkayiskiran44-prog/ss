@@ -92,6 +92,12 @@
 - [x] Release build ve self-contained `Windows-M79-Excel-Export` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; büyük veri/cancellation smoke testi çalıştırılamadı.
 
+## M80 taxonomy — 2026-09-11
+- [x] Harici taxonomy key doğrulaması boş/uzun/kontrol karakterli değerleri reddediyor.
+- [x] Mağaza izolasyonu, suggestion-only ve history davranışları korundu.
+- [x] Release build ve self-contained `Windows-M80-Taxonomy` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; taxonomy regression testleri çalıştırılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
