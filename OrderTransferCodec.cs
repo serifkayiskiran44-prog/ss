@@ -10,7 +10,12 @@ public static class OrderTransferCodec
     public static string Export(IEnumerable<OrderTransferRow> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
-        var root = new XElement("orders", rows.Select(x => new XElement("order", new XAttribute("marketplace", x.Marketplace), new XAttribute("shop", x.ShopId), new XAttribute("id", x.OrderId), new XAttribute("source", x.Source), new XAttribute("updatedUtc", x.UpdatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)), new XAttribute("total", x.Total.ToString("0.################", CultureInfo.InvariantCulture))));
+        var elements = rows.Select(x => new XElement("order",
+            new XAttribute("marketplace", x.Marketplace), new XAttribute("shop", x.ShopId),
+            new XAttribute("id", x.OrderId), new XAttribute("source", x.Source),
+            new XAttribute("updatedUtc", x.UpdatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
+            new XAttribute("total", x.Total.ToString("0.################", CultureInfo.InvariantCulture))));
+        var root = new XElement("orders", elements);
         return new XDocument(root).ToString(SaveOptions.DisableFormatting);
     }
 
