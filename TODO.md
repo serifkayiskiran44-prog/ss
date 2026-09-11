@@ -441,3 +441,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M62 hata merkezi/tanılama: SyncErrorClass için güvenli kullanıcı açıklamaları eklendi; redaction, retry ve idempotency korunuyor (docs/taskpacks/M62.md).
 
 - [x] M63 credential/secret security: Authorization and secret query values are redacted before metadata, audit, and support export persistence (docs/taskpacks/M63.md).
+
+- [x] M64 backup/restore: manifest duplicate path, SHA-256 format and length validation added before extraction (docs/taskpacks/M64.md).

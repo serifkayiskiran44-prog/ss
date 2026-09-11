@@ -62,9 +62,12 @@ public sealed class DataBackupService
         using (var reader = new StreamReader(manifestEntry.Open())) manifest = JsonSerializer.Deserialize<DataBackupManifest>(reader.ReadToEnd());
         if (manifest is null || manifest.Format != Format) throw new InvalidDataException("Yedek formatı bu sürümle uyumlu değil.");
         if (manifest.Files.Count > 100_000 || manifest.Files.Sum(x => x.Length) > 2L * 1024 * 1024 * 1024) throw new InvalidDataException("Yedek boyutu güvenli sınırı aşıyor.");
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in manifest.Files)
         {
             ValidateRelativePath(file.Path);
+            if (!seen.Add(file.Path)) throw new InvalidDataException($"Yedekte yinelenen dosya var: {file.Path}");
+            if (file.Length < 0 || file.Sha256.Length != 64 || file.Sha256.Any(c => !Uri.IsHexDigit(c))) throw new InvalidDataException($"Yedek dosya özeti geçersiz: {file.Path}");
             var entry = archive.GetEntry("data/" + file.Path.Replace(Path.DirectorySeparatorChar, '/')) ?? throw new InvalidDataException($"Yedek dosyası eksik: {file.Path}");
             if (entry.Length != file.Length) throw new InvalidDataException($"Yedek dosyası boyutu değişmiş: {file.Path}");
         }
