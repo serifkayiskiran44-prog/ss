@@ -906,6 +906,13 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void ReportAnalyticsAggregatesSelectedRowsDeterministically()
+    {
+        var aggregate = ReportAnalytics.Aggregate([new Dictionary<string, object> { ["Amount"] = 10m }, new Dictionary<string, object> { ["Amount"] = 20m }], "Amount");
+        Assert.AreEqual(2, aggregate.RowCount); Assert.AreEqual(30m, aggregate.TotalAmount); Assert.AreEqual(15m, aggregate.AverageAmount);
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

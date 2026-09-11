@@ -653,3 +653,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M230: release artifact SHA-256/length verification eklendi; deferred domainler açık tutuldu.
 # M231: ürün workspace P0 acceptance gate kanıt yoksa BLOCKED kalıyor.
 # M232: dashboard freshness NO_DATA/STALE/FRESH ayrımı eklendi; sahte KPI yok.
+# M233: rapor seçili satır count/total/average aggregate footer eklendi; dış write yok.
