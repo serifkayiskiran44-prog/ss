@@ -27,6 +27,7 @@ public partial class MainWindow
   Group("KATALOG VE TEDARİK");
   Page("dashboard","Genel bakış","Ürün, sipariş, XML, bağlantı ve sync durumunu tek ekranda izleyin.",DashboardPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("products","Ürün yönetimi","Ortak ürün havuzu • Ürün seçerek kartını, fiyatını ve stok kilitlerini düzenleyin.",builtPages["Ürün havuzu"]);
+  Page("bulk-products","Toplu ürün işlemleri","Seçili veya filtrelenmiş ürünleri preview, sürüm kontrolü ve açık onay ile güncelleyin.",BulkProductsPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("media","Görsel / medya","Ürün görsellerini kaynak, doğrulama durumu, sıra ve ana görsel olarak yönetin.",MediaPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("listing-matrix","Kanal yayın matrisi","Ürün, kanal ve mağaza bazında mapping, ilan, sync ve bağlantı durumlarını karşılaştırın.",ChannelListingMatrixPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("xml","XML yönetimi","Kaynak bağlantısı → Alan eşleştirme → Fiyat ve stok → Önizleme ve havuza aktarım",builtPages["XML yönetimi"]);
