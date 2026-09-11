@@ -332,3 +332,12 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Otomasyon WPF ekranında şablon, takvim, pencere, sonraki çalışma, retry ve audit görünürlüğü sağlandı; uygulama kapalı çalışma modeli açıkça belirtiliyor.
 - [x] Geçici SQLite/takvim/retry testleri ile 330 Release testi geçti; self-contained yayın `Windows-M35-Automation-Calendar` altında üretilecek.
 - [ ] Arka plan Windows servisi veya doğrulanmamış marketplace write işlemi açılmadı.
+
+## M36 döviz, vergi ve yerel ayar yönetim merkezi — 2026-09-11
+- [x] Kanal/mağaza bazında TRY/USD/EUR/GBP, CultureInfo ve tarih biçimi ayarları kalıcı olarak saklanıyor.
+- [x] Ürün kartı ve Excel akışına KDV % alanı eklendi; 0–100 doğrulaması yapılıyor.
+- [x] Aynı kültür katmanı ile sayı parse/format örnekleri güvence altına alındı; yanlış kültür kaynaklı fiyat bozulması reddediliyor.
+- [x] Mağaza ayarı kopyalama, sürüm ve audit trail eklendi; politika/formül çekirdeği korunuyor.
+- [x] Veri kalite merkezine geçersiz KDV kontrolü eklendi; geçersiz döviz kontrolü yerel ayarlarla tutarlı hale geldi.
+- [x] Geçici SQLite/kültür/kopyalama testleri ile 332 Release testi geçti; self-contained yayın `Windows-M36-Locale-Settings` altında üretilecek.
+- [ ] Hakediş/mutabakat, kritik fiyat ve muhasebe motoru kapsam dışıdır.
