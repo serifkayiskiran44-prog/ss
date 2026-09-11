@@ -60,6 +60,12 @@ public sealed class XmlRunStore
         if (string.IsNullOrWhiteSpace(sourceId)) throw new ArgumentException("XML kaynak kimliği zorunludur.", nameof(sourceId));
         var id = Guid.NewGuid().ToString("N");
         using var connection = Open();
+        using (var running = connection.CreateCommand())
+        {
+            running.CommandText = "SELECT 1 FROM XmlRuns WHERE SourceId=$source AND Status='Running' LIMIT 1";
+            running.Parameters.AddWithValue("$source", sourceId.Trim());
+            if (running.ExecuteScalar() is not null) throw new InvalidOperationException("Bu XML kaynağı zaten çalışıyor; paralel ikinci çalışma engellendi.");
+        }
         using var command = connection.CreateCommand();
         command.CommandText = "INSERT INTO XmlRuns(Id,SourceId,Status,StartedUtc) VALUES($id,$source,'Running',$started)";
         command.Parameters.AddWithValue("$id", id);

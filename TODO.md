@@ -220,3 +220,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] `installer/Smoke-Test.ps1`, Release testleri, self-contained publish ve installer smoke testi çalıştırıldı; 294 Release testi geçti.
 - [x] `docs/PRODUCTION-READINESS.md` ile canlı, bloklu ve ertelenmiş kapsam açıklandı.
 - [ ] Gerçek marketplace credential/API sözleşmesi olmayan kanallarda LIVE operasyon hâlâ açılmadı.
+
+## M22 tedarikçi / XML kaynak merkezi — 2026-09-11
+- [x] Kaynak ekranına sağlık kontrolü eklendi: HTTPS/yerel erişim, HTTP durumları, timeout, 25 MB sınırı, gzip ve XML alan taraması gösteriliyor.
+- [x] Kaynak çoğaltma akışı mapping/fiyat/stok kurallarını taşırken Basic Auth credential'ını kopyalamıyor; yeni kaynağın yetkilendirmesi ayrı tutuluyor.
+- [x] Kaynak bazlı ürün sayısı ve son çalışma create/update/skip özeti gösteriliyor; XML geçmişi kalıcı kalıyor.
+- [x] Aynı kaynak için eşzamanlı Running XML import `XmlRunStore` tarafından reddediliyor; mevcut snapshot/LockStock davranışı korunuyor.
+- [x] 295 Release testi geçti; self-contained yayın `Windows-M22-XML-Center` altında üretildi.
+- [ ] XML Variant Mapping ve diğer `DEFERRED_BY_USER` alt özellikleri kapsam dışıdır.
