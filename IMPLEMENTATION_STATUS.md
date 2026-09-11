@@ -123,3 +123,5 @@ M45 release integration (2026-09-11, Issue #80): M1–M44 stacked zinciri `codex
 M46 günlük kullanım parite matrisi (2026-09-11, Issue #81): Ürün/toplu işlem/arama/kategori/marka/XML/ayar/Excel/sipariş başlıkları mevcut ekranlarla TAM olarak eşleştirildi ve `docs/DAILY-PARITY-MATRIX.md` kaydedildi. Riskli akış kapıları, performans ve `DEFERRED_BY_USER` sınırları korunuyor.
 
 M47 Etsy resmi OAuth ve read doğrulaması (2026-09-11, Issue #82): Resmi dokümana göre OAuth token endpoint'i `https://api.etsy.com/v3/public/oauth/token` olarak güncellendi; PKCE/state/HTTPS callback ve scope doğrulaması korundu. Credential gerektiren gerçek mağaza read testi çalıştırılmadı; fake HTTP contract testleri kullanıldı.
+
+M48 Etsy listing yaşam döngüsü (2026-09-11, Issue #83): Etsy listing publish akışı resmi `updateListing` PATCH `state=active` çağrısı olarak eklendi. Create/update/publish işlemleri preview, explicit approval, stale ürün sürümü ve SyncJob idempotency ile korunuyor; görsel yükleme ayrı ve credential-safe. 345 Release testi geçti; gerçek mağazaya write yapılmadı.

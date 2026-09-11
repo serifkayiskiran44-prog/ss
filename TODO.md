@@ -404,3 +404,7 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Güncel resmi OAuth token endpoint'i ve scope sözleşmesi kontrol edildi; token URL'si `api.etsy.com` olarak düzeltildi.
 - [x] PKCE/state/HTTPS callback, DPAPI credential saklama ve fake HTTP contract testleri korunuyor.
 - [ ] Gerçek mağaza read testi için kullanıcı credential/scope gerekir; eksik durumda canlı çağrı yapılmaz.
+
+## M48 Etsy listing yaşam döngüsü — 2026-09-11
+- [x] Resmi create/update/publish gereksinimleri doğrulandı; publish `state=active` ile açık approval/stale/idempotency kapısından geçiyor.
+- [x] Fake HTTP + SQLite testleri eklendi; 345/345 Release testi geçti.
