@@ -417,6 +417,25 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void OrderArchiveRestoresWithoutDeletingOrderData()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-archive-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var orders = new TrMarketplaceHubDesktop.OrdersStore(root);
+            var order = new TrMarketplaceHubDesktop.OrderSnapshot { Marketplace = "MANUAL", ShopId = "shop-a", OrderId = "order-1", RawStatus = "Closed", Source = "Yerel / manuel", UpdatedAt = DateTimeOffset.UtcNow };
+            orders.SaveManual(order);
+            var archive = new TrMarketplaceHubDesktop.OrderArchiveStore(root);
+            archive.Archive("MANUAL", "shop-a", "order-1");
+            Assert.IsTrue(archive.IsArchived("MANUAL", "shop-a", "order-1"));
+            archive.Restore("MANUAL", "shop-a", "order-1");
+            Assert.IsFalse(archive.IsArchived("MANUAL", "shop-a", "order-1"));
+            Assert.AreEqual(1, orders.ReadAll().Count);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
     public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
     {
         var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
