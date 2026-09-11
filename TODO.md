@@ -623,3 +623,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M200 dropship fiyat formülleri: çarpan/yüzde/sabit/KDV/kur/yuvarlama/psychological preview, minimum marj/overflow/bulk guard eklendi; otomatik repricing yok (docs/taskpacks/M200.md).
 - [x] M201 kanal ücret kataloğu: doğrulanmış provenance, effective date/stale lookup, komisyon+sabit ücret hesabı, import/export ve audit history eklendi (docs/taskpacks/M201.md).
 - [x] M202 Etsy gap audit: official-only capability manifest, inventory migration path assertion, readiness binding ve blocked/preview write matrisi eklendi; üçüncü taraf kodu kopyalanmadı (docs/taskpacks/M202.md).
+- [x] M203 Etsy OAuth readiness: scope eksikliği reauthorize, user/shop mismatch block, app-type durumu ve 401/403/408/429/5xx operator sınıflandırması eklendi (docs/taskpacks/M203.md).

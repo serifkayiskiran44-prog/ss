@@ -667,6 +667,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyOAuthReadinessRequiresScopesAndClassifiesOperatorErrors()
+    {
+        var ready = EtsyOAuthReadiness.Evaluate("SellerApp", new[] { "shops_r", "listings_r", "listings_w", "transactions_r" }, true); Assert.AreEqual("READY", ready.Status);
+        var missing = EtsyOAuthReadiness.Evaluate("PersonalApp", new[] { "shops_r" }, true); Assert.AreEqual("REAUTHORIZE_REQUIRED", missing.Status); CollectionAssert.Contains(missing.MissingScopes.ToArray(), "listings_r");
+        Assert.AreEqual("BLOCKED", EtsyOAuthReadiness.Evaluate("SellerApp", ready.GrantedScopes, false).Status);
+        Assert.AreEqual("RATE_LIMITED", EtsyOAuthReadiness.ClassifyHttp(429)); Assert.AreEqual("SCOPE_OR_PERMISSION_ERROR", EtsyOAuthReadiness.ClassifyHttp(403));
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
