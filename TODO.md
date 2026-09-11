@@ -190,3 +190,9 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Joom API sözleşmesi/kimlik akışı doğrulanmadığı için read-only test `LIVE_API_BLOCKED` döndürüyor; endpoint uydurulmadı.
 - [x] 286 Release testi geçti; self-contained yayın `Windows-M16-Joom` altında üretildi.
 - [ ] Joom ürün/sipariş/stok/fiyat canlı operasyonları resmi credential ve güncel API sözleşmesi doğrulanana kadar kapalı.
+
+## M17 Wish connector sınırı — 2026-09-11
+- [x] Merchant ID/API key için DPAPI şifreli store, WPF bağlantı paneli, Wish kanal kartı ve yerel ürün planı eklendi.
+- [x] Güncel Wish API kimlik/endpoint sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP yok.
+- [x] 288 Release testi geçti; self-contained yayın `Windows-M17-Wish` altında üretildi.
+- [ ] Wish ürün/sipariş/stok/fiyat canlı operasyonları resmi credential ve API sözleşmesi doğrulanana kadar kapalı.
