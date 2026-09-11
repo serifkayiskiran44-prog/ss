@@ -8,6 +8,12 @@
 - [ ] Merkezi stok rezervasyonu/idempotency ve mağaza stok/fiyat politikaları masaüstüne henüz taşınmadı. Veri modeli/işlem sınırını mevcut SQLite ve sipariş akışıyla uyumlu kur.
 - [ ] Kalan normal Excel/XML/sipariş/sync ve gerçek Etsy dikey akışını tamamla. Yerel bağlantı kartı API tamamlanması değildir.
 
+## M66 performans/concurrency/restart — 2026-09-11
+- [x] Sipariş SQLite sayfalaması önceki branch’te SQL filtre/count/LIMIT/OFFSET kullanıyor; WAL, busy-timeout ve sorgu indeksleri eklendi.
+- [x] SyncStore atomik Pending claim’i korunarak stale Running işleri restart sonrası güvenli biçimde Pending’e alan `RecoverAbandonedRunning` eklendi.
+- [x] Release build ve self-contained Windows-M66-Performance publish başarılı.
+- [ ] Harici test projesinde hedefli restart/concurrency test paketi bu klonda bulunmadığı için eklenemedi; gerçek test sayısı bu nedenle doğrulanamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11

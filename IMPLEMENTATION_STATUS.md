@@ -178,4 +178,4 @@ M64 yedek/restore (Issue #99, 2026-09-11): DataBackupService manifest validation
 
 M65 installer (Issue #100, 2026-09-11): InstallPathPolicy güvenli kurulum yolunu normalize eder, geçersiz ve Windows sistem klasörlerini reddeder; güncelleme endpointi uydurulmadı. docs/taskpacks/M65.md 100/100.
 
-M66 performans (Issue #101, 2026-09-11): OrdersStore.ReadPage SQL filtre/count/order/limit kullanır; 355 Release testi korunuyor. REAL_WORK_COUNT=1, VERIFICATION_ONLY_COUNT=9.
+M66 performans (Issue #101, 2026-09-11): OrdersStore.ReadPage SQL filtre/count/order/limit kullanır; OrdersStore ve SyncStore WAL/busy-timeout/index ayarlarıyla concurrency sertleştirildi; stale Running sync işleri `RecoverAbandonedRunning` ile restart sonrası güvenle kuyruğa alınır. Release build ve self-contained `Windows-M66-Performance` publish başarılı. Bu klonda test projesi bulunmadığı için test sayısı yeniden doğrulanamadı. REAL_WORK_COUNT=3, VERIFICATION_ONLY_COUNT=7.
