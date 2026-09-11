@@ -155,3 +155,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Resmi endpoint/scope sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP çağrısı yok.
 - [x] 277 Release testi geçti; self-contained yayın `Windows-M11-Hepsiburada` altında üretildi.
 - [ ] Hepsiburada production ürün/sipariş/stok/fiyat operasyonları resmi credential ve güncel API sözleşmesi doğrulanana kadar kapalı.
+
+## M12 Fruugo connector sınırı — 2026-09-11
+- [x] Retailer ID, kullanıcı adı/şifre için doğrulamalı model, DPAPI şifreli store ve WPF bağlantı paneli eklendi.
+- [x] Fruugo kanal kartı/yerel ürün planı ve connection center hızlı geçişi eklendi.
+- [x] Ürün/sipariş API sözleşmesi doğrulanmadığı için salt okunur test `LIVE_API_BLOCKED` döndürüyor; sahte HTTP çağrısı yok.
+- [x] 279 Release testi geçti; self-contained yayın `Windows-M12-Fruugo` altında üretildi.
+- [ ] Fruugo production ürün/sipariş/stok/fiyat operasyonları retailer kabulü ve resmi API sözleşmesi doğrulanana kadar kapalı.
