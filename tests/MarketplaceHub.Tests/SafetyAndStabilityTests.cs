@@ -676,6 +676,16 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyListingLifecycleGuardsPublishOwnershipAndDeleteReceipt()
+    {
+        var preview = EtsyListingLifecycle.CreatePreview("shop", 123, "draft", "active", new[] { new EtsyListingChange("title", "old", "new") });
+        EtsyListingLifecycle.EnsurePublishReady(preview, true, true, true, true); Assert.ThrowsException<InvalidOperationException>(() => EtsyListingLifecycle.EnsureOwned(preview, "other"));
+        var receipts = new HashSet<string>(); Assert.ThrowsException<InvalidOperationException>(() => EtsyListingLifecycle.DeleteGuard(preview, false, receipts));
+        Assert.AreEqual(preview.Receipt, EtsyListingLifecycle.DeleteGuard(preview, true, receipts)); Assert.ThrowsException<InvalidOperationException>(() => EtsyListingLifecycle.DeleteGuard(preview, true, receipts));
+        StringAssert.Contains(EtsyListingLifecycle.RedactDiagnostic("Authorization: Bearer secret x-api-key"), "[redacted]");
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
