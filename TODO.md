@@ -290,3 +290,11 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Doğrulanmış mesaj capability'si olmayan kanallarda okuma/yazma `NOT_SUPPORTED/LIVE_API_BLOCKED`; HTTP isteği yok.
 - [x] Fake SQLite/capability/redaction testleri ile 317 Release testi geçti; self-contained yayın `Windows-M30-Messages` altında üretildi.
 - [ ] Gerçek marketplace inbox/mesaj API'leri resmi capability/scope doğrulanana kadar açılmayacak.
+
+## M31 güvenli toplu ürün işlemleri — 2026-09-11
+- [x] Seçili/arama sonucundaki ürünlerde aktif/pasif, kategori, marka, normal ad/açıklama ve yerel kanal planı işlemleri eklendi.
+- [x] Satır bazlı READY/SKIP/ERROR preview, eski/yeni değer, kilit ve zorunlu alan doğrulaması eklendi.
+- [x] Preview sonrası `UpdatedUtc` stale kontrolü ve CatalogProducts transaction ile kısmi yazma engellendi.
+- [x] Büyük seçimlerde ilerleme/iptal, audit özeti ve canlı connector'a çıkmayan kanal planı akışı eklendi.
+- [x] Geçici SQLite/stale/kanal planı testleri ile 320 Release testi geçti; self-contained yayın `Windows-M31-Bulk-Products` altında üretildi.
+- [ ] Toplu canlı marketplace write yok; her connector'ın mevcut preview/onay akışı korunuyor.
