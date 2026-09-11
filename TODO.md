@@ -86,6 +86,12 @@
 - [x] Release build ve self-contained `Windows-M78-Excel-Import` publish başarılı.
 - [ ] Harici test projesi bu klonda yok; XLSX fixture/cancellation testleri çalıştırılamadı.
 
+## M79 Excel export — 2026-09-11
+- [x] Export alanlarına ürün provenance sütunları eklendi.
+- [x] Ürün ve hata XLSX raporları temporary-file atomic replace kullanıyor.
+- [x] Release build ve self-contained `Windows-M79-Excel-Export` publish başarılı.
+- [ ] Harici test projesi bu klonda yok; büyük veri/cancellation smoke testi çalıştırılamadı.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
