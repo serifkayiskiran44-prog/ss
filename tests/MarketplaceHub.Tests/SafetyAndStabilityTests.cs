@@ -513,6 +513,20 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public async Task SupplierCostMonitorDetectsCurrencySafeThresholdAndStaleChanges()
+    {
+        var at = DateTimeOffset.UtcNow;
+        var old = new SupplierCostSnapshot("s1", "xml", "p1", "Marka", "Kategori", 100m, "eur", at.AddHours(-1));
+        var current = old with { Cost = 125m, CapturedUtc = at };
+        var result = SupplierCostMonitor.Compare(current, old, 20, 10, TimeSpan.FromDays(1), at);
+        Assert.AreEqual(25m, result.AmountDelta); Assert.AreEqual(25m, result.PercentDelta); Assert.IsTrue(result.Alert); Assert.IsFalse(result.Stale);
+        Assert.AreEqual("125 EUR", SupplierCostMonitor.Format(current.Cost, current.Currency));
+        var filtered = SupplierCostMonitor.Filter(new[] { result }, source: "XML", brand: "marka"); Assert.AreEqual(1, filtered.Count);
+        var stale = SupplierCostMonitor.Compare(current with { CapturedUtc = at.AddDays(-3) }, old, 20, 10, TimeSpan.FromDays(1), at); Assert.AreEqual("STALE", stale.Status);
+        var batch = await SupplierCostMonitor.BatchAsync(new[] { (current, old) }, 20, 10); Assert.AreEqual(1, batch.Count);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
