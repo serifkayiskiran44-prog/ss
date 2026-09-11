@@ -563,3 +563,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M103 parity: global arama indexine sanitized audit olayları ve diagnostics route hedefleri eklendi; parity referansı eksik olduğu için doğrulanmamış akış uydurulmadı (docs/taskpacks/M103.md).
 - [x] M104 product ops: katalog sayfalı aramaya trim/NOCASE kaynak kimliği filtresi eklendi; mevcut seçim-preview-stale-transaction akışları korunuyor (docs/taskpacks/M104.md).
 - [x] M105 data ingestion: Excel Apply ve ApplyWithUndo artık preview hata listesini ve desteklenmeyen döviz değerlerini ortak doğrulamayla reddediyor; hatalı veri kataloğa yazılmıyor (docs/taskpacks/M105.md).
+- [x] M106 order/stock: iptal-iade restock preview kimlikleri trim/kanonik mağaza-kaynak bağlamıyla oluşturuluyor; Apply kimlik doğrulaması ve mevcut onay/stale/idempotency kapıları korunuyor (docs/taskpacks/M106.md).

@@ -13,6 +13,7 @@ public partial class CatalogStore
     {
         if (new[] { marketplace, shopId, orderId, actionKey }.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("İptal/iade stok önizlemesi için kanal, mağaza, sipariş ve olay anahtarı zorunlu.");
         if (actionKey.Any(char.IsControl) || actionKey.Length > 200) throw new ArgumentException("Olay anahtarı kontrol karakteri içeremez ve 200 karakteri aşamaz.");
+        marketplace = marketplace.Trim().ToLowerInvariant(); shopId = shopId.Trim(); orderId = orderId.Trim(); actionKey = actionKey.Trim();
         var receipt = GetOrderStockStatus(marketplace, shopId, orderId) ?? throw new InvalidOperationException("Bu sipariş için daha önce uygulanmış stok hareketi bulunamadı; otomatik geri koyma önerisi üretilemez.");
         var products = Products().ToDictionary(x => x.Id);
         var lines = new List<OrderRestockPreviewLine>();
@@ -28,6 +29,7 @@ public partial class CatalogStore
     {
         if (!approved) throw new InvalidOperationException("İptal/iade stok geri koyma işlemi için açık onay gerekli.");
         if (preview.Lines.Count == 0) throw new InvalidOperationException("Geri koyulacak stok satırı yok.");
+        if (string.IsNullOrWhiteSpace(preview.Marketplace) || string.IsNullOrWhiteSpace(preview.ShopId) || string.IsNullOrWhiteSpace(preview.OrderId) || string.IsNullOrWhiteSpace(preview.ActionKey) || preview.ActionKey.Any(char.IsControl)) throw new ArgumentException("Stok geri koyma kimliği geçersiz.");
         using var connection = Open(); using var transaction = connection.BeginTransaction(deferred: false);
         using (var existing = connection.CreateCommand())
         {
