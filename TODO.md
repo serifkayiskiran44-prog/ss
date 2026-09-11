@@ -649,3 +649,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M226: ürün compliance metadata local validator ile eklendi; dış write yok.
 # M227: duplicate tracking anomaly detector eklendi; dış write yok.
 # M228: linked source graph priority/health selection eklendi; feed write yok.
+# M229: Entegra parity family matrix kod içine alındı; deferred ve live API blokları açık tutuldu.

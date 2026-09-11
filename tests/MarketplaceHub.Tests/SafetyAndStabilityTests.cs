@@ -872,6 +872,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EntegraParityMatrixKeepsDeferredFamiliesExplicitlyBlocked()
+    {
+        var blocked = EntegraParityGapMatrix.Blocked();
+        Assert.IsTrue(blocked.Any(x => x.Family == "variants" && x.Evidence == "DEFERRED_BY_USER"));
+        Assert.IsTrue(blocked.Any(x => x.Family == "marketplace-write" && x.Evidence == "LIVE_API_BLOCKED"));
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);
