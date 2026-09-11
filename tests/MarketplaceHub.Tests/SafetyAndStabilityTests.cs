@@ -928,6 +928,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void AcceptanceEvidenceGateRejectsZeroOrPartialTestEvidence()
+    {
+        var baseEvidence = new AcceptanceEvidence("#275", "abc123", ["A.cs"], 90, 90, "Windows");
+        Assert.AreEqual("ACCEPTED", AcceptanceEvidenceGate.Evaluate(baseEvidence));
+        Assert.AreEqual("BLOCKED", AcceptanceEvidenceGate.Evaluate(baseEvidence with { TestsPassed = 0, TestsTotal = 0 }));
+        Assert.AreEqual("BLOCKED", AcceptanceEvidenceGate.Evaluate(baseEvidence with { TestsPassed = 89 }));
+    }
+
+    [TestMethod]
     public void EtsyBatchDriftChunksAtOfficialLimitAndClassifiesScopeAndStale()
     {
         var chunks = EtsyBatchDrift.Chunks(Enumerable.Range(1, 205).Select(x => (long)x)).ToArray(); Assert.AreEqual(3, chunks.Length); Assert.AreEqual(100, chunks[0].Count);

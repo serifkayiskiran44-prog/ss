@@ -657,3 +657,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M234: dependency-free bounded paging ile DataGrid virtualization ilkesi adapte edildi; üçüncü taraf kopyası yok.
 # M235: repo-local safety/parity/performance/release skills ve read-only reviewer agent eklendi.
 # M236: altı senaryolu agent/skill evaluation matrix ve KEEP/MERGE raporu eklendi.
+# M237: acceptance evidence gate zero/partial test ve eksik head/artifact kanıtını engelliyor.
