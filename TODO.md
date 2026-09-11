@@ -443,3 +443,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M63 credential/secret security: Authorization and secret query values are redacted before metadata, audit, and support export persistence (docs/taskpacks/M63.md).
 
 - [x] M64 backup/restore: manifest duplicate path, SHA-256 format and length validation added before extraction (docs/taskpacks/M64.md).
+
+- [x] M65 installer/onboarding: safe install path policy validates normalized paths and rejects Windows system targets (docs/taskpacks/M65.md).

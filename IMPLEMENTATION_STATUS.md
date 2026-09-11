@@ -175,3 +175,5 @@ M62 tanılama (Issue #97, 2026-09-11): SyncStore.Explain hata sınıflarını T�
 M63 güvenlik (Issue #98, 2026-09-11): MarketplaceConnectionStore.Redact Authorization Bearer/Basic ve secret query parametrelerini temizler; destek/audit sanitization zinciri korunur. docs/taskpacks/M63.md 100/100.
 
 M64 yedek/restore (Issue #99, 2026-09-11): DataBackupService manifest validation duplicate yolları, negatif uzunluk ve geçersiz SHA-256 özetlerini reddediyor; atomic staging ve safety backup korunuyor. docs/taskpacks/M64.md 100/100.
+
+M65 installer (Issue #100, 2026-09-11): InstallPathPolicy güvenli kurulum yolunu normalize eder, geçersiz ve Windows sistem klasörlerini reddeder; güncelleme endpointi uydurulmadı. docs/taskpacks/M65.md 100/100.
