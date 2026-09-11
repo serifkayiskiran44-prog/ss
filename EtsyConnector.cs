@@ -4,7 +4,10 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 
 namespace TrMarketplaceHubDesktop;
-public record EtsyCredentials(string Key, string Secret, string Token, string ShopId, string RefreshToken = "", DateTimeOffset? ExpiresAt = null, string RedirectUri = "");
+public record EtsyCredentials(string Key, string Secret, string Token, string ShopId, string RefreshToken = "", DateTimeOffset? ExpiresAt = null, string RedirectUri = "")
+{
+    public bool IsAccessTokenUsable(DateTimeOffset? now = null) => !string.IsNullOrWhiteSpace(Token) && (!ExpiresAt.HasValue || ExpiresAt.Value > (now ?? DateTimeOffset.UtcNow).AddMinutes(1));
+}
 public class EtsyConnector(System.Net.Http.HttpClient client)
 {
     public async Task<string> TestAsync(EtsyCredentials credentials)

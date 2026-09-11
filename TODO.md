@@ -20,6 +20,12 @@
 - [x] Release build ve self-contained `Windows-M67-UX-Search` publish başarılı.
 - [ ] Harici UI smoke/test projesi bu klonda bulunmuyor; gerçek kullanıcı arayüzü testi yapılamadı.
 
+## M68 Etsy OAuth/read güvenliği — 2026-09-11
+- [x] OAuth scope sözleşmesi tekil required-scope setiyle görünür hale getirildi.
+- [x] Token expiry için bir dakikalık güvenlik payı ve gerektiğinde refresh API’si eklendi.
+- [x] Release build ve self-contained `Windows-M68-Etsy-OAuth` publish başarılı.
+- [ ] Gerçek credential/mağaza read testi yapılmadı; canlı ortam `LIVE_API_BLOCKED`.
+
 Mevcut masaüstü özellik listesi ve sınırlamalar README-YONETIM-MERKEZI.md içinde. Web özelliklerinin tamamı taşındı denmez. Yeni video transkripti çalıştırma.
 
 ## Ürün operasyon alanları — 2026-09-11
