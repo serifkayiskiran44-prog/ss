@@ -626,3 +626,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M203 Etsy OAuth readiness: scope eksikliği reauthorize, user/shop mismatch block, app-type durumu ve 401/403/408/429/5xx operator sınıflandırması eklendi (docs/taskpacks/M203.md).
 - [x] M204 Etsy listing lifecycle: state validation, field diff/readiness preview, ownership guard, destructive confirmation ve delete receipt idempotency eklendi (docs/taskpacks/M204.md).
 - [x] M205 Etsy metadata: taxonomy/property cache, section/shipping/return/processing profilleri, physical/digital validation, stale history ve READY approval gate eklendi (docs/taskpacks/M205.md).
+- [x] M206 Etsy medya: image/digital/video rank/hash preview, physical/digital guard, video contract blokajı, retry ve destructive approval gate eklendi (docs/taskpacks/M206.md).

@@ -695,6 +695,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyMediaCenterHashesRanksAndBlocksUnverifiedVideoWithRetry()
+    {
+        var items = new[] { new EtsyMediaItem("1", "image", "main", new byte[] { 1, 2 }, 2, "xml"), new EtsyMediaItem("2", "video", "clip", new byte[] { 3 }, 1, "manual") };
+        var blocked = EtsyMediaCenter.Preview(1, "shop", items, false); Assert.AreEqual("BLOCKED", blocked.Status); CollectionAssert.Contains(blocked.Errors.ToArray(), "VIDEO_LIVE_API_BLOCKED"); Assert.AreEqual("clip", blocked.Items[0].Name);
+        var ready = EtsyMediaCenter.Preview(1, "shop", items.Where(x => x.Kind != "video"), false); Assert.AreEqual("READY_READ_ONLY", ready.Status); Assert.IsFalse(string.IsNullOrWhiteSpace(ready.Fingerprint));
+        var retry = EtsyMediaCenter.Retry("1", "timeout", 1, DateTimeOffset.UtcNow); Assert.AreEqual(2, retry.Attempt); Assert.ThrowsException<InvalidOperationException>(() => EtsyMediaCenter.EnsureDestructiveApproved(blocked, true));
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
