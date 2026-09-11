@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -87,6 +88,31 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual("PARTIAL", rows.Single(x => x.Channel == "allegro").Status);
         Assert.IsTrue(rows.Where(x => x.Channel is "joom" or "wish" or "fruugo" or "navlungo")
             .All(x => x.Status == "LIVE_API_BLOCKED" && x.Detail.Contains("HTTP isteği oluşturulmaz")));
+    }
+
+    [TestMethod]
+    public void BackupRestoreValidatesHashAndKeepsPreRestoreRollbackDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-drill-" + Guid.NewGuid().ToString("N"));
+        var backup = Path.Combine(root, "backup.zip");
+        try
+        {
+            var data = Path.Combine(root, "data");
+            Directory.CreateDirectory(data);
+            _ = new TrMarketplaceHubDesktop.Catalog.CatalogStore(data).Products();
+            File.WriteAllText(Path.Combine(data, "marker.txt"), "before");
+            var service = new TrMarketplaceHubDesktop.DataBackupService(data);
+            service.Backup(backup);
+            File.WriteAllText(Path.Combine(data, "marker.txt"), "changed");
+
+            var manifest = service.Validate(backup);
+            service.Restore(backup);
+
+            Assert.IsTrue(manifest.Files.Any(x => x.Path == "marker.txt"));
+            Assert.AreEqual("before", File.ReadAllText(Path.Combine(data, "marker.txt")));
+            Assert.IsTrue(Directory.GetDirectories(root, "data.pre-restore-*").Length == 1);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
     private static readonly List<string> requestBodies = new();
