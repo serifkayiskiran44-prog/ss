@@ -686,6 +686,15 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyMetadataCenterCachesProfilesAndBlocksStalePhysicalOrDigitalSelection()
+    {
+        var now = DateTimeOffset.UtcNow; var center = new EtsyMetadataCenter(); var profile = new EtsyMetadataProfile(1, 10, "Home", new Dictionary<string, string> { ["color"] = "red" }, "s1", "ship1", "return1", 3, false, now, "official-read"); center.Cache("p1", profile);
+        var ready = center.Select("p1", now, TimeSpan.FromDays(1)); Assert.AreEqual("READY", ready.Status); EtsyMetadataCenter.EnsureWriteApproved(ready, true); CollectionAssert.Contains(EtsyMetadataCenter.MapProperties(profile.Properties, new HashSet<string> { "color" }).ToArray(), "color=red");
+        var stale = center.Select("p1", now.AddDays(3), TimeSpan.FromDays(1)); Assert.AreEqual("BLOCKED", stale.Status); Assert.ThrowsException<InvalidOperationException>(() => EtsyMetadataCenter.EnsureWriteApproved(stale, true));
+        center.Cache("p2", profile with { Digital = true, ShippingProfileId = "ship1" }); Assert.AreEqual("BLOCKED", center.Select("p2", now, TimeSpan.FromDays(1)).Status);
+    }
+
+    [TestMethod]
     public void MetadataTemplatesApplyDefaultThenShopOverrideAndIgnoreStaleWrongChannel()
     {
         var templates = new[]
