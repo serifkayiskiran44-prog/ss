@@ -385,6 +385,21 @@ public sealed class SafetyAndStabilityTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [TestMethod]
+    public void SecurityThreatModelBlocksP1AndRedactsSyntheticSecret()
+    {
+        var assessment = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
+            new("SEC-1", "P1", "export", "Authorization: Bearer synthetic-secret"),
+            new("SEC-2", "P2", "ui", "manual review")]);
+        var clear = TrMarketplaceHubDesktop.SecurityThreatModel.Assess([
+            new("SEC-3", "P2", "fixture", "bounded")]);
+
+        Assert.AreEqual("BLOCKED", assessment.Status);
+        Assert.IsTrue(assessment.HasReleaseBlocker);
+        Assert.IsFalse(assessment.Findings[0].Detail.Contains("synthetic-secret", StringComparison.Ordinal));
+        Assert.AreEqual("CONDITIONAL", clear.Status);
+    }
+
     private static readonly List<string> requestBodies = new();
 
     private sealed class RecordingHandler(List<HttpRequestMessage> requests) : HttpMessageHandler
