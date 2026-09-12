@@ -60,6 +60,11 @@ public sealed class AuditStore
         safe = Regex.Replace(safe, "(?i)([?&](?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|token)=)[^&#\\s]+", "$1[redacted]");
         safe = Regex.Replace(safe, "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[\\\"']?[^\\\"'\\s,;&}]+", "$1=[redacted]");
         safe = MarketplaceConnectionStore.Redact(safe);
+        // Redact only the username segment of a local user-profile path (Windows %USERPROFILE% or a Unix/macOS
+        // home directory) so the rest of the path -- still useful for diagnostics -- survives; a path with no
+        // such segment (a relative path, a path under Program Files, etc.) is left completely untouched.
+        safe = Regex.Replace(safe, "(?i)([A-Za-z]:\\\\Users\\\\)[^\\\\\\s]+", "$1[user]");
+        safe = Regex.Replace(safe, "(?i)(/(?:home|Users)/)[^/\\s]+", "$1[user]");
         safe = Regex.Replace(safe, "(?i)\\b[\\w.%+-]+@[\\w.-]+\\.[a-z]{2,}\\b", "[pii-email]");
         safe = Regex.Replace(safe, "(?<!\\d)(?:\\+?90[ .-]?)?0?5\\d{2}[ .-]?\\d{3}[ .-]?\\d{2}[ .-]?\\d{2}(?!\\d)", "[pii-phone]");
         safe = Regex.Replace(safe, "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
