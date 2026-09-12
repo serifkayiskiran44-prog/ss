@@ -18,9 +18,13 @@ public static class DashboardPanel
         var title = new TextBlock { Text = "Genel bakış", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = Brushes.DarkSlateGray, VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(title, Dock.Left);
         toolbar.Children.Add(title);
+        // #809: store filter, persisted per data directory and resolved against the offered list.
+        var storeFilter = new ComboBox { Width = 220, DisplayMemberPath = "Label", Margin = new Thickness(0, 0, 8, 0), ToolTip = "Panoyu bir mağazaya daralt" };
+        DockPanel.SetDock(storeFilter, Dock.Right);
         var refresh = new Button { Content = "Durumu yenile", HorizontalAlignment = HorizontalAlignment.Right };
         DockPanel.SetDock(refresh, Dock.Right);
         toolbar.Children.Add(refresh);
+        toolbar.Children.Add(storeFilter);
         panel.Children.Add(toolbar);
         var status = new TextBlock { Text = "Yerel veriler yükleniyor…", Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 0, 4, 10) };
         panel.Children.Add(status);
@@ -41,7 +45,10 @@ public static class DashboardPanel
         trendGroup.Content = trends; panel.Children.Add(trendGroup);
 
         var service = new DashboardDataService(directory);
+        var preferences = new UiPreferenceStore(directory);
         DashboardSnapshot? lastSnapshot = null;
+        var storeScope = "tüm mağazalar";
+        var applyingStoreFilter = false;
         static string RouteFor(string key) => key switch { "products" or "out-of-stock" => "products", "orders" => "orders", "sync" => "sync", "xml" => "xml", _ => "connections" };
         // Navigation uses the short-lived revision-aware cache (#783); the explicit "Durumu yenile" click is
         // the user asking for an authoritative re-read and always bypasses it.
@@ -57,7 +64,23 @@ public static class DashboardPanel
                 foreach (var kpi in DashboardKpiFreshness.ForSnapshot(snapshot, DateTime.UtcNow))
                     AddCard(cards, kpi.Title, kpi.Value, RouteFor(kpi.Key), navigate, kpi.Freshness);
                 foreach (var quick in new[] { ("Kategoriler / markalar", "taxonomy"), ("Excel işlemleri", "excel"), ("Raporlar", "reports"), ("Mesaj / hata merkezi", "messages"), ("Ayarlar", "settings") }) AddCard(cards, quick.Item1, "Aç", quick.Item2, navigate);
-                ShowAnomalies(anomalies, snapshot, navigate);
+                applyingStoreFilter = true;
+                try
+                {
+                    var options = DashboardStoreFilter.Options(snapshot.Connections.Select(c => new DashboardStoreCandidate(c.Channel, c.ShopId, c.DisplayName, c.Enabled)).ToList());
+                    var selection = DashboardStoreFilter.Resolve(preferences.Get(DashboardStoreFilter.PreferenceKey), options);
+                    storeFilter.ItemsSource = options;
+                    storeFilter.SelectedItem = options.FirstOrDefault(o => o.Key == selection.Selected.Key) ?? options[0];
+                    storeScope = selection.Selected.Scope;
+                    if (selection.FellBack)
+                    {
+                        // The saved store is gone or switched off: say so and stop pointing at it.
+                        try { preferences.Set(DashboardStoreFilter.PreferenceKey, DashboardStoreFilter.AllStoresKey); } catch (Exception saveError) { System.Diagnostics.Debug.WriteLine(saveError.Message); }
+                        status.Text = selection.Notice;
+                    }
+                }
+                finally { applyingStoreFilter = false; }
+                ShowAnomalies(anomalies, snapshot, navigate, storeScope);
                 channels.ItemsSource = snapshot.Connections.Select(x => new { x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError }).ToList();
                 notifications.Children.Clear(); foreach (var item in snapshot.Notifications) AddNotification(notifications, item, navigate);
                 trends.ItemsSource = snapshot.OrderTrend.Select(x => new { DateLabel = x.Date.ToString("dd.MM.yyyy"), x.Orders, StockLabel = x.CurrentStock < 0 ? "—" : x.CurrentStock.ToString("N0") }).ToList();
@@ -77,18 +100,24 @@ public static class DashboardPanel
             }
             finally { refresh.IsEnabled = true; }
         }
+        storeFilter.SelectionChanged += async (_, _) =>
+        {
+            if (applyingStoreFilter || storeFilter.SelectedItem is not DashboardStoreOption chosen) return;
+            try { preferences.Set(DashboardStoreFilter.PreferenceKey, chosen.Key); } catch (Exception saveError) { System.Diagnostics.Debug.WriteLine(saveError.Message); }
+            await RefreshAsync(force: false);
+        };
         refresh.Click += async (_, _) => await RefreshAsync(force: true);
         _ = RefreshAsync(force: false);
         return root;
     }
 
     // #808: the tracked anomaly states as cards carrying impact, age and the next action, ordered by severity.
-    static void ShowAnomalies(Panel parent, DashboardSnapshot snapshot, Action<string> navigate)
+    static void ShowAnomalies(Panel parent, DashboardSnapshot snapshot, Action<string> navigate, string scope)
     {
         parent.Children.Clear();
         var view = DashboardAnomalies.Project(new DashboardAnomalyInput
         {
-            Scope = "tüm mağazalar",
+            Scope = scope,
             OversellRiskProducts = snapshot.OversellRiskProducts, OversellOldestUtc = snapshot.OversellOldestUtc,
             StaleSources = snapshot.StaleSources, StaleSourceOldestUtc = snapshot.StaleSourceOldestUtc,
             FailedSyncJobs = snapshot.FailedSyncs, FailedSyncOldestUtc = snapshot.FailedSyncOldestUtc,
