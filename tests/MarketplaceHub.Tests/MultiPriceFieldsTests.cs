@@ -30,7 +30,7 @@ public sealed class MultiPriceFieldsTests
         {
             var product = SeedProduct(store);
             store.AddPriceField(product.Id, new CatalogPriceField("Etsy sabit", 219.90m, "TRY"));
-            var policy = store.SavePricePolicy(new PricePolicy { Channel = "etsy", Shop = "shop-1", Formula = "x*2", Currency = "TRY", TryPerUnit = 1, PriceFieldName = "Etsy sabit" });
+            var policy = store.SavePricePolicy(new PricePolicy { Channel = "etsy", Shop = "shop-1", Formula = "x*2", Currency = "TRY", TryPerUnit = 1, PriceFieldName = "Etsy sabit", CommissionPercent = 0m, EstimatedShippingTry = 0m, TransactionCostTry = 0m, VatRatePercent = 0m });
 
             var preview = store.PreviewPrice(policy.Channel, policy.Shop, product.Id);
 
@@ -47,7 +47,7 @@ public sealed class MultiPriceFieldsTests
         try
         {
             var product = SeedProduct(store);
-            var policy = store.SavePricePolicy(new PricePolicy { Channel = "etsy", Shop = "shop-1", Formula = "x*2", Currency = "TRY", TryPerUnit = 1 });
+            var policy = store.SavePricePolicy(new PricePolicy { Channel = "etsy", Shop = "shop-1", Formula = "x*2", Currency = "TRY", TryPerUnit = 1, CommissionPercent = 0m, EstimatedShippingTry = 0m, TransactionCostTry = 0m, VatRatePercent = 0m });
 
             var preview = store.PreviewPrice(policy.Channel, policy.Shop, product.Id);
 
