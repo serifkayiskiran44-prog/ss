@@ -688,6 +688,7 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 
 ## #287 dirty product edit repair — 2026-09-12
 - Secondary tab context repaired: media/provenance now follow the editor selection and clear on deselection. One real STA/WPF regression added; full Release 121/121. Remaining product-card acceptance stays PARTIAL.
+- Product-card order report now reads persisted local orders by selected SKU and shows order count, quantity and latest marketplace/shop/order. Two focused regression tests; full Release 123/123. Remaining product-card acceptance stays PARTIAL.
 - [x] Explicit Kaydet/Vazgeç/İptal before abandoning an edited product, refreshing results or closing.
 - [x] Preserve selection/draft on Cancel, invalid input and stale save; persist across reopen on Save.
 - [x] Permanent real Windows STA/SQLite regression coverage: 10 cases; full Release 120/120.
