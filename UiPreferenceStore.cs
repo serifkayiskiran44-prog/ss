@@ -19,7 +19,7 @@ public sealed class UiPreferenceStore
         command.CommandText = "CREATE TABLE IF NOT EXISTS UiPreferences([Key] TEXT PRIMARY KEY,Value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS UiViews(Module TEXT NOT NULL,Name TEXT NOT NULL,Payload TEXT NOT NULL,UpdatedUtc TEXT NOT NULL,PRIMARY KEY(Module,Name));";
         command.ExecuteNonQuery();
     }
-    SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
+    SqliteConnection Open() { var c = SqliteConnectionPolicy.Open(connectionString); return c; }
     public string? Get(string key)
     {
         using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT Value FROM UiPreferences WHERE [Key]=$key"; command.Parameters.AddWithValue("$key", key); return command.ExecuteScalar() as string;

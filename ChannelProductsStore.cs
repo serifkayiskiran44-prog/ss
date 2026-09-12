@@ -11,7 +11,7 @@ public sealed class ChannelProductsStore
   connectionString=new SqliteConnectionStringBuilder{DataSource=Path.Combine(directory,"channel_products.db")}.ToString();
   using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="CREATE TABLE IF NOT EXISTS ChannelPlans(ChannelId TEXT NOT NULL,ShopId TEXT NOT NULL,ProductId TEXT NOT NULL,Json TEXT NOT NULL,PRIMARY KEY(ChannelId,ShopId,ProductId))";cmd.ExecuteNonQuery();
  }
- SqliteConnection Open(){var c=new SqliteConnection(connectionString);c.Open();return c;}
+ SqliteConnection Open(){var c=SqliteConnectionPolicy.Open(connectionString);return c;}
  static void Identity(string channel,string shop,string product){if(string.IsNullOrWhiteSpace(channel)||string.IsNullOrWhiteSpace(shop)||string.IsNullOrWhiteSpace(product))throw new ArgumentException("Kanal, mağaza anahtarı ve merkez ürün kimliği zorunlu.");}
  public ChannelProductPlan? Find(string channel,string shop,string product)
  {

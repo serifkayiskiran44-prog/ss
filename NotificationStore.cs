@@ -13,7 +13,7 @@ public sealed class NotificationStore
         Directory.CreateDirectory(directory); connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "notifications.db") }.ToString();
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "CREATE TABLE IF NOT EXISTS Notifications(Id TEXT PRIMARY KEY,Fingerprint TEXT NOT NULL UNIQUE,Severity TEXT NOT NULL,Channel TEXT NOT NULL,ShopId TEXT NOT NULL,Title TEXT NOT NULL,Detail TEXT NOT NULL,Acknowledged INTEGER NOT NULL,AtUtc TEXT NOT NULL)"; cmd.ExecuteNonQuery();
     }
-    SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
+    SqliteConnection Open() { var c = SqliteConnectionPolicy.Open(connectionString); return c; }
     public LocalNotification Add(string fingerprint, string severity, string channel, string shopId, string title, string detail)
     {
         if (string.IsNullOrWhiteSpace(fingerprint) || string.IsNullOrWhiteSpace(severity)) throw new ArgumentException("Bildirim fingerprint ve severity gerekli.");

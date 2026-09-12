@@ -12,7 +12,7 @@ public sealed class OrderArchiveStore
         connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "orders.db") }.ToString();
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "CREATE TABLE IF NOT EXISTS OrderArchive(Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,OrderId TEXT NOT NULL,ArchivedUtc TEXT NOT NULL,PRIMARY KEY(Marketplace,ShopId,OrderId))"; cmd.ExecuteNonQuery();
     }
-    SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
+    SqliteConnection Open() { var c = SqliteConnectionPolicy.Open(connectionString); return c; }
     public void Archive(string marketplace, string shopId, string orderId)
     { Validate(marketplace, shopId, orderId); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "INSERT OR IGNORE INTO OrderArchive VALUES($m,$s,$o,$at)"; cmd.Parameters.AddWithValue("$m", marketplace.Trim()); cmd.Parameters.AddWithValue("$s", shopId.Trim()); cmd.Parameters.AddWithValue("$o", orderId.Trim()); cmd.Parameters.AddWithValue("$at", DateTime.UtcNow.ToString("O")); cmd.ExecuteNonQuery(); }
     public void Restore(string marketplace, string shopId, string orderId)

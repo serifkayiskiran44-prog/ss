@@ -41,7 +41,7 @@ public sealed class GlobalSearchIndexStore
         command.ExecuteNonQuery();
     }
 
-    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); using var pragma = connection.CreateCommand(); pragma.CommandText = "PRAGMA foreign_keys=ON;PRAGMA busy_timeout=15000;"; pragma.ExecuteNonQuery(); return connection; }
+    SqliteConnection Open() { var connection = SqliteConnectionPolicy.Open(connectionString); using var pragma = connection.CreateCommand(); pragma.CommandText = "PRAGMA foreign_keys=ON;PRAGMA busy_timeout=15000;"; pragma.ExecuteNonQuery(); return connection; }
 
     public void ReplaceAll(IReadOnlyList<GlobalSearchIndexEntry> entries, CancellationToken cancellationToken = default)
     {

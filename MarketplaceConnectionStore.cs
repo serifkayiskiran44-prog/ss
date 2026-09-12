@@ -71,7 +71,7 @@ public sealed class MarketplaceConnectionStore
         command.ExecuteNonQuery();
     }
 
-    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
+    SqliteConnection Open() { var connection = SqliteConnectionPolicy.Open(connectionString); return connection; }
 
     public IReadOnlyList<MarketplaceConnection> List(bool includeDefaults = true)
     {

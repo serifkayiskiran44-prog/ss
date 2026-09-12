@@ -316,3 +316,4 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M238 — Etsy live safety: currency guard ve zero-stock preview düzeltmesi teslim edildi.
 # M239 — shadow data cleanup: legacy HubData shipping assembly’den çıkarıldı, silme yapılmadı.
 # M240 — Windows CI: repo içi test discovery, TRX ve same-SHA publish artifact workflow’u teslim edildi.
+# #282 — SQLite startup repair: kalıcı store’lar ortak bağlantı politikası kullanıyor; foreign keys, WAL, busy timeout ve synchronous ayarları gerçek SQLite fixture ile doğrulandı.

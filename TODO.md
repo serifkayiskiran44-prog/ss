@@ -661,3 +661,4 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # M238: Etsy currency mismatch/unknown guard ve zero-stock preview safety eklendi; FX/live write yok.
 # M239: HubData.cs production compile’dan çıkarıldı; hub.db read-only audit ile korunuyor.
 # M240: Windows CI aynı-SHA Release test/TRX/self-contained publish workflow’u eklendi.
+# #282 forward repair: tüm yerel SQLite store açılışları ortak foreign-key/WAL/busy-timeout/synchronous bağlantı politikasına bağlandı; bağımsız PRAGMA testi eklendi.

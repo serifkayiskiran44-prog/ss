@@ -27,7 +27,7 @@ public sealed class ExcelProfileStore
         connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "excel-profiles.db") }.ToString();
         using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "CREATE TABLE IF NOT EXISTS ExcelProfiles(Id TEXT PRIMARY KEY,Name TEXT NOT NULL,Json TEXT NOT NULL,UpdatedUtc TEXT NOT NULL)"; command.ExecuteNonQuery();
     }
-    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
+    SqliteConnection Open() { var connection = SqliteConnectionPolicy.Open(connectionString); return connection; }
     public void Save(ExcelImportProfile profile)
     {
         if (string.IsNullOrWhiteSpace(profile.Name) || profile.Name.Trim().Length > 120) throw new InvalidOperationException("Excel profil adı 1-120 karakter olmalı.");
