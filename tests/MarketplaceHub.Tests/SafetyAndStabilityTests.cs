@@ -841,6 +841,28 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void EtsyCapabilityAuditClassifiesWebhookMessageAndReturnPerOfficialDocs()
+    {
+        var webhook = EtsyCapabilityAudit.OfficialManifest.Single(x => x.Name == "webhooks-order-lifecycle");
+        Assert.AreEqual("PARTIAL", webhook.Status, "Only order.paid/canceled/shipped/delivered exist today; other events are not yet released.");
+
+        var message = EtsyCapabilityAudit.OfficialManifest.Single(x => x.Name == "conversations-message");
+        Assert.AreEqual("UNSUPPORTED", message.Status, "Etsy Open API v3 has no conversations/messages endpoint at all.");
+
+        var refund = EtsyCapabilityAudit.OfficialManifest.Single(x => x.Name == "receipt-refund");
+        Assert.AreEqual("UNSUPPORTED", refund.Status, "Payments/ledger endpoints are read-only; there is no refund-creation endpoint.");
+
+        Assert.IsTrue(EtsyCapabilityAudit.MissingOrBlocked().Select(x => x.Name).Contains("conversations-message"));
+        Assert.IsTrue(EtsyCapabilityAudit.MissingOrBlocked().Select(x => x.Name).Contains("receipt-refund"));
+
+        // UNSUPPORTED/PARTIAL entries with a placeholder (non-grantable) Scope must never count as a "missing" OAuth
+        // scope: Etsy itself offers no scope to grant for a capability it doesn't expose via API at all.
+        var ready = EtsyOAuthReadiness.Evaluate("SellerApp", new[] { "shops_r", "listings_r", "listings_w", "transactions_r" }, true);
+        Assert.AreEqual("READY", ready.Status);
+        CollectionAssert.DoesNotContain(ready.MissingScopes.ToArray(), "n/a");
+    }
+
+    [TestMethod]
     public void EtsyOAuthReadinessRequiresScopesAndClassifiesOperatorErrors()
     {
         var ready = EtsyOAuthReadiness.Evaluate("SellerApp", new[] { "shops_r", "listings_r", "listings_w", "transactions_r" }, true); Assert.AreEqual("READY", ready.Status);
