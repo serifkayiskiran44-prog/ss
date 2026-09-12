@@ -75,8 +75,8 @@ public partial class CatalogStore
    if(product.Stock<pair.Value)throw new InvalidOperationException($"SKU {pair.Key}: stok yetersiz ({product.Stock}/{pair.Value}).");
    var movement=new OrderStockMovement(product.Id,product.Sku,pair.Value,product.Stock,product.Stock-pair.Value);
    product.Stock=movement.StockAfter;
-   // Preserve local sold stock when supplier XML refreshes its independent stock figure.
-   product.LockStock=true;product.UpdatedUtc=at;Put(c,"CatalogProducts",product.Id,product,tx);
+   // The order movement is a transient local effect; do not turn it into the user's manual supplier-lock.
+   product.UpdatedUtc=at;Put(c,"CatalogProducts",product.Id,product,tx);
    using var cmd=c.CreateCommand();cmd.Transaction=tx;
    cmd.CommandText="INSERT INTO OrderStockMovements VALUES($marketplace,$shop,$order,$product,$sku,$quantity,$before,$after,$at)";
    OrderStockIdentityParams(cmd,marketplace,shopId,orderId);cmd.Parameters.AddWithValue("$product",product.Id);cmd.Parameters.AddWithValue("$sku",pair.Key);cmd.Parameters.AddWithValue("$quantity",pair.Value);cmd.Parameters.AddWithValue("$before",movement.StockBefore);cmd.Parameters.AddWithValue("$after",movement.StockAfter);cmd.Parameters.AddWithValue("$at",at.ToString("O"));cmd.ExecuteNonQuery();movements.Add(movement);

@@ -12,12 +12,39 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using TrMarketplaceHubDesktop;
+using TrMarketplaceHubDesktop.Catalog;
 
 namespace MarketplaceHub.Tests;
 
 [TestClass]
 public sealed class SafetyAndStabilityTests
 {
+    [TestMethod]
+    public void OrderStockEffectDoesNotBecomePermanentSupplierLock()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-stock-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var source = new XmlSource { Id = "supplier-1", Name = "Supplier", Location = "fixture.xml", Fields = new Dictionary<string, string> { ["Sku"] = "Sku" } };
+            catalog.SaveSource(source);
+            catalog.ApplyMigration([new CatalogProduct { Id = "p-1", Sku = "SKU-1", Name = "Product", Price = 10, Stock = 5, Active = true }], source.Id);
+            catalog.ApplyOrderStock("etsy", "shop-a", "order-1", [new OrderItem { Sku = "SKU-1", Quantity = 1 }]);
+
+            var refreshed = new CatalogProduct { Sku = "SKU-1", Name = "Product", Price = 10, Stock = 4, Active = true };
+            catalog.ApplyMigration([refreshed], source.Id);
+
+            var product = catalog.Products().Single(x => x.Sku == "SKU-1");
+            Assert.AreEqual(4, product.Stock);
+            Assert.IsFalse(product.LockStock);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
     [TestMethod]
     public void MainWindowUsesIndependentChannelStatusVisuals()
     {
