@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -19,18 +20,26 @@ public sealed class ProductCardDirtyDraftTests
     {
         Run(f => {
             var workspace = (TabControl)((TabItem)((ScrollViewer)f.Editor.Parent).Parent).Parent;
-            var media = (StackPanel)((ScrollViewer)((TabItem)workspace.Items[1]).Content).Content;
-            var provenance = (StackPanel)((ScrollViewer)((TabItem)workspace.Items[3]).Content).Content;
-            workspace.SelectedIndex = 3; f.Drain();
+            // Sections are addressed by their catalogue key (#801), not by position: the tab order is a design
+            // decision that has already changed once, and an index-based test silently follows it to the wrong pane.
+            TabItem Section(string key) => workspace.Items.OfType<TabItem>().Single(t => (string)t.Tag == key);
+            StackPanel Body(string key) => (StackPanel)((ScrollViewer)Section(key).Content).Content;
+            // A section body may nest its fields under headings and hints, so the fields are searched for in the
+            // subtree rather than assumed to be the panel's direct children.
+            static IEnumerable<TextBox> Fields(DependencyObject node) =>
+                LogicalTreeHelper.GetChildren(node).OfType<DependencyObject>().SelectMany(c => c is TextBox box ? new[] { box } : Fields(c).ToArray());
+            var media = Body("media");
+            var provenance = Body("audit");
+            workspace.SelectedItem = Section("audit"); f.Drain();
             Assert.AreSame(f.Editor.DataContext, provenance.DataContext);
-            Assert.AreEqual("fixture", provenance.Children.OfType<TextBox>().First().Text);
+            Assert.AreEqual("fixture", Fields(provenance).First().Text, "The audit section leads with the product's source identity.");
             f.Grid.SelectedItem = f.Row("B"); f.Drain();
             Assert.AreEqual("B", ((CatalogProduct)provenance.DataContext).Sku);
-            workspace.SelectedIndex = 1; f.Drain();
+            workspace.SelectedItem = Section("media"); f.Drain();
             Assert.AreSame(f.Editor.DataContext, media.DataContext);
             f.Grid.SelectedItem = null; f.Drain();
             Assert.IsNull(media.DataContext);
-            Assert.IsTrue(media.Children.OfType<TextBox>().All(x => x.Text == ""));
+            Assert.IsTrue(Fields(media).All(x => x.Text == ""), "Clearing the selection empties the section's fields.");
         });
     }
 

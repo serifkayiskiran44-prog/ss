@@ -109,15 +109,31 @@ public partial class MainWindow : Window
   productEditor.Children.Add(Button("Ürünü ve kilitleri kaydet",()=>{SaveProductEdit();RefreshProducts();Log("Ürün ve alan kilitleri kaydedildi.");}));productEditor.IsEnabled=false;
   Tab("Ürün havuzu",Split(Dock(bar,BuildProductSelectionBar(),BuildProductInspectHost(products)),BuildProductWorkspace(),350));
  }
+ // #801: every workspace tab carries its catalogue key in Tag, so a deep link ("products#media"), the tab strip
+ // and the restore-on-return path all address the same section by the same name.
+ TabControl? productWorkspaceTabs;
+ readonly ProductWorkspaceSectionMemory productSectionMemory = new();
+ internal void SelectProductSection(string? sectionKey)
+ {
+  if (productWorkspaceTabs is null) return;
+  var key = productSectionMemory.Resolve(sectionKey);
+  var tab = productWorkspaceTabs.Items.OfType<TabItem>().FirstOrDefault(t => (t.Tag as string) == key);
+  if (tab is null) return;
+  productWorkspaceTabs.SelectedItem = tab;
+  // Focus restore: the section the operator returns to is the one that takes the keyboard, not the first tab.
+  tab.Dispatcher.BeginInvoke(new Action(() => (tab.Content as UIElement)?.MoveFocus(new System.Windows.Input.TraversalRequest(System.Windows.Input.FocusNavigationDirection.First))), System.Windows.Threading.DispatcherPriority.Input);
+ }
  TabControl BuildProductWorkspace()
  {
-  var tabs=new TabControl();
+  var tabs=new TabControl();productWorkspaceTabs=tabs;
+  tabs.SelectionChanged+=(_,e)=>{if(e.OriginalSource==tabs&&tabs.SelectedItem is TabItem selected)productSectionMemory.Remember(selected.Tag as string);};
   tabs.SetBinding(FrameworkElement.DataContextProperty,new Binding("DataContext"){Source=productEditor,Mode=BindingMode.OneWay});
-  tabs.Items.Add(new TabItem{Header="Genel",Content=Scroll(productEditor)});
-  tabs.Items.Add(new TabItem{Header="Görseller / açıklama",Content=Scroll(ProductReadOnlyFields(("Açıklama","Description"),("Görsel URL'leri","ImageUrls")))});
-  tabs.Items.Add(new TabItem{Header="Pazaryerleri",Content=Scroll(new StackPanel{Children={Heading("Kanal ve mağaza bağları"),productChannelSummaryMirror,Hint("Eşleştirme ve ilan durumları yerel kanal planlarından okunur; canlı write bu sekmeden başlatılmaz.")}})});
-  tabs.Items.Add(new TabItem{Header="XML / provenance",Content=Scroll(ProductReadOnlyFields(("Kaynak kimliği","SourceId"),("Kaynak türü","SourceKind"),("Fiyat kaynağı","PriceSource"),("Stok kaynağı","StockSource"),("Medya kaynağı","MediaSource")))});
-  tabs.Items.Add(new TabItem{Header="Sipariş raporu",Content=Scroll(new StackPanel{Children={Heading("Ürün sipariş raporu"),productOrderSummary,Hint("Özet yalnız yerel sipariş kayıtlarından üretilir; bu sekme canlı marketplace çağrısı yapmaz."),ProductReadOnlyFields(("SKU","Sku"),("Ürün adı","Name"))}})});
+  tabs.Items.Add(new TabItem{Header="Kimlik",Tag="identity",Content=Scroll(productEditor)});
+  tabs.Items.Add(new TabItem{Header="İçerik",Tag="content",Content=Scroll(ProductReadOnlyFields(("Başlık","Name"),("Açıklama","Description"),("Marka","Brand"),("Kategori","Category")))});
+  tabs.Items.Add(new TabItem{Header="Fiyat / stok",Tag="price-stock",Content=Scroll(ProductReadOnlyFields(("Satış fiyatı","Price"),("Satış para birimi","Currency"),("Alış fiyatı","Cost"),("Alış para birimi","CostCurrency"),("KDV oranı (%)","VatRate"),("Stok","Stock"),("Fiyat kaynağı","PriceSource"),("Stok kaynağı","StockSource")))});
+  tabs.Items.Add(new TabItem{Header="Görseller",Tag="media",Content=Scroll(ProductReadOnlyFields(("Görsel URL'leri","ImageUrls"),("Medya kaynağı","MediaSource")))});
+  tabs.Items.Add(new TabItem{Header="Kanallar",Tag="channel",Content=Scroll(new StackPanel{Children={Heading("Kanal ve mağaza bağları"),productChannelSummaryMirror,Hint("Eşleştirme ve ilan durumları yerel kanal planlarından okunur; canlı write bu sekmeden başlatılmaz.")}})});
+  tabs.Items.Add(new TabItem{Header="Geçmiş",Tag="audit",Content=Scroll(new StackPanel{Children={Heading("Ürün sipariş raporu"),productOrderSummary,Hint("Özet yalnız yerel sipariş kayıtlarından üretilir; bu sekme canlı marketplace çağrısı yapmaz."),ProductReadOnlyFields(("Kaynak kimliği","SourceId"),("Kaynak türü","SourceKind"),("Son güncelleme","UpdatedUtc"))}})});
   return tabs;
  }
  static StackPanel ProductReadOnlyFields(params (string Label,string Property)[] fields)

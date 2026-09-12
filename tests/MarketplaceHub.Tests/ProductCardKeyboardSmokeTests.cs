@@ -19,7 +19,8 @@ public sealed class ProductCardKeyboardSmokeTests
     {
         Run(f => {
             var workspace = (TabControl)((TabItem)((ScrollViewer)f.Editor.Parent).Parent).Parent;
-            Assert.AreEqual(5, workspace.Items.Count, "Product card must expose all five workspace tabs.");
+            CollectionAssert.AreEqual(ProductWorkspaceSections.All.Select(x => x.Key).ToArray(), workspace.Items.OfType<TabItem>().Select(t => (string)t.Tag).ToArray(),
+                "The workspace must expose every catalogued section, in the catalogue's order (#801).");
 
             for (var i = 0; i < workspace.Items.Count; i++)
             {
