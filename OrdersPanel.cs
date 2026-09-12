@@ -48,7 +48,7 @@ public static class OrdersPanel
     var receipt=catalog.GetOrderStockStatus(o.Marketplace,o.ShopId,o.OrderId);
     if(receipt!=null){detail.Children.Add(Text($"Stok işlendi: {receipt.AppliedUtc.ToLocalTime():g}"));foreach(var movement in receipt.Movements)detail.Children.Add(Text($"{movement.Sku}: {movement.StockBefore} → {movement.StockAfter} (−{movement.Quantity})"));}
     else detail.Children.Add(Text("Bu sipariş için stok düşümü kaydı yok. Stoğunu daha önce elle düşürdüğünüz siparişlerde çalıştırmayın."));
-    detail.Children.Add(Text("Yalnız kaydedilmiş sipariş satırları kullanılır. SKU tek ürüne eşleşmelidir; eksik/çakışan SKU veya yetersiz stokta tüm işlem geri alınır. İşlenen ürünün XML stok kilidi etkinleştirilir; böylece tedarikçi güncellemesi satılan stoğu geri yazmaz. Pazaryerlerine gönderim yapılmaz."));
+    detail.Children.Add(Text("Yalnız kaydedilmiş sipariş satırları kullanılır. SKU tek ürüne eşleşmelidir; eksik/çakışan SKU veya yetersiz stokta tüm işlem geri alınır. Düşüm yerel ve geçicidir: XML stok kilidi etkinleştirilmez, bir sonraki tedarikçi feed'i stoğu tedarikçinin değeriyle yeniden yazar (kalıcı kilit için ürün kartındaki stok kilidini kullanın). Pazaryerlerine gönderim yapılmaz."));
     if(receipt==null){
      var catalogProducts=catalog.Products();
      var savedPreview=store.ReadAll().Single(x=>x.Marketplace==o.Marketplace&&x.ShopId==o.ShopId&&x.OrderId==o.OrderId);
@@ -62,7 +62,7 @@ public static class OrdersPanel
     applyStock.Click+=(_,_)=>{try{
      var saved=store.ReadAll().Single(x=>x.Marketplace==o.Marketplace&&x.ShopId==o.ShopId&&x.OrderId==o.OrderId);
      var preview=new OrderStockDecisionService(catalog).CreatePreview(saved);var result=new OrderStockDecisionService(catalog).ApplyApproved(preview,true);
-     catalogChanged?.Invoke();Edit(saved);status.Text=result.AlreadyApplied?"Bu sipariş zaten işlendi; stok tekrar düşmedi.":"Sipariş stoğu tek işlemde düşüldü. XML stok kilidi etkin; dış pazaryerlerine gönderim yapılmadı.";
+     catalogChanged?.Invoke();Edit(saved);status.Text=result.AlreadyApplied?"Bu sipariş zaten işlendi; stok tekrar düşmedi.":"Sipariş stoğu tek işlemde düşüldü. Düşüm yerel ve geçicidir (XML stok kilidi etkinleştirilmedi); dış pazaryerlerine gönderim yapılmadı.";
     }catch(InvalidOperationException ex){status.Text=ex.Message;}catch(ArgumentException ex){status.Text=ex.Message;}catch{status.Text="Stok işlemi tamamlanamadı; kayıtlar korunur. Yenileyip tekrar deneyin.";}};
    }
    detail.Children.Add(Text("Paketler / gözlem geçmişi",16));

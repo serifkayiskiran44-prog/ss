@@ -32,7 +32,9 @@ public sealed class OrdersStore
  public void SaveManual(OrderSnapshot order)
  {
   var copy=order.Copy();OrdersRules.Validate(copy);
-  foreach(var s in copy.Shipments){var last=s.Events.LastOrDefault();if(last==null||last.State!=s.State){s.Source="Yerel / manuel";s.Events.Add(new(DateTimeOffset.UtcNow,s.State,s.Source));}}
+  // Manual packages take the same carrier normalization as API packages (#791): "aras" typed by the operator and
+  // "Aras Kargo" from Etsy must be one carrier in every label and filter.
+  foreach(var s in copy.Shipments){s.Carrier=OrderNormalizer.NormalizeCarrier(s.Carrier);var last=s.Events.LastOrDefault();if(last==null||last.State!=s.State){s.Source="Yerel / manuel";s.Events.Add(new(DateTimeOffset.UtcNow,s.State,s.Source));}}
   if(copy.Source!="Etsy API")copy.Source="Yerel / manuel";
   Save([copy],true);
  }
