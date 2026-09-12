@@ -1,4 +1,4 @@
-#nullable enable
+using Microsoft.Data.Sqlite;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
@@ -19,6 +19,29 @@ namespace MarketplaceHub.Tests;
 [TestClass]
 public sealed class SafetyAndStabilityTests
 {
+    [TestMethod]
+    public void SqliteConnectionPolicy_AppliesSharedSafetyPragmas()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-sqlite-policy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var connection = SqliteConnectionPolicy.Open(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "policy.db") }.ToString());
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA foreign_keys;";
+            Assert.AreEqual(1L, (long)command.ExecuteScalar()!);
+            command.CommandText = "PRAGMA busy_timeout;";
+            Assert.AreEqual(SqliteConnectionPolicy.BusyTimeoutMilliseconds, Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture));
+            command.CommandText = "PRAGMA journal_mode;";
+            Assert.AreEqual("wal", Convert.ToString(command.ExecuteScalar(), CultureInfo.InvariantCulture), true);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
     [TestMethod]
     public void CatalogImport_BlocksMassZeroSupplierFeedBeforeWrite()
     {
