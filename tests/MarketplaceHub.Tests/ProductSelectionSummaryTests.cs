@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using TrMarketplaceHubDesktop;
@@ -10,6 +11,10 @@ using TrMarketplaceHubDesktop.Catalog;
 [TestClass]
 public sealed class ProductSelectionSummaryTests
 {
+    // The bar formats counts for the operator's locale, so the expectation has to be computed the same way:
+    // the CI runner is en-US ("1,000") while a Turkish desktop shows "1.000".
+    static string N(int value) => value.ToString("N0", CultureInfo.CurrentCulture);
+
     static CatalogProduct Product(string sku, Action<CatalogProduct>? tweak = null)
     {
         var p = new CatalogProduct { Id = "id-" + sku, Sku = sku, Name = "Ürün " + sku, Active = true, Price = 10, Stock = 1 };
@@ -32,9 +37,9 @@ public sealed class ProductSelectionSummaryTests
 
         var thousand = ProductSelectionSummary.Describe(visible, visible, 5000);
         Assert.AreEqual(1000, thousand.Count);
-        StringAssert.Contains(thousand.Headline, "1.000 ürün seçildi");
-        StringAssert.Contains(thousand.ScopeText, "1.000", "The scope says what the selection covers...");
-        StringAssert.Contains(thousand.ScopeText, "5.000", "...against the full match count, so 'select all' on a page is not mistaken for the whole filter.");
+        StringAssert.Contains(thousand.Headline, N(1000) + " ürün seçildi");
+        StringAssert.Contains(thousand.ScopeText, N(1000), "The scope says what the selection covers...");
+        StringAssert.Contains(thousand.ScopeText, N(5000), "...against the full match count, so 'select all' on a page is not mistaken for the whole filter.");
     }
 
     [TestMethod]
