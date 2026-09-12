@@ -24,7 +24,16 @@ public sealed record DashboardSnapshot(
     DateTime GeneratedUtc,
     IReadOnlyList<DashboardConnectionRow> Connections,
     IReadOnlyList<DashboardNotification> Notifications,
-    IReadOnlyList<DashboardTrendPoint> OrderTrend);
+    IReadOnlyList<DashboardTrendPoint> OrderTrend)
+{
+    // Per-KPI data times (#807). Additive and null-defaulted: a snapshot from before this existed reports
+    // "veri zamanı bilinmiyor" rather than borrowing GeneratedUtc, which is when the board was drawn, not when
+    // the figure was last true.
+    public DateTime? ProductsAtUtc { get; init; }
+    public DateTime? OrdersAtUtc { get; init; }
+    public DateTime? SyncAtUtc { get; init; }
+    public DateTime? ConnectionsAtUtc { get; init; }
+}
 
 public static class DashboardFreshnessEvaluator
 {
@@ -181,7 +190,14 @@ public sealed class DashboardDataService
             DateTime.UtcNow,
             connectionRows,
             notifications,
-            trend);
+            trend)
+        {
+            // When each figure was last true, taken from the records themselves rather than from now (#807).
+            ProductsAtUtc = products.Count == 0 ? null : products.Max(x => x.UpdatedUtc),
+            OrdersAtUtc = orders.Count == 0 ? null : orders.Max(x => x.UpdatedAt).UtcDateTime,
+            SyncAtUtc = sync.Count == 0 ? null : sync.Max(x => x.UpdatedUtc),
+            ConnectionsAtUtc = connectionRows.Count == 0 ? null : connectionRows.Where(x => x.LastTestUtc.HasValue).Select(x => x.LastTestUtc!.Value).DefaultIfEmpty().Max() is { } tested && tested != default ? tested : null,
+        };
     }
 
     static bool IsOpen(OrderSnapshot order) => order.Shipments.Count == 0 || order.Shipments.Any(shipment => shipment.State is not ("Delivered" or "Returned"));

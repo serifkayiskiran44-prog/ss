@@ -39,6 +39,8 @@ public static class DashboardPanel
         trendGroup.Content = trends; panel.Children.Add(trendGroup);
 
         var service = new DashboardDataService(directory);
+        DashboardSnapshot? lastSnapshot = null;
+        static string RouteFor(string key) => key switch { "products" or "out-of-stock" => "products", "orders" => "orders", "sync" => "sync", "xml" => "xml", _ => "connections" };
         // Navigation uses the short-lived revision-aware cache (#783); the explicit "Durumu yenile" click is
         // the user asking for an authoritative re-read and always bypasses it.
         async Task RefreshAsync(bool force)
@@ -48,7 +50,10 @@ public static class DashboardPanel
             {
                 var snapshot = await Task.Run(() => service.Load(bypassCache: force));
                 cards.Children.Clear();
-                AddCard(cards, "Aktif ürün", snapshot.ActiveProducts.ToString("N0"), "products", navigate); AddCard(cards, "Stokta olmayan", snapshot.OutOfStockProducts.ToString("N0"), "products", navigate); AddCard(cards, "Açık sipariş", snapshot.OpenOrders.ToString("N0"), "orders", navigate); AddCard(cards, "Sync hatası", snapshot.FailedSyncs.ToString("N0"), "sync", navigate); AddCard(cards, "XML kaynağı", snapshot.XmlSources.ToString("N0"), "xml", navigate); AddCard(cards, "Bağlantı uyarısı", snapshot.ConnectionIssues.ToString("N0"), "connections", navigate);
+                lastSnapshot = snapshot;
+                // #807: every card carries its own data time, coverage and fresh/stale state.
+                foreach (var kpi in DashboardKpiFreshness.ForSnapshot(snapshot, DateTime.UtcNow))
+                    AddCard(cards, kpi.Title, kpi.Value, RouteFor(kpi.Key), navigate, kpi.Freshness);
                 foreach (var quick in new[] { ("Kategoriler / markalar", "taxonomy"), ("Excel işlemleri", "excel"), ("Raporlar", "reports"), ("Mesaj / hata merkezi", "messages"), ("Ayarlar", "settings") }) AddCard(cards, quick.Item1, "Aç", quick.Item2, navigate);
                 channels.ItemsSource = snapshot.Connections.Select(x => new { x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError }).ToList();
                 notifications.Children.Clear(); foreach (var item in snapshot.Notifications) AddNotification(notifications, item, navigate);
@@ -59,6 +64,13 @@ public static class DashboardPanel
             catch (Exception error)
             {
                 status.Text = MarketplaceConnectionStore.Redact(error.Message);
+                // #807: a refresh that failed must not leave the previous figures looking current.
+                if (lastSnapshot is { } previous)
+                {
+                    cards.Children.Clear();
+                    foreach (var kpi in DashboardKpiFreshness.ForSnapshot(previous, DateTime.UtcNow))
+                        AddCard(cards, kpi.Title, kpi.Value, RouteFor(kpi.Key), navigate, DashboardKpiFreshness.AfterRefreshFailure(kpi.Freshness));
+                }
             }
             finally { refresh.IsEnabled = true; }
         }
@@ -69,10 +81,17 @@ public static class DashboardPanel
 
     static void AddColumn(DataGrid grid, string header, string path, double width) => grid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new System.Windows.Data.Binding(path), Width = width });
 
-    static void AddCard(Panel parent, string label, string value, string route, Action<string> navigate)
+    static void AddCard(Panel parent, string label, string value, string route, Action<string> navigate, DashboardKpiFreshnessInfo? freshness = null)
     {
-        var button = new Button { Content = new StackPanel { Children = { new TextBlock { Text = label, FontSize = 12 }, new TextBlock { Text = value, FontSize = 25, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 6, 0, 0) } } }, Focusable = true, HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.White, Foreground = Brushes.DarkSlateGray, BorderBrush = new SolidColorBrush(Color.FromRgb(220, 227, 234)), MinHeight = 85, Margin = new Thickness(4) };
-        button.SetValue(AutomationProperties.NameProperty, label);
+        var content = new StackPanel { Children = { new TextBlock { Text = label, FontSize = 12 }, new TextBlock { Text = value, FontSize = 25, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 6, 0, 0) } } };
+        if (freshness is not null)
+        {
+            // Words, not just colour: a stale card must read as stale on a monochrome or high-contrast display.
+            content.Children.Add(new TextBlock { Text = (freshness.IsStale ? "⚠ " : "") + freshness.Label, FontSize = 10, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Foreground = new SolidColorBrush(freshness.IsStale ? Color.FromRgb(160, 82, 22) : Color.FromRgb(87, 112, 125)) });
+            content.Children.Add(new TextBlock { Text = "Kapsam: " + freshness.Scope, FontSize = 10, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+        }
+        var button = new Button { Content = content, Focusable = true, HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.White, Foreground = Brushes.DarkSlateGray, BorderBrush = new SolidColorBrush(freshness?.IsStale == true ? Color.FromRgb(196, 132, 22) : Color.FromRgb(220, 227, 234)), MinHeight = 85, Margin = new Thickness(4) };
+        button.SetValue(AutomationProperties.NameProperty, freshness is null ? label : $"{label}: {value}, {freshness.Label}, kapsam {freshness.Scope}");
         if (route != "dashboard") button.Click += (_, _) => navigate(route);
         parent.Children.Add(button);
     }
