@@ -121,7 +121,9 @@ public sealed class ImportRepairIntegrationTests
             await Task.Delay(10);
             await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => coordinator.ApplyWithUndoAsync(store, new XmlSource { Id = "excel-source", Currency = "USD", DecimalSeparator = "." }, decisions.Preview, Enumerable.Range(0, decisions.Preview.Rows.Count).ToArray(), path, profile, hold.Token));
             hold.Cancel();
-            await Assert.ThrowsExceptionAsync<OperationCanceledException>(() => first);
+            var cancelled = false;
+            try { await first; } catch (OperationCanceledException) { cancelled = true; }
+            Assert.IsTrue(cancelled, "İptal edilen Excel uygulaması iptal istisnası döndürmelidir.");
         }
         finally { Cleanup(root); }
     }
