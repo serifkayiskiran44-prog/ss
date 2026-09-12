@@ -31,7 +31,10 @@ public partial class CatalogStore
  {
   ValidateOrderStockIdentity(marketplace,shopId,orderId);
   using var c=Open();using var cmd=c.CreateCommand();
-  cmd.CommandText="SELECT Json FROM OrderStockReceipts WHERE Marketplace=$marketplace AND ShopId=$shop AND OrderId=$order";
+  // Marketplace compares case-insensitively (#788): orders and receipts keep the source casing ("Yerel", "etsy")
+  // while the order-exception queue lower-cases its keys, and the restock preview used to miss every receipt of a
+  // mixed-case marketplace because of it. Shop and order ids stay exact.
+  cmd.CommandText="SELECT Json FROM OrderStockReceipts WHERE Marketplace=$marketplace COLLATE NOCASE AND ShopId=$shop AND OrderId=$order";
   OrderStockIdentityParams(cmd,marketplace,shopId,orderId);
   return cmd.ExecuteScalar() is string json?JsonSerializer.Deserialize<OrderStockReceipt>(json):null;
  }
@@ -50,7 +53,7 @@ public partial class CatalogStore
   using var c=Open();using var tx=c.BeginTransaction(deferred:false);
   using(var find=c.CreateCommand())
   {
-   find.Transaction=tx;find.CommandText="SELECT Payload,Json FROM OrderStockReceipts WHERE Marketplace=$marketplace AND ShopId=$shop AND OrderId=$order";
+   find.Transaction=tx;find.CommandText="SELECT Payload,Json FROM OrderStockReceipts WHERE Marketplace=$marketplace COLLATE NOCASE AND ShopId=$shop AND OrderId=$order";
    OrderStockIdentityParams(find,marketplace,shopId,orderId);
    using var reader=find.ExecuteReader();
    if(reader.Read())
