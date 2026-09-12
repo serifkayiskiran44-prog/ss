@@ -332,3 +332,8 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 8. **DONE — CI/Publish:** `.github/workflows/windows-release-evidence.yml` restore adımı `-r win-x64` ile publish runtime hedefini hazırlar; aynı commit için `dotnet build`, tam Release test, runtime restore ve `dotnet publish ... -r win-x64 --self-contained true` doğrulandı. Yerel artifact: `Windows-Current/TrMarketplaceHubDesktop.exe`. Canlı marketplace write yapılmadı; credential/production connector kanıtı `LIVE_API_BLOCKED` olarak korunuyor.
 
 **Verification commands:** `dotnet build TrMarketplaceHubDesktop.csproj -c Release --no-restore`; `dotnet test tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=full-final.trx" --results-directory TestResults` (106/106); `dotnet restore tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj -r win-x64`; `dotnet publish TrMarketplaceHubDesktop.csproj -c Release -r win-x64 --self-contained true -o Windows-Current --no-restore`; `git diff --check`.
+#285 Profit/price repair — implementation evidence
+- Shared `MoneyPriceInput`/`MoneyPriceResult` contract in `MoneyPriceCalculator.cs` includes sale, cost, commission, shipping, transaction cost, VAT, currency and FX snapshot provenance.
+- `PriceDispatchPreflight` blocks non-ready results; `LocalMarketplaceAdapter.DispatchPriceAsync` invokes the gate before any write path.
+- `ProfitPriceRepairIntegrationTests` covers expense-aware loss/healthy margin, missing inputs and stale FX (targeted: 3/3 passed).
+- Production marketplace writes remain `LIVE_API_BLOCKED`; no live mutation performed.

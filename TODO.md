@@ -674,3 +674,9 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # - [x] Gerçek temporary SQLite, parser, XML/XLSX ve STA WPF akışından geçen 6 integration + 1 WPF smoke testi eklendi; tam Release suite 106/106 geçti.
 # - [x] Windows Release Evidence restore runtime ile düzeltildi; self-contained win-x64 publish `Windows-Current` altında üretildi. Canlı marketplace write yok (`LIVE_API_BLOCKED`).
 # Verification: build, full Release test (106/106), runtime restore, self-contained publish ve `git diff --check` başarıyla çalıştırıldı.
+# #285 Profit/price repair (in progress)
+- [x] Expense-aware shared money contract and deterministic margin status
+- [x] Missing/stale FX and missing expense inputs block dispatch
+- [x] Price dispatch preflight gate shared by adapter entry point
+- [x] Targeted integration tests for loss, healthy margin, missing inputs, stale FX
+- [ ] Full Release/CI evidence and self-contained publish

@@ -25,6 +25,8 @@ public sealed class LocalMarketplaceAdapter(MarketplaceAdapterDescriptor descrip
  public Task TestConnectionAsync(CancellationToken cancellationToken=default)=>throw new InvalidOperationException($"{Descriptor.Channel} için doğrulanmış resmi API sözleşmesi yapılandırılmadı (LIVE_API_BLOCKED).");
  public Task DispatchAsync(MarketplaceOperation operation,MarketplacePreview preview,bool approved,SyncStore sync,string syncJobId,CancellationToken cancellationToken=default)
  {if(!Descriptor.Capabilities.Supports(operation))throw new InvalidOperationException($"{Descriptor.Channel}/{operation}: capability desteklenmiyor; HTTP isteği oluşturulmadı.");if(!approved)throw new InvalidOperationException("Canlı işlem için açık onay gerekli.");throw new InvalidOperationException($"{Descriptor.Channel} canlı API'si yapılandırılmadı (LIVE_API_BLOCKED); HTTP isteği oluşturulmadı.");}
+ public Task DispatchPriceAsync(MarketplacePreview preview, MoneyPriceResult price, bool approved, SyncStore sync, string syncJobId, CancellationToken cancellationToken=default)
+ { PriceDispatchPreflight.EnsureReady(price); return DispatchAsync(MarketplaceOperation.PriceWrite, preview, approved, sync, syncJobId, cancellationToken); }
 }
 public static class MarketplaceAdapterRegistry
 {
