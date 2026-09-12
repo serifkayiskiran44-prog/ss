@@ -103,6 +103,7 @@ public partial class MainWindow
         productEditor.DataContext = edit;
         productEditor.IsEnabled = edit != null;
         ShowProductChannelStatus(edit);
+        ShowProductPriceSummary(edit);
         RefreshPriceFieldsPanel();
         acceptedProductSelection = products.SelectedItems.OfType<CatalogProduct>().ToList();
     }

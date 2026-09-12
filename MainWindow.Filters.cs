@@ -120,6 +120,34 @@ public partial class MainWindow {
   cell.Setters.Add(new Setter(VerticalContentAlignmentProperty, VerticalAlignment.Center));
   products.CellStyle = cell;
  }
+ // Product card pricing summary (#798). One ranked block -- price, then approximate margin, then when it was
+ // last calculated -- above the editable price fields, so the card leads with the number that matters instead
+ // of four equally weighted text boxes. Read-only and derived: no pricing behaviour is added here, and the
+ // authoritative check remains the dispatch-time money preflight.
+ readonly StackPanel productPriceSummaryPanel = new() { Margin = new Thickness(3, 2, 3, 8) };
+ void ShowProductPriceSummary(CatalogProduct? product)
+ {
+  productPriceSummaryPanel.Children.Clear();
+  if (product is null) return;
+  var summary = ProductPriceSummary.Build(product, DateTime.UtcNow);
+  var headline = new TextBlock { FontSize = 20, FontWeight = FontWeights.SemiBold, Text = summary.SalePrice, VerticalAlignment = VerticalAlignment.Center };
+  var currency = new TextBlock { Text = " " + summary.Currency, FontSize = 12, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(3, 0, 0, 3), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) };
+  var priceLine = new StackPanel { Orientation = Orientation.Horizontal, Children = { headline, currency } };
+  productPriceSummaryPanel.Children.Add(priceLine);
+  var marginBrush = summary.MarginLevel switch
+  {
+   ProductPriceSummary.Negative => new SolidColorBrush(Color.FromRgb(190, 52, 52)),
+   ProductPriceSummary.Thin => new SolidColorBrush(Color.FromRgb(196, 132, 22)),
+   ProductPriceSummary.Healthy => new SolidColorBrush(Color.FromRgb(46, 125, 80)),
+   _ => new SolidColorBrush(Color.FromRgb(87, 112, 125)),
+  };
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Kâr (yaklaşık): {summary.Margin}", Foreground = marginBrush, FontWeight = FontWeights.SemiBold });
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Son hesaplama: {summary.Calculated}", FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+  foreach (var warning in summary.Warnings)
+   productPriceSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = 10, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)), Margin = new Thickness(0, 4, 0, 0) });
+  System.Windows.Automation.AutomationProperties.SetName(productPriceSummaryPanel, $"{summary.SalePrice} {summary.Currency}, kâr {summary.Margin}");
+ }
  // Product quick-inspect drawer (#796). A read-only panel beside the list, opened with Ctrl+I on the selected
  // row and closed with Esc, so the operator can check identity/price/stock/source/readiness/last error without
  // leaving the row or opening the editor. It is built from ProductQuickInspect's label/value rows, which carry
