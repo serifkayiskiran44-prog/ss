@@ -664,3 +664,13 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # #284 forward repair: kültür profili olmayan tek-ayraç/üç-hane belirsiz tutarlar reddediliyor; tr-TR/en-US davranışı bağımsız fixture ile korunuyor.
 # #283 forward repair: supplier XML/Excel import yazısından önce DropshipAnomalyGuard fail-closed gate bağlandı; mass-zero feed için atomik no-write testi eklendi.
 # M241: WPF runtime repair: gerçek MainWindow STA açılış regression’ı, çift-parent OrdersPanel button hatası ve bağımsız kanal status visual’ları doğrulandı; live marketplace write yok.
+# #284 Import repair — tamamlandı (2026-09-12):
+# - [x] Mapping/profile revision ve namespace/path/repeat-node fingerprint’i `XmlSource` metadata’sında kalıcı; manual/scheduled stale gate ve explicit remap akışı `XmlCatalog`/`CatalogStore`/`MainWindow` içinde.
+# - [x] Source-missing quarantine `CatalogStore.Import` içine bağlandı; SQLite case/audit, grace süresi, recovery ve source-health görünürlüğü tamamlandı.
+# - [x] Excel gerçek WPF giriş noktası async/cancellable ve tek girişli; apply/cancel UI state, preview freshness ve undo akışı korunuyor.
+# - [x] XML/Excel/migration sayısal parse explicit profile culture ile deterministic; CurrentCulture/invariant fallback kaldırıldı ve red reason kodları eklendi.
+# - [x] XmlRunStore lease/heartbeat/restart recovery ve feed-hash idempotency; import transaction/cancellation güvenliği tamamlandı.
+# - [x] Gerçek XML/XLSX reader→preview→import zinciri için bounded elapsed/allocation ölçümü, XML async-yield gözlemi ve production fixture testi eklendi.
+# - [x] Gerçek temporary SQLite, parser, XML/XLSX ve STA WPF akışından geçen 6 integration + 1 WPF smoke testi eklendi; tam Release suite 106/106 geçti.
+# - [x] Windows Release Evidence restore runtime ile düzeltildi; self-contained win-x64 publish `Windows-Current` altında üretildi. Canlı marketplace write yok (`LIVE_API_BLOCKED`).
+# Verification: build, full Release test (106/106), runtime restore, self-contained publish ve `git diff --check` başarıyla çalıştırıldı.

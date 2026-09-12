@@ -10,6 +10,17 @@ public class XmlSource
  public DateTime? FxRateDate {get;set;}
  public DateTimeOffset? FxFetchedUtc {get;set;}
  public bool AutoImport {get;set;} public DateTime? LastRunUtc {get;set;} public string LastStatus {get;set;}="Henüz çalışmadı";
+ // Mapping identity is persisted with the source so a scheduled run cannot silently
+ // apply a feed after its XML shape or mapping has changed.
+ public int MappingRevision { get; set; } = 1;
+ public int LastAppliedMappingRevision { get; set; }
+ public string LastMappingShapeFingerprint { get; set; } = "";
+ public string LastSuccessfulFeedHash { get; set; } = "";
+ public DateTime? LastSuccessfulFeedUtc { get; set; }
+ public int LastSuccessfulFeedCount { get; set; }
+ public string LastFeedState { get; set; } = "NEVER";
+ public int MissingSourceGraceMinutes { get; set; } = 120;
+ public string NumberCultureName { get; set; } = "en-US";
  public string Id {get;set;}=Guid.NewGuid().ToString("N"); public string Name {get;set;}=""; public string Location {get;set;}=""; public bool Enabled {get;set;}=true;public int IntervalMinutes {get;set;}=30;
  public string ItemPath {get;set;}="";public string DecimalSeparator {get;set;}=".";public Dictionary<string,string> Fields {get;set;}=new();
  public decimal ExchangeRate {get;set;}=1;public decimal MarkupPercent {get;set;}=40;public decimal FixedAmount {get;set;}=0;public decimal MinimumPrice {get;set;}=0;public string Currency {get;set;}="USD";
@@ -33,7 +44,25 @@ public class CatalogProduct {
  public decimal Cost {get;set;} public decimal Price {get;set;} public int Stock {get;set;} public bool LockName {get;set;} public bool LockDescription {get;set;} public bool LockPrice {get;set;} public bool LockStock {get;set;} public bool LockImages {get;set;} public string EtsyListingId {get;set;}=""; public DateTime UpdatedUtc {get;set;}
 }
 public record XmlScan(string ItemPath,IReadOnlyList<string> Paths,Dictionary<string,string> SuggestedFields);
-public record ImportSummary(int Added,int Updated,int Unchanged);
+public record ImportSummary(int Added,int Updated,int Unchanged, bool AlreadyApplied = false, string FeedHash = "");
+public sealed class XmlImportContext
+{
+ public string FeedHash { get; init; } = "";
+ public string MappingShapeFingerprint { get; init; } = "";
+ public string PreviewFingerprint { get; init; } = "";
+ public bool CompleteFeed { get; init; }
+ public bool AllowMappingRevisionChange { get; init; }
+ public DateTimeOffset? ObservedAtUtc { get; init; }
+}
+public sealed record XmlMappingSnapshot(string Fingerprint, int ItemCount, IReadOnlyList<string> MissingFields, IReadOnlyList<string> Warnings)
+{
+ public bool IsUsable => MissingFields.Count == 0 && ItemCount > 0;
+}
+public sealed class XmlMappingBlockedException : InvalidOperationException
+{
+ public string ReasonCode { get; }
+ public XmlMappingBlockedException(string reasonCode, string message) : base(message) => ReasonCode = reasonCode;
+}
 public record CatalogPage(IReadOnlyList<CatalogProduct> Items,int Total,int InStock,int Linked);
 public sealed record CatalogUndoReceipt(string Id,IReadOnlyList<CatalogProduct> Before,IReadOnlyList<CatalogProduct> After);
 

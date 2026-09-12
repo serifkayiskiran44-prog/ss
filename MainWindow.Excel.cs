@@ -8,6 +8,10 @@ namespace TrMarketplaceHubDesktop;
 
 public partial class MainWindow
 {
+    CancellationTokenSource? excelCts;
+    readonly ExcelApplyCoordinator excelCoordinator = new();
+    Button? excelApplyButton;
+    Button? excelCancelButton;
     FrameworkElement BuildExcel()
     {
         var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1150 };
@@ -30,11 +34,12 @@ public partial class MainWindow
             profile.Name = profileName.Text.Trim(); profile.CultureName = culture.Text.Trim(); profile.HeaderAliases = ParsePairs(aliases.Text); profile.Defaults = ParsePairs(defaults.Text); profile.VisibleFields = visibleFields.Text.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
             _ = ExcelProfileStore.Culture(profile.CultureName);
         }
-        void RenderPreview()
+        async Task RenderPreviewAsync()
         {
             if (selectedPath is null) return;
-            ApplyProfileText(); decisions = CatalogExcel.PreviewDecisions(store, selectedPath, profile); preview = new ExcelPreview(decisions.Rows.Where(x => x.Product is not null).Select(x => x.Product!).ToList(), decisions.Errors); grid.ItemsSource = decisions.Rows; status.Text = $"{decisions.Rows.Count} satır önizlendi · {decisions.Rows.Count(x => x.Action == "CREATE")} yeni · {decisions.Rows.Count(x => x.Action == "UPDATE")} güncellenecek · {decisions.Rows.Count(x => x.Action == "SKIP")} aynı · {decisions.Rows.Count(x => x.Action == "ERROR")} hatalı.";
+            ApplyProfileText(); decisions = await CatalogExcel.PreviewDecisionsAsync(store, selectedPath, profile, excelCts?.Token ?? CancellationToken.None); preview = decisions.Preview ?? new ExcelPreview(decisions.Rows.Where(x => x.Product is not null).Select(x => x.Product!).ToList(), decisions.Errors); grid.ItemsSource = decisions.Rows; status.Text = $"{decisions.Rows.Count} satır önizlendi · {decisions.Rows.Count(x => x.Action == "CREATE")} yeni · {decisions.Rows.Count(x => x.Action == "UPDATE")} güncellenecek · {decisions.Rows.Count(x => x.Action == "SKIP")} aynı · {decisions.Rows.Count(x => x.Action == "ERROR")} hatalı.";
         }
+        void RenderPreview() => _ = RunAsync(RenderPreviewAsync);
         void LoadProfiles()
         {
             var list = profileStore.List(); profileBox.ItemsSource = list; profileBox.SelectedItem = list.FirstOrDefault(x => x.Id == profile.Id); if (profileBox.SelectedItem is null) { profileStore.Save(profile); list = profileStore.List(); profileBox.ItemsSource = list; profileBox.SelectedItem = list.FirstOrDefault(x => x.Id == profile.Id); }
@@ -46,11 +51,28 @@ public partial class MainWindow
         var map = Button("Kolonları elle eşle", () => { if (selectedPath is null) { status.Text = "Önce Excel dosyasını seçin."; return; } var headers = CatalogExcel.Headers(selectedPath); var result = ShowMappingDialog(headers, manualMapping); if (result is null) return; manualMapping = result; profile.ColumnMappings = result.Columns.ToDictionary(x => x.Key, x => headers[x.Value - 1], StringComparer.OrdinalIgnoreCase); RenderPreview(); });
         var export = Button("Filtreli ürünleri dışa aktar", () => { ApplyProfileText(); var query = new TextBox { Width = 380, Text = "", ToolTip = "SKU/ürün/marka/kategori filtre metni" }; var dialog = new Window { Title = "Dışa aktarım filtresi", Width = 480, Height = 180, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }; var ok = new Button { Content = "Excel'e aktar", Margin = new Thickness(3) }; var box = new StackPanel { Margin = new Thickness(14) }; box.Children.Add(new TextBlock { Text = "Filtre (boş: tüm ürünler)" }); box.Children.Add(query); box.Children.Add(ok); dialog.Content = box; ok.Click += (_, _) => dialog.DialogResult = true; if (dialog.ShowDialog() != true) return; var products = store.Products().Where(p => string.IsNullOrWhiteSpace(query.Text) || $"{p.Sku} {p.Barcode} {p.Name} {p.Brand} {p.Category}".Contains(query.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)).ToList(); var save = new SaveFileDialog { Filter = "Excel dosyası (*.xlsx)|*.xlsx", FileName = "urunler.xlsx" }; if (save.ShowDialog(this) != true) return; CatalogExcel.Export(save.FileName, products, profile.VisibleFields); status.Text = $"{products.Count} ürün ve seçili alanlar dışa aktarıldı."; });
         var errors = Button("Hataları Excel'e aktar", () => { if (preview is null || preview.Errors.Count == 0) { status.Text = "Dışa aktarılacak önizleme hatası yok."; return; } var dialog = new SaveFileDialog { Filter = "Excel dosyası (*.xlsx)|*.xlsx", FileName = "excel-hatalari.xlsx" }; if (dialog.ShowDialog(this) != true) return; CatalogExcel.ExportErrors(dialog.FileName, preview); status.Text = $"{preview.Errors.Count} hata dışa aktarıldı."; });
-        var apply = Button("Seçili önizleme satırlarını uygula", () => { if (decisions is null || selectedPath is null) throw new InvalidOperationException("Önce Excel profiliyle önizleme yapın."); var selected = grid.SelectedItems.OfType<ExcelPreviewDecision>().Where(x => x.Product is not null).Select(x => decisions.Rows.IndexOf(x)).ToArray(); if (selected.Length == 0) throw new InvalidOperationException("Önizlemeden en az bir geçerli satır seçin."); var source = new XmlSource { Id = "excel-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(selectedPath))).ToLowerInvariant()[..16], Name = Path.GetFileName(selectedPath) }; var rows = selected.Select(i => decisions.Rows[i].Product!).ToList(); undo = CatalogExcel.ApplyWithUndo(store, source, new ExcelPreview(rows, Array.Empty<string>()), Enumerable.Range(0, rows.Count).ToArray()); status.Text = "Seçili Excel satırları atomik olarak uygulandı; geri alma kaydı oluşturuldu."; RefreshProducts(); });
+        async Task ApplyExcelAsync()
+        {
+            if (decisions is null || selectedPath is null || decisions.Preview is null) throw new InvalidOperationException("Önce Excel profiliyle önizleme yapın.");
+            var selectedProducts = grid.SelectedItems.OfType<ExcelPreviewDecision>().Where(x => x.Product is not null).Select(x => x.Product!).ToList();
+            if (selectedProducts.Count == 0) throw new InvalidOperationException("Önizlemeden en az bir geçerli satır seçin.");
+            var selected = selectedProducts.Select(x => decisions.Preview.Rows.IndexOf(x)).Where(x => x >= 0).ToArray();
+            if (selected.Length != selectedProducts.Count) throw new InvalidOperationException("Seçili satır önizleme dışında.");
+            excelCts?.Dispose(); excelCts = new CancellationTokenSource(); excelApplyButton!.IsEnabled = false; excelCancelButton!.IsEnabled = true;
+            try
+            {
+                var source = new XmlSource { Id = "excel-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(selectedPath))).ToLowerInvariant()[..16], Name = Path.GetFileName(selectedPath), NumberCultureName = profile.CultureName };
+                undo = await excelCoordinator.ApplyWithUndoAsync(store, source, decisions.Preview, selected, selectedPath, profile, excelCts.Token);
+                status.Text = "Seçili Excel satırları atomik olarak uygulandı; geri alma kaydı oluşturuldu."; RefreshProducts();
+            }
+            finally { excelApplyButton!.IsEnabled = true; excelCancelButton!.IsEnabled = false; excelCts?.Dispose(); excelCts = null; }
+        }
+        excelApplyButton = Button("Seçili önizleme satırlarını uygula", () => _ = RunAsync(ApplyExcelAsync));
+        excelCancelButton = Button("Excel uygulamasını iptal et", () => excelCts?.Cancel()); excelCancelButton.IsEnabled = false;
         var rollback = Button("Son Excel uygulamasını geri al", () => { if (undo is null) { status.Text = "Geri alınacak Excel işlemi yok."; return; } store.Undo(undo); undo = null; status.Text = "Son Excel uygulaması geri alındı."; RefreshProducts(); });
         var profileRow = new WrapPanel(); profileRow.Children.Add(new TextBlock { Text = "Profil", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(profileBox); profileRow.Children.Add(new TextBlock { Text = "Ad", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(profileName); profileRow.Children.Add(new TextBlock { Text = "Kültür", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(culture); profileRow.Children.Add(saveProfile); profileRow.Children.Add(newProfile); panel.Children.Add(profileRow);
         var details = new StackPanel(); Label(details, "Başlık alias'ları", aliases); Label(details, "Varsayılan alanlar", defaults); Label(details, "Dışa aktarım görünür alanları", visibleFields); panel.Children.Add(details);
-        var bar = new WrapPanel(); bar.Children.Add(export); bar.Children.Add(choose); bar.Children.Add(map); bar.Children.Add(errors); bar.Children.Add(apply); bar.Children.Add(rollback); panel.Children.Add(bar); panel.Children.Add(grid); panel.Children.Add(status); LoadProfiles(); return Scroll(panel);
+        var bar = new WrapPanel(); bar.Children.Add(export); bar.Children.Add(choose); bar.Children.Add(map); bar.Children.Add(errors); bar.Children.Add(excelApplyButton); bar.Children.Add(excelCancelButton); bar.Children.Add(rollback); panel.Children.Add(bar); panel.Children.Add(grid); panel.Children.Add(status); LoadProfiles(); return Scroll(panel);
     }
 
     static Dictionary<string, string> ParsePairs(string text) => text.Split(['\r', '\n'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(x => x.Split('=', 2)).Where(x => x.Length == 2 && x[0].Trim().Length > 0).ToDictionary(x => x[0].Trim(), x => x[1].Trim(), StringComparer.OrdinalIgnoreCase);

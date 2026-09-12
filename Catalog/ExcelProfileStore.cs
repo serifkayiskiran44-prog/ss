@@ -9,7 +9,7 @@ public sealed class ExcelImportProfile
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "Yeni Excel profili";
-    public string CultureName { get; set; } = CultureInfo.CurrentCulture.Name;
+    public string CultureName { get; set; } = "en-US";
     public Dictionary<string, string> ColumnMappings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> HeaderAliases { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> Defaults { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -41,5 +41,5 @@ public sealed class ExcelProfileStore
     }
     public ExcelImportProfile? Find(string id) => List().FirstOrDefault(x => x.Id == id);
     public void Delete(string id) { using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "DELETE FROM ExcelProfiles WHERE Id=$id"; command.Parameters.AddWithValue("$id", id); command.ExecuteNonQuery(); }
-    public static CultureInfo Culture(string? name) { try { return string.IsNullOrWhiteSpace(name) ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(name); } catch (CultureNotFoundException) { throw new InvalidOperationException("Excel profilinin sayı/tarih kültürü geçersiz."); } }
+    public static CultureInfo Culture(string? name) => DeterministicNumberParser.Culture(name);
 }

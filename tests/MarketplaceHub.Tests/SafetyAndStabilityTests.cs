@@ -11,6 +11,9 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using TrMarketplaceHubDesktop;
 using TrMarketplaceHubDesktop.Catalog;
 
@@ -147,6 +150,43 @@ public sealed class SafetyAndStabilityTests
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
+    }
+
+    [TestMethod]
+    public void MainWindowExcelPageUsesAsyncApplyCoordinatorAndCancelEntryPoint()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-wpf-excel-" + Guid.NewGuid().ToString("N"));
+        Exception? failure = null;
+        try
+        {
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var window = new MainWindow(root);
+                    var routes = (Dictionary<string, TabItem>)typeof(MainWindow).GetField("routes", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+                    var excelPage = routes["excel"]; window.Show();
+                    var buttons = Descendants(excelPage.Content).OfType<Button>().Select(x => x.Content?.ToString() ?? "").ToArray();
+                    CollectionAssert.Contains(buttons, "Seçili önizleme satırlarını uygula");
+                    CollectionAssert.Contains(buttons, "Excel uygulamasını iptal et");
+                    var coordinator = typeof(MainWindow).GetField("excelCoordinator", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window);
+                    Assert.IsNotNull(coordinator);
+                    Assert.IsFalse((bool)coordinator!.GetType().GetProperty("IsApplying")!.GetValue(coordinator)!);
+                    window.Close();
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
+            if (failure is not null) throw new AssertFailedException(failure.ToString());
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    static IEnumerable<DependencyObject> Descendants(object? value)
+    {
+        if (value is not DependencyObject node) yield break;
+        yield return node;
+        foreach (var child in LogicalTreeHelper.GetChildren(node).OfType<DependencyObject>()) foreach (var descendant in Descendants(child)) yield return descendant;
     }
 
     [TestMethod]

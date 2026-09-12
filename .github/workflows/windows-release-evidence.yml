@@ -18,7 +18,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Restore
-        run: dotnet restore tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj
+        run: dotnet restore tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj -r win-x64
       - name: Release test with TRX
         run: dotnet test tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj -c Release --logger "trx;LogFileName=results.trx" --results-directory TestResults --no-restore
       - name: Release self-contained publish
