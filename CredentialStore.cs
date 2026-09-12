@@ -6,27 +6,32 @@ using System.Text.Json;
 namespace TrMarketplaceHubDesktop;
 public static class CredentialStore
 {
-    private static string StorePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop", "credentials.bin");
-    public static void Save(EtsyCredentials credentials)
+    // Matches TemplateStore/CatalogStore's convention: a null directory resolves to the real per-user app-data
+    // folder (unchanged behavior for the running app); a test passes its own root so it never touches this
+    // machine's real stored Etsy credentials.
+    private static string StorePath(string? directory) => Path.Combine(directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop"), "credentials.bin");
+    public static void Save(EtsyCredentials credentials, string? directory = null)
     {
+        var path = StorePath(directory);
         var plain = JsonSerializer.SerializeToUtf8Bytes(credentials);
         try
         {
             var encrypted = Protect(plain);
-            Directory.CreateDirectory(Path.GetDirectoryName(StorePath)!);
-            var temporary = StorePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try { File.WriteAllBytes(temporary, encrypted); File.Move(temporary, StorePath, true); }
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try { File.WriteAllBytes(temporary, encrypted); File.Move(temporary, path, true); }
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException)
         { throw new InvalidOperationException("Bağlantı bilgileri Windows kullanıcı profilinde güvenli olarak kaydedilemedi."); }
         finally { CryptographicOperations.ZeroMemory(plain); }
     }
-    public static EtsyCredentials? Load()
+    public static EtsyCredentials? Load(string? directory = null)
     {
-        if (!File.Exists(StorePath)) return null;
+        var path = StorePath(directory);
+        if (!File.Exists(path)) return null;
         byte[]? plain = null;
-        try { plain = Unprotect(File.ReadAllBytes(StorePath)); return JsonSerializer.Deserialize<EtsyCredentials>(plain); }
+        try { plain = Unprotect(File.ReadAllBytes(path)); return JsonSerializer.Deserialize<EtsyCredentials>(plain); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or JsonException)
         { throw new InvalidOperationException("Kayıtlı bağlantı bilgileri bu Windows kullanıcısı tarafından okunamadı. Bilgileri yeniden girip kaydedin."); }
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }

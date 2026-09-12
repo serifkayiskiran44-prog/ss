@@ -21,7 +21,7 @@ public sealed class EtsyReadinessService
     public EtsyReadinessReport Build()
     {
         var checks = new List<EtsyReadinessCheck>();
-        var credentials = CredentialStore.Load();
+        var credentials = CredentialStore.Load(directory);
         checks.Add(credentials is { Key.Length: > 0, Secret.Length: > 0, Token.Length: > 0, RefreshToken.Length: > 0 } && long.TryParse(credentials.ShopId, out var shop) && shop > 0
             ? new("credentials", credentials.IsAccessTokenUsable() ? "PASS" : "BLOCKED", credentials.IsAccessTokenUsable() ? $"Mağaza {shop} için şifreli Etsy credential kaydı bulundu." : "Etsy erişim belirteci süresi dolmuş veya dolmak üzere; refresh gerekli.")
             : new("credentials", "BLOCKED", "Etsy Key/Secret/Token/RefreshToken/Shop ID eksik; canlı işlem engellendi."));
