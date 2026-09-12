@@ -24,4 +24,19 @@ public sealed class WorkerStateStoreTests
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
+
+    [TestMethod]
+    public void WorkerAdvancesOnlyWithRealEvidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-worker-gate-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new WorkerStateStore(root);
+            var worker = new MarketplaceHubWorker(store, _ => new WorkerEvidence(0, 1, "same", "same", "pass", "verified", ""));
+            var blocked = worker.RunOnce(DateTimeOffset.UtcNow);
+            Assert.IsFalse(blocked.Advanced);
+            Assert.AreEqual("281", store.Get().Cursor);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
 }

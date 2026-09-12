@@ -36,4 +36,9 @@ public sealed class WorkerStateStore
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE WorkerState SET Cursor=$cursor,LeaseToken=NULL,LeaseUntilUtc=NULL,Status='IDLE',LastOutcome=$outcome WHERE Id=1 AND LeaseToken=$owner";
         cmd.Parameters.AddWithValue("$cursor", nextCursor); cmd.Parameters.AddWithValue("$outcome", outcome); cmd.Parameters.AddWithValue("$owner", owner); if (cmd.ExecuteNonQuery() != 1) throw new InvalidOperationException("Worker lease sahibi değil; cursor ilerletilemedi.");
     }
+    public void Release(string owner, string outcome)
+    {
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE WorkerState SET LeaseToken=NULL,LeaseUntilUtc=NULL,Status='IDLE',LastOutcome=$outcome WHERE Id=1 AND LeaseToken=$owner";
+        cmd.Parameters.AddWithValue("$owner", owner); cmd.Parameters.AddWithValue("$outcome", outcome); cmd.ExecuteNonQuery();
+    }
 }
