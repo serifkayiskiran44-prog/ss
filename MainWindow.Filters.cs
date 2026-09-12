@@ -86,6 +86,38 @@ public partial class MainWindow {
   if (applyingProductLayout || products.Columns.Count == 0) return;
   try { uiPreferences.Set(ProductLayoutKey, DataGridLayoutCodec.Serialize(CaptureProductLayout())); } catch (Exception e) { Log(Safe(e)); }
  }
+ // Product list density (#793). One selector on the same DataGrid the list already owns -- no parallel styles --
+ // driving the shared metrics table so font, row height, thumbnail and hit target scale together. The choice is
+ // a view setting like the column layout and is restored on the next launch; switching never rebinds the
+ // ItemsSource, so the selection and the virtualized panel are untouched.
+ const string ProductDensityKey = "density:products";
+ ComboBox? productDensityBox;
+ internal string CurrentProductDensity() => ProductListDensity.Normalize(productDensityBox?.SelectedItem as string ?? uiPreferences.Get(ProductDensityKey));
+ ComboBox BuildProductDensitySelector()
+ {
+  var modes = new[] { ProductListDensity.Comfortable, ProductListDensity.Compact };
+  var box = new ComboBox { Name = "ProductDensityBox", Width = 95, ItemsSource = modes.Select(ProductListDensity.Label).ToArray(), ToolTip = "Satır yoğunluğu" };
+  productDensityBox = box;
+  var stored = ProductListDensity.Normalize(uiPreferences.Get(ProductDensityKey));
+  box.SelectedIndex = Array.IndexOf(modes, stored);
+  ApplyProductDensity(stored);
+  box.SelectionChanged += (_, _) =>
+  {
+   var mode = ProductListDensity.Normalize(box.SelectedItem as string);
+   ApplyProductDensity(mode);
+   try { uiPreferences.Set(ProductDensityKey, mode); } catch (Exception e) { Log(Safe(e)); }
+  };
+  return box;
+ }
+ void ApplyProductDensity(string mode)
+ {
+  var metrics = ProductListDensity.Metrics(mode);
+  products.RowHeight = metrics.RowHeight; products.FontSize = metrics.FontSize; products.MinRowHeight = metrics.RowHeight;
+  var cell = new Style(typeof(DataGridCell));
+  cell.Setters.Add(new Setter(PaddingProperty, metrics.CellPadding));
+  cell.Setters.Add(new Setter(VerticalContentAlignmentProperty, VerticalAlignment.Center));
+  products.CellStyle = cell;
+ }
  void OpenProductColumnChooser()
  {
   var checks = products.Columns.Select(column => new CheckBox { Content = column.Header?.ToString() ?? "", IsChecked = column.Visibility == Visibility.Visible, Margin = new Thickness(5) }).ToList();
