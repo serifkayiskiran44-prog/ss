@@ -30,6 +30,25 @@ public sealed class ProductOrderReportIntegrationTests
         });
     }
 
+    [TestMethod]
+    public void ChannelTabShowsOnlySelectedProductsOwnMappingAndBothInstancesStayInSync()
+    {
+        Run(f => {
+            f.Grid.SelectedItem = f.Row("A"); f.Drain();
+            StringAssert.Contains(f.ChannelSummary.Text, "eşleme offer-A");
+            Assert.AreEqual(f.ChannelSummary.Text, f.ChannelSummaryMirror.Text);
+
+            f.Grid.SelectedItem = f.Row("B"); f.Drain();
+            StringAssert.Contains(f.ChannelSummary.Text, "allegro / shop-a");
+            Assert.IsFalse(f.ChannelSummary.Text.Contains("eşleme"), "B has no mapping and must not show A's leftover eşleme id.");
+            Assert.AreEqual(f.ChannelSummary.Text, f.ChannelSummaryMirror.Text);
+
+            f.Grid.SelectedItem = null; f.Drain();
+            Assert.AreEqual("Ürün seçince kanal planları burada görünür.", f.ChannelSummary.Text);
+            Assert.AreEqual(f.ChannelSummary.Text, f.ChannelSummaryMirror.Text);
+        });
+    }
+
     static void Run(Action<Fixture> test)
     {
         Exception failure = null;
@@ -41,7 +60,7 @@ public sealed class ProductOrderReportIntegrationTests
     sealed class Fixture : IDisposable
     {
         public readonly string Root = Path.Combine(Path.GetTempPath(), "order-report-" + Guid.NewGuid().ToString("N"));
-        public MainWindow Window; public DataGrid Grid; public TextBlock OrderSummary;
+        public MainWindow Window; public DataGrid Grid; public TextBlock OrderSummary; public TextBlock ChannelSummary; public TextBlock ChannelSummaryMirror;
 
         public Fixture()
         {
@@ -59,10 +78,16 @@ public sealed class ProductOrderReportIntegrationTests
                 new OrderSnapshot { Marketplace = "trendyol", ShopId = "shop-2", OrderId = "B-1", UpdatedAt = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero), Items = [new() { Sku = "B", Title = "Product B", Quantity = 1 }] }
             });
 
+            var productA = store.Products().Single(x => x.Sku == "A");
+            new MarketplaceConnectionStore(Root).Save("allegro", "shop-a", "Allegro Shop", true);
+            new MarketplaceMappingStore(Root).Save(new("allegro", "shop-a", productA.Id, "offer-A"));
+
             Window = new MainWindow(Root); Window.Show();
             typeof(MainWindow).GetMethod("Navigate", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(Window, new object[] { "products", true });
             Grid = (DataGrid)Field("products");
             OrderSummary = (TextBlock)Field("productOrderSummary");
+            ChannelSummary = (TextBlock)Field("productChannelSummary");
+            ChannelSummaryMirror = (TextBlock)Field("productChannelSummaryMirror");
             Drain();
         }
 
