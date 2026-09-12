@@ -94,6 +94,20 @@ public sealed class SchedulerDecoupleTests
             if (task.IsFaulted) throw task.Exception!.InnerException ?? task.Exception!;
         }
 
-        public void Dispose() { Window.Close(); Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(Root, true); }
+        public void Dispose()
+        {
+            Window.Close();
+            // Selecting the seeded XmlSource during MainWindow construction fires a fire-and-forget health check
+            // (source-health.db) that can still be opening/using its connection after Dispose starts; the same
+            // race affects other fixtures in this suite that seed an XmlSource (e.g. ProductCardDirtyDraftTests).
+            // Re-clear pools on every attempt, since a connection opened after an earlier clear would otherwise
+            // never be released before we give up.
+            for (var attempt = 1; ; attempt++)
+            {
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                try { Directory.Delete(Root, true); return; }
+                catch (IOException) when (attempt < 30) { Thread.Sleep(300); }
+            }
+        }
     }
 }
