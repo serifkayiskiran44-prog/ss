@@ -172,6 +172,52 @@ public partial class MainWindow {
    productStockSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productStockSummaryPanel, $"{summary.Label}, elde {summary.OnHand}, kanala açık {summary.Available}");
  }
+ // Unsaved-change indicator (#802). The guard that refuses to lose an edit already existed; this makes the
+ // pending work visible -- a dot on each dirty section's tab, a summary line, and a per-section undo -- and
+ // names fields only, never the values that changed.
+ readonly StackPanel productDirtyBar = new() { Margin = new Thickness(3, 0, 3, 8) };
+ internal ProductDirtyState CurrentProductDirtyState()
+ {
+  if (edit is null || productEditBaseline is null) return new([], "");
+  var baseline = System.Text.Json.JsonSerializer.Deserialize<CatalogProduct>(productEditBaseline);
+  return baseline is null ? new([], "") : ProductDirtySections.Compare(baseline, edit);
+ }
+ internal void RefreshProductDirtyIndicator()
+ {
+  var state = CurrentProductDirtyState();
+  if (productWorkspaceTabs is not null)
+   foreach (var tab in productWorkspaceTabs.Items.OfType<TabItem>())
+   {
+    var key = tab.Tag as string ?? "";
+    var label = ProductWorkspaceSections.All.FirstOrDefault(s => s.Key == key)?.Label ?? tab.Header?.ToString() ?? "";
+    tab.Header = state.Contains(key) ? label + " •" : label;
+   }
+  productDirtyBar.Children.Clear();
+  if (!state.IsDirty) { productDirtyBar.Visibility = Visibility.Collapsed; return; }
+  productDirtyBar.Visibility = Visibility.Visible;
+  productDirtyBar.Children.Add(new TextBlock { Text = state.Summary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)) });
+  foreach (var section in state.Sections)
+  {
+   var row = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 3, 0, 0) };
+   var undo = new Button { Content = "Geri al", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(6, 0, 0, 0), Tag = section.Key };
+   undo.Click += (_, _) => ResetProductSection((string)undo.Tag);
+   DockPanel.SetDock(undo, System.Windows.Controls.Dock.Right); row.Children.Add(undo);
+   row.Children.Add(new TextBlock { Text = $"{section.Label}: {string.Join(", ", section.Fields)}", TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+   productDirtyBar.Children.Add(row);
+  }
+  System.Windows.Automation.AutomationProperties.SetName(productDirtyBar, state.Summary);
+ }
+ internal void ResetProductSection(string sectionKey)
+ {
+  if (edit is null || productEditBaseline is null) return;
+  var baseline = System.Text.Json.JsonSerializer.Deserialize<CatalogProduct>(productEditBaseline);
+  if (baseline is null) return;
+  var restored = ProductDirtySections.ResetSection(baseline, edit, sectionKey);
+  edit = restored;
+  productEditor.DataContext = null; productEditor.DataContext = edit;
+  ShowProductPriceSummary(edit); ShowProductStockSummary(edit); ShowProductProvenance(edit);
+  RefreshProductDirtyIndicator();
+ }
  // Product card source provenance (#800). Collapsed by default -- the issue's "kartı kalabalıklaştırma" -- and
  // opened by the operator; the header alone carries the one-line answer. The source is named, never located:
  // XmlSource.Location is the feed URL and carries keys.

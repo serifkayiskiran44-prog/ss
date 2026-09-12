@@ -106,6 +106,7 @@ public partial class MainWindow
         ShowProductPriceSummary(edit);
         ShowProductStockSummary(edit);
         ShowProductProvenance(edit);
+        RefreshProductDirtyIndicator();
         RefreshPriceFieldsPanel();
         acceptedProductSelection = products.SelectedItems.OfType<CatalogProduct>().ToList();
     }
