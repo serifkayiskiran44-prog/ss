@@ -33,6 +33,15 @@ public sealed record DashboardSnapshot(
     public DateTime? OrdersAtUtc { get; init; }
     public DateTime? SyncAtUtc { get; init; }
     public DateTime? ConnectionsAtUtc { get; init; }
+
+    // Anomaly counts and their oldest occurrence (#808), gathered while the snapshot is built so the cards do
+    // not re-query. Additive and defaulted: an older snapshot simply projects no anomaly cards.
+    public int OversellRiskProducts { get; init; }
+    public DateTime? OversellOldestUtc { get; init; }
+    public int StaleSources { get; init; }
+    public DateTime? StaleSourceOldestUtc { get; init; }
+    public DateTime? FailedSyncOldestUtc { get; init; }
+    public DateTime? UnmappedOrderOldestUtc { get; init; }
 }
 
 public static class DashboardFreshnessEvaluator
@@ -149,6 +158,8 @@ public sealed class DashboardDataService
         var lastXmlStatus = latestXml?.Status ?? latestSourceRun?.LastStatus ?? "Henüz çalışmadı";
         var lastXmlUtc = latestXml?.FinishedUtc ?? latestXml?.StartedUtc ?? latestSourceRun?.LastRunUtc;
         var connectionIssues = connectionRows.Count(x => !string.Equals(x.Status, "CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase));
+        var oversellRisk = products.Where(x => x.Active && x.Stock <= 0).ToList();
+        var staleSources = sources.Where(x => x.LastSuccessfulFeedUtc is { } fed && DateTime.UtcNow - fed > ProductRowState.StaleAfter).ToList();
         var quality = new DataQualityStore(directory).Summary();
         var notifications = new List<DashboardNotification>();
 
@@ -197,6 +208,16 @@ public sealed class DashboardDataService
             OrdersAtUtc = orders.Count == 0 ? null : orders.Max(x => x.UpdatedAt).UtcDateTime,
             SyncAtUtc = sync.Count == 0 ? null : sync.Max(x => x.UpdatedUtc),
             ConnectionsAtUtc = connectionRows.Count == 0 ? null : connectionRows.Where(x => x.LastTestUtc.HasValue).Select(x => x.LastTestUtc!.Value).DefaultIfEmpty().Max() is { } tested && tested != default ? tested : null,
+
+            // #808 anomaly inputs. "Oversell risk" is an active product with no stock -- a live listing that
+            // cannot be fulfilled -- and its age is the oldest such product's last change. A source is stale on
+            // the same seven-day rule the rest of the app uses.
+            OversellRiskProducts = oversellRisk.Count,
+            OversellOldestUtc = oversellRisk.Count == 0 ? null : oversellRisk.Min(x => x.UpdatedUtc),
+            StaleSources = staleSources.Count,
+            StaleSourceOldestUtc = staleSources.Count == 0 ? null : staleSources.Min(x => x.LastSuccessfulFeedUtc ?? DateTime.MinValue) is var oldestFeed && oldestFeed == DateTime.MinValue ? null : oldestFeed,
+            FailedSyncOldestUtc = failedSync.Count == 0 ? null : failedSync.Min(x => x.UpdatedUtc),
+            UnmappedOrderOldestUtc = stockWaiting == 0 ? null : orders.Where(order => catalog.GetOrderStockStatus(order.Marketplace, order.ShopId, order.OrderId) is null).Select(x => x.UpdatedAt.UtcDateTime).DefaultIfEmpty().Min() is var oldestOrder && oldestOrder == default ? null : oldestOrder,
         };
     }
 

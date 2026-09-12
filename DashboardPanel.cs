@@ -31,6 +31,8 @@ public static class DashboardPanel
         AddColumn(channels, "Kanal", "Channel", 100); AddColumn(channels, "Mağaza", "ShopId", 120); AddColumn(channels, "Durum", "Status", 170); AddColumn(channels, "Son test", "LastTestLabel", 150); AddColumn(channels, "Hata", "LastError", 300);
         channelGroup.Content = channels;
         panel.Children.Add(channelGroup);
+        var anomalyGroup = new GroupBox { Header = "Anomaliler", Margin = new Thickness(4), Padding = new Thickness(8) };
+        var anomalies = new StackPanel(); anomalyGroup.Content = anomalies; panel.Children.Add(anomalyGroup);
         var notificationGroup = new GroupBox { Header = "Hata / bildirim merkezi", Margin = new Thickness(4), Padding = new Thickness(8) };
         var notifications = new StackPanel(); notificationGroup.Content = notifications; panel.Children.Add(notificationGroup);
         var trendGroup = new GroupBox { Header = "Son 14 gün yerel raporları", Margin = new Thickness(4), Padding = new Thickness(8) };
@@ -55,6 +57,7 @@ public static class DashboardPanel
                 foreach (var kpi in DashboardKpiFreshness.ForSnapshot(snapshot, DateTime.UtcNow))
                     AddCard(cards, kpi.Title, kpi.Value, RouteFor(kpi.Key), navigate, kpi.Freshness);
                 foreach (var quick in new[] { ("Kategoriler / markalar", "taxonomy"), ("Excel işlemleri", "excel"), ("Raporlar", "reports"), ("Mesaj / hata merkezi", "messages"), ("Ayarlar", "settings") }) AddCard(cards, quick.Item1, "Aç", quick.Item2, navigate);
+                ShowAnomalies(anomalies, snapshot, navigate);
                 channels.ItemsSource = snapshot.Connections.Select(x => new { x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError }).ToList();
                 notifications.Children.Clear(); foreach (var item in snapshot.Notifications) AddNotification(notifications, item, navigate);
                 trends.ItemsSource = snapshot.OrderTrend.Select(x => new { DateLabel = x.Date.ToString("dd.MM.yyyy"), x.Orders, StockLabel = x.CurrentStock < 0 ? "—" : x.CurrentStock.ToString("N0") }).ToList();
@@ -77,6 +80,35 @@ public static class DashboardPanel
         refresh.Click += async (_, _) => await RefreshAsync(force: true);
         _ = RefreshAsync(force: false);
         return root;
+    }
+
+    // #808: the tracked anomaly states as cards carrying impact, age and the next action, ordered by severity.
+    static void ShowAnomalies(Panel parent, DashboardSnapshot snapshot, Action<string> navigate)
+    {
+        parent.Children.Clear();
+        var view = DashboardAnomalies.Project(new DashboardAnomalyInput
+        {
+            Scope = "tüm mağazalar",
+            OversellRiskProducts = snapshot.OversellRiskProducts, OversellOldestUtc = snapshot.OversellOldestUtc,
+            StaleSources = snapshot.StaleSources, StaleSourceOldestUtc = snapshot.StaleSourceOldestUtc,
+            FailedSyncJobs = snapshot.FailedSyncs, FailedSyncOldestUtc = snapshot.FailedSyncOldestUtc,
+            UnmappedOrders = snapshot.StockWaitingOrders, UnmappedOrderOldestUtc = snapshot.UnmappedOrderOldestUtc,
+        }, DateTime.UtcNow);
+        parent.Children.Add(new TextBlock { Text = view.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 2, 6) });
+        foreach (var card in view.Cards)
+        {
+            var critical = card.Severity == DashboardAnomalies.Critical;
+            var body = new StackPanel();
+            body.Children.Add(new TextBlock { Text = $"{(critical ? "✖" : "⚠")} {card.Title} · {card.Count:N0}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(critical ? Color.FromRgb(190, 52, 52) : Color.FromRgb(160, 82, 22)) });
+            body.Children.Add(new TextBlock { Text = card.Impact, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+            body.Children.Add(new TextBlock { Text = $"{card.Age} · kapsam: {card.Scope}", TextWrapping = TextWrapping.Wrap, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+            var go = new Button { Content = card.NextAction, Tag = card.Route, Margin = new Thickness(0, 4, 0, 0), Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left };
+            go.Click += (_, _) => navigate((string)go.Tag);
+            body.Children.Add(go);
+            var border = new Border { BorderBrush = new SolidColorBrush(critical ? Color.FromRgb(190, 52, 52) : Color.FromRgb(214, 226, 235)), BorderThickness = new Thickness(critical ? 2 : 1), Padding = new Thickness(8), Margin = new Thickness(2, 3, 2, 3), Child = body };
+            AutomationProperties.SetName(border, $"{card.Title}, {card.Count}, {card.Age}");
+            parent.Children.Add(border);
+        }
     }
 
     static void AddColumn(DataGrid grid, string header, string path, double width) => grid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new System.Windows.Data.Binding(path), Width = width });
