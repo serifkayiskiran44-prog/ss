@@ -172,6 +172,35 @@ public partial class MainWindow {
    productStockSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productStockSummaryPanel, $"{summary.Label}, elde {summary.OnHand}, kanala açık {summary.Available}");
  }
+ // Content before/after preview (#805). Opened deliberately, read-only, and closed again: it renders the values
+ // a save is about to change to customer-facing text, sanitized and capped by ProductContentDiff. It writes
+ // nothing -- locally or to a marketplace -- and offers no control that could.
+ internal ProductContentDiffView CurrentContentDiff()
+ {
+  if (edit is null || productEditBaseline is null) return ProductContentDiff.Build(new CatalogProduct(), new CatalogProduct());
+  var baseline = System.Text.Json.JsonSerializer.Deserialize<CatalogProduct>(productEditBaseline) ?? new CatalogProduct();
+  return ProductContentDiff.Build(baseline, edit, store.FindProduct(edit.Id));
+ }
+ void OpenContentPreview()
+ {
+  if (edit is null) throw new InvalidOperationException("Önce ürün seçin.");
+  var diff = CurrentContentDiff();
+  var body = new StackPanel { Margin = new Thickness(14) };
+  body.Children.Add(new TextBlock { Text = diff.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+  if (diff.Warning.Length > 0)
+   body.Children.Add(new TextBlock { Text = "⚠ " + diff.Warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 0, 0, 8) });
+  foreach (var row in diff.Rows)
+  {
+   body.Children.Add(new TextBlock { Text = row.Field, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 2) });
+   body.Children.Add(new TextBlock { Text = "Önce: " + row.Before, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+   body.Children.Add(new TextBlock { Text = "Sonra: " + row.After, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(46, 90, 46)) });
+  }
+  var close = new Button { Content = "Kapat", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(12, 3, 12, 3) };
+  body.Children.Add(close);
+  var dialog = new Window { Owner = this, Title = "İçerik değişiklik önizlemesi", Width = 620, Height = 480, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
+  close.Click += (_, _) => dialog.DialogResult = true;
+  dialog.ShowDialog();
+ }
  // Validation summary panel (#803). Blocking / warning / info from the same evaluator the store refuses saves
  // with, grouped by section, with a jump to the first blocker. Field names only -- never the offending value.
  readonly StackPanel productValidationPanel = new() { Margin = new Thickness(3, 0, 3, 8) };
