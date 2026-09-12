@@ -172,6 +172,36 @@ public partial class MainWindow {
    productStockSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productStockSummaryPanel, $"{summary.Label}, elde {summary.OnHand}, kanala açık {summary.Available}");
  }
+ // Validation summary panel (#803). Blocking / warning / info from the same evaluator the store refuses saves
+ // with, grouped by section, with a jump to the first blocker. Field names only -- never the offending value.
+ readonly StackPanel productValidationPanel = new() { Margin = new Thickness(3, 0, 3, 8) };
+ void ShowProductValidation(CatalogProduct? product)
+ {
+  productValidationPanel.Children.Clear();
+  if (product is null) { productValidationPanel.Visibility = Visibility.Collapsed; return; }
+  var result = ProductValidation.Evaluate(product);
+  var actionable = result.Findings.Where(f => f.Severity != ProductValidation.Info).ToList();
+  if (actionable.Count == 0) { productValidationPanel.Visibility = Visibility.Collapsed; return; }
+  productValidationPanel.Visibility = Visibility.Visible;
+  var header = new DockPanel { LastChildFill = true };
+  if (result.FirstBlocking is { } first)
+  {
+   var jump = new Button { Content = "İlk soruna git", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(6, 0, 0, 0), Tag = first.Section };
+   jump.Click += (_, _) => SelectProductSection((string)jump.Tag);
+   DockPanel.SetDock(jump, System.Windows.Controls.Dock.Right); header.Children.Add(jump);
+  }
+  header.Children.Add(new TextBlock { Text = result.Summary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(result.HasBlocking ? Color.FromRgb(190, 52, 52) : Color.FromRgb(160, 82, 22)) });
+  productValidationPanel.Children.Add(header);
+  foreach (var section in ProductWorkspaceSections.All)
+  {
+   var rows = actionable.Where(f => f.Section == section.Key).ToList();
+   if (rows.Count == 0) continue;
+   productValidationPanel.Children.Add(new TextBlock { Text = section.Label, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 4, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+   foreach (var finding in rows)
+    productValidationPanel.Children.Add(new TextBlock { Text = (finding.Severity == ProductValidation.Blocking ? "✖ " : "⚠ ") + finding.Message, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = new SolidColorBrush(finding.Severity == ProductValidation.Blocking ? Color.FromRgb(190, 52, 52) : Color.FromRgb(160, 82, 22)) });
+  }
+  System.Windows.Automation.AutomationProperties.SetName(productValidationPanel, result.Summary);
+ }
  // Unsaved-change indicator (#802). The guard that refuses to lose an edit already existed; this makes the
  // pending work visible -- a dot on each dirty section's tab, a summary line, and a per-section undo -- and
  // names fields only, never the values that changed.
@@ -184,6 +214,7 @@ public partial class MainWindow {
  }
  internal void RefreshProductDirtyIndicator()
  {
+  ShowProductValidation(edit);
   var state = CurrentProductDirtyState();
   if (productWorkspaceTabs is not null)
    foreach (var tab in productWorkspaceTabs.Items.OfType<TabItem>())
