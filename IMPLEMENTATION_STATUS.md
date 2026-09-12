@@ -342,3 +342,9 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 - `ProductListRepairTests.SearchUsesSqliteFiltersSortAndPagesAcrossAllRows` exercises a six-row real SQLite import and paged query.
 - Remaining #286 deliverables (UI binding, context-menu targeting, selection snapshot/bulk audit, performance and Release publish evidence) are not yet complete.
 - Product list UI now exposes min/max price and server-side sort controls; Release test suite 110/110 and self-contained publish completed locally. CI same-SHA evidence and remaining bulk/context-menu/performance items are still open.
+
+#286 Product list repair — COMPLETE
+- Windows Release Evidence run 34687008194 completed successfully at SHA 78fa4c491d403629752d3a13c76fdeccd75f5343.
+- Release test suite: 110/110 passed; self-contained win-x64 publish succeeded.
+- Branch: codex/issue-286-product-list-repair.
+
