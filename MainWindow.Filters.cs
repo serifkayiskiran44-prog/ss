@@ -11,6 +11,8 @@ public partial class MainWindow {
   var description=new ComboBox{ItemsSource=new[]{"Tümü","Dolu","Boş"},SelectedIndex=0,Width=90};
   var image=new ComboBox{ItemsSource=new[]{"Tümü","Var","Yok"},SelectedIndex=0,Width=90};
   var minPrice=new TextBox{Width=85};var maxPrice=new TextBox{Width=85};var sort=new ComboBox{ItemsSource=new[]{"Name","Sku","Barcode","Price","Cost","Stock","Updated"},SelectedIndex=0,Width=95};var descSort=new CheckBox{Content="Azalan"};
+  // The sort controls are part of the persisted product list layout (#792); exposed to the layout code as delegates.
+  applyProductSort=(by,descending)=>{sort.SelectedItem=by;descSort.IsChecked=descending;};captureProductSort=()=>(sort.SelectedItem?.ToString()??"Name",descSort.IsChecked==true);
   foreach(var (title,control) in new (string,Control)[]{("Durum",status),("Marka (; ile ayır)",brand),("Kategori (; ile ayır)",category),("SKU (; ile ayır)",sku),("Açıklama",description),("Görsel kaydı",image),("Min fiyat",minPrice),("Max fiyat",maxPrice),("Sıralama",sort),("",descSort)}){
    var group=new StackPanel{Margin=new Thickness(4)};group.Children.Add(new TextBlock{Text=title});group.Children.Add(control);panel.Children.Add(group);
   }
@@ -28,7 +30,6 @@ public partial class MainWindow {
   panel.Children.Add(Button("Filtreyi yükle",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");Apply(selected.Filter);productFilter=selected.Filter;productOffset=0;RefreshProducts();}));
   panel.Children.Add(Button("Filtreyi sil",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");filterStore.Delete(selected.Name);ReloadSaved();}));
   panel.Children.Add(Button("Kolon görünürlüğü",OpenProductColumnChooser));
-  ApplyProductColumnPreferences();
   ReloadSaved();
   host.Children.Add(new Expander{Header="Detaylı ürün arama",Content=panel,HorizontalAlignment=HorizontalAlignment.Stretch});
  }
@@ -40,6 +41,50 @@ public partial class MainWindow {
    var header = column.Header?.ToString() ?? "";
    column.Visibility = hidden.Contains(header) ? Visibility.Collapsed : Visibility.Visible;
   }
+ }
+ // Product list column layout persistence (#792). The previous version persisted only hidden headers, and applied
+ // them from AddProductFilters -- which BuildProducts calls before a single column exists, so nothing was ever
+ // restored after a restart. The layout (order, width, visibility, sort) now lives under one key per view in the
+ // store's own ui-preferences.db, keyed by binding path rather than header text (so a renamed or translated
+ // header keeps its layout), applied once the columns exist, and saved on every reorder, resize, visibility or
+ // sort change and on closing. ApplyProductColumnPreferences above stays as the fallback for a database that
+ // only has the old hidden-header list.
+ const string ProductLayoutKey = "layout:products";
+ Action<string, bool>? applyProductSort; Func<(string SortBy, bool Descending)>? captureProductSort; bool applyingProductLayout;
+ static string ColumnKey(DataGridColumn column) => column is DataGridBoundColumn { Binding: System.Windows.Data.Binding binding } ? binding.Path.Path : column.Header?.ToString() ?? "";
+ void InitializeProductLayout()
+ {
+  ApplyProductLayout(DataGridLayoutCodec.Deserialize(uiPreferences.Get(ProductLayoutKey)));
+  products.ColumnDisplayIndexChanged += (_, _) => SaveProductLayout(); products.ColumnReordered += (_, _) => SaveProductLayout();
+  var width = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(DataGridColumn.WidthProperty, typeof(DataGridColumn));
+  var visibility = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(DataGridColumn.VisibilityProperty, typeof(DataGridColumn));
+  foreach (var column in products.Columns) { width.AddValueChanged(column, (_, _) => SaveProductLayout()); visibility.AddValueChanged(column, (_, _) => SaveProductLayout()); }
+  Closing += (_, _) => SaveProductLayout();
+ }
+ void ApplyProductLayout(DataGridLayoutState? state)
+ {
+  applyingProductLayout = true;
+  try
+  {
+   if (state is null) { ApplyProductColumnPreferences(); return; }
+   var byKey = products.Columns.GroupBy(ColumnKey, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+   var order = DataGridLayoutCodec.ResolveOrder(products.Columns.Select(ColumnKey).ToList(), state.Columns);
+   for (var i = 0; i < order.Count; i++) if (byKey.TryGetValue(order[i], out var column) && column.DisplayIndex != i) column.DisplayIndex = i;
+   foreach (var saved in state.Columns) { if (!byKey.TryGetValue(saved.Key, out var column)) continue; if (saved.Width > 0) column.Width = new DataGridLength(saved.Width); column.Visibility = saved.Visible ? Visibility.Visible : Visibility.Collapsed; }
+   if (!string.IsNullOrWhiteSpace(state.SortBy) && applyProductSort is not null) { applyProductSort(state.SortBy, state.SortDescending); productFilter = productFilter with { SortBy = state.SortBy, SortDescending = state.SortDescending }; }
+  }
+  finally { applyingProductLayout = false; }
+ }
+ DataGridLayoutState CaptureProductLayout()
+ {
+  var columns = products.Columns.Select(c => new DataGridColumnLayout(ColumnKey(c), c.DisplayIndex, c.Width.IsAbsolute ? c.Width.Value : c.ActualWidth, c.Visibility == Visibility.Visible)).ToList();
+  var sort = captureProductSort?.Invoke() ?? (productFilter.SortBy, productFilter.SortDescending);
+  return new(DataGridLayoutCodec.CurrentVersion, columns, sort.SortBy, sort.Descending);
+ }
+ void SaveProductLayout()
+ {
+  if (applyingProductLayout || products.Columns.Count == 0) return;
+  try { uiPreferences.Set(ProductLayoutKey, DataGridLayoutCodec.Serialize(CaptureProductLayout())); } catch (Exception e) { Log(Safe(e)); }
  }
  void OpenProductColumnChooser()
  {
@@ -53,7 +98,7 @@ public partial class MainWindow {
   var save = new Button { Content = "Kaydet", HorizontalAlignment = HorizontalAlignment.Right };
   panel.Children.Add(save);
   var dialog = new Window { Owner = this, Title = "Ürün kolonları", Width = 360, Height = 500, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
-  save.Click += (_, _) => { var hidden = products.Columns.Zip(checks).Where(x => x.Second.IsChecked != true).Select(x => x.First.Header?.ToString() ?? ""); uiPreferences.Set("columns:products", string.Join('\u001f', hidden)); ApplyProductColumnPreferences(); dialog.DialogResult = true; };
+  save.Click += (_, _) => { var hidden = products.Columns.Zip(checks).Where(x => x.Second.IsChecked != true).Select(x => x.First.Header?.ToString() ?? ""); uiPreferences.Set("columns:products", string.Join('\u001f', hidden)); ApplyProductColumnPreferences(); SaveProductLayout(); dialog.DialogResult = true; };
   dialog.ShowDialog();
  }
 }
