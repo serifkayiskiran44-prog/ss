@@ -17,7 +17,7 @@ public sealed record PriceChoice(string Value,string Label);
 public partial class MainWindow : Window
 {
  readonly CatalogStore store;
- readonly HttpClient http=new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(60)};
+ readonly HttpClient http;
  readonly SemaphoreSlim gate=new(1,1);
  readonly SemaphoreSlim authorizationGate=new(1,1);
  readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMinutes(1)};
@@ -44,8 +44,11 @@ public partial class MainWindow : Window
  XmlSource? source; CatalogProduct? edit; EtsyListingTemplate template=new(); EtsyCredentials credentials=new("","","",""); OAuthAttempt? attempt;
  List<MappingEntry> mappings=[]; string xml="",loadedLocation="",previewRevision="",previewMappingShapeFingerprint=""; int listingOffset,listingTotal,productOffset,productTotal,searchRevision,globalSearchRevision; string loadedListingShop="",loadedListingState="";
  public MainWindow():this(null){}
- public MainWindow(string? directory)
+ // httpClient lets a test substitute a fake handler (e.g. to drive AuthorizedAsync's OAuth refresh path
+ // without a real network call); null preserves the exact real client used before this parameter existed.
+ public MainWindow(string? directory, HttpClient? httpClient = null)
  {
+  http=httpClient??new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(60)};
   dataDirectory=directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");startupRecovery=new StartupRecovery(dataDirectory);store=new CatalogStore(dataDirectory);new SyncStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromHours(1));new XmlRunStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromMinutes(10));globalSearchIndex=new GlobalSearchIndexService(dataDirectory);logPath=Path.Combine(dataDirectory,"operations.log");
   InitializeComponent();uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
