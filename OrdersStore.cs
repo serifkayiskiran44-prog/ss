@@ -10,7 +10,12 @@ public sealed class OrdersStore
  {
   directory??=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");Directory.CreateDirectory(directory);
   connectionString=new SqliteConnectionStringBuilder{DataSource=Path.Combine(directory,"orders.db"),DefaultTimeout=15,Pooling=true}.ToString();
-  using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA busy_timeout=15000;CREATE TABLE IF NOT EXISTS orders(marketplace TEXT NOT NULL,shop TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(marketplace,shop,id));CREATE INDEX IF NOT EXISTS IX_orders_marketplace_shop ON orders(marketplace,shop);CREATE INDEX IF NOT EXISTS IX_orders_status ON orders(json_extract(payload,'$.RawStatus'));CREATE INDEX IF NOT EXISTS IX_orders_updated ON orders(json_extract(payload,'$.UpdatedAt') DESC)";cmd.ExecuteNonQuery();SchemaVersion.Ensure(c);
+  using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA busy_timeout=15000;CREATE TABLE IF NOT EXISTS orders(marketplace TEXT NOT NULL,shop TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(marketplace,shop,id));CREATE INDEX IF NOT EXISTS IX_orders_marketplace_shop ON orders(marketplace,shop);CREATE INDEX IF NOT EXISTS IX_orders_status ON orders(json_extract(payload,'$.RawStatus'));CREATE INDEX IF NOT EXISTS IX_orders_updated ON orders(json_extract(payload,'$.UpdatedAt') DESC);"+
+  // ReadPage always filters by marketplace/shop (the common "one store's order list" case) and always sorts
+  // by UpdatedAt; the single-column indexes above cannot be combined for both, so SQLite fell back to a
+  // separate temp-b-tree sort. This compound index lets that whole query -- filter and order -- be satisfied
+  // by one index walk instead (confirmed via EXPLAIN QUERY PLAN in OrderListQueryPlanTests).
+  "CREATE INDEX IF NOT EXISTS IX_orders_shop_updated ON orders(marketplace,shop,json_extract(payload,'$.UpdatedAt') DESC)";cmd.ExecuteNonQuery();SchemaVersion.Ensure(c);
  }
  SqliteConnection Open(){var c=SqliteConnectionPolicy.Open(connectionString);using var pragma=c.CreateCommand();pragma.CommandText="PRAGMA busy_timeout=15000";pragma.ExecuteNonQuery();return c;}
  public List<OrderSnapshot> ReadAll(){using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT payload FROM orders";using var r=cmd.ExecuteReader();var rows=new List<OrderSnapshot>();while(r.Read())rows.Add(JsonSerializer.Deserialize<OrderSnapshot>(r.GetString(0))!);return rows.OrderByDescending(o=>o.UpdatedAt).ToList();}
