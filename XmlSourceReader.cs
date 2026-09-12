@@ -25,6 +25,8 @@ public class XmlSourceReader(HttpClient client)
    using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,timeout.Token);
    if((int)response.StatusCode is >=300 and <400)throw new InvalidOperationException("XML adresi yönlendiriliyor. Son HTTPS adresini kullanın.");
    if(!response.IsSuccessStatusCode)throw new InvalidOperationException($"XML alınamadı (HTTP {(int)response.StatusCode}).");
+   var mediaType=response.Content.Headers.ContentType?.MediaType;
+   if(mediaType is not null&&(mediaType.Equals("text/html",StringComparison.OrdinalIgnoreCase)||mediaType.Equals("application/xhtml+xml",StringComparison.OrdinalIgnoreCase)))throw new InvalidOperationException($"Sunucu XML yerine HTML içerik türü ('{mediaType}') döndürdü; hata veya giriş sayfası olabilir.");
    if(response.Content.Headers.ContentLength>Limit)throw new InvalidOperationException("XML 25 MB sınırını aşıyor.");
    await using var raw=await response.Content.ReadAsStreamAsync(timeout.Token);await using var stream=response.Content.Headers.ContentEncoding.Any(x=>string.Equals(x,"gzip",StringComparison.OrdinalIgnoreCase))?new GZipStream(raw,CompressionMode.Decompress):raw;return await ParseAsync(stream,timeout.Token);
   }catch(XmlException){throw new InvalidOperationException("XML biçimi geçersiz veya DTD içeriyor. Hiçbir ürün değiştirilmedi.");}
@@ -35,9 +37,20 @@ public class XmlSourceReader(HttpClient client)
  {
   using var buffer=new MemoryStream();var block=new byte[81920];int read;
   while((read=await stream.ReadAsync(block,ct))>0){if(buffer.Length+read>Limit)throw new InvalidOperationException("XML 25 MB sınırını aşıyor.");await buffer.WriteAsync(block.AsMemory(0,read),ct);}
-  buffer.Position=0;
+  if(buffer.Length==0)throw new InvalidOperationException("XML yanıtı boş.");
+  buffer.Position=0;EnsureLooksLikeXml(buffer);buffer.Position=0;
   using var reader=XmlReader.Create(buffer,new XmlReaderSettings{DtdProcessing=DtdProcessing.Prohibit,XmlResolver=null,MaxCharactersInDocument=Limit});
   return XDocument.Load(reader).ToString(SaveOptions.DisableFormatting);
+ }
+ // A well-formed-enough HTML error/login page can otherwise parse as generic XML syntax; sniff the payload's
+ // own signature so a server that mislabels its content-type is still caught, not just a bad header.
+ private static void EnsureLooksLikeXml(MemoryStream buffer)
+ {
+  var peekLength=(int)Math.Min(buffer.Length,4096);var head=new byte[peekLength];_=buffer.Read(head,0,peekLength);
+  var text=Encoding.UTF8.GetString(head).TrimStart('﻿').TrimStart();
+  if(text.StartsWith("<!DOCTYPE html",StringComparison.OrdinalIgnoreCase)||text.StartsWith("<html",StringComparison.OrdinalIgnoreCase))
+   throw new InvalidOperationException("Sunucu XML yerine HTML sayfası döndürdü (ör. hata veya giriş sayfası). Adresi ve yetkilendirmeyi kontrol edin.");
+  if(!text.StartsWith("<"))throw new InvalidOperationException("Yanıt XML biçiminde değil (içerik '<' ile başlamıyor).");
  }
 }
 public static class XmlAuthStore
