@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -50,6 +52,73 @@ public sealed class SchedulerDecoupleTests
 
             Assert.AreEqual(afterFirst, afterSecond, "A job whose NextRunUtc was advanced by the first tick must not run again on an immediate second tick.");
         });
+    }
+
+    [TestMethod]
+    public void ScheduledTickPerformsAndPersistsAHealthCheckForADueEnabledSource()
+    {
+        // #692: a source with Enabled=true but AutoImport=false must still get a real reachability/latency
+        // check on the production ScheduledAsync path -- health monitoring shouldn't require import to be on.
+        var root = Path.Combine(Path.GetTempPath(), "scheduler-health-" + Guid.NewGuid().ToString("N"));
+        HttpClient httpClient = null;
+        Exception failure = null;
+        var handler = new CountingHealthyHandler();
+        try
+        {
+            var store = new CatalogStore(root);
+            store.SaveSource(new XmlSource { Id = Guid.NewGuid().ToString("N"), Name = "Fixture", Location = "https://example.test/feed.xml", Enabled = true, AutoImport = false, IntervalMinutes = 30 });
+            httpClient = new HttpClient(handler);
+            var capturedHttp = httpClient;
+
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var window = new MainWindow(root, capturedHttp);
+                    try
+                    {
+                        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(window.Dispatcher));
+                        var method = typeof(MainWindow).GetMethod("ScheduledAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                        var task = (Task)method.Invoke(window, null)!;
+                        var frame = new DispatcherFrame();
+                        task.ContinueWith(_ => frame.Continue = false, TaskScheduler.FromCurrentSynchronizationContext());
+                        Dispatcher.PushFrame(frame);
+                        if (task.IsFaulted) throw task.Exception!.InnerException ?? task.Exception!;
+
+                        var updated = new CatalogStore(root).Sources().Single();
+                        Assert.AreEqual("HEALTHY", updated.LastHealthState);
+                        Assert.IsNotNull(updated.LastHealthCheckUtc);
+                        Assert.IsTrue(updated.LastHealthLatencyMs >= 0);
+                        Assert.IsTrue(handler.Calls >= 1, "ScheduledAsync must actually perform the health check, not just enqueue a placeholder.");
+                    }
+                    finally { window.Close(); }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start(); thread.Join();
+            if (failure != null) throw new AssertFailedException(failure.ToString());
+        }
+        finally
+        {
+            httpClient?.Dispose();
+            for (var attempt = 0; attempt < 30; attempt++)
+            {
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); break; }
+                catch (IOException) { Thread.Sleep(300); }
+            }
+        }
+    }
+
+    sealed class CountingHealthyHandler : HttpMessageHandler
+    {
+        public int Calls;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref Calls);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<Products/>") });
+        }
     }
 
     static void Run(Action<Fixture> test)

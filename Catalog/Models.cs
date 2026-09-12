@@ -21,6 +21,13 @@ public class XmlSource
  public string LastFeedState { get; set; } = "NEVER";
  public int MissingSourceGraceMinutes { get; set; } = 120;
  public string NumberCultureName { get; set; } = "en-US";
+ // Reachability/latency health, distinct from LastFeedState (which tracks import outcome, not connectivity).
+ // Null on records written before this field existed -- a scheduled check populates it on its first run.
+ public DateTimeOffset? LastHealthCheckUtc { get; set; }
+ public string LastHealthState { get; set; } = "NEVER_CHECKED";
+ public int? LastHealthHttpStatus { get; set; }
+ public long? LastHealthLatencyMs { get; set; }
+ public string LastHealthError { get; set; } = "";
  public string Id {get;set;}=Guid.NewGuid().ToString("N"); public string Name {get;set;}=""; public string Location {get;set;}=""; public bool Enabled {get;set;}=true;public int IntervalMinutes {get;set;}=30;
  public string ItemPath {get;set;}="";public string DecimalSeparator {get;set;}=".";public Dictionary<string,string> Fields {get;set;}=new();
  public decimal ExchangeRate {get;set;}=1;public decimal MarkupPercent {get;set;}=40;public decimal FixedAmount {get;set;}=0;public decimal MinimumPrice {get;set;}=0;public string Currency {get;set;}="USD";
