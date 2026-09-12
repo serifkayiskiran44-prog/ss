@@ -12,6 +12,8 @@ public static class LocalCulture
         value = 0;
         if (string.IsNullOrWhiteSpace(text)) return false;
         var candidate = text.Trim();
+        if (candidate.Count(c => c is ',' or '.') == 1 && candidate.Length - candidate.IndexOfAny([',', '.']) - 1 == 3)
+            return false; // A single separator with three trailing digits is ambiguous without a profile culture.
         var culture = candidate.Contains(',') && candidate.Contains('.') && candidate.LastIndexOf(',') > candidate.LastIndexOf('.')
             ? Turkish
             : candidate.Contains(',') ? Turkish : CultureInfo.InvariantCulture;
