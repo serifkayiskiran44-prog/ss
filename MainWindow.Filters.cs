@@ -172,6 +172,27 @@ public partial class MainWindow {
    productStockSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productStockSummaryPanel, $"{summary.Label}, elde {summary.OnHand}, kanala açık {summary.Available}");
  }
+ // Product audit timeline (#806) in the workspace's "Geçmiş" section: grouped, newest first, each entry's
+ // detail collapsed behind an expander because that is where a failed call's message lands.
+ readonly StackPanel productAuditTimelinePanel = new();
+ void ShowProductAuditTimeline(CatalogProduct? product)
+ {
+  productAuditTimelinePanel.Children.Clear();
+  if (product is null) { productAuditTimelinePanel.Children.Add(new TextBlock { Text = "Ürün seçince değişiklik geçmişi burada görünür.", TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) }); return; }
+  ProductAuditTimelineView view;
+  try { view = ProductAuditTimeline.Build(new AuditStore(dataDirectory).List(AuditStore.RetentionLimit), product.Id, DateTime.UtcNow); }
+  catch (Exception e) { Log(Safe(e)); productAuditTimelinePanel.Children.Add(new TextBlock { Text = "Denetim geçmişi okunamadı.", Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)) }); return; }
+  productAuditTimelinePanel.Children.Add(new TextBlock { Text = view.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });
+  foreach (var entry in view.Entries)
+  {
+   var line = $"{entry.When} · {entry.Action} · {entry.Module} · {entry.Outcome}" + (entry.Repeat.Length > 0 ? " · " + entry.Repeat : "");
+   if (entry.HasDetail)
+    productAuditTimelinePanel.Children.Add(new Expander { Header = line, Margin = new Thickness(0, 1, 0, 1), Content = new TextBlock { Text = entry.Detail, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 3, 0, 6), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) } });
+   else
+    productAuditTimelinePanel.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 2), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+  }
+  System.Windows.Automation.AutomationProperties.SetName(productAuditTimelinePanel, view.Headline);
+ }
  // Content before/after preview (#805). Opened deliberately, read-only, and closed again: it renders the values
  // a save is about to change to customer-facing text, sanitized and capped by ProductContentDiff. It writes
  // nothing -- locally or to a marketplace -- and offers no control that could.

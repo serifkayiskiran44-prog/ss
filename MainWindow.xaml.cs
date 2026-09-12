@@ -136,7 +136,7 @@ public partial class MainWindow : Window
   tabs.Items.Add(new TabItem{Header="Fiyat / stok",Tag="price-stock",Content=Scroll(ProductReadOnlyFields(("Satış fiyatı","Price"),("Satış para birimi","Currency"),("Alış fiyatı","Cost"),("Alış para birimi","CostCurrency"),("KDV oranı (%)","VatRate"),("Stok","Stock"),("Fiyat kaynağı","PriceSource"),("Stok kaynağı","StockSource")))});
   tabs.Items.Add(new TabItem{Header="Görseller",Tag="media",Content=Scroll(ProductReadOnlyFields(("Görsel URL'leri","ImageUrls"),("Medya kaynağı","MediaSource")))});
   tabs.Items.Add(new TabItem{Header="Kanallar",Tag="channel",Content=Scroll(new StackPanel{Children={Heading("Kanal ve mağaza bağları"),productChannelSummaryMirror,Hint("Eşleştirme ve ilan durumları yerel kanal planlarından okunur; canlı write bu sekmeden başlatılmaz.")}})});
-  tabs.Items.Add(new TabItem{Header="Geçmiş",Tag="audit",Content=Scroll(new StackPanel{Children={Heading("Ürün sipariş raporu"),productOrderSummary,Hint("Özet yalnız yerel sipariş kayıtlarından üretilir; bu sekme canlı marketplace çağrısı yapmaz."),ProductReadOnlyFields(("Kaynak kimliği","SourceId"),("Kaynak türü","SourceKind"),("Son güncelleme","UpdatedUtc"))}})});
+  tabs.Items.Add(new TabItem{Header="Geçmiş",Tag="audit",Content=Scroll(new StackPanel{Children={Heading("Değişiklik geçmişi"),productAuditTimelinePanel,Heading("Ürün sipariş raporu"),productOrderSummary,Hint("Özet yalnız yerel sipariş kayıtlarından üretilir; bu sekme canlı marketplace çağrısı yapmaz."),ProductReadOnlyFields(("Kaynak kimliği","SourceId"),("Kaynak türü","SourceKind"),("Son güncelleme","UpdatedUtc"))}})});
   return tabs;
  }
  static StackPanel ProductReadOnlyFields(params (string Label,string Property)[] fields)
