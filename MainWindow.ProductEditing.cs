@@ -105,6 +105,7 @@ public partial class MainWindow
         ShowProductChannelStatus(edit);
         ShowProductPriceSummary(edit);
         ShowProductStockSummary(edit);
+        ShowProductProvenance(edit);
         RefreshPriceFieldsPanel();
         acceptedProductSelection = products.SelectedItems.OfType<CatalogProduct>().ToList();
     }

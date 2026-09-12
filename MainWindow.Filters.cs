@@ -172,6 +172,26 @@ public partial class MainWindow {
    productStockSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productStockSummaryPanel, $"{summary.Label}, elde {summary.OnHand}, kanala açık {summary.Available}");
  }
+ // Product card source provenance (#800). Collapsed by default -- the issue's "kartı kalabalıklaştırma" -- and
+ // opened by the operator; the header alone carries the one-line answer. The source is named, never located:
+ // XmlSource.Location is the feed URL and carries keys.
+ readonly StackPanel productProvenanceBody = new();
+ readonly Expander productProvenanceExpander = new() { Header = "Köken", Margin = new Thickness(3, 2, 3, 8), IsExpanded = false };
+ void ShowProductProvenance(CatalogProduct? product)
+ {
+  productProvenanceBody.Children.Clear();
+  productProvenanceExpander.Visibility = product is null ? Visibility.Collapsed : Visibility.Visible;
+  if (product is null) return;
+  var source = string.IsNullOrWhiteSpace(product.SourceId) ? null : store.Sources().FirstOrDefault(s => s.Id == product.SourceId);
+  var view = ProductProvenance.Build(product, source, DateTime.UtcNow);
+  productProvenanceExpander.Header = $"Köken · {view.Headline}";
+  productProvenanceBody.Children.Add(new TextBlock { Text = view.SourceSummary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+  foreach (var row in view.Rows)
+   productProvenanceBody.Children.Add(new TextBlock { Text = $"{row.Field}: {row.Origin} — {row.Detail}", TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 2, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+  foreach (var warning in view.Warnings)
+   productProvenanceBody.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 4, 0, 0) });
+  System.Windows.Automation.AutomationProperties.SetName(productProvenanceExpander, "Alan kökenleri: " + view.Headline);
+ }
  // Product quick-inspect drawer (#796). A read-only panel beside the list, opened with Ctrl+I on the selected
  // row and closed with Esc, so the operator can check identity/price/stock/source/readiness/last error without
  // leaving the row or opening the editor. It is built from ProductQuickInspect's label/value rows, which carry
