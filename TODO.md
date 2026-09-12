@@ -685,3 +685,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Whitelisted server-side sorting and paged fixture coverage
 - [ ] UI filter binding, context menu target, selection snapshot and bulk audit flow
 - [ ] Full Release/publish evidence
+
+## #287 dirty product edit repair — 2026-09-12
+- [x] Explicit Kaydet/Vazgeç/İptal before abandoning an edited product, refreshing results or closing.
+- [x] Preserve selection/draft on Cancel, invalid input and stale save; persist across reopen on Save.
+- [x] Permanent real Windows STA/SQLite regression coverage: 10 cases; full Release 120/120.
+- [x] Release build and self-contained win-x64 publish; CI check skipped because gh is unavailable.
+- [ ] Full #287 product-card acceptance (bound tabs/domain/report/profitability/DPI/performance evidence) remains unverified/incomplete; do not infer completion from this defect fix.

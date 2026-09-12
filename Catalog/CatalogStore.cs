@@ -43,6 +43,7 @@ public partial class CatalogStore
   if(p.Name.Length>500||p.Sku.Length>128||p.Barcode.Length>64||p.Brand.Length>200||p.Category.Length>200||p.Description.Length>20000||p.Currency.Length is < 3 or > 3)throw new InvalidOperationException("Ürün metin alanlarından biri izin verilen uzunluğu aşıyor veya döviz kodu 3 karakter değil.");
   if(string.IsNullOrWhiteSpace(p.Name)||(string.IsNullOrWhiteSpace(p.Sku)&&string.IsNullOrWhiteSpace(p.Barcode))||p.Price<0||p.Cost<0||p.Stock<0||p.VatRate<0||p.VatRate>100)throw new InvalidOperationException("Ürün adı, kimliği, fiyatı, stoku veya KDV oranı geçersiz.");
  }
+ public CatalogProduct? FindProduct(string id){using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";cmd.Parameters.AddWithValue("$id",id);return cmd.ExecuteScalar() is string json?JsonSerializer.Deserialize<CatalogProduct>(json):null;}
  public void SaveProduct(CatalogProduct product){Valid(product);using var c=Open();using var tx=c.BeginTransaction();using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",product.Id);var json=find.ExecuteScalar() as string??throw new InvalidOperationException("Ürün bulunamadı.");var old=JsonSerializer.Deserialize<CatalogProduct>(json)!;if(old.SourceId!=product.SourceId||old.Sku!=product.Sku||old.Barcode!=product.Barcode)throw new InvalidOperationException("Ürün kimliği elle değiştirilemez.");EnsureUniqueIdentity(c,tx,product);if(product.UpdatedUtc!=old.UpdatedUtc)throw new InvalidOperationException("Ürün başka bir işlemde güncellendi. Yenileyip tekrar düzenleyin.");if(product.Price!=old.Price||product.Currency!=old.Currency){product.FormulaPriceTry=null;product.AppliedTryRate=null;product.FxRateDate=null;}product.UpdatedUtc=DateTime.UtcNow;Put(c,"CatalogProducts",product.Id,product,tx);tx.Commit();}
  static void EnsureUniqueIdentity(SqliteConnection c,SqliteTransaction tx,CatalogProduct product){using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Json FROM CatalogProducts WHERE Id<>$id AND ((json_extract(Json,'$.Sku')=$sku AND $sku<>'') OR (json_extract(Json,'$.Barcode')=$barcode AND $barcode<>'')) LIMIT 1";cmd.Parameters.AddWithValue("$id",product.Id);cmd.Parameters.AddWithValue("$sku",product.Sku.Trim());cmd.Parameters.AddWithValue("$barcode",product.Barcode.Trim());if(cmd.ExecuteScalar() is string)throw new InvalidOperationException("SKU veya barkod başka bir üründe zaten kayıtlı.");}
  public void DeleteProduct(CatalogProduct product){using var c=Open();using var tx=c.BeginTransaction();using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",product.Id);var json=find.ExecuteScalar() as string??throw new InvalidOperationException("Ürün bulunamadı.");var old=JsonSerializer.Deserialize<CatalogProduct>(json)!;if(old.UpdatedUtc!=product.UpdatedUtc)throw new InvalidOperationException("Ürün değişti; yenileyip tekrar deneyin.");if(old.EtsyCreationAttempted||!string.IsNullOrEmpty(old.EtsyListingId))throw new InvalidOperationException("Etsy bağlantısı veya gönderim kaydı olan ürünü silmek yerine pasife alın.");using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="DELETE FROM CatalogProducts WHERE Id=$id";cmd.Parameters.AddWithValue("$id",product.Id);cmd.ExecuteNonQuery();tx.Commit();}
@@ -87,14 +88,3 @@ public partial class CatalogStore
  public CatalogUndoReceipt ImportWithUndo(XmlSource source,IReadOnlyList<CatalogProduct> incoming,CancellationToken cancellationToken=default){var before=Products().Select(CloneProduct).ToList();Import(source,incoming,cancellationToken);cancellationToken.ThrowIfCancellationRequested();var after=Products().Select(CloneProduct).ToList();return new(Guid.NewGuid().ToString("N"),before,after);}
  public void Undo(CatalogUndoReceipt receipt){using var c=Open();using var tx=c.BeginTransaction();var current=Read<CatalogProduct>(c,"CatalogProducts",tx);var expected=JsonSerializer.Serialize(receipt.After.OrderBy(p=>p.Id));var actual=JsonSerializer.Serialize(current.OrderBy(p=>p.Id));if(expected!=actual)throw new InvalidOperationException("Katalog bu içe aktarmadan sonra değişti; geri alma güvenlik nedeniyle durduruldu.");using(var delete=c.CreateCommand()){delete.Transaction=tx;delete.CommandText="DELETE FROM CatalogProducts";delete.ExecuteNonQuery();}foreach(var p in receipt.Before)Put(c,"CatalogProducts",p.Id,p,tx);tx.Commit();}
 }
-
-
-
-
-
-
-
-
-
-
-

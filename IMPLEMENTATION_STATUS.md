@@ -348,3 +348,15 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 - Release test suite: 110/110 passed; self-contained win-x64 publish succeeded.
 - Branch: codex/issue-286-product-list-repair.
 
+
+## #287 — dirty product edit repair (2026-09-12)
+
+Status: dirty-edit defect FIXED; the full product-card issue remains PARTIAL.
+- `MainWindow.ProductEditing.cs` compares the editor with its loaded snapshot, includes invalid binding text in dirty detection, and requires an explicit Kaydet/Vazgeç/İptal decision before changing products, replacing list results or closing the window.
+- Cancel/save failure restores the accepted selection and preserves the editor. Successful save uses CatalogStore validation, optimistic concurrency and a local SQLite transaction; no marketplace dispatch is added. Re-selecting reads the persisted version by product ID. Refresh after a save re-queries the list so the grid and editor agree.
+- Modal decision re-entry from an in-flight refresh is rejected. Cancelling window close leaves cancellation tokens active.
+- `tests/MarketplaceHub.Tests/ProductCardDirtyDraftTests.cs` permanently covers 10 STA/WPF/temporary-SQLite cases: all three decisions, refresh/close cancellation, stale save, invalid input, save/reopen persistence, page replacement cancellation, grid/editor refresh consistency and modal re-entry. Initial six cases were observed red (no prompt); refresh-grid consistency and modal re-entry also failed before their fixes.
+- Full Release suite: **120 passed / 0 failed / 0 skipped**, `TestResults/full-dirty-fix.trx`. Release build succeeded with 0 warnings/errors. Self-contained win-x64 publish succeeded in `Windows-Current`. Existing test-project nullable warnings are not new.
+- Commands: `dotnet test tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj -c Release --logger "trx;LogFileName=full-dirty-fix.trx" --results-directory TestResults`; `dotnet build TrMarketplaceHubDesktop.csproj -c Release --no-restore`; `dotnet publish TrMarketplaceHubDesktop.csproj -c Release -r win-x64 --self-contained true -o Windows-Current`; `git diff --check`.
+- gh is unavailable: CI checking and issue closing are skipped by user instruction. No same-SHA green CI is claimed.
+- Remaining #287 acceptance is not established: twelve bound tabs, actual order report, variant/bundle domain integration, shared profitability, per-deliverable matrix and DPI/performance evidence. This repair does not turn these into completed deliverables.
