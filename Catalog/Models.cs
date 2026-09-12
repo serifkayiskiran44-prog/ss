@@ -34,7 +34,7 @@ public class CatalogProduct {
  public string Shelf {get;set;}="";
  public DateTime? ExpiresOn {get;set;}
 
- public string Gtin {get;set;}=""; public bool Active {get;set;}=true; public bool SourceMissing {get;set;} public bool Anomaly {get;set;} public bool Duplicate {get;set;} public string StatusLabel => Active?"Aktif":"Pasif";
+ public string Gtin {get;set;}=""; public bool Active {get;set;}=true; public bool SourceMissing {get;set;} public bool Anomaly {get;set;} public bool Duplicate {get;set;} public decimal? ApproximateProfit => Price > 0 && Cost >= 0 ? Price - Cost : null; public decimal? ApproximateMarginPercent => Price > 0 && ApproximateProfit.HasValue ? ApproximateProfit.Value / Price * 100m : null; public string StatusLabel => Active?"Aktif":"Pasif";
  public string CostCurrency {get;set;}="TRY";
  public decimal? FormulaPriceTry {get;set;}
  public decimal? AppliedTryRate {get;set;}
