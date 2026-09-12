@@ -107,7 +107,7 @@ public partial class MainWindow : Window
   productEditor.Children.Add(Button("Tarihi temizle",()=>expires.SelectedDate=null));
   productEditor.Children.Add(Hint("Operasyon bilgileri XML yenilemesinde korunur. Fatura adı yerel kayıttır; fatura entegrasyonuna otomatik gönderilmez."));
   productEditor.Children.Add(Button("Ürünü ve kilitleri kaydet",()=>{SaveProductEdit();RefreshProducts();Log("Ürün ve alan kilitleri kaydedildi.");}));productEditor.IsEnabled=false;
-  Tab("Ürün havuzu",Split(Dock(bar,BuildProductSelectionBar(),products),BuildProductWorkspace(),350));
+  Tab("Ürün havuzu",Split(Dock(bar,BuildProductSelectionBar(),BuildProductInspectHost(products)),BuildProductWorkspace(),350));
  }
  TabControl BuildProductWorkspace()
  {

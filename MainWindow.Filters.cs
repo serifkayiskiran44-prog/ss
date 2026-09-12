@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using TrMarketplaceHubDesktop.Catalog;
 namespace TrMarketplaceHubDesktop;
@@ -118,6 +119,66 @@ public partial class MainWindow {
   cell.Setters.Add(new Setter(PaddingProperty, metrics.CellPadding));
   cell.Setters.Add(new Setter(VerticalContentAlignmentProperty, VerticalAlignment.Center));
   products.CellStyle = cell;
+ }
+ // Product quick-inspect drawer (#796). A read-only panel beside the list, opened with Ctrl+I on the selected
+ // row and closed with Esc, so the operator can check identity/price/stock/source/readiness/last error without
+ // leaving the row or opening the editor. It is built from ProductQuickInspect's label/value rows, which carry
+ // no commands and are sanitized, so the drawer cannot mutate anything and cannot echo a secret.
+ readonly StackPanel productInspectBody = new();
+ readonly TextBlock productInspectTitle = new() { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) };
+ Border? productInspectDrawer;
+ UIElement BuildProductInspectHost(UIElement list)
+ {
+  var close = new Button { Content = "Kapat (Esc)", HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(10, 3, 10, 3) };
+  close.Click += (_, _) => CloseProductInspect();
+  var stack = new StackPanel { Margin = new Thickness(12) };
+  stack.Children.Add(productInspectTitle); stack.Children.Add(productInspectBody); stack.Children.Add(close);
+  productInspectDrawer = new Border
+  {
+   Width = 320, Visibility = Visibility.Collapsed, Background = new SolidColorBrush(Color.FromRgb(250, 252, 254)),
+   BorderBrush = new SolidColorBrush(Color.FromRgb(214, 226, 235)), BorderThickness = new Thickness(1, 0, 0, 0),
+   Child = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
+  };
+  productInspectDrawer.Name = "ProductInspectDrawer";
+  System.Windows.Automation.AutomationProperties.SetName(productInspectDrawer, "Ürün hızlı inceleme");
+  var host = new Grid();
+  host.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+  host.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+  Grid.SetColumn(list, 0); host.Children.Add(list);
+  Grid.SetColumn(productInspectDrawer, 1); host.Children.Add(productInspectDrawer);
+  products.InputBindings.Add(new KeyBinding(new SimpleCommand(OpenProductInspect), Key.I, ModifierKeys.Control));
+  products.InputBindings.Add(new KeyBinding(new SimpleCommand(CloseProductInspect), Key.Escape, ModifierKeys.None));
+  productInspectDrawer.InputBindings.Add(new KeyBinding(new SimpleCommand(CloseProductInspect), Key.Escape, ModifierKeys.None));
+  return host;
+ }
+ internal void OpenProductInspect()
+ {
+  if (productInspectDrawer is null) return;
+  if (products.SelectedItem is not CatalogProduct product) { CloseProductInspect(); return; }
+  var jobs = new SyncStore(dataDirectory).List().Where(j => j.EntityId == product.Id).ToList();
+  var view = ProductQuickInspect.Build(product, jobs, DateTime.UtcNow);
+  productInspectTitle.Text = view.Rows.First(r => r.Label == "Ürün adı").Value;
+  productInspectBody.Children.Clear();
+  foreach (var section in view.Sections)
+  {
+   productInspectBody.Children.Add(new TextBlock { Text = section, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 10, 0, 3) });
+   foreach (var row in view.InSection(section))
+    productInspectBody.Children.Add(new TextBlock { Text = row.Label + ": " + row.Value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 1) });
+  }
+  productInspectDrawer.Visibility = Visibility.Visible;
+  productInspectDrawer.Focus();
+ }
+ internal void CloseProductInspect()
+ {
+  if (productInspectDrawer is null || productInspectDrawer.Visibility != Visibility.Visible) return;
+  productInspectDrawer.Visibility = Visibility.Collapsed;
+  products.Focus();
+ }
+ sealed class SimpleCommand(Action run) : System.Windows.Input.ICommand
+ {
+  public event EventHandler? CanExecuteChanged { add { } remove { } }
+  public bool CanExecute(object? parameter) => true;
+  public void Execute(object? parameter) => run();
  }
  // Product list selection summary bar (#795). Sticky between the toolbar and the grid, hidden until something is
  // selected. It reports only counts -- never product text -- and it reconciles the selection against the rows
