@@ -34,7 +34,28 @@ public static class MediaPanel
         grid.Columns.Add(new DataGridCheckBoxColumn { Header = "Ana", Binding = new System.Windows.Data.Binding("IsPrimary"), Width = 55 });
         grid.Columns.Add(new DataGridTextColumn { Header = "Son doğrulama", Binding = new System.Windows.Data.Binding("LastValidatedUtc"), Width = 160 });
         grid.Columns.Add(new DataGridTextColumn { Header = "Hata", Binding = new System.Windows.Data.Binding("Error"), Width = 300 });
-        var preview = new System.Windows.Controls.Image { Width = 360, Height = 260, Stretch = System.Windows.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left };
+        // #797: the image and its placeholder live in one fixed box, so loading -> ready -> broken never resizes
+        // anything. The placeholder is the shared ProductMediaPresentation description (glyph, word, hint).
+        var preview = new System.Windows.Controls.Image { Stretch = System.Windows.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var previewGlyph = new TextBlock { FontSize = 30, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(140, 158, 171)) };
+        var previewLabel = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Margin = new Thickness(8, 6, 8, 0), Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)) };
+        var previewPlaceholder = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Children = { previewGlyph, previewLabel } };
+        var previewBox = new Border
+        {
+            Width = 360, Height = 260, HorizontalAlignment = HorizontalAlignment.Left,
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(247, 250, 252)),
+            BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(214, 226, 235)), BorderThickness = new Thickness(1),
+            Child = new Grid { Children = { preview, previewPlaceholder } },
+        };
+        void ShowMediaState(ProductMediaRecord? record, bool loading, bool loaded, bool fromCache, bool failed = false)
+        {
+            var state = ProductMediaPresentation.Classify(record, loading, loaded, fromCache, failed);
+            var picture = state.Key is ProductMediaPresentation.Ready or ProductMediaPresentation.Cached;
+            preview.Visibility = picture ? Visibility.Visible : Visibility.Collapsed;
+            previewPlaceholder.Visibility = picture ? Visibility.Collapsed : Visibility.Visible;
+            previewGlyph.Text = state.Glyph; previewLabel.Text = state.Hint.Length > 0 ? state.Label + "\n" + state.Hint : state.Label;
+            System.Windows.Automation.AutomationProperties.SetName(previewBox, state.Label);
+        }
         ProductMediaRecord? selected = null;
         IReadOnlyList<ProductChoice> choices = [];
 
@@ -72,6 +93,7 @@ public static class MediaPanel
         async Task ShowPreviewAsync(ProductMediaRecord? record)
         {
             preview.Source = null;
+            ShowMediaState(record, loading: record is not null, loaded: false, fromCache: false);
             if (record is null) return;
             try
             {
@@ -79,11 +101,15 @@ public static class MediaPanel
                 var normalized = MediaStore.NormalizeUrl(record.Url);
                 if (normalized.StartsWith("file:", StringComparison.OrdinalIgnoreCase)) bytes = await File.ReadAllBytesAsync(new Uri(normalized).LocalPath);
                 else if (normalized.Length > 0) bytes = await previewHttp.GetByteArrayAsync(normalized);
-                else return;
+                else { ShowMediaState(record, false, false, false); return; }
                 using var stream = new MemoryStream(bytes);
                 var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad; image.StreamSource = stream; image.EndInit(); image.Freeze(); preview.Source = image;
+                ShowMediaState(record, loading: false, loaded: true, fromCache: normalized.StartsWith("file:", StringComparison.OrdinalIgnoreCase));
             }
-            catch (Exception error) { status.Text = "Önizleme yüklenemedi: " + MarketplaceConnectionStore.Redact(error.Message); }
+            // The transport's own message has, in this app, contained the full signed URL; the operator gets the
+            // shared failure line (reason + host) instead, and the raw text is not surfaced (#797).
+            catch (Exception error) when (error is HttpRequestException or IOException or NotSupportedException or UriFormatException or TaskCanceledException)
+            { ShowMediaState(record, loading: false, loaded: false, fromCache: false, failed: true); status.Text = ProductMediaPresentation.FailureText(record, error.Message); }
         }
 
         productPicker.SelectionChanged += (_, _) => RefreshMedia();
@@ -110,13 +136,14 @@ public static class MediaPanel
             RefreshMedia(); status.Text = "Ürün görsellerinin doğrulaması tamamlandı.";
         });
         var primary = Button("Ana görsel yap", () => { if (selected is null) throw new InvalidOperationException("Önce görsel seçin."); media.SetPrimary(selected.Id); RefreshMedia(); });
-        var remove = Button("Kaydı kaldır", () => { if (selected is null) throw new InvalidOperationException("Önce görsel seçin."); media.Delete(selected.Id); selected = null; RefreshMedia(); preview.Source = null; });
+        var remove = Button("Kaydı kaldır", () => { if (selected is null) throw new InvalidOperationException("Önce görsel seçin."); media.Delete(selected.Id); selected = null; RefreshMedia(); preview.Source = null; ShowMediaState(null, false, false, false); });
         var openProduct = Button("Ürünü düzenle", () => navigate?.Invoke("products"));
 
         var top = new WrapPanel(); top.Children.Add(new TextBlock { Text = "Ürün", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); top.Children.Add(productPicker); top.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); top.Children.Add(search); top.Children.Add(refresh); top.Children.Add(openProduct); panel.Children.Add(top);
         var addRow = new WrapPanel(); addRow.Children.Add(new TextBlock { Text = "Adres", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(url); addRow.Children.Add(new TextBlock { Text = "Kaynak", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(source); addRow.Children.Add(add); panel.Children.Add(addRow);
         var actions = new WrapPanel(); actions.Children.Add(validate); actions.Children.Add(validateAll); actions.Children.Add(primary); actions.Children.Add(remove); panel.Children.Add(actions);
-        var body = new Grid(); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(390) }); Grid.SetColumn(grid, 0); Grid.SetColumn(preview, 1); body.Children.Add(grid); body.Children.Add(preview); panel.Children.Add(body); panel.Children.Add(status);
+        var body = new Grid(); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(390) }); Grid.SetColumn(grid, 0); Grid.SetColumn(previewBox, 1); body.Children.Add(grid); body.Children.Add(previewBox); panel.Children.Add(body); panel.Children.Add(status);
+        ShowMediaState(null, loading: false, loaded: false, fromCache: false);
         SyncCatalogImages(); RefreshProducts();
         return Scroll(panel);
     }
