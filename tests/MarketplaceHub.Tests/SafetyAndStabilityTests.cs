@@ -20,6 +20,21 @@ namespace MarketplaceHub.Tests;
 public sealed class SafetyAndStabilityTests
 {
     [TestMethod]
+    public void CatalogImportHonorsCancellationBeforeMutation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-import-cancel-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new TrMarketplaceHubDesktop.Catalog.CatalogStore(root);
+            var source = new TrMarketplaceHubDesktop.Catalog.XmlSource { Id = "source", Currency = "USD", DecimalSeparator = "." };
+            using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+            Assert.ThrowsException<OperationCanceledException>(() => store.Import(source, Array.Empty<TrMarketplaceHubDesktop.Catalog.CatalogProduct>(), cancellation.Token));
+            Assert.AreEqual(0, store.Products().Count);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
     public void SqliteConnectionPolicy_AppliesSharedSafetyPragmas()
     {
         var root = Path.Combine(Path.GetTempPath(), "marketplacehub-sqlite-policy-" + Guid.NewGuid().ToString("N"));

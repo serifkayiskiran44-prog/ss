@@ -44,11 +44,12 @@ public partial class CatalogStore
  static void EnsureUniqueIdentity(SqliteConnection c,SqliteTransaction tx,CatalogProduct product){using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Json FROM CatalogProducts WHERE Id<>$id AND ((json_extract(Json,'$.Sku')=$sku AND $sku<>'') OR (json_extract(Json,'$.Barcode')=$barcode AND $barcode<>'')) LIMIT 1";cmd.Parameters.AddWithValue("$id",product.Id);cmd.Parameters.AddWithValue("$sku",product.Sku.Trim());cmd.Parameters.AddWithValue("$barcode",product.Barcode.Trim());if(cmd.ExecuteScalar() is string)throw new InvalidOperationException("SKU veya barkod başka bir üründe zaten kayıtlı.");}
  public void DeleteProduct(CatalogProduct product){using var c=Open();using var tx=c.BeginTransaction();using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",product.Id);var json=find.ExecuteScalar() as string??throw new InvalidOperationException("Ürün bulunamadı.");var old=JsonSerializer.Deserialize<CatalogProduct>(json)!;if(old.UpdatedUtc!=product.UpdatedUtc)throw new InvalidOperationException("Ürün değişti; yenileyip tekrar deneyin.");if(old.EtsyCreationAttempted||!string.IsNullOrEmpty(old.EtsyListingId))throw new InvalidOperationException("Etsy bağlantısı veya gönderim kaydı olan ürünü silmek yerine pasife alın.");using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="DELETE FROM CatalogProducts WHERE Id=$id";cmd.Parameters.AddWithValue("$id",product.Id);cmd.ExecuteNonQuery();tx.Commit();}
  static void Index(Dictionary<string,List<CatalogProduct>> index,string key,CatalogProduct product){if(key=="")return;if(!index.TryGetValue(key,out var values))index[key]=values=new();values.Add(product);}
- public ImportSummary Import(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
+ public ImportSummary Import(XmlSource source,IReadOnlyList<CatalogProduct> incoming)=>Import(source,incoming,CancellationToken.None);
+ public ImportSummary Import(XmlSource source,IReadOnlyList<CatalogProduct> incoming,CancellationToken cancellationToken)
  {
-  EnsureDropshipFeedSafe(source,incoming);
+  cancellationToken.ThrowIfCancellationRequested();EnsureDropshipFeedSafe(source,incoming);
   ImportSummary? result=null;
-  XmlSourceExecutionGate.RunAsync(source.Id,()=>{result=ImportCore(source,incoming);return Task.CompletedTask;}).GetAwaiter().GetResult();
+  XmlSourceExecutionGate.RunAsync(source.Id,()=>{result=ImportCore(source,incoming);return Task.CompletedTask;},cancellationToken).GetAwaiter().GetResult();
   return result!;
  }
  void EnsureDropshipFeedSafe(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
