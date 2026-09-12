@@ -32,6 +32,15 @@ public sealed class ImportRepairIntegrationTests
 
         source.MappingRevision++;
         XmlCatalog.EnsureMappingReady(source, drift, scheduled: false);
+
+        var repeatDrift = "<Products xmlns=\"urn:v1\"><Product><Sku>A</Sku><Name>One</Name><Cost>10.00</Cost><Stock>2</Stock><Extra><Value>x</Value></Extra></Product></Products>";
+        var repeatSnapshot = XmlCatalog.MappingSnapshot(repeatDrift, source);
+        Assert.ThrowsException<XmlMappingBlockedException>(() => XmlCatalog.EnsureMappingReady(source, repeatSnapshot, scheduled: true));
+
+        var renamedSource = RequiredSource("mapping-source-renamed");
+        renamedSource.Fields["Name"] = "Title";
+        var renamed = XmlCatalog.MappingSnapshot("<Products><Product><Sku>A</Sku><Title>One</Title><Cost>10</Cost><Stock>2</Stock></Product></Products>", renamedSource);
+        Assert.IsTrue(renamed.IsUsable);
     }
 
     [TestMethod]
@@ -53,6 +62,12 @@ public sealed class ImportRepairIntegrationTests
             Assert.AreEqual(9, missing.Updated + missing.Unchanged);
             var cases = new SourceMissingQuarantine(root).List(source.Id);
             Assert.AreEqual("WARNING", cases.Single(x => x.ProductId == "SKU-10").State);
+            Assert.AreEqual(10, store.Products().Count);
+
+            var pending = store.Import(source, partial, default, new XmlImportContext { FeedHash = "feed-b2", MappingShapeFingerprint = "shape-a", CompleteFeed = true, ObservedAtUtc = DateTimeOffset.UtcNow.AddHours(2) });
+            Assert.AreEqual(9, pending.Updated + pending.Unchanged);
+            Assert.AreEqual("PENDING_ACTION", new SourceMissingQuarantine(root).List(source.Id).Single(x => x.ProductId == "SKU-10").State);
+            Assert.AreEqual(10, store.Products().Count);
 
             var recovered = store.Import(source, all, default, new XmlImportContext { FeedHash = "feed-c", MappingShapeFingerprint = "shape-a", CompleteFeed = true, ObservedAtUtc = DateTimeOffset.UtcNow.AddHours(2) });
             Assert.IsTrue(recovered.Updated + recovered.Unchanged >= 10);
@@ -72,6 +87,8 @@ public sealed class ImportRepairIntegrationTests
         Assert.IsTrue(tr.Success, tr.Message);
         Assert.AreEqual(1234.56m, tr.Value);
         Assert.AreEqual(1234.56m, DeterministicNumberParser.Decimal("1,234.56", "en-US", "Price").Value);
+        Assert.AreEqual(1.234m, DeterministicNumberParser.Decimal("1,234", "tr-TR", "Price").Value);
+        Assert.AreEqual("AMBIGUOUS_SEPARATOR", DeterministicNumberParser.Decimal("1,234.56", "tr-TR", "Price").Code);
         Assert.AreEqual("EMPTY", DeterministicNumberParser.Decimal("", "en-US", "Price").Code);
         Assert.AreEqual("DATE_LIKE", DeterministicNumberParser.Decimal("2026-09-12", "en-US", "Price").Code);
         Assert.AreEqual("NEGATIVE", DeterministicNumberParser.Decimal("-1", "en-US", "Price").Code);
