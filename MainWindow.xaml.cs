@@ -37,6 +37,7 @@ public partial class MainWindow : Window
  readonly ComboBox decimalSeparator=new(){ItemsSource=new[]{".",","},SelectedIndex=0}, listingState=new(){ItemsSource=new[]{"active","draft","inactive","sold_out","expired"},SelectedIndex=0,Width=140};
  readonly StackPanel sourceGeneral=new(),sourceRules=new(),productEditor=new(),templateEditor=new();
  readonly TextBlock previewStatus=Hint("XML'i oku → eşleştir → önizle → seçili ürünleri havuza al."), apiStatus=Hint("Bağlantı henüz doğrulanmadı."), draftStatus=Hint("Ürün havuzundan bir ürün seç."),listingStatus=Hint(""), productChannelSummary=Hint("Ürün seçince kanal planları burada görünür."), productChannelSummaryMirror=Hint("Ürün seçince kanal planları burada görünür."), productOrderSummary=Hint("Ürün seçince yerel sipariş özeti burada görünür."), xmlSourceHealth=Hint("Kaynak seçince sağlık, ürün ve son çalışma özeti görünür.");
+ readonly StackPanel priceFieldsList=new();
  readonly ObservableCollection<string> xmlPaths=new();
  readonly TextBox sampleCost=new(){Text="100",Width=130};
  readonly TextBlock calculationStatus=Hint("Alış fiyatını girip hesaplamayı test edebilirsin."),fxStatus=Hint("Kur henüz alınmadı.");
@@ -85,7 +86,8 @@ public partial class MainWindow : Window
   foreach(var x in new[]{("Durum","StatusLabel",65d),("Stok kodu / SKU","Sku",135d),("Ürün","Name",200d),("Alış fiyatı","Cost",90d),("Alış döviz","CostCurrency",65d),("Satış fiyatı","Price",90d),("Satış döviz","Currency",65d),("KDV %","VatRate",60d),("Stok","Stock",60d),("Formül TL","FormulaPriceTry",95d),("1 döviz/TL","AppliedTryRate",95d),("Barkod","Barcode",140d),("GTIN","Gtin",140d),("Marka","Brand",120d),("Kategori","Category",150d),("Açıklama","Description",240d),("Etsy ilan ID","EtsyListingId",110d),("XML kaynağı","SourceId",125d),("Son güncelleme","UpdatedUtc",155d)})Column(products,x.Item1,x.Item2,x.Item3);
   Column(products,"Son veri kaynağı","SourceKind",110);Column(products,"Fiyat kaynağı","PriceSource",100);Column(products,"Stok kaynağı","StockSource",100);Column(products,"Medya kaynağı","MediaSource",100);
   products.SelectionMode=DataGridSelectionMode.Extended;products.EnableRowVirtualization=true;products.EnableColumnVirtualization=false;VirtualizingPanel.SetIsVirtualizing(products,true);VirtualizingPanel.SetVirtualizationMode(products,VirtualizationMode.Recycling);products.SelectionChanged+=ProductSelectionChanged;
-  bar.Children.Add(Button("Aktife al",()=>SetProductActive(true)));bar.Children.Add(Button("Pasife al",()=>SetProductActive(false)));bar.Children.Add(Button("Ürünü sil",DeleteSelectedProduct));productEditor.Children.Add(Heading("Ürün kartı"));Field(productEditor,"Alış fiyatı","Cost").IsReadOnly=true;Field(productEditor,"Alış para birimi","CostCurrency").IsReadOnly=true;Field(productEditor,"Satış fiyatı","Price");Field(productEditor,"Satış para birimi","Currency").IsReadOnly=true;Field(productEditor,"KDV oranı (%)","VatRate");productEditor.Children.Add(Hint("XML güncellemesinde korunmasını istediğin alanı kilitle."));
+  bar.Children.Add(Button("Aktife al",()=>SetProductActive(true)));bar.Children.Add(Button("Pasife al",()=>SetProductActive(false)));bar.Children.Add(Button("Ürünü sil",DeleteSelectedProduct));productEditor.Children.Add(Heading("Ürün kartı"));Field(productEditor,"Alış fiyatı","Cost").IsReadOnly=true;Field(productEditor,"Alış para birimi","CostCurrency").IsReadOnly=true;Field(productEditor,"Satış fiyatı","Price");Field(productEditor,"Satış para birimi","Currency").IsReadOnly=true;Field(productEditor,"KDV oranı (%)","VatRate");Field(productEditor,"Desi (kargo)","Desi");productEditor.Children.Add(Hint("XML güncellemesinde korunmasını istediğin alanı kilitle."));
+  BuildPriceFieldsPanel(productEditor);
   Field(productEditor,"Ürün stok kodu / SKU","Sku").IsReadOnly=true;Field(productEditor,"Barkod","Barcode").IsReadOnly=true;Field(productEditor,"GTIN","Gtin").IsReadOnly=true;Field(productEditor,"Marka","Brand");Field(productEditor,"Kategori","Category");Field(productEditor,"Başlık","Name");Flag(productEditor,"Başlığı kilitle","LockName");Field(productEditor,"Açıklama","Description",90);Flag(productEditor,"Açıklamayı kilitle","LockDescription");Flag(productEditor,"Fiyatı kilitle","LockPrice");Field(productEditor,"Stok","Stock");Flag(productEditor,"Stoğu kilitle","LockStock");Field(productEditor,"Görsel URL'leri","ImageUrls",65);Flag(productEditor,"Görselleri kilitle","LockImages");
   productEditor.Children.Add(Heading("Kanal durumları / yerel planlar"));productEditor.Children.Add(productChannelSummary);productEditor.Children.Add(Hint("Buradaki planlar yerel eşleme ve son durum bilgisidir; canlı marketplace yazımı yalnız açık önizleme/onay akışlarından yapılır."));
   productEditor.Children.Add(Heading("Operasyon bilgileri"));
@@ -113,6 +115,33 @@ public partial class MainWindow : Window
  static StackPanel ProductReadOnlyFields(params (string Label,string Property)[] fields)
  {
   var panel=new StackPanel(); foreach(var field in fields){panel.Children.Add(new TextBlock{Text=field.Label,Margin=new Thickness(4,7,4,0)});var box=new TextBox{IsReadOnly=true,MinHeight=28,TextWrapping=TextWrapping.Wrap};box.SetBinding(TextBox.TextProperty,new Binding(field.Property));panel.Children.Add(box);} return panel;
+ }
+ void BuildPriceFieldsPanel(Panel parent)
+ {
+  parent.Children.Add(Heading("Bağımsız fiyat alanları"));
+  parent.Children.Add(Hint("Kanal bazında formül yerine kullanılabilecek sabit fiyatlar (örn. \"Etsy sabit\"). Fiyat kuralında PriceFieldName ile seçilir."));
+  parent.Children.Add(priceFieldsList);
+  var name=new TextBox{Width=140,ToolTip="Alan adı"};var value=new TextBox{Width=80,ToolTip="Değer"};var currency=new TextBox{Width=50,Text="TRY",ToolTip="Para birimi"};
+  var addRow=new WrapPanel();addRow.Children.Add(name);addRow.Children.Add(value);addRow.Children.Add(currency);
+  addRow.Children.Add(Button("Fiyat alanı ekle",()=>{
+   if(edit==null)throw new InvalidOperationException("Önce ürün seç.");
+   if(!decimal.TryParse(value.Text,NumberStyles.Number,CultureInfo.InvariantCulture,out var v))throw new InvalidOperationException("Değer sayısal olmalı.");
+   store.AddPriceField(edit.Id,new(name.Text.Trim(),v,currency.Text.Trim().ToUpperInvariant()));
+   edit=store.FindProduct(edit.Id);productEditBaseline=JsonSerializer.Serialize(edit);name.Clear();value.Clear();RefreshPriceFieldsPanel();
+  }));
+  parent.Children.Add(addRow);
+ }
+ void RefreshPriceFieldsPanel()
+ {
+  priceFieldsList.Children.Clear();
+  if(edit==null)return;
+  foreach(var field in edit.PriceFields)
+  {
+   var row=new WrapPanel();row.Children.Add(new TextBlock{Text=$"{field.Name}: {field.Value} {field.Currency}",Margin=new Thickness(2,4,8,4),VerticalAlignment=VerticalAlignment.Center});
+   var capturedName=field.Name;
+   row.Children.Add(Button("Sil",()=>{store.RemovePriceField(edit!.Id,capturedName);edit=store.FindProduct(edit.Id);productEditBaseline=JsonSerializer.Serialize(edit);RefreshPriceFieldsPanel();}));
+   priceFieldsList.Children.Add(row);
+  }
  }
  void ShowProductChannelStatus(CatalogProduct? product){if(product==null){productChannelSummary.Text="Ürün seçince kanal planları burada görünür.";productChannelSummaryMirror.Text=productChannelSummary.Text;productOrderSummary.Text="Ürün seçince yerel sipariş özeti burada görünür.";return;}var rows=MarketplaceProductPanelModel.Build(product.Id,dataDirectory).Select(x=>$"{x.Channel} / {x.ShopId}: {x.Status} · {x.Readiness}"+(string.IsNullOrWhiteSpace(x.MappingId)?"":$" · eşleme {x.MappingId}"));var text=string.Join("\n",rows);productChannelSummary.Text=text;productChannelSummaryMirror.Text=text;var report=ProductOrderReport.Build(product.Sku,new OrdersStore(dataDirectory).ReadAll());productOrderSummary.Text=$"Sipariş: {report.OrderCount} · Adet: {report.Quantity} · Son sipariş: {report.LatestOrderId} · {report.LatestChannelShop}";}
  void SetProductActive(bool active){var selected=products.SelectedItems.OfType<CatalogProduct>().ToList();if(selected.Count==0&&edit!=null)selected.Add(edit);if(selected.Count==0)throw new InvalidOperationException("Önce ürün seç.");ValidBindings(productEditor);foreach(var row in selected){var copy=Clone(row);copy.Active=active;store.SaveProduct(copy);}RefreshProducts();Log($"{selected.Count} ürün yerel havuzda {(active?"aktif":"pasif")} yapıldı. Canlı ilan durumu değiştirilmedi.");}
