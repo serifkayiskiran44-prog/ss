@@ -43,6 +43,14 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
+    public void XmlPreviewFingerprint_ChangesWhenFeedOrMappingChanges()
+    {
+        var first = XmlPreviewFingerprint.Create("<Products><Product /></Products>", "{\"path\":\"Product\"}");
+        Assert.AreNotEqual(first, XmlPreviewFingerprint.Create("<Products><Product><Sku>A</Sku></Product></Products>", "{\"path\":\"Product\"}"));
+        Assert.AreNotEqual(first, XmlPreviewFingerprint.Create("<Products><Product /></Products>", "{\"path\":\"Item\"}"));
+    }
+
+    [TestMethod]
     public void CatalogImport_BlocksMassZeroSupplierFeedBeforeWrite()
     {
         var root = Path.Combine(Path.GetTempPath(), "marketplacehub-anomaly-" + Guid.NewGuid().ToString("N"));
