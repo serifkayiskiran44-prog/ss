@@ -10,6 +10,8 @@ namespace TrMarketplaceHubDesktop;
 public static class MediaPanel
 {
     sealed record ProductChoice(string Id, string Label);
+    // One thumbnail tile: position, state glyph and host only -- the record's URL never reaches the strip (#804).
+    sealed record GalleryTile(int Position, string Glyph, string Host, string Primary);
 
     public static FrameworkElement Create(string? directory, Action<string>? navigate = null)
     {
@@ -26,7 +28,26 @@ public static class MediaPanel
         var url = new TextBox { Width = 450, ToolTip = "HTTPS veya yerel file:/// adresi" };
         var source = new TextBox { Text = "manual", Width = 160 };
         var status = Hint("");
-        var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, Height = 330, EnableRowVirtualization = true };
+        // #804: keyboard-navigable thumbnail strip over the same records the grid lists. Focus is visible on the
+        // tile itself (a border that follows keyboard focus), and the summary beneath names position/state/host.
+        IReadOnlyList<ProductMediaRecord> galleryRecords = Array.Empty<ProductMediaRecord>();
+        var gallery = new ListBox { Height = 92, SelectionMode = SelectionMode.Single };
+        // Deliberate copy of one image's address, in contrast to the grid's implicit row copy, which is disabled
+        // below because it swept signed URLs onto the clipboard whenever an operator pressed Ctrl+C (#804).
+        var copySource = new Button { Content = "Görsel adresini kopyala", Margin = new Thickness(3) };
+        gallery.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        gallery.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
+        gallery.ItemsPanel = (ItemsPanelTemplate)System.Windows.Markup.XamlReader.Parse(
+            "<ItemsPanelTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'><VirtualizingStackPanel Orientation='Horizontal'/></ItemsPanelTemplate>");
+        gallery.ItemTemplate = (DataTemplate)System.Windows.Markup.XamlReader.Parse(
+            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
+            "<Border Width='96' Height='68' Margin='3' Padding='4' BorderThickness='1' BorderBrush='#D6E2EB' Background='#F7FAFC'>" +
+            "<StackPanel><TextBlock Text='{Binding Glyph}' FontSize='18' HorizontalAlignment='Center'/>" +
+            "<TextBlock Text='{Binding Host}' FontSize='10' TextTrimming='CharacterEllipsis' HorizontalAlignment='Center'/>" +
+            "<TextBlock FontSize='10' HorizontalAlignment='Center'><Run Text='#'/><Run Text='{Binding Position}'/><Run Text=' '/><Run Text='{Binding Primary}'/></TextBlock>" +
+            "</StackPanel></Border></DataTemplate>");
+        var gallerySummary = new TextBlock { Margin = new Thickness(3, 2, 3, 6), TextWrapping = TextWrapping.Wrap, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)) };
+        var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, Height = 330, EnableRowVirtualization = true, ClipboardCopyMode = DataGridClipboardCopyMode.None };
         grid.Columns.Add(new DataGridTextColumn { Header = "Durum", Binding = new System.Windows.Data.Binding("Status"), Width = 130 });
         grid.Columns.Add(new DataGridTextColumn { Header = "URL", Binding = new System.Windows.Data.Binding("Url"), Width = 360 });
         grid.Columns.Add(new DataGridTextColumn { Header = "Kaynak", Binding = new System.Windows.Data.Binding("Source"), Width = 150 });
@@ -87,7 +108,16 @@ public static class MediaPanel
             var choice = productPicker.SelectedItem as ProductChoice;
             var rows = media.List(choice?.Id);
             grid.ItemsSource = rows;
+            galleryRecords = rows;
+            gallery.ItemsSource = rows.Select((r, i) => new GalleryTile(i + 1, ProductMediaPresentation.Classify(r, false, r.Status == MediaStatus.Ready, false).Glyph, ProductMediaPresentation.SafeSourceLabel(r.Url), r.IsPrimary ? "★" : "")).ToList();
+            if (gallery.Items.Count > 0 && gallery.SelectedIndex < 0) gallery.SelectedIndex = 0;
+            UpdateGallerySummary();
             status.Text = choice is null ? $"{rows.Count} görsel" : $"{rows.Count} görsel · ürün: {choice.Label}";
+        }
+        void UpdateGallerySummary()
+        {
+            gallerySummary.Text = MediaGalleryNavigation.Summary(galleryRecords, gallery.SelectedIndex);
+            System.Windows.Automation.AutomationProperties.SetName(gallery, gallerySummary.Text);
         }
 
         async Task ShowPreviewAsync(ProductMediaRecord? record)
@@ -112,6 +142,34 @@ public static class MediaPanel
             { ShowMediaState(record, loading: false, loaded: false, fromCache: false, failed: true); status.Text = ProductMediaPresentation.FailureText(record, error.Message); }
         }
 
+        // #804: the thumbnail strip drives the same selection the grid does, with arrow/Home/End/Enter handled
+        // through the shared rules and a summary that names position, state and host -- never the URL.
+        gallery.SelectionChanged += async (_, _) =>
+        {
+            UpdateGallerySummary();
+            if (gallery.SelectedIndex >= 0 && gallery.SelectedIndex < galleryRecords.Count)
+            {
+                var record = galleryRecords[gallery.SelectedIndex];
+                if (!ReferenceEquals(record, selected)) { grid.SelectedItem = record; selected = record; await ShowPreviewAsync(record); }
+            }
+        };
+        gallery.PreviewKeyDown += (_, e) =>
+        {
+            if (MediaGalleryNavigation.IsActivation(e.Key)) { copySource.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent)); e.Handled = true; return; }
+            var next = MediaGalleryNavigation.Next(gallery.SelectedIndex, gallery.Items.Count, e.Key);
+            if (next == gallery.SelectedIndex) return;
+            gallery.SelectedIndex = next;
+            (gallery.ItemContainerGenerator.ContainerFromIndex(next) as ListBoxItem)?.Focus();
+            gallery.ScrollIntoView(gallery.SelectedItem);
+            e.Handled = true;
+        };
+        copySource.Click += (_, _) =>
+        {
+            var value = MediaGalleryNavigation.ExplicitCopyValue(selected);
+            if (value.Length == 0) { status.Text = "Önce görsel seçin."; return; }
+            try { Clipboard.SetText(value); status.Text = "Görsel adresi panoya kopyalandı."; }
+            catch (Exception copyError) when (copyError is System.Runtime.InteropServices.COMException or InvalidOperationException) { status.Text = "Pano kullanılamadı."; }
+        };
         productPicker.SelectionChanged += (_, _) => RefreshMedia();
         search.TextChanged += (_, _) => RefreshProducts();
         grid.SelectionChanged += async (_, _) => { selected = grid.SelectedItem as ProductMediaRecord; await ShowPreviewAsync(selected); };
@@ -141,8 +199,9 @@ public static class MediaPanel
 
         var top = new WrapPanel(); top.Children.Add(new TextBlock { Text = "Ürün", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); top.Children.Add(productPicker); top.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); top.Children.Add(search); top.Children.Add(refresh); top.Children.Add(openProduct); panel.Children.Add(top);
         var addRow = new WrapPanel(); addRow.Children.Add(new TextBlock { Text = "Adres", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(url); addRow.Children.Add(new TextBlock { Text = "Kaynak", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(source); addRow.Children.Add(add); panel.Children.Add(addRow);
-        var actions = new WrapPanel(); actions.Children.Add(validate); actions.Children.Add(validateAll); actions.Children.Add(primary); actions.Children.Add(remove); panel.Children.Add(actions);
-        var body = new Grid(); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(390) }); Grid.SetColumn(grid, 0); Grid.SetColumn(previewBox, 1); body.Children.Add(grid); body.Children.Add(previewBox); panel.Children.Add(body); panel.Children.Add(status);
+        var actions = new WrapPanel(); actions.Children.Add(validate); actions.Children.Add(validateAll); actions.Children.Add(primary); actions.Children.Add(remove); actions.Children.Add(copySource); panel.Children.Add(actions);
+        var body = new Grid(); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(390) }); Grid.SetColumn(grid, 0); Grid.SetColumn(previewBox, 1); body.Children.Add(grid); body.Children.Add(previewBox);
+        panel.Children.Add(gallery); panel.Children.Add(gallerySummary); panel.Children.Add(body); panel.Children.Add(status);
         ShowMediaState(null, loading: false, loaded: false, fromCache: false);
         SyncCatalogImages(); RefreshProducts();
         return Scroll(panel);
