@@ -10,13 +10,15 @@ public partial class MainWindow {
   var brand=new TextBox{Width=130,MaxLength=6000};var category=new TextBox{Width=130,MaxLength=6000};var sku=new TextBox{Width=160,MaxLength=6000};
   var description=new ComboBox{ItemsSource=new[]{"Tümü","Dolu","Boş"},SelectedIndex=0,Width=90};
   var image=new ComboBox{ItemsSource=new[]{"Tümü","Var","Yok"},SelectedIndex=0,Width=90};
-  foreach(var (title,control) in new (string,Control)[]{("Durum",status),("Marka (; ile ayır)",brand),("Kategori (; ile ayır)",category),("SKU (; ile ayır)",sku),("Açıklama",description),("Görsel kaydı",image)}){
+  var minPrice=new TextBox{Width=85};var maxPrice=new TextBox{Width=85};var sort=new ComboBox{ItemsSource=new[]{"Name","Sku","Barcode","Price","Cost","Stock","Updated"},SelectedIndex=0,Width=95};var descSort=new CheckBox{Content="Azalan"};
+  foreach(var (title,control) in new (string,Control)[]{("Durum",status),("Marka (; ile ayır)",brand),("Kategori (; ile ayır)",category),("SKU (; ile ayır)",sku),("Açıklama",description),("Görsel kaydı",image),("Min fiyat",minPrice),("Max fiyat",maxPrice),("Sıralama",sort),("",descSort)}){
    var group=new StackPanel{Margin=new Thickness(4)};group.Children.Add(new TextBlock{Text=title});group.Children.Add(control);panel.Children.Add(group);
   }
   static string[] Values(string text)=>text.Split(new[]{';','\r','\n'},StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Distinct().ToArray();
   static bool? State(ComboBox box)=>box.SelectedIndex==0?null:box.SelectedIndex==1;
-  CatalogFilter Current()=>new(){Active=State(status),Brands=Values(brand.Text),Categories=Values(category.Text),Skus=Values(sku.Text),DescriptionPresent=State(description),ImagePresent=State(image)};
-  void Apply(CatalogFilter filter){status.SelectedIndex=filter.Active is null?0:filter.Active.Value?1:2;description.SelectedIndex=filter.DescriptionPresent is null?0:filter.DescriptionPresent.Value?1:2;image.SelectedIndex=filter.ImagePresent is null?0:filter.ImagePresent.Value?1:2;brand.Text=string.Join(';',filter.Brands);category.Text=string.Join(';',filter.Categories);sku.Text=string.Join(';',filter.Skus);}
+  decimal? Number(string text)=>decimal.TryParse(text,System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.CurrentCulture,out var value)?value:null;
+  CatalogFilter Current()=>new(){Active=State(status),Brands=Values(brand.Text),Categories=Values(category.Text),Skus=Values(sku.Text),DescriptionPresent=State(description),ImagePresent=State(image),MinPrice=Number(minPrice.Text),MaxPrice=Number(maxPrice.Text),SortBy=sort.SelectedItem?.ToString()??"Name",SortDescending=descSort.IsChecked==true};
+  void Apply(CatalogFilter filter){status.SelectedIndex=filter.Active is null?0:filter.Active.Value?1:2;description.SelectedIndex=filter.DescriptionPresent is null?0:filter.DescriptionPresent.Value?1:2;image.SelectedIndex=filter.ImagePresent is null?0:filter.ImagePresent.Value?1:2;brand.Text=string.Join(';',filter.Brands);category.Text=string.Join(';',filter.Categories);sku.Text=string.Join(';',filter.Skus);minPrice.Text=filter.MinPrice?.ToString(System.Globalization.CultureInfo.CurrentCulture)??"";maxPrice.Text=filter.MaxPrice?.ToString(System.Globalization.CultureInfo.CurrentCulture)??"";sort.SelectedItem=filter.SortBy;descSort.IsChecked=filter.SortDescending;}
   var filterStore=new CatalogFilterStore(dataDirectory);var saved=new ComboBox{Width=170,DisplayMemberPath="Name"};var filterName=new TextBox{Width=140,ToolTip="Kaydedilecek filtre adı"};
   void ReloadSaved(){saved.ItemsSource=filterStore.List();}
   panel.Children.Add(Button("Filtreleri uygula",()=>{productFilter=Current();productOffset=0;RefreshProducts();}));
