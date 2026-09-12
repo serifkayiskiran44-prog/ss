@@ -4,7 +4,7 @@ using System.IO;
 
 namespace TrMarketplaceHubDesktop.Catalog;
 
-public enum AutomationKind { Stock = 0, Price = 1, Xml = 2, Health = 3, Sync = 4 }
+public enum AutomationKind { Stock = 0, Price = 1, Xml = 2, Health = 3, Sync = 4, XmlExport = 5 }
 
 public sealed class AutomationJob
 {

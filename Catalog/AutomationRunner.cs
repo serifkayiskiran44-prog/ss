@@ -23,11 +23,11 @@ public static class AutomationRunner
     static AutomationRunResult RunClaimed(CatalogStore catalog, AutomationStore automation, SyncStore sync, AutomationJob job, string channel, string shop, DateTime nowUtc, bool requireListingMapping, string leaseToken)
     {
         var errors = new List<string>(); var queued = 0;
-        if (job.Kind is AutomationKind.Xml or AutomationKind.Health or AutomationKind.Sync)
+        if (job.Kind is AutomationKind.Xml or AutomationKind.Health or AutomationKind.Sync or AutomationKind.XmlExport)
         {
             try
             {
-                var operation = job.Kind switch { AutomationKind.Xml => "xml-import", AutomationKind.Health => "health-check", _ => "sync" };
+                var operation = job.Kind switch { AutomationKind.Xml => "xml-import", AutomationKind.Health => "health-check", AutomationKind.XmlExport => "xml-export", _ => "sync" };
                 var entity = string.IsNullOrWhiteSpace(job.TemplateKey) ? shop : job.TemplateKey;
                 sync.Enqueue(new SyncRequest(channel, operation, entity, $"{job.Id}:{nowUtc.Ticks}", shop)); queued = 1;
             }
