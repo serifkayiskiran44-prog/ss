@@ -31,6 +31,11 @@ public sealed class TrendyolConnection
     {
         if (string.IsNullOrWhiteSpace(settings.SupplierId) || !settings.SupplierId.All(char.IsAsciiDigit) || settings.SupplierId.Length > 32) throw new ArgumentException("Trendyol satıcı ID sayısal olmalı.");
         foreach (var value in new[] { settings.ApiKey, settings.ApiSecret, settings.UserAgent }) if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl) || value.Length > 512) throw new ArgumentException("Trendyol API kimlik bilgileri geçersiz.");
+        // Official format: "{SellerId} - SelfIntegration" or "{SellerId} - {IntegrationCompanyName}"; requests without a matching User-Agent are rejected with HTTP 403 by Trendyol.
+        // https://developers.trendyol.com/v3.0/docs/getting-started-1 (fetched 2026-09-12)
+        var prefix = settings.SupplierId + " - ";
+        if (!settings.UserAgent.StartsWith(prefix, StringComparison.Ordinal) || settings.UserAgent.Length == prefix.Length)
+            throw new ArgumentException("Trendyol User-Agent \"{SatıcıId} - SelfIntegration\" veya \"{SatıcıId} - Entegrasyon Firması\" biçiminde olmalı.");
     }
     public static string Describe(TrendyolSettings? settings) => settings is null ? "NOT_CONFIGURED" : "Ayarlar şifreli kayıtlı; resmi API sözleşmesi ve mağaza erişimi doğrulanmalı.";
     public Task TestReadOnlyAsync(TrendyolSettings settings, CancellationToken cancellationToken = default)

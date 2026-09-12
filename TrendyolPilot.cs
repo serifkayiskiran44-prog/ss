@@ -7,6 +7,8 @@ public sealed record TrendyolInvoicePreview(long SellerId, long ShipmentPackageI
 
 public static class TrendyolPilot
 {
+    // Batch limit and listPrice>=salePrice rule confirmed against https://developers.trendyol.com/v3.0/docs/9-stock-and-price-update-1
+    // and https://developers.trendyol.com/v2.0/docs/product-create-createproducts (fetched 2026-09-12); not taken from an unverified report.
     public static void ValidateProductBatch(IReadOnlyList<TrendyolProductV2Item> items)
     {
         ArgumentNullException.ThrowIfNull(items);
