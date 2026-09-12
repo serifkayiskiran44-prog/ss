@@ -102,6 +102,7 @@ public partial class MainWindow : Window
  TabControl BuildProductWorkspace()
  {
   var tabs=new TabControl();
+  tabs.SetBinding(FrameworkElement.DataContextProperty,new Binding("DataContext"){Source=productEditor,Mode=BindingMode.OneWay});
   tabs.Items.Add(new TabItem{Header="Genel",Content=Scroll(productEditor)});
   tabs.Items.Add(new TabItem{Header="Görseller / açıklama",Content=Scroll(ProductReadOnlyFields(("Açıklama","Description"),("Görsel URL'leri","ImageUrls")))});
   tabs.Items.Add(new TabItem{Header="Pazaryerleri",Content=Scroll(new StackPanel{Children={Heading("Kanal ve mağaza bağları"),productChannelSummaryMirror,Hint("Eşleştirme ve ilan durumları yerel kanal planlarından okunur; canlı write bu sekmeden başlatılmaz.")}})});

@@ -351,6 +351,9 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 
 ## #287 — dirty product edit repair (2026-09-12)
 
+Incremental secondary-tab repair: `BuildProductWorkspace` binds its DataContext to the editor's DataContext. `SecondaryTabsFollowSelectedProductAndClearWhenSelectionClears` exercises actual WPF selection A/B/empty, source text and media context, using temporary SQLite. This fixes previously unbound secondary fields, not the placeholder order report or remaining tabs.
+REAL_WORK_COUNT=1; VERIFICATION_ONLY_COUNT=1 (baseline 120 tests); FILES_CHANGED=MainWindow.xaml.cs, tests/MarketplaceHub.Tests/ProductCardDirtyDraftTests.cs, TODO.md, IMPLEMENTATION_STATUS.md; TESTS_ADDED_OR_CHANGED=1; TEST_RESULT=121 passed, 0 failed, 0 skipped (TestResults/tab-context.trx); PUBLISH=Windows-Issue287-TabContext, Release win-x64 self-contained successful; BLOCKER=full issue acceptance remains PARTIAL, same-SHA remote CI and visual reference acceptance not established.
+
 Status: dirty-edit defect FIXED; the full product-card issue remains PARTIAL.
 - `MainWindow.ProductEditing.cs` compares the editor with its loaded snapshot, includes invalid binding text in dirty detection, and requires an explicit Kaydet/Vazgeç/İptal decision before changing products, replacing list results or closing the window.
 - Cancel/save failure restores the accepted selection and preserves the editor. Successful save uses CatalogStore validation, optimistic concurrency and a local SQLite transaction; no marketplace dispatch is added. Re-selecting reads the persisted version by product ID. Refresh after a save re-queries the list so the grid and editor agree.

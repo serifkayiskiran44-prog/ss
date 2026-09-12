@@ -14,6 +14,26 @@ using TrMarketplaceHubDesktop.Catalog;
 [TestClass]
 public sealed class ProductCardDirtyDraftTests
 {
+    [TestMethod]
+    public void SecondaryTabsFollowSelectedProductAndClearWhenSelectionClears()
+    {
+        Run(f => {
+            var workspace = (TabControl)((TabItem)((ScrollViewer)f.Editor.Parent).Parent).Parent;
+            var media = (StackPanel)((ScrollViewer)((TabItem)workspace.Items[1]).Content).Content;
+            var provenance = (StackPanel)((ScrollViewer)((TabItem)workspace.Items[3]).Content).Content;
+            workspace.SelectedIndex = 3; f.Drain();
+            Assert.AreSame(f.Editor.DataContext, provenance.DataContext);
+            Assert.AreEqual("fixture", provenance.Children.OfType<TextBox>().First().Text);
+            f.Grid.SelectedItem = f.Row("B"); f.Drain();
+            Assert.AreEqual("B", ((CatalogProduct)provenance.DataContext).Sku);
+            workspace.SelectedIndex = 1; f.Drain();
+            Assert.AreSame(f.Editor.DataContext, media.DataContext);
+            f.Grid.SelectedItem = null; f.Drain();
+            Assert.IsNull(media.DataContext);
+            Assert.IsTrue(media.Children.OfType<TextBox>().All(x => x.Text == ""));
+        });
+    }
+
     [DataTestMethod]
     [DataRow("Kaydet", "Unsaved A draft", "B")]
     [DataRow("Vazgeç", "Original A", "B")]
