@@ -7,9 +7,20 @@ public sealed class NavlungoAuthorizationPreparation
     public string AuthorizeUrl { get; }
     internal string Verifier { get; }
     internal string State { get; }
+    internal bool Consumed { get; private set; }
     internal NavlungoAuthorizationPreparation(string url, string verifier, string state)
         => (AuthorizeUrl, Verifier, State) = (url, verifier, state);
+    internal void MarkConsumed()
+    {
+        if (Consumed) throw new InvalidOperationException("Navlungo yetkilendirme isteği zaten kullanıldı; callback replay reddedildi.");
+        Consumed = true;
+    }
 }
+
+// Navlungo's authorize response echoes back every querystring parameter the client originally sent
+// (github.com/Navlungo/public-api-docs, README.md §2.1, fetched 2026-09-12), so client_id and state
+// added to the authorize request are returned as-is and can be checked here.
+public sealed record NavlungoTokenRequest(string ClientId, string Code, string CodeVerifier, string Scope);
 public static class NavlungoConnection
 {
     public static bool IsConnected => false;
@@ -33,5 +44,25 @@ public static class NavlungoConnection
         var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(verifier)));
         var host = settings.Sandbox ? "https://qa.navlungo.com" : "https://navlungo.com";
         return new($"{host}/authorize?client_id={Uri.EscapeDataString(settings.ClientId)}&code_challenge={Uri.EscapeDataString(challenge)}&state={state}", verifier, state);
+    }
+
+    // Validates a callback against the pending authorization it belongs to and prepares the Token API
+    // request. Rejects: state mismatch (CSRF), a callback echoing a different client_id than the one
+    // that started this flow (wrong account), a missing/blank code, and replay of an already-consumed
+    // pending authorization. Scope matches token.md's documented minimum for authorization_code: "openid offline_access".
+    public static NavlungoTokenRequest HandleCallback(NavlungoSettings settings, NavlungoAuthorizationPreparation pending, IReadOnlyDictionary<string, string> callbackQuery)
+    {
+        Validate(settings);
+        ArgumentNullException.ThrowIfNull(pending);
+        ArgumentNullException.ThrowIfNull(callbackQuery);
+        if (pending.Consumed) throw new InvalidOperationException("Navlungo yetkilendirme isteği zaten kullanıldı; callback replay reddedildi.");
+        if (!callbackQuery.TryGetValue("state", out var state) || state != pending.State)
+            throw new InvalidOperationException("Navlungo callback state değeri eşleşmiyor; CSRF şüphesiyle reddedildi.");
+        if (!callbackQuery.TryGetValue("client_id", out var clientId) || clientId != settings.ClientId)
+            throw new InvalidOperationException("Navlungo callback farklı bir hesaba ait; client_id eşleşmiyor.");
+        if (!callbackQuery.TryGetValue("code", out var code) || string.IsNullOrWhiteSpace(code))
+            throw new InvalidOperationException("Navlungo callback authorization code içermiyor.");
+        pending.MarkConsumed();
+        return new(settings.ClientId, code, pending.Verifier, "openid offline_access");
     }
 }
