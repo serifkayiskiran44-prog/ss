@@ -39,12 +39,14 @@ public static class DashboardPanel
         trendGroup.Content = trends; panel.Children.Add(trendGroup);
 
         var service = new DashboardDataService(directory);
-        async Task RefreshAsync()
+        // Navigation uses the short-lived revision-aware cache (#783); the explicit "Durumu yenile" click is
+        // the user asking for an authoritative re-read and always bypasses it.
+        async Task RefreshAsync(bool force)
         {
             refresh.IsEnabled = false; status.Text = "Yerel veri kaynakları okunuyor…";
             try
             {
-                var snapshot = await Task.Run(service.Load);
+                var snapshot = await Task.Run(() => service.Load(bypassCache: force));
                 cards.Children.Clear();
                 AddCard(cards, "Aktif ürün", snapshot.ActiveProducts.ToString("N0"), "products", navigate); AddCard(cards, "Stokta olmayan", snapshot.OutOfStockProducts.ToString("N0"), "products", navigate); AddCard(cards, "Açık sipariş", snapshot.OpenOrders.ToString("N0"), "orders", navigate); AddCard(cards, "Sync hatası", snapshot.FailedSyncs.ToString("N0"), "sync", navigate); AddCard(cards, "XML kaynağı", snapshot.XmlSources.ToString("N0"), "xml", navigate); AddCard(cards, "Bağlantı uyarısı", snapshot.ConnectionIssues.ToString("N0"), "connections", navigate);
                 foreach (var quick in new[] { ("Kategoriler / markalar", "taxonomy"), ("Excel işlemleri", "excel"), ("Raporlar", "reports"), ("Mesaj / hata merkezi", "messages"), ("Ayarlar", "settings") }) AddCard(cards, quick.Item1, "Aç", quick.Item2, navigate);
@@ -60,8 +62,8 @@ public static class DashboardPanel
             }
             finally { refresh.IsEnabled = true; }
         }
-        refresh.Click += async (_, _) => await RefreshAsync();
-        _ = RefreshAsync();
+        refresh.Click += async (_, _) => await RefreshAsync(force: true);
+        _ = RefreshAsync(force: false);
         return root;
     }
 

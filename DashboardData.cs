@@ -1,4 +1,7 @@
+using System.Collections.Concurrent;
 using System.Globalization;
+using System.IO;
+using System.Text;
 using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
@@ -35,10 +38,84 @@ public static class DashboardFreshnessEvaluator
 /// <summary>Builds a read-only, local dashboard snapshot from existing stores.</summary>
 public sealed class DashboardDataService
 {
-    readonly string? directory;
-    public DashboardDataService(string? directory = null) => this.directory = directory;
+    // #783: the dashboard is the first thing shown after every navigation, and building it aggregates every
+    // store (products, orders, sync jobs, XML runs, sources, connections, data quality) from scratch. A
+    // short-lived, revision-aware cache hands back the same immutable snapshot as long as (a) it is younger
+    // than MaxAge and (b) no database file under the data directory has changed since it was built. The
+    // revision comes from the SQLite files themselves -- length plus the 32-byte header of every *.db and
+    // *.db-wal, read through a file handle so an open writer's bytes are seen rather than stale directory
+    // metadata. Every committed write appends WAL frames or rewrites the WAL header salts (or bumps the
+    // change counter of a rollback-journal database), so a store/source change from this or any other
+    // process invalidates the entry without any store having to signal it. The cache is process-wide and
+    // keyed by data directory, so a store switch is simply a different key; MaxAge is the safety net that
+    // bounds staleness if a change ever escapes the file-level signal.
+    public static readonly TimeSpan DefaultMaxAge = TimeSpan.FromSeconds(10);
+    static readonly ConcurrentDictionary<string, CachedSnapshot> cache = new(StringComparer.OrdinalIgnoreCase);
+    sealed record CachedSnapshot(string Revision, DateTime StoredUtc, DashboardSnapshot Snapshot);
 
-    public DashboardSnapshot Load()
+    readonly string? directory;
+    readonly TimeSpan maxAge;
+    readonly Func<DateTime> clock;
+
+    public DashboardDataService(string? directory = null) : this(directory, null, null) { }
+
+    public DashboardDataService(string? directory, TimeSpan? maxAge, Func<DateTime>? clock)
+    {
+        if (maxAge is { } age && age < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(maxAge));
+        this.directory = directory;
+        this.maxAge = maxAge ?? DefaultMaxAge;
+        this.clock = clock ?? (() => DateTime.UtcNow);
+    }
+
+    string DataDirectory => directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
+
+    public DashboardSnapshot Load() => Load(bypassCache: false);
+
+    /// <summary>Returns the dashboard snapshot, served from the cache when it is fresh and nothing on disk has changed; <paramref name="bypassCache"/> (the explicit "refresh" action) always rebuilds.</summary>
+    public DashboardSnapshot Load(bool bypassCache)
+    {
+        var key = DataDirectory;
+        var now = clock();
+        if (!bypassCache && cache.TryGetValue(key, out var hit) && now >= hit.StoredUtc && now - hit.StoredUtc <= maxAge && hit.Revision == ComputeRevision(key))
+            return hit.Snapshot;
+        var snapshot = Build();
+        // Taken after the build on purpose: opening the stores can itself touch the files (schema checks,
+        // index maintenance), and those writes must not read as "changed since" on the very next load. A
+        // failed build throws before this line, so a failure is never cached and never masks the next attempt.
+        cache[key] = new CachedSnapshot(ComputeRevision(key), now, snapshot);
+        return snapshot;
+    }
+
+    public static void InvalidateCache(string? directory = null)
+    {
+        if (directory is null) cache.Clear(); else cache.TryRemove(directory, out _);
+    }
+
+    internal static string ComputeRevision(string directory)
+    {
+        if (!Directory.Exists(directory)) return "missing";
+        var revision = new StringBuilder();
+        foreach (var path in Directory.EnumerateFiles(directory, "*.db*").Where(p => !p.EndsWith("-shm", StringComparison.OrdinalIgnoreCase)).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+        {
+            revision.Append(Path.GetFileName(path)).Append('|');
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1);
+                Span<byte> header = stackalloc byte[32];
+                var read = stream.Read(header);
+                revision.Append(stream.Length).Append('|').Append(Convert.ToHexString(header[..read]));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // A file whose state cannot be read must never validate a cached snapshot.
+                revision.Append("unreadable|").Append(Guid.NewGuid().ToString("N"));
+            }
+            revision.Append(';');
+        }
+        return revision.ToString();
+    }
+
+    DashboardSnapshot Build()
     {
         var catalog = new CatalogStore(directory);
         var products = catalog.Products();
