@@ -9,6 +9,9 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using TrMarketplaceHubDesktop;
 
 namespace MarketplaceHub.Tests;
@@ -16,6 +19,50 @@ namespace MarketplaceHub.Tests;
 [TestClass]
 public sealed class SafetyAndStabilityTests
 {
+    [TestMethod]
+    public void MainWindow_StaSmoke_UsesIndependentChannelStatusVisuals()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-wpf-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Exception failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                var window = new MainWindow(root);
+                Assert.IsFalse(window.IsVisible);
+                var summaries = FindLogicalChildren<TextBlock>(window)
+                    .Where(x => x.Text.Contains("Ürün seçince kanal planları", StringComparison.Ordinal))
+                    .ToArray();
+                Assert.IsTrue(summaries.Length >= 2);
+                Assert.AreNotSame(summaries[0], summaries[1]);
+                window.Close();
+                app.Dispatcher.InvokeShutdown();
+            }
+            catch (Exception ex) { failure = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.IsTrue(thread.Join(TimeSpan.FromSeconds(20)), "WPF STA smoke timed out.");
+        if (failure != null) Assert.Fail(failure.ToString());
+        try { Directory.Delete(root, true); } catch (IOException) { }
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        if (root is T match) yield return match;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            foreach (var child in FindVisualChildren<T>(VisualTreeHelper.GetChild(root, i))) yield return child;
+    }
+
+    private static IEnumerable<T> FindLogicalChildren<T>(DependencyObject root) where T : class
+    {
+        if (root is T match) yield return match;
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+            foreach (var childMatch in FindLogicalChildren<T>(child)) yield return childMatch;
+    }
+
     [TestMethod]
     public void AuditRedactionMasksCredentialsAndPii()
     {
