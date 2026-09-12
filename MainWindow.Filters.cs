@@ -118,6 +118,21 @@ public partial class MainWindow {
   cell.Setters.Add(new Setter(VerticalContentAlignmentProperty, VerticalAlignment.Center));
   products.CellStyle = cell;
  }
+ // Product row state hierarchy (#794). LoadingRow is the one hook that also fires when a recycled row is reused,
+ // so a virtualized list cannot end up showing a previous product's state; the badge column, this border and the
+ // tooltip all read the same ProductRowState classification.
+ void InitializeProductRowStates()
+ {
+  products.LoadingRow += (_, e) =>
+  {
+   if (e.Row.Item is not CatalogProduct product) return;
+   var state = ProductRowState.Classify(product, DateTime.UtcNow);
+   e.Row.BorderThickness = ProductRowState.BorderThickness(state.Key);
+   e.Row.BorderBrush = ProductRowState.AccentBrush(state.Key, ProductRowState.IsHighContrast);
+   e.Row.ToolTip = state.Key == ProductRowState.Normal ? null : ProductRowState.Tooltip(state, product);
+   System.Windows.Automation.AutomationProperties.SetItemStatus(e.Row, state.Badge);
+  };
+ }
  void OpenProductColumnChooser()
  {
   var checks = products.Columns.Select(column => new CheckBox { Content = column.Header?.ToString() ?? "", IsChecked = column.Visibility == Visibility.Visible, Margin = new Thickness(5) }).ToList();
