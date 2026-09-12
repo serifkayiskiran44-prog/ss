@@ -20,6 +20,26 @@ namespace MarketplaceHub.Tests;
 public sealed class SafetyAndStabilityTests
 {
     [TestMethod]
+    public void CatalogImport_BlocksMassZeroSupplierFeedBeforeWrite()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-anomaly-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var source = new XmlSource { Id = "supplier-anomaly", Name = "Supplier", Location = "fixture.xml", Fields = new Dictionary<string, string> { ["Sku"] = "Sku" } };
+            catalog.SaveSource(source);
+            catalog.ApplyMigration([new CatalogProduct { Id = "seed", Sku = "SKU-1", Name = "Seed", Price = 10, Stock = 10, Active = true }], source.Id);
+            Assert.ThrowsException<InvalidOperationException>(() => catalog.Import(source, [new CatalogProduct { Sku = "SKU-1", Name = "Seed", Price = 10, Stock = 0, Active = true, SourceId = source.Id }]));
+            Assert.AreEqual(10, catalog.Products().Single().Stock);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [TestMethod]
     public void OrderStockEffectDoesNotBecomePermanentSupplierLock()
     {
         var root = Path.Combine(Path.GetTempPath(), "marketplacehub-stock-" + Guid.NewGuid().ToString("N"));

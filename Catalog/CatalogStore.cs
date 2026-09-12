@@ -46,9 +46,21 @@ public partial class CatalogStore
  static void Index(Dictionary<string,List<CatalogProduct>> index,string key,CatalogProduct product){if(key=="")return;if(!index.TryGetValue(key,out var values))index[key]=values=new();values.Add(product);}
  public ImportSummary Import(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
  {
+  EnsureDropshipFeedSafe(source,incoming);
   ImportSummary? result=null;
   XmlSourceExecutionGate.RunAsync(source.Id,()=>{result=ImportCore(source,incoming);return Task.CompletedTask;}).GetAwaiter().GetResult();
   return result!;
+ }
+ void EnsureDropshipFeedSafe(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
+ {
+  var existing=Products().Where(x=>x.SourceId==source.Id).ToList();
+  // The caller has already selected a source; this guard is deliberately fail-closed for
+  // suspicious supplier deltas before the write transaction starts.
+  var currentCount=incoming.Count;var zeroCount=incoming.Count(x=>x.Stock<=0);var average=incoming.Count==0?0:incoming.Average(x=>x.Price);
+  var previous=existing.Count==0?null:new FeedRunMetrics(source.Id,existing.Count,existing.Count(x=>x.Stock<=0),existing.Average(x=>x.Price),0,0,DateTimeOffset.UtcNow);
+  var guard=new DropshipAnomalyGuard();
+  var report=guard.Evaluate(new FeedRunMetrics(source.Id,currentCount,zeroCount,average,0,0,DateTimeOffset.UtcNow),previous);
+  if(report.ApplyBlocked)throw new InvalidOperationException("Dropshipping anomaly gate blocked import: "+string.Join(", ",report.Reasons));
  }
  internal ImportSummary ImportCore(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
  {

@@ -316,4 +316,5 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 # M238 — Etsy live safety: currency guard ve zero-stock preview düzeltmesi teslim edildi.
 # M239 — shadow data cleanup: legacy HubData shipping assembly’den çıkarıldı, silme yapılmadı.
 # M240 — Windows CI: repo içi test discovery, TRX ve same-SHA publish artifact workflow’u teslim edildi.
+# #283 — Dropshipping anomaly gate: supplier import akışında şüpheli stok feed’i transaction başlamadan engelleniyor; mevcut katalog değişmeden kalıyor ve bağımsız testle doğrulanıyor.
 # M241 — Issue #281 WPF runtime repair: gerçek STA MainWindow açılış/aç-kapat regression testi eklendi; `OrdersPanel` çift-parent button ekleme çökmesi düzeltildi ve ürün kanal status visual’ları ayrı instance olarak korundu. Gerçek marketplace write yapılmadı; Release test ve self-contained publish bu teslimatın kabul kanıtıdır. REAL_WORK_COUNT=1.
