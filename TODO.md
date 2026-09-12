@@ -680,3 +680,8 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Price dispatch preflight gate shared by adapter entry point
 - [x] Targeted integration tests for loss, healthy margin, missing inputs, stale FX
 - [ ] Full Release/CI evidence and self-contained publish
+# #286 Product list repair (in progress)
+- [x] SQLite-side category and numeric filter primitives
+- [x] Whitelisted server-side sorting and paged fixture coverage
+- [ ] UI filter binding, context menu target, selection snapshot and bulk audit flow
+- [ ] Full Release/publish evidence

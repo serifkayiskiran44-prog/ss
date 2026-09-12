@@ -337,3 +337,7 @@ M210 Etsy seller cockpit (Issue #248, 2026-09-11): Added aggregated auth/shop/sc
 - `PriceDispatchPreflight` blocks non-ready results; `LocalMarketplaceAdapter.DispatchPriceAsync` invokes the gate before any write path.
 - `ProfitPriceRepairIntegrationTests` covers expense-aware loss/healthy margin, missing inputs and stale FX (targeted: 3/3 passed).
 - Production marketplace writes remain `LIVE_API_BLOCKED`; no live mutation performed.
+#286 Product list repair — partial checkpoint
+- `CatalogFilter` and `CatalogStore.Search` now support category plus price/cost/stock/source-missing predicates and whitelisted server-side sort across the full SQLite result set.
+- `ProductListRepairTests.SearchUsesSqliteFiltersSortAndPagesAcrossAllRows` exercises a six-row real SQLite import and paged query.
+- Remaining #286 deliverables (UI binding, context-menu targeting, selection snapshot/bulk audit, performance and Release publish evidence) are not yet complete.
