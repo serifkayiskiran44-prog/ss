@@ -27,7 +27,7 @@ public sealed class OrderExceptionStore
         directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop"); Directory.CreateDirectory(directory); connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "order-exceptions.db") }.ToString();
         using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "CREATE TABLE IF NOT EXISTS OrderExceptions(Id TEXT PRIMARY KEY,Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,OrderId TEXT NOT NULL,Type TEXT NOT NULL,EventKey TEXT NOT NULL,Severity TEXT NOT NULL,Message TEXT NOT NULL,Status TEXT NOT NULL,CreatedUtc TEXT NOT NULL,UpdatedUtc TEXT NOT NULL,UNIQUE(Marketplace,ShopId,OrderId,Type,EventKey))"; command.ExecuteNonQuery();
     }
-    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
+    SqliteConnection Open() { var connection = SqliteConnectionPolicy.Open(connectionString); return connection; }
     public OrderExceptionRecord Save(OrderExceptionRecord record)
     {
         if (new[] { record.Marketplace, record.ShopId, record.OrderId, record.Type, record.EventKey, record.Message }.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("İstisna kanal, mağaza, sipariş, tür, olay ve açıklama içermeli.");

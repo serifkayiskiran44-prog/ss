@@ -30,7 +30,7 @@ public sealed class AuditStore
         directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop"); Directory.CreateDirectory(directory); connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "audit.db") }.ToString();
         using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "CREATE TABLE IF NOT EXISTS AuditEvents(Id TEXT PRIMARY KEY,AtUtc TEXT NOT NULL,Module TEXT NOT NULL,Action TEXT NOT NULL,ProductId TEXT NOT NULL,OrderId TEXT NOT NULL,Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,Outcome TEXT NOT NULL,Detail TEXT NOT NULL);CREATE INDEX IF NOT EXISTS IX_AuditEvents_At ON AuditEvents(AtUtc DESC)"; command.ExecuteNonQuery();
     }
-    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
+    SqliteConnection Open() { var connection = SqliteConnectionPolicy.Open(connectionString); return connection; }
     public void Append(AuditEvent audit)
     {
         audit.Module = Clean(audit.Module, 80); audit.Action = Clean(audit.Action, 120); audit.ProductId = Clean(audit.ProductId, 120); audit.OrderId = Clean(audit.OrderId, 120); audit.Marketplace = Clean(audit.Marketplace, 80); audit.ShopId = Clean(audit.ShopId, 160); audit.Outcome = Clean(audit.Outcome, 40); audit.Detail = Sanitize(audit.Detail); audit.AtUtc = audit.AtUtc == default ? DateTime.UtcNow : audit.AtUtc;

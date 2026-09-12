@@ -65,7 +65,7 @@ public sealed class MediaStore
         command.ExecuteNonQuery();
     }
 
-    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
+    SqliteConnection Open() { var connection = SqliteConnectionPolicy.Open(connectionString); return connection; }
 
     public IReadOnlyList<ProductMediaRecord> List(string? productId = null, string? query = null)
     {

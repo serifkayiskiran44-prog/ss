@@ -50,9 +50,7 @@ public sealed class XmlRunStore
 
     SqliteConnection Open()
     {
-        var connection = new SqliteConnection(connectionString);
-        connection.Open();
-        return connection;
+        return SqliteConnectionPolicy.Open(connectionString);
     }
 
     public string Start(string sourceId)

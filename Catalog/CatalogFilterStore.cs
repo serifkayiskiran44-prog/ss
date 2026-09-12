@@ -18,7 +18,7 @@ public sealed class CatalogFilterStore
         command.CommandText = "CREATE TABLE IF NOT EXISTS CatalogFilterViews(Name TEXT PRIMARY KEY, Json TEXT NOT NULL)";
         command.ExecuteNonQuery();
     }
-    SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
+    SqliteConnection Open() { var c = SqliteConnectionPolicy.Open(connectionString); return c; }
     public IReadOnlyList<SavedCatalogFilter> List()
     {
         using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT Name,Json FROM CatalogFilterViews ORDER BY Name";
