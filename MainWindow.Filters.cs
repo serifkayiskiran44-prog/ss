@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using TrMarketplaceHubDesktop.Catalog;
 namespace TrMarketplaceHubDesktop;
 public partial class MainWindow {
@@ -117,6 +118,34 @@ public partial class MainWindow {
   cell.Setters.Add(new Setter(PaddingProperty, metrics.CellPadding));
   cell.Setters.Add(new Setter(VerticalContentAlignmentProperty, VerticalAlignment.Center));
   products.CellStyle = cell;
+ }
+ // Product list selection summary bar (#795). Sticky between the toolbar and the grid, hidden until something is
+ // selected. It reports only counts -- never product text -- and it reconciles the selection against the rows
+ // currently in the list, so a filter change that leaves rows behind is stated rather than silently acted on.
+ readonly TextBlock productSelectionHeadline = new() { FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+ readonly TextBlock productSelectionDetail = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(10, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Color.FromRgb(76, 102, 118)) };
+ Border? productSelectionBar;
+ Border BuildProductSelectionBar()
+ {
+  var clear = new Button { Content = "Seçimi temizle", Margin = new Thickness(6, 0, 0, 0), Padding = new Thickness(10, 3, 10, 3) };
+  clear.Click += (_, _) => { products.UnselectAll(); UpdateProductSelectionSummary(); };
+  var layout = new DockPanel { LastChildFill = true };
+  DockPanel.SetDock(clear, System.Windows.Controls.Dock.Right); layout.Children.Add(clear);
+  DockPanel.SetDock(productSelectionHeadline, System.Windows.Controls.Dock.Left); layout.Children.Add(productSelectionHeadline);
+  layout.Children.Add(productSelectionDetail);
+  productSelectionBar = new Border { Background = new SolidColorBrush(Color.FromRgb(240, 245, 249)), BorderBrush = new SolidColorBrush(Color.FromRgb(214, 226, 235)), BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(12, 6, 12, 6), Visibility = Visibility.Collapsed, Child = layout };
+  System.Windows.Automation.AutomationProperties.SetName(productSelectionBar, "Seçim özeti");
+  return productSelectionBar;
+ }
+ void UpdateProductSelectionSummary()
+ {
+  if (productSelectionBar is null) return;
+  var visible = products.ItemsSource?.OfType<CatalogProduct>().ToList() ?? [];
+  var summary = ProductSelectionSummary.Describe(products.SelectedItems.OfType<CatalogProduct>().ToList(), visible, productTotal);
+  productSelectionBar.Visibility = summary.IsVisible ? Visibility.Visible : Visibility.Collapsed;
+  productSelectionHeadline.Text = summary.Headline;
+  productSelectionDetail.Text = string.Join(" ", new[] { summary.ScopeText, summary.RiskText }.Where(x => x.Length > 0));
+  System.Windows.Automation.AutomationProperties.SetHelpText(productSelectionBar, productSelectionDetail.Text);
  }
  // Product row state hierarchy (#794). LoadingRow is the one hook that also fires when a recycled row is reused,
  // so a virtualized list cannot end up showing a previous product's state; the badge column, this border and the
