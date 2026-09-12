@@ -47,7 +47,8 @@ public static class AutomationRunner
                 }
                 catch (Exception error)
                 {
-                    var failed = sync.Enqueue(new SyncRequest(channel, operation, entity, $"{product.Id}:{product.UpdatedUtc.Ticks}:error", shop)); sync.Fail(failed.Id, error.Message); errors.Add($"{product.Sku}: {error.Message}");
+                    // One atomic write: Enqueue-then-Fail left a Pending (dispatchable) ":error" job between the two statements (#778).
+                    sync.EnqueueFailed(new SyncRequest(channel, operation, entity, $"{product.Id}:{product.UpdatedUtc.Ticks}:error", shop), error.Message); errors.Add($"{product.Sku}: {error.Message}");
                 }
             }
         }
