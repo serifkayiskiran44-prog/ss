@@ -46,6 +46,11 @@ public partial class CatalogStore {
    VatRatePercent=p.VatRatePercent,VatIncludedInSale=p.VatIncludedInSale,
    FxRateTryPerUnit=p.Currency=="TRY"?null:p.TryPerUnit,FxSnapshotUtc=fxSnapshot});
   PriceDispatchPreflight.EnsureReady(money);
+  // The operator's minimum-margin guard (#790). Before #285 it was compared with the naive formula-minus-cost,
+  // which ignored every fee; #285 replaced that check with the money gate and dropped the guard entirely. It is
+  // enforced here against the real net contribution the gate just computed, so "at least N TRY per sale"
+  // means what the operator typed: after commission, shipping, transaction cost and VAT.
+  if(money.NetContribution<p.MinimumMarginTry)throw new InvalidOperationException($"Fiyat gönderimi engellendi: net katkı {money.NetContribution.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)} TRY, asgari kâr {p.MinimumMarginTry.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)} TRY altında; {money.ChannelShop}.");
   return new(product.Sku,salePrice,saleCurrency,formulaPriceTry,product.Cost);
  }
 }
