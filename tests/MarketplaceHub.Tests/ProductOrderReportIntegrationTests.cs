@@ -94,6 +94,19 @@ public sealed class ProductOrderReportIntegrationTests
         public object Field(string name) => typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(Window);
         public CatalogProduct Row(string sku) => Grid.Items.OfType<CatalogProduct>().Single(x => x.Sku == sku);
         public void Drain() { Window.UpdateLayout(); Window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle); }
-        public void Dispose() { Window.Close(); Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(Root, true); }
+        public void Dispose()
+        {
+            Window.Close();
+            // Selecting the seeded XmlSource during MainWindow construction fires a fire-and-forget health check
+            // (source-health.db) that can still be closing its connection when Directory.Delete runs; clear the
+            // pool before every retry attempt, not just once.
+            for (var attempt = 0; attempt < 30; attempt++)
+            {
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                try { Directory.Delete(Root, true); break; }
+                catch (IOException) { Thread.Sleep(300); }
+                catch (UnauthorizedAccessException) { Thread.Sleep(300); }
+            }
+        }
     }
 }
