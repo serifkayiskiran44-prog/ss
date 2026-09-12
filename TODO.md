@@ -693,4 +693,5 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Preserve selection/draft on Cancel, invalid input and stale save; persist across reopen on Save.
 - [x] Permanent real Windows STA/SQLite regression coverage: 10 cases; full Release 120/120.
 - [x] Release build and self-contained win-x64 publish; CI check skipped because gh is unavailable.
-- [ ] Full #287 product-card acceptance (bound tabs/domain/report/profitability/DPI/performance evidence) remains unverified/incomplete; do not infer completion from this defect fix.
+- [x] Order-report panel cross-product isolation verified with a real Windows STA MainWindow fixture: A (2 orders, qty 5) and B (1 order, qty 1) each show only their own order data on selection, a product with zero matching orders shows an explicit `Sipariş: 0 · Adet: 0` (not a fabricated non-zero value), and clearing selection reverts to the placeholder text with no stale product's data left behind. One new integration test; full Release 124/124 at 4db1cd1b.
+- [ ] Full #287 product-card acceptance (bound tabs/domain/profitability/DPI/performance evidence) remains unverified/incomplete; do not infer completion from this defect fix. Order-report cross-product isolation is now the one sub-item confirmed above.
