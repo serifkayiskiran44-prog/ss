@@ -148,6 +148,30 @@ public partial class MainWindow {
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = 10, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)), Margin = new Thickness(0, 4, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productPriceSummaryPanel, $"{summary.SalePrice} {summary.Currency}, kâr {summary.Margin}");
  }
+ // Product card stock composition (#799). The available figure comes from CatalogStore.PreviewStock -- the owner
+ // of that projection -- and is only presented here; the card never re-derives it, so it cannot disagree with
+ // what the dispatcher would send. Without a saved policy for the channel there is no projection, and the card
+ // says so instead of showing on-hand stock as if it were sellable.
+ readonly StackPanel productStockSummaryPanel = new() { Margin = new Thickness(3, 2, 3, 8) };
+ void ShowProductStockSummary(CatalogProduct? product)
+ {
+  productStockSummaryPanel.Children.Clear();
+  if (product is null) return;
+  StockPolicy? policy = null; int? projected = null;
+  try
+  {
+   policy = store.GetStockPolicy("local", "default");
+   if (policy is { Enabled: true }) projected = store.PreviewStock("local", "default", product.Id);
+  }
+  catch (InvalidOperationException) { projected = null; }
+  var summary = ProductStockSummary.Build(product, policy, projected, DateTime.UtcNow);
+  productStockSummaryPanel.Children.Add(new TextBlock { Text = $"{summary.Glyph} {summary.Label}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+  productStockSummaryPanel.Children.Add(new TextBlock { Text = $"Elde: {summary.OnHand} · Kanala açık: {summary.Available} · Tutulan: {summary.Withheld}", TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+  productStockSummaryPanel.Children.Add(new TextBlock { Text = $"Güvenlik payı: {summary.SafetyBuffer} · Üst sınır: {summary.MaximumCap} · Güncelleme: {summary.Updated}", FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+  foreach (var warning in summary.Warnings)
+   productStockSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
+  System.Windows.Automation.AutomationProperties.SetName(productStockSummaryPanel, $"{summary.Label}, elde {summary.OnHand}, kanala açık {summary.Available}");
+ }
  // Product quick-inspect drawer (#796). A read-only panel beside the list, opened with Ctrl+I on the selected
  // row and closed with Esc, so the operator can check identity/price/stock/source/readiness/last error without
  // leaving the row or opening the editor. It is built from ProductQuickInspect's label/value rows, which carry

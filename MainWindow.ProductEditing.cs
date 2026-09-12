@@ -104,6 +104,7 @@ public partial class MainWindow
         productEditor.IsEnabled = edit != null;
         ShowProductChannelStatus(edit);
         ShowProductPriceSummary(edit);
+        ShowProductStockSummary(edit);
         RefreshPriceFieldsPanel();
         acceptedProductSelection = products.SelectedItems.OfType<CatalogProduct>().ToList();
     }
