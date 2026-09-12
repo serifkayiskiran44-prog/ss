@@ -1,3 +1,4 @@
+#nullable enable
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
@@ -5,6 +6,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -16,6 +18,44 @@ namespace MarketplaceHub.Tests;
 [TestClass]
 public sealed class SafetyAndStabilityTests
 {
+    [TestMethod]
+    public void MainWindowUsesIndependentChannelStatusVisuals()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "marketplacehub-wpf-" + Guid.NewGuid().ToString("N"));
+        Exception? failure = null;
+        try
+        {
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var window = new MainWindow(root);
+                    var fields = typeof(MainWindow).GetFields(BindingFlags.Instance | BindingFlags.NonPublic);
+                    var primary = fields.Single(x => x.Name == "productChannelSummary").GetValue(window);
+                    var mirror = fields.Single(x => x.Name == "productChannelSummaryMirror").GetValue(window);
+                    Assert.IsNotNull(primary);
+                    Assert.IsNotNull(mirror);
+                    Assert.AreNotSame(primary, mirror);
+                    window.Show();
+                    window.Close();
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure is not null) throw new AssertFailedException(failure.ToString());
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
     [TestMethod]
     public void AuditRedactionMasksCredentialsAndPii()
     {
