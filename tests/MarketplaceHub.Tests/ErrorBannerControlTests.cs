@@ -39,7 +39,7 @@ public sealed class ErrorBannerControlTests
                 Assert.AreEqual(Visibility.Visible, host.Visibility);
                 var banner = (Border)host.Children.OfType<Border>().Single();
                 var buttons = Buttons(banner);
-                CollectionAssert.AreEqual(new[] { "Yeniden dene", "Kaynağa git", "Tanılamayı aç", "Uyarı bildirimini kapat" }, buttons.Select(AutomationProperties.GetName).ToArray());
+                CollectionAssert.AreEqual(new[] { "Yeniden dene", "Kaynağa git", "Tanılamayı aç", SupportSummary.CopyName, "Uyarı bildirimini kapat" }, buttons.Select(AutomationProperties.GetName).ToArray());
                 Assert.IsTrue(buttons.All(b => b.Focusable), "Every action is reachable without a mouse.");
                 StringAssert.Contains(AutomationProperties.GetName(banner), "Uyarı");
 

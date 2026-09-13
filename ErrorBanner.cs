@@ -74,7 +74,7 @@ public static class ErrorBanner
     /// window wraps them instead of clipping, Escape inside the banner dismisses, and an automation name that
     /// says severity, text and count. <paramref name="retry"/> runs the surface's own action again.
     /// </summary>
-    public static Border Create(ErrorBannerModel model, Func<Task>? retry, Action<string>? navigate, Action dismiss)
+    public static Border Create(ErrorBannerModel model, Func<Task>? retry, Action<string>? navigate, Action dismiss, Func<string>? summary = null)
     {
         ArgumentNullException.ThrowIfNull(model); ArgumentNullException.ThrowIfNull(dismiss);
         // #817: glyph, word, weight and colour come from the one severity table.
@@ -107,6 +107,24 @@ public static class ErrorBanner
             Action(model.SourceLabel.Length > 0 ? model.SourceLabel : "Kaynağa git", "Kaynağa git", () => navigate(model.SourceRoute));
         if (model.CanOpenDiagnostics && navigate is not null)
             Action("Tanılamayı aç", "Tanılamayı aç", () => navigate("diagnostics"));
+        if (summary is not null)
+        {
+            // #884: one click, one redacted support text; when the clipboard is unavailable the text stays in the banner for a manual copy.
+            Button? copyButton = null;
+            copyButton = Action(SupportSummary.CopyLabel, SupportSummary.CopyName, () =>
+            {
+                var text = summary();
+                if (SafeClipboard.TryCopy(text)) { copyButton!.Content = "Kopyalandı ✓"; return; }
+                var fallback = body.Children.OfType<TextBox>().FirstOrDefault(t => t.Tag as string == "support-summary-fallback");
+                if (fallback is null)
+                {
+                    fallback = new TextBox { Tag = "support-summary-fallback", IsReadOnly = true, TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MaxHeight = 160, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 6, 0, 0) };
+                    AutomationProperties.SetName(fallback, SupportSummary.ClipboardUnavailable);
+                    body.Children.Add(fallback);
+                }
+                fallback.Text = SupportSummary.ClipboardUnavailable + Environment.NewLine + text;
+            });
+        }
         Action("Kapat", $"{word} bildirimini kapat", dismiss);
         body.Children.Add(actions);
         var border = new Border
@@ -132,6 +150,7 @@ public sealed class ErrorSurface
     readonly Action<string>? navigate;
     ErrorBannerModel? standing;
     Func<Task>? standingRetry;
+    Exception? standingError; string standingCorrelation = "";
 
     public ErrorSurface(Panel host, Action<string>? navigate) { this.host = host ?? throw new ArgumentNullException(nameof(host)); this.navigate = navigate; }
 
@@ -142,16 +161,18 @@ public sealed class ErrorSurface
         var incoming = ErrorBanner.Describe(error, retry is not null, sourceRoute, sourceLabel);
         standing = ErrorBanner.Merge(standing, incoming);
         standingRetry = retry ?? standingRetry;
+        standingError = error; standingCorrelation = UiActivity.Current.Correlation; // #884: the summary names the operation that was running
         Render();
     }
 
-    public void Clear() { standing = null; standingRetry = null; Render(); }
+    public void Clear() { standing = null; standingRetry = null; standingError = null; standingCorrelation = ""; Render(); }
 
     void Render()
     {
         host.Children.Clear();
         if (standing is null) { host.Visibility = Visibility.Collapsed; return; }
         host.Visibility = Visibility.Visible;
-        host.Children.Add(ErrorBanner.Create(standing, standingRetry, navigate, Clear));
+        var model = standing; var error = standingError; var correlation = standingCorrelation;
+        host.Children.Add(ErrorBanner.Create(model, standingRetry, navigate, Clear, () => SupportSummary.Compose(error, new SupportSummaryContext(model.SourceRoute, model.SourceLabel, correlation))));
     }
 }
