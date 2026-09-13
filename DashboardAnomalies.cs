@@ -10,6 +10,8 @@ public sealed class DashboardAnomalyInput
     public DateTime? OversellOldestUtc { get; set; }
     public int StaleSources { get; set; }
     public DateTime? StaleSourceOldestUtc { get; set; }
+    public int OverdueSources { get; set; }
+    public DateTime? OverdueSourceOldestUtc { get; set; }
     public int FailedSyncJobs { get; set; }
     public DateTime? FailedSyncOldestUtc { get; set; }
     public int UnmappedOrders { get; set; }
@@ -61,6 +63,9 @@ public static class DashboardAnomalies
         Add("stale-source", "Bayat tedarikçi verisi", Warning, input.StaleSources, input.StaleSourceOldestUtc,
             "Kaynak uzun süredir güncellenmedi; fiyat ve stok tedarikçideki gerçeği yansıtmıyor olabilir.",
             "XML kaynağını çalıştırın veya bağlantı sağlığını kontrol edin.", "xml");
+        Add("sla-overdue", "Güncellik SLA'sı aşıldı", Warning, input.OverdueSources, input.OverdueSourceOldestUtc,
+            "Kaynak beklenen yenileme süresini ve toleransı aştı; fiyat ve stok sözleşilen tazelikte değil.",
+            "XML kaynağını çalıştırın; sürekli aşılıyorsa kontrol aralığını veya SLA profilini gözden geçirin.", "xml");
         Add("unmapped-order", "Eşleşmeyen sipariş satırı", Warning, input.UnmappedOrders, input.UnmappedOrderOldestUtc,
             "Sipariş satırları bir ürünle eşleşmiyor; stok düşümü ve raporlama eksik kalıyor.",
             "Sipariş istisna kuyruğunda SKU eşlemesini düzeltin.", "orders");

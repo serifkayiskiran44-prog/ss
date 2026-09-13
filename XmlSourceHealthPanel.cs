@@ -23,6 +23,8 @@ public sealed record SourceHealthFacts(
 {
     /// <summary>#892: the source's credential state word (see <see cref="SourceCredentialHealth"/>); empty when unknown.</summary>
     public string CredentialState { get; init; } = "";
+    /// <summary>#898: the source's refresh SLA verdict; null when not evaluated.</summary>
+    public SourceSlaVerdict? Sla { get; init; }
 }
 
 public sealed record SourceHealthPanelModel(SourceHealthVerdict Verdict, SeverityLevel Level, string Headline, IReadOnlyList<SourceHealthLine> Lines, IReadOnlyList<SourceHealthAction> Actions);
@@ -41,6 +43,9 @@ public static class XmlSourceHealthPanel
     static readonly Regex AuthHeader = new(@"(?i)\b(authorization|proxy-authorization|x-api-key|api[_-]?key)\b\s*[:=]?\s*(?:(?:basic|bearer|digest|token)\s+)?[A-Za-z0-9+/=._\-]{4,}", RegexOptions.Compiled);
     static readonly Regex AuthScheme = new(@"(?i)\b(basic|bearer|digest)\s+[A-Za-z0-9+/=._\-]{4,}", RegexOptions.Compiled);
     static readonly Regex UserInfo = new(@"(?i)(https?://)[^/@\s]+@", RegexOptions.Compiled);
+
+    // #898: the refresh SLA line -- the verdict's word and detail, or "değerlendirilmedi" when the caller passed none.
+    static SourceHealthLine Sla(SourceHealthFacts f) => f.Sla is null ? new("Güncellik SLA", "değerlendirilmedi", SeverityLevel.Info) : new("Güncellik SLA", f.Sla.Word, f.Sla.Level, f.Sla.Detail);
 
     public static SourceHealthPanelModel Compose(SourceHealthFacts f, DateTime nowUtc)
     {
@@ -66,10 +71,11 @@ public static class XmlSourceHealthPanel
             Retry(f, runFailed),
             new("Havuz", $"{f.ProductCount.ToString("N0", CultureInfo.CurrentCulture)} ürün" + (f.QuarantinePending + f.QuarantineWarning > 0 ? $" · kaynakta kayıp: {f.QuarantinePending.ToString("N0", CultureInfo.CurrentCulture)} bekleyen / {f.QuarantineWarning.ToString("N0", CultureInfo.CurrentCulture)} uyarı" : ""), f.QuarantinePending > 0 ? SeverityLevel.Warning : SeverityLevel.Info),
             Credential(f),
+            Sla(f),
         };
         var verdict = !checkedOnce && !everRan ? SourceHealthVerdict.NeverRun
             : (checkedOnce && !reachable) || runFailed || f.RetryStage is not null || SourceCredentialHealth.ShouldFailFast(f.CredentialState) ? SourceHealthVerdict.Failed
-            : slow || shapeDrift || mappingDrift || incomplete || f.QuarantinePending > 0 || f.ValidationBlocking > 0 ? SourceHealthVerdict.Degraded
+            : slow || shapeDrift || mappingDrift || incomplete || f.QuarantinePending > 0 || f.ValidationBlocking > 0 || f.Sla is { State: SourceSlaState.Overdue } ? SourceHealthVerdict.Degraded
             : SourceHealthVerdict.Healthy;
         var (level, headline) = verdict switch
         {

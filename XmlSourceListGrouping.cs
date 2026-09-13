@@ -65,6 +65,8 @@ public static class XmlSourceListGrouping
         if (checkedOnce && source.LastHealthLatencyMs is { } ms && ms >= DegradedLatencyMs) return (SourceHealthBand.Problem, $"yavaş · {ms.ToString("N0", CultureInfo.CurrentCulture)} ms");
         if (run is { Status: "Failed" or "Abandoned" }) return (SourceHealthBand.Problem, "son çalıştırma başarısız" + SafeError(run.Error));
         if (string.Equals(source.LastFeedState, "INCOMPLETE", StringComparison.OrdinalIgnoreCase)) return (SourceHealthBand.Problem, "eksik akış · son aktarım tamamlanmadı");
+        // #898: a source past its refresh SLA is a problem even when it is reachable.
+        if (SourceSla.Evaluate(source, nowUtc) is { State: SourceSlaState.Overdue } sla) return (SourceHealthBand.Problem, "güncellik SLA: " + sla.Word);
         var everRan = source.LastRunUtc is not null || source.LastSuccessfulFeedUtc is not null || run is not null;
         if (!checkedOnce && !everRan) return (SourceHealthBand.NeverRun, "");
         return (SourceHealthBand.Healthy, "");

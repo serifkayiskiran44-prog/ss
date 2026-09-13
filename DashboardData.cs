@@ -40,6 +40,9 @@ public sealed record DashboardSnapshot(
     public int OversellRiskProducts { get; init; }
     public DateTime? OversellOldestUtc { get; init; }
     public int StaleSources { get; init; }
+    // #898: sources past their refresh SLA (expected refresh + grace) and the oldest missed deadline.
+    public int OverdueSources { get; init; }
+    public DateTime? OverdueSourceOldestUtc { get; init; }
 
     // #811: why the board is empty, not just that it is. Additive and defaulted; an older snapshot reports
     // nothing ever run, which is what a board with no source history honestly looks like.
@@ -166,6 +169,7 @@ public sealed class DashboardDataService
         var connectionIssues = connectionRows.Count(x => !string.Equals(x.Status, "CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase));
         var oversellRisk = products.Where(x => x.Active && x.Stock <= 0).ToList();
         var staleSources = sources.Where(x => x.LastSuccessfulFeedUtc is { } fed && DateTime.UtcNow - fed > ProductRowState.StaleAfter).ToList();
+        var overdueSources = sources.Select(x => SourceSla.Evaluate(x, DateTime.UtcNow)).Where(v => v.State == SourceSlaState.Overdue).ToList();
         var quality = new DataQualityStore(directory).Summary();
         var notifications = new List<DashboardNotification>();
 
@@ -221,6 +225,8 @@ public sealed class DashboardDataService
             OversellRiskProducts = oversellRisk.Count,
             OversellOldestUtc = oversellRisk.Count == 0 ? null : oversellRisk.Min(x => x.UpdatedUtc),
             StaleSources = staleSources.Count,
+            OverdueSources = overdueSources.Count,
+            OverdueSourceOldestUtc = overdueSources.Count == 0 ? null : overdueSources.Min(v => v.DeadlineUtc),
             StaleSourceOldestUtc = staleSources.Count == 0 ? null : staleSources.Min(x => x.LastSuccessfulFeedUtc ?? DateTime.MinValue) is var oldestFeed && oldestFeed == DateTime.MinValue ? null : oldestFeed,
             FailedSyncOldestUtc = failedSync.Count == 0 ? null : failedSync.Min(x => x.UpdatedUtc),
             UnmappedOrderOldestUtc = stockWaiting == 0 ? null : orders.Where(order => catalog.GetOrderStockStatus(order.Marketplace, order.ShopId, order.OrderId) is null).Select(x => x.UpdatedAt.UtcDateTime).DefaultIfEmpty().Min() is var oldestOrder && oldestOrder == default ? null : oldestOrder,

@@ -22,6 +22,7 @@ public sealed class SourceConfig
     public int SafetyStock { get; set; } = 3; public int MinimumStock { get; set; } public int MaximumStock { get; set; } = 20; public string BrandFilter { get; set; } = ""; public string CategoryFilter { get; set; } = "";
     public bool UpdateName { get; set; } public bool UpdateDescription { get; set; } public bool UpdateImages { get; set; } public int MissingSourceGraceMinutes { get; set; } = 120;
     public int Priority { get; set; } = 100;
+    public int SlaRefreshMinutes { get; set; } public int SlaGraceMinutes { get; set; }
 
     static readonly JsonSerializerOptions Canonical = new() { WriteIndented = false };
 
@@ -35,7 +36,7 @@ public sealed class SourceConfig
             PriceMode = s.PriceMode ?? "", Formula = s.Formula ?? "", CostCurrency = s.CostCurrency ?? "", Currency = s.Currency ?? "", AutoFx = s.AutoFx,
             FxKind = s.FxKind ?? "", TryPerTargetUnit = s.TryPerTargetUnit, ExchangeRate = s.ExchangeRate, MarkupPercent = s.MarkupPercent, FixedAmount = s.FixedAmount, MinimumPrice = s.MinimumPrice,
             SafetyStock = s.SafetyStock, MinimumStock = s.MinimumStock, MaximumStock = s.MaximumStock, BrandFilter = s.BrandFilter ?? "", CategoryFilter = s.CategoryFilter ?? "",
-            UpdateName = s.UpdateName, UpdateDescription = s.UpdateDescription, UpdateImages = s.UpdateImages, MissingSourceGraceMinutes = s.MissingSourceGraceMinutes, Priority = s.Priority,
+            UpdateName = s.UpdateName, UpdateDescription = s.UpdateDescription, UpdateImages = s.UpdateImages, MissingSourceGraceMinutes = s.MissingSourceGraceMinutes, Priority = s.Priority, SlaRefreshMinutes = s.SlaRefreshMinutes, SlaGraceMinutes = s.SlaGraceMinutes,
         };
     }
 
@@ -48,7 +49,7 @@ public sealed class SourceConfig
         s.PriceMode = PriceMode; s.Formula = Formula; s.CostCurrency = CostCurrency; s.Currency = Currency; s.AutoFx = AutoFx;
         s.FxKind = FxKind; s.TryPerTargetUnit = TryPerTargetUnit; s.ExchangeRate = ExchangeRate; s.MarkupPercent = MarkupPercent; s.FixedAmount = FixedAmount; s.MinimumPrice = MinimumPrice;
         s.SafetyStock = SafetyStock; s.MinimumStock = MinimumStock; s.MaximumStock = MaximumStock; s.BrandFilter = BrandFilter; s.CategoryFilter = CategoryFilter;
-        s.UpdateName = UpdateName; s.UpdateDescription = UpdateDescription; s.UpdateImages = UpdateImages; s.MissingSourceGraceMinutes = MissingSourceGraceMinutes; s.Priority = Priority;
+        s.UpdateName = UpdateName; s.UpdateDescription = UpdateDescription; s.UpdateImages = UpdateImages; s.MissingSourceGraceMinutes = MissingSourceGraceMinutes; s.Priority = Priority; s.SlaRefreshMinutes = SlaRefreshMinutes; s.SlaGraceMinutes = SlaGraceMinutes;
     }
 
     public string ToJson() => JsonSerializer.Serialize(this, Canonical);

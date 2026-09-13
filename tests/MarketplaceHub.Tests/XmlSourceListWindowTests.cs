@@ -35,7 +35,7 @@ public sealed class XmlSourceListWindowTests
                 store.SaveSource(new XmlSource { Id = "run", Name = "Koşan", Location = "https://r.example.com/feed.xml" });
                 store.SaveSource(new XmlSource { Id = "down", Name = "Düşük", Location = "https://d.example.com/feed.xml?token=SECRET999", LastHealthState = "TIMEOUT", LastHealthError = "timeout token=SECRET999" });
                 store.SaveSource(new XmlSource { Id = "slow", Name = "Yavaş", Location = "https://s.example.com/feed.xml", LastHealthState = "HEALTHY", LastHealthLatencyMs = 7000 });
-                store.SaveSource(new XmlSource { Id = "ok", Name = "Sağlam", Location = "https://ok.example.com/feed.xml", LastHealthState = "HEALTHY", LastHealthLatencyMs = 200, LastFeedState = "COMPLETE", LastSuccessfulFeedUtc = now.AddHours(-2), AutoImport = true, LastRunUtc = now.AddMinutes(-10), IntervalMinutes = 30 });
+                store.SaveSource(new XmlSource { Id = "ok", Name = "Sağlam", Location = "https://ok.example.com/feed.xml", LastHealthState = "HEALTHY", LastHealthLatencyMs = 200, LastFeedState = "COMPLETE", LastSuccessfulFeedUtc = now.AddHours(-2), AutoImport = true, LastRunUtc = now.AddMinutes(-10), IntervalMinutes = 30, SlaRefreshMinutes = 120, SlaGraceMinutes = 30 });
                 store.SaveSource(new XmlSource { Id = "file", Name = "Yerel", Location = local });
                 store.SaveSource(new XmlSource { Id = "off", Name = "Kapalı", Location = "https://o.example.com/feed.xml", Enabled = false });
                 for (var i = 1; i <= 100; i++) store.SaveSource(new XmlSource { Id = $"f{i:D3}", Name = $"Dolgu {i:D3}", Location = $"https://f{i}.example.com/feed.xml", LastHealthState = "HEALTHY", LastHealthLatencyMs = 50, LastRunUtc = now.AddMinutes(-1) });

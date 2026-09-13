@@ -37,10 +37,13 @@ public sealed class XmlSourceListGroupingTests
         var incomplete = Entry(new XmlSource { Name = "Inc", Location = "https://i.example.com/f.xml", LastHealthState = "HEALTHY", LastFeedState = "INCOMPLETE", LastHealthLatencyMs = 90 });
         Assert.AreEqual(SourceHealthBand.Problem, incomplete.Band); StringAssert.Contains(incomplete.Problem, "eksik akış");
 
-        var healthy = Entry(new XmlSource { Name = "Ok", Location = "https://ok.example.com/f.xml", LastHealthState = "HEALTHY", LastHealthLatencyMs = 300, LastFeedState = "COMPLETE", LastSuccessfulFeedUtc = Now.AddHours(-2), AutoImport = true, LastRunUtc = Now.AddMinutes(-10), IntervalMinutes = 30 }, new("Completed", Now.AddMinutes(-10), Now.AddMinutes(-9), null, ""));
+        var healthy = Entry(new XmlSource { Name = "Ok", Location = "https://ok.example.com/f.xml", LastHealthState = "HEALTHY", LastHealthLatencyMs = 300, LastFeedState = "COMPLETE", LastSuccessfulFeedUtc = Now.AddHours(-2), AutoImport = true, LastRunUtc = Now.AddMinutes(-10), IntervalMinutes = 30, SlaRefreshMinutes = 120, SlaGraceMinutes = 30 }, new("Completed", Now.AddMinutes(-10), Now.AddMinutes(-9), null, ""));
         Assert.AreEqual(SourceHealthBand.Healthy, healthy.Band);
         Assert.AreEqual("2 sa önce", healthy.LastSuccess); Assert.AreEqual("20 dk sonra", healthy.NextSchedule); Assert.AreEqual("", healthy.ActiveRun);
         StringAssert.Contains(healthy.Detail, "son başarı 2 sa önce"); StringAssert.Contains(healthy.Detail, "sonraki: 20 dk sonra");
+        // #898: the same source on the default profile (30 + 15 minutes) has missed its promised refresh -- a problem even though it is reachable.
+        var overdue = Entry(new XmlSource { Name = "Late", Location = "https://late.example.com/f.xml", LastHealthState = "HEALTHY", LastHealthLatencyMs = 300, LastFeedState = "COMPLETE", LastSuccessfulFeedUtc = Now.AddHours(-2), AutoImport = true, LastRunUtc = Now.AddMinutes(-10), IntervalMinutes = 30 });
+        Assert.AreEqual(SourceHealthBand.Problem, overdue.Band); StringAssert.Contains(overdue.Problem, "güncellik SLA");
 
         var never = Entry(new XmlSource { Name = "New", Location = "https://n.example.com/f.xml" });
         Assert.AreEqual(SourceHealthBand.NeverRun, never.Band); Assert.AreEqual("hiç", never.LastSuccess); Assert.AreEqual("otomatik değil", never.NextSchedule);

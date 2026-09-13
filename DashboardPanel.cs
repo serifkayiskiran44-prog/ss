@@ -189,6 +189,7 @@ public static class DashboardPanel
             Scope = scope,
             OversellRiskProducts = snapshot.OversellRiskProducts, OversellOldestUtc = snapshot.OversellOldestUtc,
             StaleSources = snapshot.StaleSources, StaleSourceOldestUtc = snapshot.StaleSourceOldestUtc,
+            OverdueSources = snapshot.OverdueSources, OverdueSourceOldestUtc = snapshot.OverdueSourceOldestUtc,
             FailedSyncJobs = snapshot.FailedSyncs, FailedSyncOldestUtc = snapshot.FailedSyncOldestUtc,
             UnmappedOrders = snapshot.StockWaitingOrders, UnmappedOrderOldestUtc = snapshot.UnmappedOrderOldestUtc,
         }, DateTime.UtcNow);
