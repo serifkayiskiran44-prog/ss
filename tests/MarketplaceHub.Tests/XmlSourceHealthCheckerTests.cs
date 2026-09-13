@@ -24,7 +24,7 @@ public sealed class XmlSourceHealthCheckerTests
 
         Assert.AreEqual("HEALTHY", result.State);
         Assert.AreEqual(200, result.HttpStatus);
-        Assert.IsTrue(result.LatencyMs >= 30, $"Expected measured latency to reflect the artificial 30ms delay, got {result.LatencyMs}ms.");
+        Assert.IsTrue(result.LatencyMs >= 25, $"Expected measured latency to reflect the artificial 30ms delay, got {result.LatencyMs}ms.");  // 25: Task.Delay/timer resolution can fire ~1ms early on the CI runner (measured 29ms)
     }
 
     [TestMethod]
