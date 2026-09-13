@@ -67,12 +67,32 @@ public sealed class ImportProgressState
         if (Running is { } running) Apply(new(running, ImportProgressStatus.Cancelled, AtUtc: nowUtc));
     }
 
+    // #890: a cancel click is a request about the operator, not a fact about the pipeline; the pipeline answers it
+    // at its next check by reporting the stage cancelled, and the surface reads the outcome from that, never from the click.
+    public DateTime? CancelRequestedUtc { get; private set; }
+    public bool CancelAcknowledged => stages.Values.Any(s => s.Status == ImportProgressStatus.Cancelled);
+    public void RequestCancel(DateTime nowUtc) { CancelRequestedUtc ??= nowUtc; }
+    /// <summary>A new operation starts with no request pending.</summary>
+    public void BeginOperation() { CancelRequestedUtc = null; }
+    /// <summary>The pipeline's own policy: the read is one parse that runs to its end (the next check then stops the job); every other stage checks the token as it goes, and the apply is one transaction that rolls back.</summary>
+    public static bool IsCancellable(ImportProgressStage stage) => stage != ImportProgressStage.Read;
+    /// <summary>What is certain now: the request, the acknowledgement, whether the operation ended (nothing runs and a stage finished or failed) and when, and whether the running stage can be interrupted.</summary>
+    public CancellationFacts CancellationFacts(DateTime nowUtc)
+    {
+        var running = Running;
+        var settled = stages.Values.Where(s => s.Status is ImportProgressStatus.Done or ImportProgressStatus.Failed).ToList();
+        var ended = running is null && settled.Count > 0;
+        DateTime? endedUtc = ended ? settled.Max(s => (s.StartedUtc ?? nowUtc) + s.Elapsed) : null;
+        return new CancellationFacts(CancelRequestedUtc, CancelAcknowledged, ended, endedUtc, running is null || IsCancellable(running.Value), running is { } r ? stages[r].Label : "");
+    }
+
     /// <summary>Retry keeps what finished before the failure and resets the failed or cancelled stage and everything after it.</summary>
     public ImportProgressStage? Retry()
     {
         var failed = Failed;
         if (failed is null) return null;
         foreach (var s in Stages.Where(s => s.Stage >= failed.Value)) stages[s.Stage] = Reset(stages[s.Stage]);
+        CancelRequestedUtc = null;
         return failed;
     }
 

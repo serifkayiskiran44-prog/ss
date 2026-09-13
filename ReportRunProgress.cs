@@ -60,6 +60,22 @@ public sealed class ReportRunProgressState
     /// <summary>A cancellation lands on whatever is running; when nothing runs yet, on the query.</summary>
     public void Cancel(DateTime nowUtc) => Apply(new(Running ?? ReportRunStage.Query, ReportRunStageStatus.Cancelled, AtUtc: nowUtc));
 
+    // #890: the request apart from the acknowledgement; the runner answers a request at its next check.
+    public DateTime? CancelRequestedUtc { get; private set; }
+    public bool CancelAcknowledged => IsCancelled;
+    public void RequestCancel(DateTime nowUtc) { CancelRequestedUtc ??= nowUtc; }
+    public void BeginOperation() { CancelRequestedUtc = null; }
+    /// <summary>The runner's own policy: the query and the export check the token row by row; the generation is one unit that runs to its end.</summary>
+    public static bool IsCancellable(ReportRunStage stage) => stage != ReportRunStage.Generate;
+    public CancellationFacts CancellationFacts(DateTime nowUtc)
+    {
+        var running = Running;
+        var settled = stages.Values.Where(s => s.Status is ReportRunStageStatus.Done or ReportRunStageStatus.Failed).ToList();
+        var ended = running is null && settled.Count > 0;
+        DateTime? endedUtc = ended ? settled.Max(s => (s.StartedUtc ?? nowUtc) + s.Elapsed) : null;
+        return new CancellationFacts(CancelRequestedUtc, CancelAcknowledged, ended, endedUtc, running is null || IsCancellable(running.Value), running is { } r ? stages[r].Label : "");
+    }
+
     /// <summary>One line for the whole run.</summary>
     public string Headline(DateTime nowUtc)
     {

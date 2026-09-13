@@ -92,7 +92,8 @@ public static class ReportParameterPanel
         var retry = new Button { Tag = "report-run-retry", Content = RetryLabel, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 8, 0), Visibility = Visibility.Collapsed };
         var openDiagnostics = new Button { Tag = "report-run-diagnostics-open", Content = "Tanılamaya git", Padding = new Thickness(10, 2, 10, 2), Visibility = Visibility.Collapsed };
         runActions.Children.Add(cancel); runActions.Children.Add(retry); runActions.Children.Add(openDiagnostics);
-        progressHost.Children.Add(progressHeadline); progressHost.Children.Add(progressRows); progressHost.Children.Add(diagnostics); progressHost.Children.Add(runActions);
+        var cancelOutcome = new TextBlock { Tag = CancellationOutcome.Tag, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed, Margin = Spacing.BelowInline }; AutomationProperties.SetLiveSetting(cancelOutcome, AutomationLiveSetting.Polite);
+        progressHost.Children.Add(progressHeadline); progressHost.Children.Add(cancelOutcome); progressHost.Children.Add(progressRows); progressHost.Children.Add(diagnostics); progressHost.Children.Add(runActions);
         if (runnable) root.Children.Add(progressHost);
 
         // #849: the result -- summary, the column chooser, the export, the grid.
@@ -154,6 +155,9 @@ public static class ReportParameterPanel
                 row.Children.Add(bar); progressRows.Children.Add(row);
             }
             progressHeadline.Text = progress.Headline(now);
+            // #890: the cancellation outcome from the run's real state, beside the headline.
+            var verdict = CancellationOutcome.Describe(progress.CancellationFacts(now), "Dosya yazılmadı; sonuç değişmedi.");
+            cancelOutcome.Text = verdict.Line; cancelOutcome.Visibility = verdict.Phase == CancellationPhase.NotRequested ? Visibility.Collapsed : Visibility.Visible; cancelOutcome.Foreground = SeverityStyle.AccentBrush(verdict.Level, hc);
             cancel.Visibility = running && progress.Failed is null && !progress.IsComplete ? Visibility.Visible : Visibility.Collapsed;
             retry.Visibility = !running && progress.Failed is not null ? Visibility.Visible : Visibility.Collapsed;
             var failed = progress.Failed is { } f && progress[f].Status == ReportRunStageStatus.Failed;
@@ -256,7 +260,7 @@ public static class ReportParameterPanel
             var views = context.Preferences.ListViews(module); saved.ItemsSource = views; saved.SelectedItem = select is null ? null : views.FirstOrDefault(v => v.Name == select);
             var noViews = views.Count == 0 ? DisabledReason.StoreState("Kayıtlı filtre yok.") : null; CommandState.Apply(load, noViews); CommandState.Apply(delete, noViews);
         }
-        void BeginRun() { runCts?.Dispose(); runCts = new CancellationTokenSource(); running = true; CommandState.Apply(run, DisabledReason.Busy("Rapor çalışıyor.")); CommandState.Apply(exportButton, DisabledReason.Busy("Rapor çalışıyor.")); CommandState.Apply(cancel, null); progressHost.Visibility = Visibility.Visible; RenderProgress(); }
+        void BeginRun() { runCts?.Dispose(); runCts = new CancellationTokenSource(); running = true; progress.BeginOperation(); CommandState.Apply(run, DisabledReason.Busy("Rapor çalışıyor.")); CommandState.Apply(exportButton, DisabledReason.Busy("Rapor çalışıyor.")); CommandState.Apply(cancel, null); progressHost.Visibility = Visibility.Visible; RenderProgress(); }
         void EndRun() { running = false; if (progress.Running is not null) progress.Cancel(DateTime.UtcNow); RenderProgress(); Revalidate(); }
         async Task StartQuery()
         {
@@ -320,7 +324,7 @@ public static class ReportParameterPanel
         run.Click += async (_, _) => await StartQuery();
         exportButton.Click += async (_, _) => await StartExport(isRetry: false);
         retry.Click += async (_, _) => { if (lastAction == "export") await StartExport(isRetry: true); else await StartQuery(); };
-        cancel.Click += (_, _) => { if (!running) return; runCts?.Cancel(); status.Text = "İptal istendi; sürmekte olan aşama durduruluyor."; cancel.IsEnabled = false; };
+        cancel.Click += (_, _) => { if (!running) return; progress.RequestCancel(DateTime.UtcNow); runCts?.Cancel(); RenderProgress(); status.Text = CancellationOutcome.Describe(progress.CancellationFacts(DateTime.UtcNow), "Dosya yazılmadı; sonuç değişmedi.").Line; cancel.IsEnabled = false; };
         openDiagnostics.Click += (_, _) => context.Navigate?.Invoke("diagnostics");
         columnsButton.Click += (_, _) =>
         {
