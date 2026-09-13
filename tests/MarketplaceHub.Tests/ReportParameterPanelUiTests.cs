@@ -110,7 +110,7 @@ public sealed class ReportParameterPanelUiTests
                     Assert.IsTrue(Descendants(setupHost).OfType<TextBlock>().Any(t => (string?)t.Tag == "report-setup-none"), "The support package says it has no parameters.");
 
                     // Without an offered store the setup itself blocks: the store combo is off with the reason, the run disabled.
-                    var alone = ReportParameterPanel.Build(new ReportParameterPanel.Context(ReportCatalog.Find("orders-csv")!, () => Array.Empty<string>(), new UiPreferenceStore(root), navigated.Add, _ => Task.FromResult<string?>("ran")));
+                    var alone = ReportParameterPanel.Build(new ReportParameterPanel.Context(ReportCatalog.Find("orders-csv")!, () => Array.Empty<string>(), new UiPreferenceStore(root), navigated.Add, (_, _, _, _) => Task.FromResult<string?>("ran")));
                     setupHost.Child = alone; Drain(window);
                     var storeAlone = Setup<ComboBox>("report-param-store");
                     Assert.IsFalse(storeAlone.IsEnabled); Assert.IsFalse(Setup<Button>("report-param-run").IsEnabled); StringAssert.Contains(Setup<TextBlock>("report-param-validation").Text, "Mağaza seçin");

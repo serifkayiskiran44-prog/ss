@@ -13,14 +13,20 @@ public sealed record ReportStateOption(string Key, string Label);
 /// defaults filled on open, a validation line per field plus a summary, saved filters (load / save / delete under
 /// the report's own preference module), and the actions -- "Çalıştır" for the report the workspace runs itself,
 /// "Ekranda aç" for a report another screen owns. Every control is a labelled tab stop; Enter runs.
+/// The run view (#848): the run's stages -- query, generate, export -- as real progress rows (count and an
+/// indeterminate bar while the total is unknown, a percentage once it is), a cancel that stops the run at its
+/// stage, terminal diagnostics that are sanitized and lead to the diagnostics screen, and a retry that re-runs the
+/// same parameters into the same file.
 /// </summary>
 public static class ReportParameterPanel
 {
-    /// <param name="Run">Runs the report with the validated parameters and returns the outcome text; null when the report is not runnable here.</param>
-    public sealed record Context(ReportDefinition Definition, Func<IReadOnlyCollection<string>?> AllowedStoreKeys, UiPreferenceStore Preferences, Action<string>? Navigate, Func<ReportParameterSet, Task<string?>>? Run, DateTime? NowUtc = null);
+    /// <param name="Run">Runs the report with the validated parameters, reporting stage events and honouring the token; <c>retry</c> re-runs into the previous file. Returns the outcome text, or null when the operator picked no file. Null when the report is not runnable here.</param>
+    public sealed record Context(ReportDefinition Definition, Func<IReadOnlyCollection<string>?> AllowedStoreKeys, UiPreferenceStore Preferences, Action<string>? Navigate, Func<ReportParameterSet, IProgress<ReportRunProgressEvent>, CancellationToken, bool, Task<string?>>? Run, DateTime? NowUtc = null);
 
     public const string RunLabel = "Çalıştır";
     public const string OpenLabel = "Ekranda aç";
+    public const string CancelLabel = "İptal";
+    public const string RetryLabel = "Yeniden dene";
     public const string NoParametersText = "Bu raporun parametresi yok.";
 
     public static FrameworkElement Build(Context context)
@@ -39,7 +45,7 @@ public static class ReportParameterPanel
         var to = new DatePicker { Tag = "report-param-to" }; var toField = FormField.Build(new FormFieldSpec("Bitiş tarihi", Required: true, Help: $"En fazla {ReportParameters.MaxRangeDays} günlük aralık."), to);
         var stateItems = new[] { new ReportStateOption("", "Tümü") }.Concat(OrdersRules.States.Select(s => new ReportStateOption(s, OrdersRules.Label(s)))).ToList();
         var state = new ComboBox { Tag = "report-param-state", ItemsSource = stateItems, DisplayMemberPath = "Label", SelectedIndex = 0 }; var stateField = FormField.Build(new FormFieldSpec("Teslimat durumu", Help: "Boş bırakınca tüm durumlar."), state);
-        var query = new TextBox { Tag = "report-param-query", MaxLength = ReportParameters.MaxQueryLength }; var queryField = FormField.Build(new FormFieldSpec("Arama metni", Help: "Sipariş no, SKU veya ürün adı; kişisel veri aranmaz."), query);
+        var query = new TextBox { Tag = "report-param-query", MaxLength = ReportParameters.MaxQueryLength }; var queryField = FormField.Build(new FormFieldSpec("Arama metni", Help: "Sipariş no, SKU veya ürün adı; kişisel veri aranmaz ve bu metin kayıtlara yazılmaz."), query);
         if (schema.Store) root.Children.Add(storeField.Root);
         if (schema.DateRange) { root.Children.Add(fromField.Root); root.Children.Add(toField.Root); }
         if (schema.DeliveryState) root.Children.Add(stateField.Root);
@@ -62,9 +68,23 @@ public static class ReportParameterPanel
         var runnable = context.Run is not null && ReportRunner.CanRun(definition);
         var run = new Button { Tag = "report-param-run", Content = RunLabel, Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(0, 0, 8, 0), Visibility = runnable ? Visibility.Visible : Visibility.Collapsed, IsDefault = runnable };
         var open = new Button { Tag = "report-param-open", Content = OpenLabel, Padding = new Thickness(12, 3, 12, 3), Visibility = definition.Route == "reports" || context.Navigate is null ? Visibility.Collapsed : Visibility.Visible, IsDefault = !runnable };
-        actions.Children.Add(run); actions.Children.Add(open); root.Children.Add(actions); root.Children.Add(status);
+        actions.Children.Add(run); actions.Children.Add(open); root.Children.Add(actions);
 
-        var applying = false; var running = false;
+        // #848: the run view -- one row per stage, cancel while running, diagnostics and retry after a failure or cancellation.
+        var progressHost = new StackPanel { Tag = "report-run-progress", Visibility = Visibility.Collapsed, Margin = new Thickness(0, 10, 0, 0) };
+        var progressHeadline = new TextBlock { Tag = "report-run-headline", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) }; AutomationProperties.SetLiveSetting(progressHeadline, AutomationLiveSetting.Polite);
+        var progressRows = new StackPanel();
+        var diagnostics = new TextBlock { Tag = "report-run-diagnostics", TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 4, 0, 0) }; AutomationProperties.SetLiveSetting(diagnostics, AutomationLiveSetting.Assertive);
+        var runActions = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        var cancel = new Button { Tag = "report-run-cancel", Content = CancelLabel, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 8, 0), Visibility = Visibility.Collapsed, IsCancel = true };
+        var retry = new Button { Tag = "report-run-retry", Content = RetryLabel, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 8, 0), Visibility = Visibility.Collapsed };
+        var openDiagnostics = new Button { Tag = "report-run-diagnostics-open", Content = "Tanılamaya git", Padding = new Thickness(10, 2, 10, 2), Visibility = Visibility.Collapsed };
+        runActions.Children.Add(cancel); runActions.Children.Add(retry); runActions.Children.Add(openDiagnostics);
+        progressHost.Children.Add(progressHeadline); progressHost.Children.Add(progressRows); progressHost.Children.Add(diagnostics); progressHost.Children.Add(runActions);
+        if (runnable) root.Children.Add(progressHost);
+        root.Children.Add(status);
+
+        var applying = false; var running = false; var progress = new ReportRunProgressState(); CancellationTokenSource? runCts = null;
         ReportParameterSet Current() => new(definition.Key,
             schema.Store ? (store.SelectedItem as ReportStoreOption)?.Key ?? "" : "",
             schema.DateRange ? AsUtcDay(from.SelectedDate) : null, schema.DateRange ? AsUtcDay(to.SelectedDate) : null,
@@ -85,6 +105,26 @@ public static class ReportParameterPanel
             run.IsEnabled = blocking.Count == 0 && !running;
             return findings;
         }
+        void RenderProgress()
+        {
+            var now = DateTime.UtcNow; var hc = SeverityStyle.IsHighContrast; progressRows.Children.Clear();
+            foreach (var stage in progress.Snapshot(now))
+            {
+                var row = new DockPanel { Tag = "report-run-stage-" + stage.Stage.ToString().ToLowerInvariant(), Margin = new Thickness(0, 1, 0, 1) };
+                var label = new TextBlock { Text = $"{ReportRunProgressState.Glyph(stage.Status)} {stage.Label}", Width = 120, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(label, Dock.Left); row.Children.Add(label);
+                var counter = new TextBlock { Tag = "report-run-counter", Text = (stage.Counter.Length > 0 ? stage.Counter + " · " : "") + ReportRunProgressState.StatusWord(stage.Status) + (stage.Elapsed > TimeSpan.Zero ? $" · {stage.Elapsed.TotalSeconds:0.#} sn" : ""), Width = 150, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 }; DockPanel.SetDock(counter, Dock.Right); row.Children.Add(counter);
+                var bar = new ProgressBar { Tag = "report-run-bar-" + stage.Stage.ToString().ToLowerInvariant(), Height = 10, Margin = new Thickness(6, 0, 6, 0), Minimum = 0, Maximum = 100, IsIndeterminate = stage.IsIndeterminate, Value = stage.Percent ?? (stage.Status == ReportRunStageStatus.Done ? 100 : 0) };
+                AutomationProperties.SetName(bar, $"{stage.Label}: {ReportRunProgressState.StatusWord(stage.Status)}" + (stage.Percent is { } pc ? $", yüzde {pc:0}" : stage.Counter.Length > 0 ? ", " + stage.Counter : ""));
+                row.Children.Add(bar); progressRows.Children.Add(row);
+            }
+            progressHeadline.Text = progress.Headline(now);
+            cancel.Visibility = running && progress.Failed is null && !progress.IsComplete ? Visibility.Visible : Visibility.Collapsed;
+            retry.Visibility = !running && progress.Failed is not null ? Visibility.Visible : Visibility.Collapsed;
+            var failed = progress.Failed is { } f && progress[f].Status == ReportRunStageStatus.Failed;
+            diagnostics.Text = progress.Diagnostics; diagnostics.Visibility = progress.Failed is null ? Visibility.Collapsed : Visibility.Visible;
+            diagnostics.Foreground = SeverityStyle.AccentBrush(failed ? SeverityLevel.Blocking : SeverityLevel.Warning, hc);
+            openDiagnostics.Visibility = failed && context.Navigate is not null ? Visibility.Visible : Visibility.Collapsed;
+        }
         void Apply(ReportParameterSet p)
         {
             applying = true;
@@ -102,6 +142,28 @@ public static class ReportParameterPanel
         {
             var views = context.Preferences.ListViews(module); saved.ItemsSource = views; saved.SelectedItem = select is null ? null : views.FirstOrDefault(v => v.Name == select);
             load.IsEnabled = views.Count > 0; delete.IsEnabled = views.Count > 0;
+        }
+        async Task StartRun(bool isRetry)
+        {
+            if (running || context.Run is null) return;
+            var findings = Revalidate(); if (!ReportParameters.IsValid(findings)) { status.Text = "Önce parametre hatalarını düzeltin."; return; }
+            progress = new ReportRunProgressState(); runCts?.Dispose(); runCts = new CancellationTokenSource();
+            running = true; run.IsEnabled = false; progressHost.Visibility = Visibility.Visible; status.Text = "Çalıştırılıyor…"; RenderProgress();
+            var reporter = new Progress<ReportRunProgressEvent>(e => { progress.Apply(e); RenderProgress(); });
+            try
+            {
+                var message = await context.Run(Current(), reporter, runCts.Token, isRetry);
+                if (message is null) { status.Text = "Çalıştırma vazgeçildi; dosya seçilmedi."; progressHost.Visibility = Visibility.Collapsed; }
+                else status.Text = message;
+            }
+            catch (OperationCanceledException) { status.Text = "Rapor iptal edildi; dosya yazılmadı."; }
+            catch (Exception error) { var safe = AuditStore.Sanitize(error.Message); status.Text = "Çalıştırılamadı: " + safe; progress.Apply(new(progress.Running ?? ReportRunStage.Query, ReportRunStageStatus.Failed, Note: safe)); }
+            finally
+            {
+                running = false;
+                if (progress.Running is not null) progress.Cancel(DateTime.UtcNow);
+                RenderProgress(); Revalidate();
+            }
         }
         store.SelectionChanged += (_, _) => { if (!applying) Revalidate(); };
         from.SelectedDateChanged += (_, _) => { if (!applying) Revalidate(); };
@@ -128,15 +190,10 @@ public static class ReportParameterPanel
             context.Preferences.DeleteView(module, view.Name); RefreshSaved(); status.Text = $"'{view.Name}' silindi.";
         };
         open.Click += (_, _) => context.Navigate?.Invoke(definition.Route);
-        run.Click += async (_, _) =>
-        {
-            if (running || context.Run is null) return;
-            var findings = Revalidate(); if (!ReportParameters.IsValid(findings)) { status.Text = "Önce parametre hatalarını düzeltin."; return; }
-            running = true; run.IsEnabled = false; status.Text = "Çalıştırılıyor…";
-            try { status.Text = await context.Run(Current()) ?? "Çalıştırma vazgeçildi; dosya seçilmedi."; }
-            catch (Exception error) { status.Text = "Çalıştırılamadı: " + AuditStore.Sanitize(error.Message); }
-            finally { running = false; Revalidate(); }
-        };
+        run.Click += async (_, _) => await StartRun(isRetry: false);
+        retry.Click += async (_, _) => await StartRun(isRetry: true);
+        cancel.Click += (_, _) => { if (!running) return; runCts?.Cancel(); status.Text = "İptal istendi; sürmekte olan aşama durduruluyor."; cancel.IsEnabled = false; };
+        openDiagnostics.Click += (_, _) => context.Navigate?.Invoke("diagnostics");
         Apply(ReportParameters.Defaults(definition, allowed, context.NowUtc ?? DateTime.UtcNow)); RefreshSaved();
         return root;
     }

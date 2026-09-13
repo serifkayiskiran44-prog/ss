@@ -88,14 +88,14 @@ public static class ReportParameters
         catch (JsonException) { return null; }
     }
 
-    /// <summary>The parameters as one line for a run note or a status: labels and dates, no payload.</summary>
-    public static string Summary(ReportParameterSet parameters, ReportParameterSchema schema)
+    /// <summary>The parameters as one line for a status or, with <paramref name="includeQuery"/> off, for a run note or a log -- the query is the operator's own text and never lands in a store (#848).</summary>
+    public static string Summary(ReportParameterSet parameters, ReportParameterSchema schema, bool includeQuery = true)
     {
         var parts = new List<string>();
         if (schema.Store) parts.Add(parameters.StoreKey.Length == 0 ? "Mağaza: seçilmedi" : "Mağaza: " + StoreLabel(parameters.StoreKey));
         if (schema.DateRange && parameters.FromUtc is not null && parameters.ToUtc is not null) parts.Add($"{parameters.FromUtc.Value.ToString("d", CultureInfo.CurrentCulture)}–{parameters.ToUtc.Value.ToString("d", CultureInfo.CurrentCulture)}");
         if (schema.DeliveryState) parts.Add("Durum: " + (parameters.DeliveryState.Length == 0 ? "tümü" : OrdersRules.Label(parameters.DeliveryState)));
-        if (schema.Query && parameters.Query.Length > 0) parts.Add("Arama: " + parameters.Query);
+        if (schema.Query && parameters.Query.Length > 0) parts.Add(includeQuery ? "Arama: " + parameters.Query : "Arama: var");
         return string.Join(" · ", parts);
     }
 
