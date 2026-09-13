@@ -58,8 +58,16 @@ public static class DashboardPanel
 
         var service = new DashboardDataService(directory);
         var preferences = new UiPreferenceStore(directory);
-        var alerts = new NotificationStore(directory);
-        void RenderAlerts() => NotificationCenterPanel.Render(notifications, NotificationCenter.Build(alerts.List(), DateTime.UtcNow), navigate, id => { alerts.Acknowledge(id); RenderAlerts(); }, id => { alerts.Unacknowledge(id); RenderAlerts(); }, DateTime.UtcNow);
+        var alerts = new NotificationStore(directory); var snoozes = new AlertSnoozeStore(directory);
+        void RenderAlerts()
+        {
+            var now = DateTime.UtcNow;
+            // #852: snoozes come from their own store (fingerprint and scope only); a snooze is set from the row's chooser and lifted from the snoozed list.
+            NotificationCenterPanel.Render(notifications, NotificationCenter.Build(alerts.List(), snoozes.Active(now), now), navigate,
+                id => { alerts.Acknowledge(id); RenderAlerts(); }, id => { alerts.Unacknowledge(id); RenderAlerts(); }, now,
+                (id, option) => { var alert = alerts.List().FirstOrDefault(a => a.Id == id); var chosen = AlertSnoozeRules.Option(option); if (alert is null || chosen is null) return; snoozes.Snooze(alert.Fingerprint, alert.Source, alert.StoreKey, alert.Severity, chosen.Duration, DateTime.UtcNow); RenderAlerts(); },
+                fingerprint => { snoozes.Clear(fingerprint); RenderAlerts(); });
+        }
         DashboardSnapshot? lastSnapshot = null;
         var storeScope = "tüm mağazalar";
         var applyingStoreFilter = false;

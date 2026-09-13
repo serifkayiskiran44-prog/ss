@@ -11,7 +11,10 @@ public sealed record AlertGroup(string Severity, string Source, string StoreKey,
     public string Title => $"{NotificationCenter.SeverityWord(Severity)} · {NotificationCenter.SourceLabel(Source)}" + (StoreKey.Length > 0 ? " · " + ReportParameters.StoreLabel(StoreKey) : "");
 }
 
-public sealed record NotificationCenterView(IReadOnlyList<AlertGroup> Unresolved, IReadOnlyList<AlertGroup> Acknowledged, IReadOnlyList<LocalNotification> Resolved, int ResolvedCount, string Headline)
+/// <summary>An open alert a snooze currently silences (#852), with the snooze that does it.</summary>
+public sealed record SnoozedAlert(LocalNotification Alert, AlertSnooze Snooze);
+
+public sealed record NotificationCenterView(IReadOnlyList<AlertGroup> Unresolved, IReadOnlyList<AlertGroup> Acknowledged, IReadOnlyList<LocalNotification> Resolved, int ResolvedCount, string Headline, IReadOnlyList<SnoozedAlert> Snoozed)
 {
     public bool HasUnresolved => Unresolved.Count > 0;
 }
@@ -58,41 +61,71 @@ public static class NotificationCenter
         return new(NotificationStore.Fingerprint(severity, notification.RouteKey, notification.StoreKey, notification.Title), severity, channel, shop, notification.Title, notification.Detail, notification.RouteKey);
     }
 
-    public static NotificationCenterView Build(IEnumerable<LocalNotification> alerts, DateTime nowUtc)
+    public static NotificationCenterView Build(IEnumerable<LocalNotification> alerts, DateTime nowUtc) => Build(alerts, Array.Empty<AlertSnooze>(), nowUtc);
+
+    /// <summary>The centre with snoozes (#852): an open, unacknowledged alert a snooze still silences leaves the open groups for the snoozed list; an escalated or expired one is shown as usual.</summary>
+    public static NotificationCenterView Build(IEnumerable<LocalNotification> alerts, IReadOnlyList<AlertSnooze> snoozes, DateTime nowUtc)
     {
-        ArgumentNullException.ThrowIfNull(alerts);
+        ArgumentNullException.ThrowIfNull(alerts); ArgumentNullException.ThrowIfNull(snoozes);
         var all = alerts.ToList();
         static IReadOnlyList<AlertGroup> Groups(IEnumerable<LocalNotification> items, bool acknowledged) => items
             .GroupBy(a => (Severity: Normalize(a.Severity), Source: (a.Source ?? "").Trim().ToLowerInvariant(), Store: a.StoreKey))
             .Select(g => new AlertGroup(g.Key.Severity, g.Key.Source, g.Key.Store, acknowledged, g.OrderByDescending(a => a.AtUtc).ThenBy(a => a.Title, StringComparer.CurrentCulture).ToList()))
             .OrderBy(g => Rank(g.Severity)).ThenBy(g => SourceLabel(g.Source), StringComparer.CurrentCulture).ThenBy(g => g.StoreKey, StringComparer.Ordinal).ToList();
-        var unresolved = Groups(all.Where(a => a.IsOpen && !a.Acknowledged), false);
+        var byFingerprint = snoozes.GroupBy(s => s.Fingerprint, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.UntilUtc).First(), StringComparer.Ordinal);
+        var shown = new List<LocalNotification>(); var snoozed = new List<SnoozedAlert>();
+        foreach (var alert in all.Where(a => a.IsOpen && !a.Acknowledged))
+        {
+            if (byFingerprint.TryGetValue(alert.Fingerprint, out var snooze) && AlertSnoozeRules.Silences(snooze, alert, nowUtc)) snoozed.Add(new(alert, snooze)); else shown.Add(alert);
+        }
+        var unresolved = Groups(shown, false);
         var acknowledged = Groups(all.Where(a => a.IsOpen && a.Acknowledged), true);
         var resolvedAll = all.Where(a => !a.IsOpen).OrderByDescending(a => a.ResolvedUtc ?? a.AtUtc).ToList();
         var open = unresolved.Sum(g => g.Count); var errors = unresolved.Where(g => g.Severity == "ERROR").Sum(g => g.Count); var warnings = unresolved.Where(g => g.Severity == "WARNING").Sum(g => g.Count); var infos = open - errors - warnings;
         var parts = new List<string>();
         if (errors > 0) parts.Add($"{errors:N0} hata"); if (warnings > 0) parts.Add($"{warnings:N0} uyarı"); if (infos > 0) parts.Add($"{infos:N0} bilgi");
         var headline = open == 0 ? "Açık uyarı yok" : $"{open:N0} açık uyarı: {string.Join(", ", parts)}";
-        var ackCount = acknowledged.Sum(g => g.Count); if (ackCount > 0) headline += $" · {ackCount:N0} onaylandı"; if (resolvedAll.Count > 0) headline += $" · {resolvedAll.Count:N0} çözüldü";
-        return new(unresolved, acknowledged, resolvedAll.Take(MaxResolvedShown).ToList(), resolvedAll.Count, headline);
+        var ackCount = acknowledged.Sum(g => g.Count); if (ackCount > 0) headline += $" · {ackCount:N0} onaylandı"; if (snoozed.Count > 0) headline += $" · {snoozed.Count:N0} ertelendi"; if (resolvedAll.Count > 0) headline += $" · {resolvedAll.Count:N0} çözüldü";
+        return new(unresolved, acknowledged, resolvedAll.Take(MaxResolvedShown).ToList(), resolvedAll.Count, headline, snoozed.OrderBy(s => s.Snooze.UntilUtc).ToList());
     }
 }
 
 /// <summary>The centre on screen: sections, one focusable group per severity/source/store, capped rows with open / acknowledge actions, all named for the keyboard and the screen reader.</summary>
 public static class NotificationCenterPanel
 {
-    public static void Render(Panel host, NotificationCenterView view, Action<string> navigate, Action<string> acknowledge, Action<string> unacknowledge, DateTime nowUtc)
+    /// <param name="snooze">Snoozes an alert (its id) for an option key from <see cref="AlertSnoozeRules.Options"/>; null hides the chooser (#852).</param>
+    /// <param name="unsnooze">Lifts the snooze on a fingerprint.</param>
+    public static void Render(Panel host, NotificationCenterView view, Action<string> navigate, Action<string> acknowledge, Action<string> unacknowledge, DateTime nowUtc, Action<string, string>? snooze = null, Action<string>? unsnooze = null)
     {
         ArgumentNullException.ThrowIfNull(host); ArgumentNullException.ThrowIfNull(view); ArgumentNullException.ThrowIfNull(navigate); ArgumentNullException.ThrowIfNull(acknowledge); ArgumentNullException.ThrowIfNull(unacknowledge);
         host.Children.Clear(); var hc = SeverityStyle.IsHighContrast;
         var headline = new TextBlock { Tag = "alerts-headline", Text = view.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 2, 6) };
         AutomationProperties.SetLiveSetting(headline, AutomationLiveSetting.Polite); host.Children.Add(headline);
         if (!view.HasUnresolved) host.Children.Add(new TextBlock { Tag = "alerts-empty", Text = "Açık uyarı yok. Yerel veri kaynaklarında onay bekleyen bir bulgu bulunmuyor.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 2, 6), Opacity = 0.85 });
-        var unresolved = new StackPanel { Tag = "alerts-unresolved" }; foreach (var group in view.Unresolved) unresolved.Children.Add(Group(group, navigate, acknowledge, unacknowledge, nowUtc, hc, expanded: NotificationCenter.Rank(group.Severity) <= 1)); host.Children.Add(unresolved);
+        var unresolved = new StackPanel { Tag = "alerts-unresolved" }; foreach (var group in view.Unresolved) unresolved.Children.Add(Group(group, navigate, acknowledge, unacknowledge, snooze, nowUtc, hc, expanded: NotificationCenter.Rank(group.Severity) <= 1)); host.Children.Add(unresolved);
         if (view.Acknowledged.Count > 0)
         {
             host.Children.Add(new TextBlock { Text = $"Onaylananlar ({view.Acknowledged.Sum(g => g.Count):N0})", FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 8, 2, 2) });
-            var acknowledged = new StackPanel { Tag = "alerts-acknowledged" }; foreach (var group in view.Acknowledged) acknowledged.Children.Add(Group(group, navigate, acknowledge, unacknowledge, nowUtc, hc, expanded: false)); host.Children.Add(acknowledged);
+            var acknowledged = new StackPanel { Tag = "alerts-acknowledged" }; foreach (var group in view.Acknowledged) acknowledged.Children.Add(Group(group, navigate, acknowledge, unacknowledge, null, nowUtc, hc, expanded: false)); host.Children.Add(acknowledged);
+        }
+        if (view.Snoozed.Count > 0)
+        {
+            host.Children.Add(new TextBlock { Text = $"Ertelenenler ({view.Snoozed.Count:N0})", FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 8, 2, 2) });
+            var snoozedHost = new StackPanel { Tag = "alerts-snoozed" };
+            foreach (var item in view.Snoozed)
+            {
+                var row = new DockPanel { Tag = "alert-snoozed-row", Margin = new Thickness(2, 3, 2, 3), LastChildFill = true }; AutomationProperties.SetAutomationId(row, item.Alert.Id);
+                if (unsnooze is not null)
+                {
+                    var lift = new Button { Tag = "alert-unsnooze", Content = "Ertelemeyi kaldır", Padding = new Thickness(8, 3, 8, 3), Margin = new Thickness(4, 0, 0, 0) }; AutomationProperties.SetAutomationId(lift, item.Snooze.Fingerprint);
+                    var fingerprint = item.Snooze.Fingerprint; lift.Click += (_, _) => unsnooze(fingerprint); AutomationProperties.SetName(lift, "Ertelemeyi kaldır: " + item.Alert.Title);
+                    DockPanel.SetDock(lift, Dock.Right); row.Children.Add(lift);
+                }
+                var level = NotificationCenter.LevelOf(item.Alert.Severity);
+                row.Children.Add(new TextBlock { Text = $"{SeverityStyle.For(level, hc).Glyph} {AuditStore.Redact(item.Alert.Title)} · {NotificationCenter.SeverityWord(item.Alert.Severity)} · {AlertSnoozeRules.Describe(item.Snooze, nowUtc)} · daha ciddi bir olay ertelemeyi aşar", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4), Opacity = 0.9 });
+                snoozedHost.Children.Add(row);
+            }
+            host.Children.Add(snoozedHost);
         }
         if (view.ResolvedCount > 0)
         {
@@ -104,7 +137,7 @@ public static class NotificationCenterPanel
         }
     }
 
-    static Expander Group(AlertGroup group, Action<string> navigate, Action<string> acknowledge, Action<string> unacknowledge, DateTime nowUtc, bool hc, bool expanded)
+    static Expander Group(AlertGroup group, Action<string> navigate, Action<string> acknowledge, Action<string> unacknowledge, Action<string, string>? snooze, DateTime nowUtc, bool hc, bool expanded)
     {
         var level = NotificationCenter.LevelOf(group.Severity); var style = SeverityStyle.For(level, hc);
         var expander = new Expander { Tag = "alert-group", IsExpanded = expanded, Margin = new Thickness(2, 2, 2, 2), BorderBrush = SeverityStyle.AccentBrush(level, hc), BorderThickness = new Thickness(style.BorderWeight), Padding = new Thickness(4) };
@@ -118,6 +151,14 @@ public static class NotificationCenterPanel
             var id = alert.Id; if (group.Acknowledged) ack.Click += (_, _) => unacknowledge(id); else ack.Click += (_, _) => acknowledge(id);
             AutomationProperties.SetName(ack, (group.Acknowledged ? "Onayı geri al: " : "Onayla: ") + alert.Title);
             DockPanel.SetDock(ack, Dock.Right); row.Children.Add(ack);
+            if (snooze is not null && !group.Acknowledged)
+            {
+                // #852: a bounded snooze from a short list; the alert is hidden until the time, unless a more severe event returns.
+                var chooser = new ComboBox { Tag = "alert-snooze", Width = 104, Margin = new Thickness(4, 0, 0, 0), ItemsSource = AlertSnoozeRules.Options, DisplayMemberPath = "Label", ToolTip = "Ertele: uyarı seçilen süre boyunca gizlenir; daha ciddi bir olay ertelemeyi aşar." };
+                AutomationProperties.SetAutomationId(chooser, alert.Id); AutomationProperties.SetName(chooser, "Ertele: " + alert.Title);
+                chooser.SelectionChanged += (_, _) => { if (chooser.SelectedItem is AlertSnoozeOption option) snooze(id, option.Key); };
+                DockPanel.SetDock(chooser, Dock.Right); row.Children.Add(chooser);
+            }
             if (alert.Source.Length > 0)
             {
                 var open = new Button { Tag = "alert-open", Content = "Aç", Padding = new Thickness(8, 3, 8, 3), Margin = new Thickness(4, 0, 0, 0) }; AutomationProperties.SetAutomationId(open, alert.Id);
