@@ -69,6 +69,7 @@ public static class ProductDirtySections
         ["TaxClassHistory"] = ("price-stock", "Vergi sınıfı geçmişi"),
         ["CountryOfOrigin"] = ("identity", "Menşei"),
         ["CountryOfOriginCode"] = ("identity", "Menşei kodu"),
+        ["AttributesText"] = ("content", "Özellikler"),
         ["LockPrice"] = ("price-stock", "Fiyat kilidi"),
         ["LockStock"] = ("price-stock", "Stok kilidi"),
         ["PriceFields"] = ("price-stock", "Fiyat alanları"),
