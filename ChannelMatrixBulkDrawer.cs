@@ -33,22 +33,22 @@ public static class ChannelMatrixBulkDrawer
         var operations = new BulkProductOperations(context.Catalog, context.Plans);
         var targets = context.Stores.Select(s => new ChannelMatrixBulkTarget(s.Key, s.Channel, s.ShopId, $"{s.ChannelName} · {s.ShopId}")).ToList();
         var body = new StackPanel();
-        body.Children.Add(new TextBlock { Text = $"{context.Products.Count:N0} seçili ürün için yerel kanal planı oluşturulur: hedef mağaza ve hedef kategori seçin, önizlemeyi okuyun, sonra onaylayın. Bu işlem yalnızca yerel plan yazar; pazaryerine hiçbir şey gönderilmez.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+        body.Children.Add(new TextBlock { Text = $"{context.Products.Count:N0} seçili ürün için yerel kanal planı oluşturulur: hedef mağaza ve hedef kategori seçin, önizlemeyi okuyun, sonra onaylayın. Bu işlem yalnızca yerel plan yazar; pazaryerine hiçbir şey gönderilmez.", TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowControl });
         var form = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
         var target = new ComboBox { Tag = "channel-matrix-bulk-target", Width = 220, ItemsSource = targets, DisplayMemberPath = "Label", Margin = new Thickness(0, 0, 8, 4) };
         System.Windows.Automation.AutomationProperties.SetName(target, "Hedef mağaza");
         target.SelectedItem = context.DefaultStore is null ? targets.FirstOrDefault() : targets.FirstOrDefault(t => t.Key == context.DefaultStore.Key) ?? targets.FirstOrDefault();
         var category = new TextBox { Tag = "channel-matrix-bulk-category", Width = 200, Margin = new Thickness(0, 0, 8, 4), ToolTip = "Hedef kategori (planın kategori alanı)" };
         System.Windows.Automation.AutomationProperties.SetName(category, "Hedef kategori");
-        var previewButton = new Button { Tag = "channel-matrix-bulk-preview", Content = "Önizle", Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 0, 4) };
+        var previewButton = new Button { Tag = "channel-matrix-bulk-preview", Content = "Önizle", Padding = new Thickness(10, 2, 10, 2), Margin = Spacing.BelowInline };
         form.Children.Add(Label("Hedef mağaza")); form.Children.Add(target); form.Children.Add(Label("Hedef kategori")); form.Children.Add(category); form.Children.Add(previewButton);
         body.Children.Add(form);
         var summary = new TextBlock { Tag = "channel-matrix-bulk-summary", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 2), Text = "Önizleme alınmadı." };
         var reason = new TextBlock { Tag = "channel-matrix-bulk-reason", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 4), Visibility = Visibility.Collapsed };
         var lines = new ItemsControl { Tag = "channel-matrix-bulk-lines", Margin = new Thickness(0, 4, 0, 2) };
-        var more = new TextBlock { Tag = "channel-matrix-bulk-more", Opacity = 0.85, Margin = new Thickness(0, 0, 0, 4), Visibility = Visibility.Collapsed };
+        var more = new TextBlock { Tag = "channel-matrix-bulk-more", Opacity = 0.85, Margin = Spacing.BelowInline, Visibility = Visibility.Collapsed };
         var approve = new CheckBox { Tag = "channel-matrix-bulk-approve", Content = "Yukarıdaki yerel planların oluşturulmasını onaylıyorum (canlı yazım yok).", IsEnabled = false, Margin = new Thickness(0, 8, 0, 4) };
-        var status = new TextBlock { Tag = "channel-matrix-bulk-status", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
+        var status = new TextBlock { Tag = "channel-matrix-bulk-status", TextWrapping = TextWrapping.Wrap, Margin = Spacing.AboveInline };
         body.Children.Add(summary); body.Children.Add(reason); body.Children.Add(lines); body.Children.Add(more); body.Children.Add(approve); body.Children.Add(status);
 
         var cts = new CancellationTokenSource();

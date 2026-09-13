@@ -84,7 +84,7 @@ public static class DialogShell
     }
 
     /// <summary>A wrapped, sanitized message body for confirmations and validation text: it wraps, it never widens the dialog.</summary>
-    public static TextBlock Message(string text) => new() { Text = DialogLayout.SafeText(text), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) };
+    public static TextBlock Message(string text) => new() { Text = DialogLayout.SafeText(text), TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowInline };
 
     /// <summary>The standard confirmation: Enter is Cancel when the action is destructive, Escape always cancels.</summary>
     public static bool Confirm(Window? owner, string title, string message, string confirmLabel, string cancelLabel = "Vazgeç", bool destructive = true)

@@ -129,12 +129,12 @@ public static class SettingsPanel
         var label = new TextBlock { Text = (nameCategory ? category.Label + " › " : "") + entry.Label + (dirty is null ? "" : " " + DirtyMark), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
         body.Children.Add(label);
         body.Children.Add(new TextBlock { Text = entry.Description, TextWrapping = TextWrapping.Wrap, Opacity = 0.9, Margin = new Thickness(0, 2, 0, 4) });
-        if (dirty is not null) body.Children.Add(new TextBlock { Tag = "settings-dirty-badge", Text = $"{DirtyMark} {dirty.Summary}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = SeverityStyle.AccentBrush(SeverityLevel.Warning, SeverityStyle.IsHighContrast), Margin = new Thickness(0, 0, 0, 4) });
-        if (entry.SecretBearing) body.Children.Add(new TextBlock { Tag = "settings-secret-badge", Text = "🔒 " + SecretBadge, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Opacity = 0.85, Margin = new Thickness(0, 0, 0, 4) });
+        if (dirty is not null) body.Children.Add(new TextBlock { Tag = "settings-dirty-badge", Text = $"{DirtyMark} {dirty.Summary}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = SeverityStyle.AccentBrush(SeverityLevel.Warning, SeverityStyle.IsHighContrast), Margin = Spacing.BelowInline });
+        if (entry.SecretBearing) body.Children.Add(new TextBlock { Tag = "settings-secret-badge", Text = "🔒 " + SecretBadge, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Opacity = 0.85, Margin = Spacing.BelowInline });
         if (entry.Inline)
         {
             var inline = Inline(entry, context.Directory);
-            if (inline is not null) { inline.Margin = new Thickness(0, 4, 0, 0); body.Children.Add(inline); }
+            if (inline is not null) { inline.Margin = Spacing.AboveInline; body.Children.Add(inline); }
         }
         else
         {
@@ -143,7 +143,7 @@ public static class SettingsPanel
             open.Click += (_, _) => { if (entry.Section.Length > 0 && context.OpenSection is not null) context.OpenSection(entry.Route, entry.Section); else context.Navigate?.Invoke(entry.Route); };
             body.Children.Add(open);
         }
-        var border = new Border { Tag = "settings-entry", BorderThickness = new Thickness(0, 0, 0, 1), BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(222, 228, 232)), Padding = new Thickness(0, 8, 0, 8), Child = body };
+        var border = new Border { Tag = "settings-entry", BorderThickness = new Thickness(0, 0, 0, 1), BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(222, 228, 232)), Padding = Spacing.VerticalControl, Child = body };
         AutomationProperties.SetAutomationId(border, entry.Key); AutomationProperties.SetName(border, entry.Label + (entry.SecretBearing ? ", gizli bilgi içerir" : "") + (dirty is null ? "" : ", " + dirty.Summary));
         return border;
     }

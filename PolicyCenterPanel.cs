@@ -10,7 +10,7 @@ public static class PolicyCenterPanel
 {
     public static FrameworkElement Create(string? directory = null)
     {
-        var store = new CatalogStore(directory); var tabs = new TabControl { Margin = new Thickness(12) }; tabs.Items.Add(new TabItem { Header = "Stok politikaları", Content = Stock(store, directory) }); tabs.Items.Add(new TabItem { Header = "Fiyat politikaları", Content = Price(store, directory) }); tabs.Items.Add(new TabItem { Header = "Kişisel veri", Content = Pii(store) }); return tabs;
+        var store = new CatalogStore(directory); var tabs = new TabControl { Margin = Spacing.Section }; tabs.Items.Add(new TabItem { Header = "Stok politikaları", Content = Stock(store, directory) }); tabs.Items.Add(new TabItem { Header = "Fiyat politikaları", Content = Price(store, directory) }); tabs.Items.Add(new TabItem { Header = "Kişisel veri", Content = Pii(store) }); return tabs;
     }
     static FrameworkElement Stock(CatalogStore store, string? directory)
     {
@@ -39,15 +39,15 @@ public static class PolicyCenterPanel
         var root = new StackPanel { Margin = new Thickness(14), MaxWidth = 900, Tag = "pii-policy" }; root.Children.Add(Text("Kişisel veri gösterimi", TextRole.SectionTitle));
         root.Children.Add(Text("Sipariş ayrıntısındaki müşteri adı, e-posta, telefon ve adres varsayılan olarak maskelidir. Bu ayar açıkken operatör gerekçe yazarak alanları sınırlı bir süre görebilir; her istek (izin verilen veya reddedilen) denetim günlüğüne alan adları ve gerekçeyle yazılır, değerler asla yazılmaz."));
         var current = store.GetPiiRevealPolicy();
-        var allowed = new CheckBox { Content = "Gerekçeli gösterime izin ver", IsChecked = current.Allowed, Margin = new Thickness(4) }; System.Windows.Automation.AutomationProperties.SetName(allowed, "Gerekçeli gösterime izin ver");
-        var seconds = new TextBox { Text = current.RevealSeconds.ToString(CultureInfo.InvariantCulture), Width = 90 }; var reason = new CheckBox { Content = "Gerekçe zorunlu", IsChecked = current.RequireReason, Margin = new Thickness(4) };
+        var allowed = new CheckBox { Content = "Gerekçeli gösterime izin ver", IsChecked = current.Allowed, Margin = Spacing.Inline }; System.Windows.Automation.AutomationProperties.SetName(allowed, "Gerekçeli gösterime izin ver");
+        var seconds = new TextBox { Text = current.RevealSeconds.ToString(CultureInfo.InvariantCulture), Width = 90 }; var reason = new CheckBox { Content = "Gerekçe zorunlu", IsChecked = current.RequireReason, Margin = Spacing.Inline };
         var status = Text("");
         root.Children.Add(allowed); Add(root, "Otomatik maskeleme süresi (saniye, 5–300)", seconds); root.Children.Add(reason);
         root.Children.Add(Button("Politikayı kaydet", () => { try { if (!int.TryParse(seconds.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)) throw new ArgumentException("Süre tam sayı olmalı."); var saved = store.SavePiiRevealPolicy(new PiiRevealPolicy(allowed.IsChecked == true, n, reason.IsChecked == true)); seconds.Text = saved.RevealSeconds.ToString(CultureInfo.InvariantCulture); status.Text = saved.Allowed ? $"Kaydedildi: gösterim açık, {saved.RevealSeconds} sn sonra otomatik maskelenir." : "Kaydedildi: gösterim kapalı."; } catch (Exception e) { status.Text = e.Message; } }));
         root.Children.Add(status); return root;
     }
     static void Add(Panel panel, string label, UIElement control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(4, 8, 2, 2) }); panel.Children.Add(control); }
-    static TextBlock Text(string value, TextRole role = TextRole.Body) => TextStyles.Apply(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 7), Foreground = Brushes.DarkSlateGray }, role);
+    static TextBlock Text(string value, TextRole role = TextRole.Body) => TextStyles.Apply(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BodyBlock, Foreground = Brushes.DarkSlateGray }, role);
     static Button Button(string text) => new() { Content = text, Margin = new Thickness(3, 5, 3, 5) };
     static Button Button(string text, Action action) { var button = Button(text); button.Click += (_, _) => action(); return button; }
 }

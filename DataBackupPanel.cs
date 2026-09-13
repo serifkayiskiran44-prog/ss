@@ -11,7 +11,7 @@ public static class DataBackupPanel
     public static FrameworkElement Create(string? directory)
     {
         var service = new DataBackupService(directory);
-        var panel = new StackPanel { Margin = new Thickness(4), MaxWidth = 850 };
+        var panel = new StackPanel { Margin = Spacing.Inline, MaxWidth = 850 };
         panel.Children.Add(new TextBlock { Text = AppVersion.Display, FontSize = DesignTokens.TextSubsectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(0, 4, 0, 6) });
         panel.Children.Add(new TextBlock { Text = $"Yerel veri: {service.DataDirectory}\nŞifreli credential dosyaları çözülmeden byte olarak korunur. Yedek/geri yükleme yalnızca yerel dosyalarla çalışır.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
         var status = new TextBlock { Text = "Güncelleme kaynağı yapılandırılmadı; doğrulanmamış uzak endpoint çağrılmıyor.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) };

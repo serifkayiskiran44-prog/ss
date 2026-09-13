@@ -11,7 +11,7 @@ public static class NavlungoPanel
     public static FrameworkElement Create()
     {
         var panel = new StackPanel { Margin = new Thickness(24), MaxWidth = 800, HorizontalAlignment = HorizontalAlignment.Left };
-        void Text(string text, double size = 14) => panel.Children.Add(new TextBlock { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
+        void Text(string text, double size = 14) => panel.Children.Add(new TextBlock { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowSection });
         Text("Navlungo Express • Yurt dışı kargo", 25);
         Text("Yurt dışı gönderiler için bağlantı hazırlığı. Navlungo hesabına ek olarak API başvurusu ve sağlayıcının verdiği uygulama bilgileri gerekir.");
         var store = new NavlungoSettingsStore();
@@ -21,10 +21,10 @@ public static class NavlungoPanel
         var status = new TextBlock { Text = loadError ?? NavlungoConnection.Describe(saved), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 20), Foreground = Brushes.DarkOrange };
         panel.Children.Add(status);
         Text("Navlungo uygulama kimliği (client_id)");
-        var clientId = new TextBox { Text = saved?.ClientId ?? "", MinWidth = 450, Margin = new Thickness(0, 0, 0, 12) };
+        var clientId = new TextBox { Text = saved?.ClientId ?? "", MinWidth = 450, Margin = Spacing.BelowSection };
         panel.Children.Add(clientId);
         Text("Başvuruda kayıtlı HTTPS dönüş adresi");
-        var callback = new TextBox { Text = saved?.CallbackUri ?? "", Margin = new Thickness(0, 0, 0, 12) };
+        var callback = new TextBox { Text = saved?.CallbackUri ?? "", Margin = Spacing.BelowSection };
         panel.Children.Add(callback);
         var sandbox = new CheckBox { Content = "QA test ortamı (ayrı test hesabı ve uygulama bilgileri)", IsChecked = saved?.Sandbox ?? false, Margin = new Thickness(0, 0, 0, 16) };
         panel.Children.Add(sandbox);

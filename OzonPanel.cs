@@ -17,7 +17,7 @@ public static class OzonPanel
         panel.Children.Add(Text("Seller hesabı → Ayarlar → Seller API bölümünden Client ID ve API key alın. Ürün kontrolü için Product read-only, depo kontrolü için Warehouse erişimi gerekir. Anahtarı aşağıdaki gizli alana yapıştırın."));
         var inputs = new StackPanel();
         inputs.Children.Add(Text("Client ID"));
-        var clientId = new TextBox { Margin = new Thickness(0,0,0,8) }; inputs.Children.Add(clientId);
+        var clientId = new TextBox { Margin = Spacing.BelowControl }; inputs.Children.Add(clientId);
         // #855: the secret standard -- masked, paste-cleaned, never copied, presence only for a saved value, kept when left empty.
         var key = SecretField.Build("API key", "Seller API anahtarı; şifreli saklanır, ekranda ve kayıtlarda gösterilmez."); inputs.Children.Add(key.Field.Root); panel.Children.Add(inputs);
         var actions = new WrapPanel();
@@ -76,6 +76,6 @@ public static class OzonPanel
         });
         return panel;
     }
-    static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,0,0,8), Foreground = Brushes.DarkSlateGray };
+    static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowControl, Foreground = Brushes.DarkSlateGray };
     static Button Button(Panel panel, string label) { var button = new Button { Content = label, Margin = new Thickness(0,0,8,8) }; panel.Children.Add(button); return button; }
 }

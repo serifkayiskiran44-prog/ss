@@ -70,8 +70,8 @@ public partial class MainWindow : Window
   globalSearchTimer.Stop();
   if (GlobalSearchBox.Text.Trim().Length >= 2) globalSearchTimer.Start();
  }
- static TextBlock Hint(string text)=>TextStyles.Apply(new TextBlock{Text=text,Margin=new Thickness(4,8,4,8)},TextRole.Hint);
- static TextBlock Heading(string text)=>TextStyles.Apply(new TextBlock{Text=text,Margin=new Thickness(4,8,4,12)},TextRole.SectionTitle);
+ static TextBlock Hint(string text)=>TextStyles.Apply(new TextBlock{Text=text,Margin=Spacing.HintBlock},TextRole.Hint);
+ static TextBlock Heading(string text)=>TextStyles.Apply(new TextBlock{Text=text,Margin=Spacing.TitleBlock},TextRole.SectionTitle);
  Button Button(string text,Action action){var b=new Button{Content=text};b.Click+=(_,_)=>{try{action();}catch(Exception e){Log(Safe(e), NotificationSeverity.Error);}};return b;}
  Button AsyncButton(string text,Func<Task> action)=>Button(text,()=>_=RunAsync(action));
  static void Label(Panel panel,string text,UIElement control){panel.Children.Add(new TextBlock{Text=text,Margin=new Thickness(4,7,4,0)});panel.Children.Add(control);}
@@ -237,7 +237,7 @@ public partial class MainWindow : Window
 
  // #824: the mapping table made readable -- required / type / sample / status per row, a summary above, and the
  // first problem one click away. Samples come from the first scanned item and are masked before they are shown.
- System.Xml.Linq.XElement? mappingSampleItem; readonly TextBlock mappingSummary=new(){TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold,Margin=new Thickness(3,4,3,2)}; readonly Button mappingFirstProblem=new(){Content="İlk soruna git",Margin=new Thickness(3,0,3,6),Padding=new Thickness(8,2,8,2),HorizontalAlignment=HorizontalAlignment.Left,Visibility=Visibility.Collapsed};
+ System.Xml.Linq.XElement? mappingSampleItem; readonly TextBlock mappingSummary=new(){TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold,Margin=new Thickness(3,4,3,2)}; readonly Button mappingFirstProblem=new(){Content="İlk soruna git",Margin=new Thickness(3,0,3,6),Padding=Spacing.Chip,HorizontalAlignment=HorizontalAlignment.Left,Visibility=Visibility.Collapsed};
  string? MappingSampleFor(string path){var item=mappingSampleItem;if(item==null)return null;System.Xml.Linq.XElement? current=item;var segments=path.Split('/',StringSplitOptions.RemoveEmptyEntries);for(var i=0;i<segments.Length;i++){var seg=segments[i];if(seg.StartsWith('@'))return i==segments.Length-1?current?.Attribute(seg[1..])?.Value:null;current=current?.Element(seg);if(current==null)return null;}return current?.Value;}
  void RefreshMappingTable(){
   var known=xmlPaths.Where(x=>!string.IsNullOrWhiteSpace(x)).ToList();
@@ -276,7 +276,7 @@ public partial class MainWindow : Window
  // known, and ends done, failed or cancelled. An unknown total is an indeterminate bar with a count, never a
  // percentage. The reporter is created on the UI thread so background stages marshal here.
  readonly ImportProgressState importProgress=new(); readonly StackPanel importProgressPanel=new(){Margin=new Thickness(2,0,2,8)}; IProgress<ImportProgressEvent>? importProgressReporter; CancellationTokenSource? importCts;
- readonly Button importCancelButton=new(){Content="İptal",Padding=new Thickness(8,2,8,2),Margin=new Thickness(0,0,6,0),Visibility=Visibility.Collapsed}; readonly Button importRetryButton=new(){Content="Yeniden dene",Padding=new Thickness(8,2,8,2),Visibility=Visibility.Collapsed};
+ readonly Button importCancelButton=new(){Content="İptal",Padding=Spacing.Chip,Margin=new Thickness(0,0,6,0),Visibility=Visibility.Collapsed}; readonly Button importRetryButton=new(){Content="Yeniden dene",Padding=Spacing.Chip,Visibility=Visibility.Collapsed};
  IProgress<ImportProgressEvent> ImportReporter()=>importProgressReporter??=new Progress<ImportProgressEvent>(e=>{importProgress.Apply(e);RenderImportProgress();});
  void ReportImport(ImportProgressStage stage,ImportProgressStatus status,long done=0,long? total=null,string note="")=>ImportReporter().Report(new(stage,status,done,total,DateTime.UtcNow,note));
  CancellationToken BeginImportStage(){importCts?.Dispose();importCts=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);return importCts.Token;}
@@ -303,11 +303,11 @@ public partial class MainWindow : Window
   var style=SeverityStyle.For(c.Level,SeverityStyle.IsHighContrast);var accent=SeverityStyle.AccentBrush(c.Level,SeverityStyle.IsHighContrast);
   var body=new StackPanel();
   body.Children.Add(new TextBlock{Text=$"{style.Glyph} {c.Headline}",FontWeight=FontWeights.SemiBold,Foreground=accent,TextWrapping=TextWrapping.Wrap});
-  body.Children.Add(new TextBlock{Text=c.CountsLine,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,0)});
+  body.Children.Add(new TextBlock{Text=c.CountsLine,TextWrapping=TextWrapping.Wrap,Margin=Spacing.AboveInline});
   body.Children.Add(new TextBlock{Text=c.DurationLine+" · "+c.Revision,TextWrapping=TextWrapping.Wrap,FontSize=DesignTokens.TextCaptionSize,Opacity=0.85});
-  body.Children.Add(new TextBlock{Text=c.Detail,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,0)});
+  body.Children.Add(new TextBlock{Text=c.Detail,TextWrapping=TextWrapping.Wrap,Margin=Spacing.AboveInline});
   var actions=new WrapPanel{Margin=new Thickness(0,6,0,0)};
-  foreach(var action in c.NextActions){var b=new Button{Content=action.Label,Padding=new Thickness(8,2,8,2),Margin=new Thickness(0,0,6,0),Tag=action.Kind};b.Click+=(_,_)=>RunImportNextAction((ImportNextActionKind)b.Tag);actions.Children.Add(b);}
+  foreach(var action in c.NextActions){var b=new Button{Content=action.Label,Padding=Spacing.Chip,Margin=new Thickness(0,0,6,0),Tag=action.Kind};b.Click+=(_,_)=>RunImportNextAction((ImportNextActionKind)b.Tag);actions.Children.Add(b);}
   body.Children.Add(actions);
   importCompletionPanel.BorderBrush=accent;importCompletionPanel.BorderThickness=new Thickness(style.BorderWeight);importCompletionPanel.Child=body;importCompletionPanel.Visibility=Visibility.Visible;
   System.Windows.Automation.AutomationProperties.SetName(importCompletionPanel,"Aktarım sonucu: "+c.Headline+". "+c.CountsLine);}
@@ -343,7 +343,7 @@ public partial class MainWindow : Window
  // #830: the source detail health panel -- one verdict and six lines composed from recorded facts (health check,
  // run store, quarantine, mapping revisions, the page's own preview and import state). Nothing here probes; the
  // "Erişimi kontrol et" action runs the checker and records, then the panel is recomposed.
- readonly Border xmlSourceHealthPanel=new(){Padding=new Thickness(8,6,8,6),Margin=new Thickness(0,4,0,4)}; readonly StackPanel xmlSourceHealthLines=new(); readonly WrapPanel xmlSourceHealthActions=new(){Margin=new Thickness(0,4,0,0)}; readonly TextBlock xmlSourceHealthHeadline=new(){FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap};
+ readonly Border xmlSourceHealthPanel=new(){Padding=new Thickness(8,6,8,6),Margin=new Thickness(0,4,0,4)}; readonly StackPanel xmlSourceHealthLines=new(); readonly WrapPanel xmlSourceHealthActions=new(){Margin=Spacing.AboveInline}; readonly TextBlock xmlSourceHealthHeadline=new(){FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap};
  SourceHealthPanelModel? lastSourceHealth; DateTime? previewEvaluatedUtc; string previewSourceId="";
  void RenderSourceHealth(SourceHealthPanelModel m){
   var accent=SeverityStyle.AccentBrush(m.Level,SeverityStyle.IsHighContrast);var style=SeverityStyle.For(m.Level,SeverityStyle.IsHighContrast);
@@ -353,7 +353,7 @@ public partial class MainWindow : Window
    var body=new StackPanel();body.Children.Add(new TextBlock{Text=$"{lineStyle.Glyph} {line.Value}",TextWrapping=TextWrapping.Wrap,Foreground=SeverityStyle.AccentBrush(line.Level,SeverityStyle.IsHighContrast)});if(line.Detail.Length>0)body.Children.Add(new TextBlock{Text=line.Detail,TextWrapping=TextWrapping.Wrap,FontSize=DesignTokens.TextCaptionSize,Opacity=0.85});row.Children.Add(body);
    System.Windows.Automation.AutomationProperties.SetName(row,$"{line.Label}: {line.Value}"+(line.Detail.Length>0?". "+line.Detail:""));xmlSourceHealthLines.Children.Add(row);}
   xmlSourceHealthActions.Children.Clear();
-  foreach(var action in m.Actions){var b=new Button{Content=action.Label,Padding=new Thickness(8,2,8,2),Margin=new Thickness(0,0,6,0),Tag=action.Kind};b.Click+=(_,_)=>RunSourceHealthAction((SourceHealthActionKind)b.Tag);xmlSourceHealthActions.Children.Add(b);}
+  foreach(var action in m.Actions){var b=new Button{Content=action.Label,Padding=Spacing.Chip,Margin=new Thickness(0,0,6,0),Tag=action.Kind};b.Click+=(_,_)=>RunSourceHealthAction((SourceHealthActionKind)b.Tag);xmlSourceHealthActions.Children.Add(b);}
   System.Windows.Automation.AutomationProperties.SetName(xmlSourceHealthPanel,"Kaynak sağlığı: "+m.Headline+". "+string.Join(". ",m.Lines.Select(l=>l.Label+": "+l.Value)));}
  void RunSourceHealthAction(SourceHealthActionKind kind){
   switch(kind){
@@ -372,7 +372,7 @@ public partial class MainWindow : Window
  // #831: the preview's sticky toolbar -- docked above the filter bar and the grid, so it stays put while the grid
  // scrolls. Composed from the flow state the stepper already computes (cached: a selection change must not re-scan
  // the XML) and the selection's findings. Apply here is the same ImportAsync with its own revision check.
- readonly Border previewToolbar=new(){Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,0,0,4)}; readonly TextBlock previewToolbarCounts=new(){TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)}, previewToolbarValidation=new(){TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)}, previewToolbarStatus=new(){TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
+ readonly Border previewToolbar=new(){Padding=new Thickness(8,4,8,4),Margin=Spacing.BelowInline}; readonly TextBlock previewToolbarCounts=new(){TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)}, previewToolbarValidation=new(){TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)}, previewToolbarStatus=new(){TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
  readonly Button previewApplyButton=new(){Padding=new Thickness(10,3,10,3),Margin=new Thickness(0,0,6,0),FontWeight=FontWeights.SemiBold}, previewCancelButton=new(){Content="İptal",Padding=new Thickness(8,3,8,3),Margin=new Thickness(0,0,6,0),Visibility=Visibility.Collapsed}, previewRecomputeButton=new(){Content="Önizlemeyi yenile",Padding=new Thickness(8,3,8,3),Margin=new Thickness(0,0,6,0)};
  ImportFlowState? lastFlowState; PreviewToolbarModel? lastPreviewToolbar;
  void RefreshPreviewToolbar(){
@@ -395,7 +395,7 @@ public partial class MainWindow : Window
   if(preview.SelectedItems.Count!=1||preview.SelectedItem is not CatalogProduct row)throw new InvalidOperationException("Fark için önizlemeden tek bir satır seçin.");
   var existing=ExistingProductFor(row);var rows=FieldDiff.Build(existing,row,FieldDiff.ProductFields,includeUnchanged:true);
   var body=new StackPanel{Margin=new Thickness(14)};
-  body.Children.Add(new TextBlock{Text=existing==null?"Havuzda eşleşen ürün yok: satır yeni ürün olarak eklenir.":$"Havuzdaki ürünle karşılaştırma ({(string.IsNullOrWhiteSpace(existing.Sku)?"barkod":"SKU")} eşleşmesi). Hiçbir şey yazılmaz.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,8)});
+  body.Children.Add(new TextBlock{Text=existing==null?"Havuzda eşleşen ürün yok: satır yeni ürün olarak eklenir.":$"Havuzdaki ürünle karşılaştırma ({(string.IsNullOrWhiteSpace(existing.Sku)?"barkod":"SKU")} eşleşmesi). Hiçbir şey yazılmaz.",TextWrapping=TextWrapping.Wrap,Margin=Spacing.BelowControl});
   body.Children.Add(FieldDiffRenderer.Render(rows,SeverityStyle.IsHighContrast));
   var title="Satır farkı"+(string.IsNullOrWhiteSpace(row.Sku)?"":" · "+AuditStore.Redact(row.Sku.Trim()));
   return DialogShell.Create(this,title,body,new DialogShell.Action[]{new("Kapat",IsCancel:true)},640,520);}
@@ -435,7 +435,7 @@ public partial class MainWindow : Window
   Field(sourceRules,"Alınacak markalar (boş: tümü; ayırıcı ;)","BrandFilter");Field(sourceRules,"Alınacak kategoriler (boş: tümü; ayırıcı ;)","CategoryFilter");sourceRules.Children.Add(Hint("Fiyat ve stok, ürün kartında kilitli değilse güncellenir. Yeni ürün tüm eşleşen alanlarla kaydedilir."));Flag(sourceRules,"Tekrar alımda başlığı güncelle","UpdateName");Flag(sourceRules,"Tekrar alımda açıklamayı güncelle","UpdateDescription");Flag(sourceRules,"Tekrar alımda görselleri güncelle","UpdateImages");
   
   var previewTop=new WrapPanel();previewStatus.MaxWidth=460;previewTop.Children.Add(previewStatus);
-  foreach(var (label,control) in new (string,UIElement)[]{("Önem",previewSeverity),("Alan",previewField),("Neden",previewReason)}){var g=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(4,0,0,0)};g.Children.Add(new TextBlock{Text=label,Margin=new Thickness(0,0,4,0),VerticalAlignment=VerticalAlignment.Center});g.Children.Add(control);previewTop.Children.Add(g);}
+  foreach(var (label,control) in new (string,UIElement)[]{("Önem",previewSeverity),("Alan",previewField),("Neden",previewReason)}){var g=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(4,0,0,0)};g.Children.Add(new TextBlock{Text=label,Margin=Spacing.RightInline,VerticalAlignment=VerticalAlignment.Center});g.Children.Add(control);previewTop.Children.Add(g);}
   previewTop.Children.Add(previewChangedOnly);previewTop.Children.Add(previewCounts);
   previewSeverity.SelectionChanged+=(_,_)=>ApplyPreviewFilter();previewField.SelectionChanged+=(_,_)=>ApplyPreviewFilter();previewReason.SelectionChanged+=(_,_)=>ApplyPreviewFilter();previewChangedOnly.Click+=(_,_)=>ApplyPreviewFilter();
   var previewStatusColumn=new DataGridTextColumn{Header="Doğrulama",IsReadOnly=true,Width=170,Binding=new Binding("."){Converter=new PreviewFlagConverter(row=>previewFlags.TryGetValue(row,out var f)?f.StatusLabel:"")}};preview.Columns.Add(previewStatusColumn);previewTop.Children.Add(Button("Tüm önizleme satırlarını seç",()=>preview.SelectAll()));foreach(var x in new[]{("SKU","Sku",130d),("Ürün","Name",240d),("Alış TL","Cost",90d),("Formül TL","FormulaPriceTry",105d),("1 döviz/TL","AppliedTryRate",100d),("Satış","Price",90d),("Döviz","Currency",65d),("Stok","Stock",60d),("Kategori","Category",150d)})Column(preview,x.Item1,x.Item2,x.Item3);
@@ -462,7 +462,7 @@ public partial class MainWindow : Window
   var fxGrid=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};var ratePanel=new StackPanel();var rateBox=Field(ratePanel,"1 hedef döviz kaç TL? (otomatik veya manuel)","TryPerTargetUnit");rateBox.SetBinding(TextBox.IsReadOnlyProperty,new Binding("IsChecked"){Source=auto});fxGrid.Children.Add(ratePanel);
   var kindPanel=new StackPanel();var kind=new ComboBox{ItemsSource=new[]{new PriceChoice("ForexSelling","TCMB döviz satış"),new PriceChoice("ForexBuying","TCMB döviz alış")},DisplayMemberPath="Label",SelectedValuePath="Value"};kind.SetBinding(ComboBox.SelectedValueProperty,new Binding("FxKind"){Mode=BindingMode.TwoWay});Label(kindPanel,"Kur türü",kind);fxGrid.Children.Add(kindPanel);formulaPanel.Children.Add(fxGrid);
   formulaPanel.Children.Add(fxStatus);formulaPanel.Children.Add(AsyncButton("Kuru şimdi güncelle",async()=>{var s=CurrentSource();if(s.PriceMode!="Formula")return;s.AutoFx=true;await UpdateFxAsync(s);BindSource();previewRevision="";}));
-  var testPanel=new WrapPanel();testPanel.Children.Add(new TextBlock{Text="Örnek alış TL (x)",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(4)});testPanel.Children.Add(sampleCost);testPanel.Children.Add(AsyncButton("Formülü ve kuru test et",TestFormulaAsync));formulaPanel.Children.Add(testPanel);formulaPanel.Children.Add(calculationStatus);
+  var testPanel=new WrapPanel();testPanel.Children.Add(new TextBlock{Text="Örnek alış TL (x)",VerticalAlignment=VerticalAlignment.Center,Margin=Spacing.Inline});testPanel.Children.Add(sampleCost);testPanel.Children.Add(AsyncButton("Formülü ve kuru test et",TestFormulaAsync));formulaPanel.Children.Add(testPanel);formulaPanel.Children.Add(calculationStatus);
   var simplePanel=new StackPanel();simplePanel.Children.Add(Hint("Önceki hesap: maliyet × çarpan × (1 + kâr / 100) + sabit. Bu mod otomatik kur almaz."));var simpleGrid=new System.Windows.Controls.Primitives.UniformGrid{Columns=3};foreach(var f in new[]{("Döviz çarpanı","ExchangeRate"),("Kâr (%)","MarkupPercent"),("Sabit tutar (hedef döviz)","FixedAmount")}){var p=new StackPanel();Field(p,f.Item1,f.Item2);simpleGrid.Children.Add(p);}simplePanel.Children.Add(simpleGrid);
   mode.SelectionChanged+=(_,_)=>{var formula=mode.SelectedValue?.ToString()=="Formula";formulaPanel.Visibility=formula?Visibility.Visible:Visibility.Collapsed;simplePanel.Visibility=formula?Visibility.Collapsed:Visibility.Visible;};sourceRules.Children.Add(formulaPanel);sourceRules.Children.Add(simplePanel);
  }

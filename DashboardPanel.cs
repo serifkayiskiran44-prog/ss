@@ -35,9 +35,9 @@ public static class DashboardPanel
         panel.Children.Add(errorHost);
         var onboarding = new StackPanel { Margin = new Thickness(4, 0, 4, 10) };
         panel.Children.Add(onboarding);
-        var cards = new UniformGrid { Columns = 3, Margin = new Thickness(0, 0, 0, 12) };
+        var cards = new UniformGrid { Columns = 3, Margin = Spacing.BelowSection };
         panel.Children.Add(cards);
-        var channelGroup = new GroupBox { Header = "Kanal / mağaza sağlığı", Margin = new Thickness(4), Padding = new Thickness(8) };
+        var channelGroup = new GroupBox { Header = "Kanal / mağaza sağlığı", Margin = Spacing.Inline, Padding = new Thickness(8) };
         var channels = new DataGrid { Height = 220, IsReadOnly = true, AutoGenerateColumns = false, EnableRowVirtualization = true };
         var rowTooltip = new Style(typeof(DataGridRow));
         rowTooltip.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new System.Windows.Data.Binding("Tooltip")));
@@ -47,11 +47,11 @@ public static class DashboardPanel
         AddColumn(channels, "Kanal", "Channel", 100); AddColumn(channels, "Mağaza", "ShopId", 120); AddColumn(channels, "Durum", "Status", 170); AddColumn(channels, "Son test", "LastTestLabel", 150); AddColumn(channels, "Hata", "LastError", 300);
         channelGroup.Content = channels;
         panel.Children.Add(channelGroup);
-        var anomalyGroup = new GroupBox { Header = "Anomaliler", Margin = new Thickness(4), Padding = new Thickness(8) };
+        var anomalyGroup = new GroupBox { Header = "Anomaliler", Margin = Spacing.Inline, Padding = new Thickness(8) };
         var anomalies = new StackPanel(); anomalyGroup.Content = anomalies; panel.Children.Add(anomalyGroup);
-        var notificationGroup = new GroupBox { Header = "Hata / bildirim merkezi", Margin = new Thickness(4), Padding = new Thickness(8) };
+        var notificationGroup = new GroupBox { Header = "Hata / bildirim merkezi", Margin = Spacing.Inline, Padding = new Thickness(8) };
         var notifications = new StackPanel(); notificationGroup.Content = notifications; panel.Children.Add(notificationGroup);
-        var trendGroup = new GroupBox { Header = "Son 14 gün yerel raporları", Margin = new Thickness(4), Padding = new Thickness(8) };
+        var trendGroup = new GroupBox { Header = "Son 14 gün yerel raporları", Margin = Spacing.Inline, Padding = new Thickness(8) };
         var trends = new DataGrid { Height = 250, IsReadOnly = true, AutoGenerateColumns = false, EnableRowVirtualization = true };
         AddColumn(trends, "Tarih", "DateLabel", 130); AddColumn(trends, "Sipariş", "Orders", 100); AddColumn(trends, "Mevcut toplam stok", "StockLabel", 170);
         trendGroup.Content = trends; panel.Children.Add(trendGroup);
@@ -186,7 +186,7 @@ public static class DashboardPanel
             body.Children.Add(new TextBlock { Text = $"{style.Glyph} {card.Title} · {card.Count:N0}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = SeverityStyle.AccentBrush(style.Level, SeverityStyle.IsHighContrast) });
             body.Children.Add(new TextBlock { Text = card.Impact, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
             body.Children.Add(new TextBlock { Text = $"{card.Age} · kapsam: {card.Scope}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
-            var go = new Button { Content = card.NextAction, Tag = card.Route, Margin = new Thickness(0, 4, 0, 0), Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left };
+            var go = new Button { Content = card.NextAction, Tag = card.Route, Margin = Spacing.AboveInline, Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left };
             var drilled = card;
             go.Click += (_, _) => open(drilled);
             body.Children.Add(go);
@@ -218,14 +218,14 @@ public static class DashboardPanel
         parent.Visibility = Visibility.Visible;
         var body = new StackPanel();
         body.Children.Add(new TextBlock { Text = state.Title, FontWeight = FontWeights.SemiBold, FontSize = 14, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) });
-        body.Children.Add(new TextBlock { Text = state.Detail, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+        body.Children.Add(new TextBlock { Text = state.Detail, TextWrapping = TextWrapping.Wrap, Margin = Spacing.AboveInline, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
         if (state.HasAction)
         {
-            var go = new Button { Content = state.ActionLabel, Tag = state.Route, Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left };
+            var go = new Button { Content = state.ActionLabel, Tag = state.Route, Margin = Spacing.AboveControl, Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left };
             go.Click += (_, _) => navigate((string)go.Tag);
             body.Children.Add(go);
         }
-        var border = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(196, 132, 22)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(253, 248, 238)), Padding = new Thickness(12), Child = body };
+        var border = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(196, 132, 22)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(253, 248, 238)), Padding = Spacing.Section, Child = body };
         AutomationProperties.SetName(border, $"{state.Title}. {state.Detail}");
         parent.Children.Add(border);
     }
@@ -241,7 +241,7 @@ public static class DashboardPanel
             content.Children.Add(new TextBlock { Text = (freshness.IsStale ? "⚠ " : "") + freshness.Label, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Foreground = new SolidColorBrush(freshness.IsStale ? Color.FromRgb(160, 82, 22) : Color.FromRgb(87, 112, 125)) });
             content.Children.Add(new TextBlock { Text = "Kapsam: " + freshness.Scope, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
         }
-        var button = new Button { Content = content, Focusable = true, HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.White, Foreground = Brushes.DarkSlateGray, BorderBrush = new SolidColorBrush(freshness?.IsStale == true ? Color.FromRgb(196, 132, 22) : Color.FromRgb(220, 227, 234)), MinHeight = 85, Margin = new Thickness(4) };
+        var button = new Button { Content = content, Focusable = true, HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.White, Foreground = Brushes.DarkSlateGray, BorderBrush = new SolidColorBrush(freshness?.IsStale == true ? Color.FromRgb(196, 132, 22) : Color.FromRgb(220, 227, 234)), MinHeight = 85, Margin = Spacing.Inline };
         button.SetValue(AutomationProperties.NameProperty, freshness is null ? label : $"{label}: {value}, {freshness.Label}, kapsam {freshness.Scope}");
         if (route != "dashboard") button.Click += (_, _) => navigate(route);
         parent.Children.Add(button);

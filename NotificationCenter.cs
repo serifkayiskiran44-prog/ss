@@ -122,7 +122,7 @@ public static class NotificationCenterPanel
                     DockPanel.SetDock(lift, Dock.Right); row.Children.Add(lift);
                 }
                 var level = NotificationCenter.LevelOf(item.Alert.Severity);
-                row.Children.Add(new TextBlock { Text = $"{SeverityStyle.For(level, hc).Glyph} {AuditStore.Redact(item.Alert.Title)} · {NotificationCenter.SeverityWord(item.Alert.Severity)} · {AlertSnoozeRules.Describe(item.Snooze, nowUtc)} · daha ciddi bir olay ertelemeyi aşar", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4), Opacity = 0.9 });
+                row.Children.Add(new TextBlock { Text = $"{SeverityStyle.For(level, hc).Glyph} {AuditStore.Redact(item.Alert.Title)} · {NotificationCenter.SeverityWord(item.Alert.Severity)} · {AlertSnoozeRules.Describe(item.Snooze, nowUtc)} · daha ciddi bir olay ertelemeyi aşar", TextWrapping = TextWrapping.Wrap, Margin = Spacing.Inline, Opacity = 0.9 });
                 snoozedHost.Children.Add(row);
             }
             host.Children.Add(snoozedHost);
@@ -140,7 +140,7 @@ public static class NotificationCenterPanel
     static Expander Group(AlertGroup group, Action<string> navigate, Action<string> acknowledge, Action<string> unacknowledge, Action<string, string>? snooze, DateTime nowUtc, bool hc, bool expanded)
     {
         var level = NotificationCenter.LevelOf(group.Severity); var style = SeverityStyle.For(level, hc);
-        var expander = new Expander { Tag = "alert-group", IsExpanded = expanded, Margin = new Thickness(2, 2, 2, 2), BorderBrush = SeverityStyle.AccentBrush(level, hc), BorderThickness = new Thickness(style.BorderWeight), Padding = new Thickness(4) };
+        var expander = new Expander { Tag = "alert-group", IsExpanded = expanded, Margin = new Thickness(2, 2, 2, 2), BorderBrush = SeverityStyle.AccentBrush(level, hc), BorderThickness = new Thickness(style.BorderWeight), Padding = Spacing.Inline };
         expander.Header = new TextBlock { Text = $"{style.Glyph} {group.Title} ({group.Count:N0}" + (group.Occurrences > group.Count ? $", ×{group.Occurrences:N0}" : "") + ")", FontWeight = FontWeights.SemiBold, Foreground = SeverityStyle.AccentBrush(level, hc), TextWrapping = TextWrapping.Wrap };
         AutomationProperties.SetName(expander, $"{style.Word}: {group.Title}, {group.Count:N0} uyarı" + (group.Acknowledged ? ", onaylandı" : ""));
         var rows = new StackPanel();
@@ -167,7 +167,7 @@ public static class NotificationCenterPanel
             }
             var meta = $"×{alert.Occurrences:N0} · {StatusTooltip.Relative(alert.AtUtc, nowUtc)}" + (alert.Reopened > 0 ? $" · yeniden açıldı ×{alert.Reopened:N0}" : "");
             // The ledger sanitizes on write; the screen redacts once more so a row built from any source still shows no secret.
-            row.Children.Add(new TextBlock { Text = $"{AuditStore.Redact(alert.Title)}\n{AuditStore.Redact(alert.Detail)}\n{meta}", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4) });
+            row.Children.Add(new TextBlock { Text = $"{AuditStore.Redact(alert.Title)}\n{AuditStore.Redact(alert.Detail)}\n{meta}", TextWrapping = TextWrapping.Wrap, Margin = Spacing.Inline });
             rows.Children.Add(row);
         }
         if (group.Count > NotificationCenter.MaxPerGroup) rows.Children.Add(new TextBlock { Tag = "alert-more", Text = $"… ve {group.Count - NotificationCenter.MaxPerGroup:N0} daha", Margin = new Thickness(6, 2, 4, 2), Opacity = 0.7 });

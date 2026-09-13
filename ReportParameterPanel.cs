@@ -46,7 +46,7 @@ public static class ReportParameterPanel
         ArgumentNullException.ThrowIfNull(context);
         var definition = context.Definition; var schema = ReportParameters.SchemaFor(definition); var module = ReportCatalog.FilterModulePrefix + definition.Key;
         var allowed = context.AllowedStoreKeys();
-        var root = new StackPanel { Tag = "report-setup", Margin = new Thickness(12) };
+        var root = new StackPanel { Tag = "report-setup", Margin = Spacing.Section };
         root.Children.Add(new TextBlock { Tag = "report-setup-title", Text = definition.Title, FontSize = DesignTokens.TextSubsectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, TextWrapping = TextWrapping.Wrap });
         root.Children.Add(new TextBlock { Text = definition.Purpose, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 10), Opacity = 0.9 });
 
@@ -69,9 +69,9 @@ public static class ReportParameterPanel
 
         var saved = new ComboBox { Tag = "report-param-saved", DisplayMemberPath = "Name", Width = 190, Margin = new Thickness(0, 0, 6, 4) }; AutomationProperties.SetName(saved, "Kayıtlı filtre");
         var savedName = new TextBox { Tag = "report-param-saved-name", Width = 150, MaxLength = 100, Margin = new Thickness(0, 0, 6, 4), ToolTip = "Yeni filtre adı" }; AutomationProperties.SetName(savedName, "Filtre adı");
-        var load = new Button { Tag = "report-param-load", Content = "Yükle", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 6, 4) };
-        var delete = new Button { Tag = "report-param-delete", Content = "Sil", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 6, 4) };
-        var save = new Button { Tag = "report-param-save", Content = "Kaydet", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 0, 4) };
+        var load = new Button { Tag = "report-param-load", Content = "Yükle", Padding = Spacing.Chip, Margin = new Thickness(0, 0, 6, 4) };
+        var delete = new Button { Tag = "report-param-delete", Content = "Sil", Padding = Spacing.Chip, Margin = new Thickness(0, 0, 6, 4) };
+        var save = new Button { Tag = "report-param-save", Content = "Kaydet", Padding = Spacing.Chip, Margin = Spacing.BelowInline };
         var savedBar = new WrapPanel(); savedBar.Children.Add(saved); savedBar.Children.Add(load); savedBar.Children.Add(delete); savedBar.Children.Add(savedName); savedBar.Children.Add(save);
         if (schema.Any) { root.Children.Add(new TextBlock { Text = "Kayıtlı filtreler", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 4) }); root.Children.Add(savedBar); }
 
@@ -84,9 +84,9 @@ public static class ReportParameterPanel
 
         // #848: the run view -- one row per stage, cancel while running, diagnostics and retry after a failure or cancellation.
         var progressHost = new StackPanel { Tag = "report-run-progress", Visibility = Visibility.Collapsed, Margin = new Thickness(0, 10, 0, 0) };
-        var progressHeadline = new TextBlock { Tag = "report-run-headline", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) }; AutomationProperties.SetLiveSetting(progressHeadline, AutomationLiveSetting.Polite);
+        var progressHeadline = new TextBlock { Tag = "report-run-headline", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowInline }; AutomationProperties.SetLiveSetting(progressHeadline, AutomationLiveSetting.Polite);
         var progressRows = new StackPanel();
-        var diagnostics = new TextBlock { Tag = "report-run-diagnostics", TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 4, 0, 0) }; AutomationProperties.SetLiveSetting(diagnostics, AutomationLiveSetting.Assertive);
+        var diagnostics = new TextBlock { Tag = "report-run-diagnostics", TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed, Margin = Spacing.AboveInline }; AutomationProperties.SetLiveSetting(diagnostics, AutomationLiveSetting.Assertive);
         var runActions = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
         var cancel = new Button { Tag = "report-run-cancel", Content = CancelLabel, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 8, 0), Visibility = Visibility.Collapsed, IsCancel = true };
         var retry = new Button { Tag = "report-run-retry", Content = RetryLabel, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 8, 0), Visibility = Visibility.Collapsed };
@@ -97,8 +97,8 @@ public static class ReportParameterPanel
 
         // #849: the result -- summary, the column chooser, the export, the grid.
         var resultHost = new StackPanel { Tag = "report-result", Visibility = Visibility.Collapsed, Margin = new Thickness(0, 10, 0, 0) };
-        var resultSummary = new TextBlock { Tag = "report-result-summary", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) }; AutomationProperties.SetLiveSetting(resultSummary, AutomationLiveSetting.Polite);
-        var resultBar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
+        var resultSummary = new TextBlock { Tag = "report-result-summary", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowInline }; AutomationProperties.SetLiveSetting(resultSummary, AutomationLiveSetting.Polite);
+        var resultBar = new WrapPanel { Margin = Spacing.BelowInline };
         var columnsButton = new Button { Tag = "report-result-columns", Content = ColumnsLabel + "…", Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 8, 0) }; AutomationProperties.SetName(columnsButton, "Sonuç kolonlarını düzenle");
         var exportButton = new Button { Tag = "report-result-export", Content = ExportLabel, Padding = new Thickness(10, 2, 10, 2), Visibility = context.Export is null ? Visibility.Collapsed : Visibility.Visible };
         resultBar.Children.Add(columnsButton); resultBar.Children.Add(exportButton);

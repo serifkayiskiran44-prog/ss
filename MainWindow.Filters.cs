@@ -16,7 +16,7 @@ public partial class MainWindow {
   // The sort controls are part of the persisted product list layout (#792); exposed to the layout code as delegates.
   applyProductSort=(by,descending)=>{sort.SelectedItem=by;descSort.IsChecked=descending;};captureProductSort=()=>(sort.SelectedItem?.ToString()??"Name",descSort.IsChecked==true);
   foreach(var (title,control) in new (string,Control)[]{("Durum",status),("Marka (; ile ayır)",brand),("Kategori (; ile ayır)",category),("SKU (; ile ayır)",sku),("Açıklama",description),("Görsel kaydı",image),("Min fiyat",minPrice),("Max fiyat",maxPrice),("Sıralama",sort),("",descSort)}){
-   var group=new StackPanel{Margin=new Thickness(4)};group.Children.Add(new TextBlock{Text=title});group.Children.Add(control);panel.Children.Add(group);
+   var group=new StackPanel{Margin=Spacing.Inline};group.Children.Add(new TextBlock{Text=title});group.Children.Add(control);panel.Children.Add(group);
   }
   static string[] Values(string text)=>text.Split(new[]{';','\r','\n'},StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Distinct().ToArray();
   static bool? State(ComboBox box)=>box.SelectedIndex==0?null:box.SelectedIndex==1;
@@ -145,7 +145,7 @@ public partial class MainWindow {
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Son hesaplama: {summary.Calculated}", FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
   foreach (var warning in summary.Warnings)
    productPriceSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
-  productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)), Margin = new Thickness(0, 4, 0, 0) });
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)), Margin = Spacing.AboveInline });
   System.Windows.Automation.AutomationProperties.SetName(productPriceSummaryPanel, $"{summary.SalePrice} {summary.Currency}, kâr {summary.Margin}");
  }
  // Product card stock composition (#799). The available figure comes from CatalogStore.PreviewStock -- the owner
@@ -207,9 +207,9 @@ public partial class MainWindow {
   if (edit is null) throw new InvalidOperationException("Önce ürün seçin.");
   var diff = CurrentContentDiff();
   var body = new StackPanel { Margin = new Thickness(14) };
-  body.Children.Add(new TextBlock { Text = diff.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+  body.Children.Add(new TextBlock { Text = diff.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowControl });
   if (diff.Warning.Length > 0)
-   body.Children.Add(new TextBlock { Text = "⚠ " + diff.Warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 0, 0, 8) });
+   body.Children.Add(new TextBlock { Text = "⚠ " + diff.Warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = Spacing.BelowControl });
   // #832: the shared renderer -- added / removed / changed read from glyph, word and border, not from colour.
   body.Children.Add(FieldDiffRenderer.Render(diff.Rows.Select(r => new FieldDiffRow(r.Field, r.Before, r.After, r.Kind, r.BeforeTruncated, r.AfterTruncated)).ToList(), SeverityStyle.IsHighContrast));
   // #818: the standard dialog shell -- fitted to the work area, resizable, scrolling body, Kapat on Escape.
@@ -245,7 +245,7 @@ public partial class MainWindow {
   {
    var rows = actionable.Where(f => f.Section == section.Key).ToList();
    if (rows.Count == 0) continue;
-   productValidationPanel.Children.Add(new TextBlock { Text = section.Label, FontSize = DesignTokens.TextCaptionSize, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 4, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+   productValidationPanel.Children.Add(new TextBlock { Text = section.Label, FontSize = DesignTokens.TextCaptionSize, FontWeight = FontWeights.SemiBold, Margin = Spacing.AboveInline, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
    foreach (var finding in rows)
     productValidationPanel.Children.Add(new TextBlock { Text = SeverityStyle.For(SeverityStyle.FromValidation(finding.Severity), highContrast).Badge + " · " + finding.Message, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = SeverityStyle.AccentBrush(SeverityStyle.FromValidation(finding.Severity), highContrast) });
   }
@@ -315,7 +315,7 @@ public partial class MainWindow {
   foreach (var row in view.Rows)
    productProvenanceBody.Children.Add(new TextBlock { Text = $"{row.Field}: {row.Origin} — {row.Detail}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(0, 2, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
   foreach (var warning in view.Warnings)
-   productProvenanceBody.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 4, 0, 0) });
+   productProvenanceBody.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = Spacing.AboveInline });
   System.Windows.Automation.AutomationProperties.SetName(productProvenanceExpander, "Alan kökenleri: " + view.Headline);
  }
  // Product quick-inspect drawer (#796). A read-only panel beside the list, opened with Ctrl+I on the selected
@@ -323,13 +323,13 @@ public partial class MainWindow {
  // leaving the row or opening the editor. It is built from ProductQuickInspect's label/value rows, which carry
  // no commands and are sanitized, so the drawer cannot mutate anything and cannot echo a secret.
  readonly StackPanel productInspectBody = new();
- readonly TextBlock productInspectTitle = new() { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) };
+ readonly TextBlock productInspectTitle = new() { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowControl };
  Border? productInspectDrawer;
  UIElement BuildProductInspectHost(UIElement list)
  {
   var close = new Button { Content = "Kapat (Esc)", HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(10, 3, 10, 3) };
   close.Click += (_, _) => CloseProductInspect();
-  var stack = new StackPanel { Margin = new Thickness(12) };
+  var stack = new StackPanel { Margin = Spacing.Section };
   stack.Children.Add(productInspectTitle); stack.Children.Add(productInspectBody); stack.Children.Add(close);
   productInspectDrawer = new Border
   {

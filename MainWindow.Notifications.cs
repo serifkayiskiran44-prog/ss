@@ -65,7 +65,7 @@ public partial class MainWindow
             body.Children.Add(close);
             if (toast.ActionLabel.Length > 0 && toast.Route.Length > 0 && routes.ContainsKey(toast.Route))
             {
-                var go = new Button { Content = toast.ActionLabel, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(6, 0, 0, 0) };
+                var go = new Button { Content = toast.ActionLabel, Padding = Spacing.Chip, Margin = new Thickness(6, 0, 0, 0) };
                 var route = toast.Route;
                 go.Click += (_, _) => { notificationQueue.Dismiss(id); RenderToasts(); Navigate(route); };
                 DockPanel.SetDock(go, System.Windows.Controls.Dock.Right);

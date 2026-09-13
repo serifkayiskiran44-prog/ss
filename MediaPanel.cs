@@ -34,7 +34,7 @@ public static class MediaPanel
         var gallery = new ListBox { Height = 92, SelectionMode = SelectionMode.Single };
         // Deliberate copy of one image's address, in contrast to the grid's implicit row copy, which is disabled
         // below because it swept signed URLs onto the clipboard whenever an operator pressed Ctrl+C (#804).
-        var copySource = new Button { Content = "Görsel adresini kopyala", Margin = new Thickness(3) };
+        var copySource = new Button { Content = "Görsel adresini kopyala", Margin = Spacing.Control };
         gallery.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
         gallery.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
         gallery.ItemsPanel = (ItemsPanelTemplate)System.Windows.Markup.XamlReader.Parse(
@@ -197,8 +197,8 @@ public static class MediaPanel
         var remove = Button("Kaydı kaldır", () => { if (selected is null) throw new InvalidOperationException("Önce görsel seçin."); media.Delete(selected.Id); selected = null; RefreshMedia(); preview.Source = null; ShowMediaState(null, false, false, false); });
         var openProduct = Button("Ürünü düzenle", () => navigate?.Invoke("products"));
 
-        var top = new WrapPanel(); top.Children.Add(new TextBlock { Text = "Ürün", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); top.Children.Add(productPicker); top.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); top.Children.Add(search); top.Children.Add(refresh); top.Children.Add(openProduct); panel.Children.Add(top);
-        var addRow = new WrapPanel(); addRow.Children.Add(new TextBlock { Text = "Adres", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(url); addRow.Children.Add(new TextBlock { Text = "Kaynak", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(source); addRow.Children.Add(add); panel.Children.Add(addRow);
+        var top = new WrapPanel(); top.Children.Add(new TextBlock { Text = "Ürün", Margin = Spacing.Inline, VerticalAlignment = VerticalAlignment.Center }); top.Children.Add(productPicker); top.Children.Add(new TextBlock { Text = "Ara", Margin = Spacing.Inline, VerticalAlignment = VerticalAlignment.Center }); top.Children.Add(search); top.Children.Add(refresh); top.Children.Add(openProduct); panel.Children.Add(top);
+        var addRow = new WrapPanel(); addRow.Children.Add(new TextBlock { Text = "Adres", Margin = Spacing.Inline, VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(url); addRow.Children.Add(new TextBlock { Text = "Kaynak", Margin = Spacing.Inline, VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(source); addRow.Children.Add(add); panel.Children.Add(addRow);
         var actions = new WrapPanel(); actions.Children.Add(validate); actions.Children.Add(validateAll); actions.Children.Add(primary); actions.Children.Add(remove); actions.Children.Add(copySource); panel.Children.Add(actions);
         var body = new Grid(); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(390) }); Grid.SetColumn(grid, 0); Grid.SetColumn(previewBox, 1); body.Children.Add(grid); body.Children.Add(previewBox);
         panel.Children.Add(gallery); panel.Children.Add(gallerySummary); panel.Children.Add(body); panel.Children.Add(status);
@@ -207,9 +207,9 @@ public static class MediaPanel
         return Scroll(panel);
     }
 
-    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 12) }, TextRole.SectionTitle);
-    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 8) }, TextRole.Hint);
-    static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Görsel merkezi", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
-    static Button AsyncButton(string text, Func<Task> action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += async (_, _) => { try { button.IsEnabled = false; await action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Görsel merkezi", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { button.IsEnabled = true; } }; return button; }
+    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = Spacing.TitleBlock }, TextRole.SectionTitle);
+    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = Spacing.HintBlock }, TextRole.Hint);
+    static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = Spacing.Control }; button.Click += (_, _) => { try { action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Görsel merkezi", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
+    static Button AsyncButton(string text, Func<Task> action) { var button = new Button { Content = text, Margin = Spacing.Control }; button.Click += async (_, _) => { try { button.IsEnabled = false; await action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Görsel merkezi", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { button.IsEnabled = true; } }; return button; }
     static ScrollViewer Scroll(UIElement content) => new() { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };
 }

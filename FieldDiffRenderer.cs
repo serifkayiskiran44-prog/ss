@@ -31,7 +31,7 @@ public static class FieldDiffRenderer
                 if (row.Kind != DiffKind.Added) body.Children.Add(new TextBlock { Text = "Önce: " + row.Before + (row.BeforeTruncated ? " (kısaltıldı)" : ""), TextWrapping = TextWrapping.Wrap });
                 if (row.Kind != DiffKind.Removed) body.Children.Add(new TextBlock { Text = "Sonra: " + row.After + (row.AfterTruncated ? " (kısaltıldı)" : ""), TextWrapping = TextWrapping.Wrap });
             }
-            var border = new Border { BorderBrush = accent, BorderThickness = new Thickness(p.BorderWeight, p.BorderWeight, p.BorderWeight, p.BorderWeight), Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(0, 0, 0, 4), Child = body, Focusable = true, Tag = row.Kind };
+            var border = new Border { BorderBrush = accent, BorderThickness = new Thickness(p.BorderWeight, p.BorderWeight, p.BorderWeight, p.BorderWeight), Padding = new Thickness(8, 4, 8, 4), Margin = Spacing.BelowInline, Child = body, Focusable = true, Tag = row.Kind };
             KeyboardNavigation.SetIsTabStop(border, true);
             System.Windows.Automation.AutomationProperties.SetName(border, $"{row.Field}: {p.Word}. " + (row.Kind == DiffKind.Unchanged ? row.After : $"Önce {row.Before}. Sonra {row.After}."));
             panel.Children.Add(border);

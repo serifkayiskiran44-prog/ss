@@ -19,12 +19,12 @@ public static class ReportColumnChooserDialog
         ArgumentNullException.ThrowIfNull(layout); ArgumentNullException.ThrowIfNull(onSave);
         var current = layout; var schema = layout.Columns.Select(c => c.Column).ToList();
         var body = new StackPanel();
-        body.Children.Add(new TextBlock { Text = "Görünecek kolonları işaretleyin; seçili kolonu ok düğmeleriyle taşıyın. Sınıflandırılmış kolonlar politika izin verdiğinde açılır ve her zaman maskeli kalır.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+        body.Children.Add(new TextBlock { Text = "Görünecek kolonları işaretleyin; seçili kolonu ok düğmeleriyle taşıyın. Sınıflandırılmış kolonlar politika izin verdiğinde açılır ve her zaman maskeli kalır.", TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowControl });
         var bar = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
         var search = new TextBox { Tag = "report-columns-search", Width = 220, Margin = new Thickness(0, 0, 8, 0), ToolTip = "Kolon adı, anahtar veya grup ara" }; AutomationProperties.SetName(search, "Kolon ara");
-        var up = new Button { Tag = "report-columns-up", Content = "▲ Yukarı", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0) }; AutomationProperties.SetName(up, "Seçili kolonu yukarı taşı");
-        var down = new Button { Tag = "report-columns-down", Content = "▼ Aşağı", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0) }; AutomationProperties.SetName(down, "Seçili kolonu aşağı taşı");
-        var reset = new Button { Tag = "report-columns-reset", Content = "Varsayılan", Padding = new Thickness(8, 2, 8, 2) };
+        var up = new Button { Tag = "report-columns-up", Content = "▲ Yukarı", Padding = Spacing.Chip, Margin = Spacing.RightInline }; AutomationProperties.SetName(up, "Seçili kolonu yukarı taşı");
+        var down = new Button { Tag = "report-columns-down", Content = "▼ Aşağı", Padding = Spacing.Chip, Margin = Spacing.RightInline }; AutomationProperties.SetName(down, "Seçili kolonu aşağı taşı");
+        var reset = new Button { Tag = "report-columns-reset", Content = "Varsayılan", Padding = Spacing.Chip };
         bar.Children.Add(new TextBlock { Text = "Ara", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) }); bar.Children.Add(search); bar.Children.Add(up); bar.Children.Add(down); bar.Children.Add(reset);
         body.Children.Add(bar);
         var list = new ListBox { Tag = "report-columns-list", Height = 320, SelectionMode = SelectionMode.Single, HorizontalContentAlignment = HorizontalAlignment.Stretch }; AutomationProperties.SetName(list, "Rapor kolonları");

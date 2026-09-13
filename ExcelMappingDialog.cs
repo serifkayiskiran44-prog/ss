@@ -39,8 +39,8 @@ public static class ExcelMappingDialog
     {
         ArgumentNullException.ThrowIfNull(headers); ArgumentNullException.ThrowIfNull(sampleFor);
         var content = new StackPanel { Margin = new Thickness(16) };
-        var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) };
-        var jump = new Button { Content = "İlk soruna git", Padding = new Thickness(8, 2, 8, 2), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 8), Visibility = Visibility.Collapsed };
+        var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold, Margin = Spacing.BelowInline };
+        var jump = new Button { Content = "İlk soruna git", Padding = Spacing.Chip, HorizontalAlignment = HorizontalAlignment.Left, Margin = Spacing.BelowControl, Visibility = Visibility.Collapsed };
         content.Children.Add(summary); content.Children.Add(jump);
         var combos = new Dictionary<string, ComboBox>(StringComparer.Ordinal);
         var statuses = new Dictionary<string, (Border Row, TextBlock Status)>(StringComparer.Ordinal);

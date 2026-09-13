@@ -32,7 +32,7 @@ public static class EbayPanel
         var disconnect = Button(actions, "Yerel bağlantıyı sil");
         panel.Children.Add(actions);
         panel.Children.Add(Text("Tam dönüş URL'si (kod ve state içerir; paylaşmayın; işlemden sonra temizlenir)"));
-        var returned = new PasswordBox { Margin = new Thickness(0, 0, 0, 8) };
+        var returned = new PasswordBox { Margin = Spacing.BelowControl };
         panel.Children.Add(returned);
         var complete = new Button { Content = "Dönüşü doğrula ve token al", HorizontalAlignment = HorizontalAlignment.Left };
         panel.Children.Add(complete);
@@ -111,7 +111,7 @@ public static class EbayPanel
         });
         return panel;
     }
-    static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8), Foreground = Brushes.DarkSlateGray };
-    static TextBox Field(Panel panel, string label) { panel.Children.Add(Text(label)); var box = new TextBox { Margin = new Thickness(0, 0, 0, 8) }; panel.Children.Add(box); return box; }
+    static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BelowControl, Foreground = Brushes.DarkSlateGray };
+    static TextBox Field(Panel panel, string label) { panel.Children.Add(Text(label)); var box = new TextBox { Margin = Spacing.BelowControl }; panel.Children.Add(box); return box; }
     static Button Button(Panel panel, string label) { var button = new Button { Content = label, Margin = new Thickness(0, 0, 8, 8) }; panel.Children.Add(button); return button; }
 }

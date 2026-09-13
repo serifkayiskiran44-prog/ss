@@ -26,9 +26,9 @@ public static class MarketplaceConnectionsPanel
         var display = new TextBox { Width = 220 };
         var enabled = new CheckBox { Content = "Bağlantı etkin", IsChecked = true };
         var selectedId = "";
-        var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
-        var capability = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
-        var result = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
+        var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = Spacing.HintBlock };
+        var capability = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = Spacing.HintBlock };
+        var result = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = Spacing.HintBlock };
         var health = new ApiHealthStore(dataDirectory);
         foreach (var connection in rows) health.EnsureConnection(connection.Channel, connection.ShopId, connection.Status, connection.LastError);
         var capture = new ApiHealthCaptureHandler { InnerHandler = new HttpClientHandler() };
@@ -63,7 +63,7 @@ public static class MarketplaceConnectionsPanel
         grid.SelectionChanged += (_, _) => Show(grid.SelectedItem as MarketplaceConnection);
         channel.SelectedIndex = 0; UpdateCapabilities(); Show(null);
 
-        var form = new StackPanel { Margin = new Thickness(12) };
+        var form = new StackPanel { Margin = Spacing.Section };
         form.Children.Add(new TextBlock { Text = "Seçili mağaza bağlantısı", FontSize = DesignTokens.TextSubsectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(4, 4, 4, 10) });
         AddLabel(form, "Kanal", channel); AddLabel(form, "Mağaza kimliği", shop); AddLabel(form, "Görünen ad", display); form.Children.Add(enabled);
         form.Children.Add(capability); form.Children.Add(status);
@@ -110,7 +110,7 @@ public static class MarketplaceConnectionsPanel
             links.Children.Add(Button("API belgeleri", () => Process.Start(new ProcessStartInfo(definition.DocumentationUrl) { UseShellExecute = true })));
         }
         form.Children.Add(links);
-        var layout = new Grid { Margin = new Thickness(12) };
+        var layout = new Grid { Margin = Spacing.Section };
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(430) });
         layout.Children.Add(new ScrollViewer { Content = grid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
@@ -139,6 +139,6 @@ public static class MarketplaceConnectionsPanel
     }
 
     static void AddLabel(Panel panel, string label, UIElement control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(4, 7, 4, 0) }); panel.Children.Add(control); }
-    static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { action(); } catch (Exception e) { MessageBox.Show(MarketplaceConnectionStore.Redact(e.Message), "Bağlantı yönetimi", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
-    static Button AsyncButton(string text, Func<Task> action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += async (_, _) => { try { button.IsEnabled = false; await action(); } catch (Exception e) { MessageBox.Show(MarketplaceConnectionStore.Redact(e.Message), "Bağlantı yönetimi", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { button.IsEnabled = true; } }; return button; }
+    static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = Spacing.Control }; button.Click += (_, _) => { try { action(); } catch (Exception e) { MessageBox.Show(MarketplaceConnectionStore.Redact(e.Message), "Bağlantı yönetimi", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
+    static Button AsyncButton(string text, Func<Task> action) { var button = new Button { Content = text, Margin = Spacing.Control }; button.Click += async (_, _) => { try { button.IsEnabled = false; await action(); } catch (Exception e) { MessageBox.Show(MarketplaceConnectionStore.Redact(e.Message), "Bağlantı yönetimi", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { button.IsEnabled = true; } }; return button; }
 }

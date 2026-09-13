@@ -28,7 +28,7 @@ public static class MarketplaceSetupPanel
             actions.Children.Add(Link("Resmî API belgelerini aç", channel.DocumentationUrl, result));
             body.Children.Add(actions);
             body.Children.Add(result);
-            content.Children.Add(new GroupBox { Header = channel.Name, Content = body, Margin = new Thickness(0, 8, 0, 8), Padding = new Thickness(12) });
+            content.Children.Add(new GroupBox { Header = channel.Name, Content = body, Margin = Spacing.VerticalControl, Padding = Spacing.Section });
         }
         return new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
@@ -58,7 +58,7 @@ public static class MarketplaceSetupPanel
     static TextBlock Text(string value, double size = 14, Brush? color = null) => new()
     {
         Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap,
-        Foreground = color ?? Brushes.DarkSlateGray, Margin = new Thickness(0, 0, 0, 8)
+        Foreground = color ?? Brushes.DarkSlateGray, Margin = Spacing.BelowControl
     };
 
     static Button Link(string label, string url, TextBlock result)

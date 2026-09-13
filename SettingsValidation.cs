@@ -215,7 +215,7 @@ public static class SettingsValidationBanner
         title.Inlines.Add(new Run($" · {label}"));
         text.Children.Add(title);
         if (issue.Detail.Length > 0) text.Children.Add(new TextBlock { Text = issue.Detail, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) });
-        var go = new Button { Tag = "settings-issue-open", Content = GoLabel, Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Top };
+        var go = new Button { Tag = "settings-issue-open", Content = GoLabel, Padding = new Thickness(12, 3, 12, 3), Margin = Spacing.LeftControl, VerticalAlignment = VerticalAlignment.Top };
         AutomationProperties.SetAutomationId(go, issue.EntryKey); AutomationProperties.SetName(go, $"{GoLabel}: {label}");
         go.Click += (_, _) => open(issue.EntryKey);
         var dock = new DockPanel { LastChildFill = true }; DockPanel.SetDock(go, Dock.Right); dock.Children.Add(go); dock.Children.Add(text);
@@ -227,7 +227,7 @@ public static class SettingsValidationBanner
 
     static WrapPanel Actions(params (string Label, string Name, string Tag, Action Click)[] actions)
     {
-        var panel = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+        var panel = new WrapPanel { Margin = Spacing.AboveControl };
         foreach (var (label, name, tag, click) in actions)
         {
             var button = new Button { Tag = tag, Content = label, Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 0, 6, 0) };

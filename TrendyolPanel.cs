@@ -10,14 +10,14 @@ public static class TrendyolPanel
     public static FrameworkElement Create(string? directory = null, SettingsEditState? editState = null)
     {
         var store = new TrendyolSettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "trendyol.bin"));
-        var root = new StackPanel { Margin = new Thickness(18), MaxWidth = 820 };
+        var root = new StackPanel { Margin = Spacing.Page, MaxWidth = 820 };
         root.Children.Add(new TextBlock { Text = "Trendyol bağlantısı", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(0, 0, 0, 10) });
-        root.Children.Add(new TextBlock { Text = "API bilgileri DPAPI ile şifrelenir. Resmi sözleşme doğrulanmadan ürün, stok, fiyat veya sipariş isteği oluşturulmaz.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 0, 0, 12) });
+        root.Children.Add(new TextBlock { Text = "API bilgileri DPAPI ile şifrelenir. Resmi sözleşme doğrulanmadan ürün, stok, fiyat veya sipariş isteği oluşturulmaz.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = Spacing.BelowSection });
         var supplier = Field(root, "Supplier ID"); var key = Field(root, "API key");
         // #855: the secret standard -- masked, paste-cleaned, never copied, presence only for a saved value, kept when left empty.
         var secret = SecretField.Build("API secret", "Şifreli saklanır; ekranda, kayıtlarda ve dışa aktarımlarda gösterilmez."); root.Children.Add(secret.Field.Root);
         var agent = Field(root, "User-Agent");
-        var state = new TextBlock { Tag = "trendyol-status", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 8, 0, 8) }; root.Children.Add(state);
+        var state = new TextBlock { Tag = "trendyol-status", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = Spacing.VerticalControl }; root.Children.Add(state);
         TrendyolSettings? saved = null;
         // #854: unsaved fields by label; the secret contributes presence, never its value.
         var tracker = editState?.Form("trendyol-connection").Track("Supplier ID", () => supplier.Text).Track("API key", () => key.Text).Track("API secret", () => secret.Box.Password, secret: true).Track("User-Agent", () => agent.Text);
@@ -25,8 +25,8 @@ public static class TrendyolPanel
         secret.Box.PasswordChanged += (_, _) => tracker?.Recompute();
         TrendyolSettings Read() => new(supplier.Text.Trim(), key.Text.Trim(), secret.Resolve(saved?.ApiSecret), agent.Text.Trim());
         // Errors land in the status line (redacted), never in a modal; a validation failure keeps what was typed.
-        Button Button(string text, Action action) { var b = new Button { Content = text, Margin = new Thickness(3), Padding = DesignTokens.CompactButtonPadding }; b.Click += (_, _) => { try { action(); } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); } }; return b; }
-        Button AsyncButton(string text, Func<Task> action) { var b = new Button { Content = text, Margin = new Thickness(3), Padding = DesignTokens.CompactButtonPadding }; b.Click += async (_, _) => { try { b.IsEnabled = false; await action(); } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); } finally { b.IsEnabled = true; } }; return b; }
+        Button Button(string text, Action action) { var b = new Button { Content = text, Margin = Spacing.Control, Padding = DesignTokens.CompactButtonPadding }; b.Click += (_, _) => { try { action(); } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); } }; return b; }
+        Button AsyncButton(string text, Func<Task> action) { var b = new Button { Content = text, Margin = Spacing.Control, Padding = DesignTokens.CompactButtonPadding }; b.Click += async (_, _) => { try { b.IsEnabled = false; await action(); } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); } finally { b.IsEnabled = true; } }; return b; }
         root.Children.Add(Button("Şifreli kaydet", () =>
         {
             var settings = Read();

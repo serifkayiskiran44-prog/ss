@@ -33,8 +33,8 @@ public static class ProductionReadinessPanel
         return Scroll(root);
     }
 
-    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 12) }, TextRole.SectionTitle);
-    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 8) }, TextRole.Hint);
-    static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { action(); } catch (Exception error) { MessageBox.Show(AuditStore.Sanitize(error.Message), "Üretim hazırlığı", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
+    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = Spacing.TitleBlock }, TextRole.SectionTitle);
+    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = Spacing.HintBlock }, TextRole.Hint);
+    static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = Spacing.Control }; button.Click += (_, _) => { try { action(); } catch (Exception error) { MessageBox.Show(AuditStore.Sanitize(error.Message), "Üretim hazırlığı", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
     static ScrollViewer Scroll(UIElement content) => new() { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };
 }

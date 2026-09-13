@@ -77,7 +77,7 @@ public static class DestructiveConfirmDialog
     {
         var body = new StackPanel();
         body.Children.Add(DialogShell.Message(DestructiveConfirmation.Message(intent)));
-        var box = new TextBox { Margin = new Thickness(0, 8, 0, 0), MaxLength = 12 };
+        var box = new TextBox { Margin = Spacing.AboveControl, MaxLength = 12 };
         AutomationProperties.SetName(box, "Onay metni");
         var feedback = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed, Foreground = SeverityStyle.AccentBrush(SeverityLevel.Blocking, SeverityStyle.IsHighContrast) };
         AutomationProperties.SetLiveSetting(feedback, AutomationLiveSetting.Assertive);

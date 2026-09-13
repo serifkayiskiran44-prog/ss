@@ -24,6 +24,15 @@
     <Thickness x:Key="NavigationItemPadding">14,9</Thickness>
     <Thickness x:Key="NavigationItemMargin">8,2</Thickness>
 
+    <!-- Spacing scale as margins (#859): page, section and inline on all sides; the chip padding; the three text-block rhythms. -->
+    <Thickness x:Key="PageMargin">20</Thickness>
+    <Thickness x:Key="SectionMargin">12</Thickness>
+    <Thickness x:Key="InlineMargin">4</Thickness>
+    <Thickness x:Key="ChipPadding">8,2</Thickness>
+    <Thickness x:Key="TitleBlockMargin">4,8,4,12</Thickness>
+    <Thickness x:Key="HintBlockMargin">4,8,4,8</Thickness>
+    <Thickness x:Key="BodyBlockMargin">3,4,3,7</Thickness>
+
     <!-- Control heights -->
     <sys:Double x:Key="ControlMinHeight">30</sys:Double>
     <sys:Double x:Key="RowHeight">36</sys:Double>
@@ -54,4 +63,8 @@
     <Style x:Key="BodyText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextBodySize}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
     <Style x:Key="CaptionText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextCaptionSize}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
     <Style x:Key="KpiText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextKpiSize}"/><Setter Property="FontWeight" Value="{StaticResource FontWeightKpi}"/></Style>
+
+    <!-- Shared layout styles (#859): a page root and a section root for XAML; Spacing.cs applies the same rhythm in code. -->
+    <Style x:Key="PageRoot" TargetType="Panel"><Setter Property="Margin" Value="{StaticResource PageMargin}"/></Style>
+    <Style x:Key="SectionRoot" TargetType="Panel"><Setter Property="Margin" Value="{StaticResource SectionMargin}"/></Style>
 </ResourceDictionary>

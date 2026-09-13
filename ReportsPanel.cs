@@ -70,7 +70,7 @@ public static class ReportsPanel
             setupHost.Visibility = Visibility.Visible;
         }
         var refresh = Button(errors, "Yenile", Refresh);
-        var bar = new WrapPanel(); bar.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(search); bar.Children.Add(refresh);
+        var bar = new WrapPanel(); bar.Children.Add(new TextBlock { Text = "Ara", Margin = Spacing.Inline, VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(search); bar.Children.Add(refresh);
         var left = new StackPanel(); left.Children.Add(bar); left.Children.Add(count); left.Children.Add(empty); left.Children.Add(cards);
         var layout = new Grid(); layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(left, 0); Grid.SetColumn(setupHost, 1); layout.Children.Add(left); layout.Children.Add(setupHost);
@@ -109,8 +109,8 @@ public static class ReportsPanel
         return (window is null ? dialog.ShowDialog() : dialog.ShowDialog(window)) == true ? dialog.FileName : null;
     }
     static TextBlock Line(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 1) };
-    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 12) }, TextRole.SectionTitle);
-    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 8) }, TextRole.Hint);
-    static Button Button(ErrorSurface errors, string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { errors.Clear(); action(); } catch (Exception error) { errors.Show(error); } }; return button; }
+    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = Spacing.TitleBlock }, TextRole.SectionTitle);
+    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = Spacing.HintBlock }, TextRole.Hint);
+    static Button Button(ErrorSurface errors, string text, Action action) { var button = new Button { Content = text, Margin = Spacing.Control }; button.Click += (_, _) => { try { errors.Clear(); action(); } catch (Exception error) { errors.Show(error); } }; return button; }
     static ScrollViewer Scroll(UIElement content) => new() { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };
 }

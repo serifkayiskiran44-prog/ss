@@ -9,7 +9,7 @@ public static class MessagePanel
 {
     public static FrameworkElement Create(string? directory = null, Action<string>? navigate = null)
     {
-        var store = new MessageStore(directory); var root = new DockPanel { Margin = new Thickness(12) };
+        var store = new MessageStore(directory); var root = new DockPanel { Margin = Spacing.Section };
         var top = new StackPanel(); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         top.Children.Add(Text("Mesaj ve müşteri iletişim merkezi", TextRole.SectionTitle));
         top.Children.Add(Text("Mesajlar yerel olarak saklanır. Doğrulanmış mesaj API capability'si bulunmayan kanallarda gerçek okuma/yazma yapılmaz."));
@@ -46,7 +46,7 @@ public static class MessagePanel
     {
         try { new AuditStore(directory).Append(new() { Module = "messages", Action = message.Direction == "Outbound" ? "draft" : "local", Marketplace = message.Marketplace, ShopId = message.ShopId, OrderId = message.OrderId, Outcome = "Info", Detail = "Mesaj gövdesi audit kaydına yazılmadı." }); } catch { }
     }
-    static TextBlock Text(string value, TextRole role = TextRole.Body) => TextStyles.Apply(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 7), Foreground = Brushes.DarkSlateGray }, role);
+    static TextBlock Text(string value, TextRole role = TextRole.Body) => TextStyles.Apply(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, Margin = Spacing.BodyBlock, Foreground = Brushes.DarkSlateGray }, role);
     static TextBox Field(Panel panel, string label, string value, int height = 0) { panel.Children.Add(Text(label)); var box = new TextBox { Text = value }; if (height > 0) { box.Height = height; box.AcceptsReturn = true; box.TextWrapping = TextWrapping.Wrap; box.VerticalScrollBarVisibility = ScrollBarVisibility.Auto; } panel.Children.Add(box); return box; }
     static void Label(Panel panel, string label, UIElement control) { panel.Children.Add(Text(label)); panel.Children.Add(control); }
     static Button Button(string text) => new() { Content = text, Margin = new Thickness(3, 5, 3, 5) };
