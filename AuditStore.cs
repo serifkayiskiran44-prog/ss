@@ -112,6 +112,7 @@ public sealed class DiagnosticsService
         try { checks.Add(UiLatency.Check(new LatencyStore(directory).Summary())); } catch (Exception error) { checks.Add(new(UiLatency.DiagnosticName, "ERROR", AuditStore.Sanitize(error.Message))); }
         checks.Add(UiFreezeWatchdog.Check(UiFreezeWatchdog.Current?.Events, UiFreezeWatchdog.Current?.ThresholdMs ?? UiFreezeWatchdog.DefaultThresholdMs));
         checks.Add(FeedCache.Check(directory));
+        checks.Add(new ProductDocumentStore(directory).Check()); // #911
         var failed = sync.Count(x => x.Status == Catalog.SyncStatus.Failed); var pending = sync.Count(x => x.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running); var last = new AuditStore(directory).LastFailure(); return new(DateTime.UtcNow, directory, AppVersion.Display, checks, pending, failed, last?.Detail ?? "");
     }
 }

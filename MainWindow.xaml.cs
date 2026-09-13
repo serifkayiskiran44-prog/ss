@@ -127,6 +127,7 @@ public partial class MainWindow : Window
   Field(productEditor,"Raf / konum","Shelf").MaxLength=100;Field(productEditor,"Ağırlık (birimli, örn. 1,5 kg)","WeightText").MaxLength=40;Field(productEditor,"Boyut (U x G x Y, birimli)","DimensionsText").MaxLength=60; // #907
   var expires=new DatePicker();expires.SetBinding(DatePicker.SelectedDateProperty,new Binding("ExpiresOn"){Mode=BindingMode.TwoWay,ValidatesOnExceptions=true});Label(productEditor,"Son kullanma tarihi (isteğe bağlı)",expires);
   productEditor.Children.Add(Button("Tarihi temizle",()=>expires.SelectedDate=null));
+  productEditor.Children.Add(ProductDocumentsPanel.Create(new ProductDocumentStore(dataDirectory),()=>edit?.Id,text=>Log(text),()=>this)); /* #911: compliance documents of the selected product */
   productEditor.Children.Add(Hint("Operasyon bilgileri XML yenilemesinde korunur. Fatura adı yerel kayıttır; fatura entegrasyonuna otomatik gönderilmez."));
   productEditor.Children.Add(Button("Ürünü ve kilitleri kaydet",()=>{SaveProductEdit();RefreshProducts();Log("Ürün ve alan kilitleri kaydedildi.");}));CommandState.Apply(productEditor,DisabledReason.Selection("Önce ürün seçin."));
   Tab("Ürün havuzu",Split(Dock(bar,BuildProductSelectionBar(),Dock(productEmptyHost,BuildProductInspectHost(products))),BuildProductWorkspace(),350));
