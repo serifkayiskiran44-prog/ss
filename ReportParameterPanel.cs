@@ -104,12 +104,18 @@ public static class ReportParameterPanel
         resultBar.Children.Add(columnsButton); resultBar.Children.Add(exportButton);
         var grid = new DataGrid { Tag = "report-result-grid", AutoGenerateColumns = false, IsReadOnly = true, Height = ResultGridHeight, EnableRowVirtualization = true, EnableColumnVirtualization = true, CanUserReorderColumns = true, CanUserResizeColumns = true, CanUserSortColumns = true, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column };
         AutomationProperties.SetName(grid, "Rapor sonucu");
-        resultHost.Children.Add(resultSummary); resultHost.Children.Add(resultBar); resultHost.Children.Add(grid);
+        // #850: one surface for every outcome that is not a listed result -- true empty, filtered empty, failed, cancelled, schema incompatible -- each with its own calls to action.
+        var stateHost = new Border { Tag = "report-result-state", Visibility = Visibility.Collapsed, BorderThickness = new Thickness(1), Padding = new Thickness(10), Margin = new Thickness(0, 4, 0, 4) };
+        var stateTitle = new TextBlock { Tag = "report-result-state-title", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }; AutomationProperties.SetLiveSetting(stateTitle, AutomationLiveSetting.Assertive);
+        var stateText = new TextBlock { Tag = "report-result-state-text", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 6) };
+        var stateActions = new WrapPanel { Tag = "report-result-state-actions" };
+        var stateBody = new StackPanel(); stateBody.Children.Add(stateTitle); stateBody.Children.Add(stateText); stateBody.Children.Add(stateActions); stateHost.Child = stateBody;
+        resultHost.Children.Add(resultSummary); resultHost.Children.Add(resultBar); resultHost.Children.Add(stateHost); resultHost.Children.Add(grid);
         if (runnable) root.Children.Add(resultHost);
         root.Children.Add(status);
 
         var applying = false; var running = false; var buildingGrid = false; var lastAction = "query";
-        var progress = new ReportRunProgressState(); CancellationTokenSource? runCts = null; ReportResult? result = null;
+        var progress = new ReportRunProgressState(); CancellationTokenSource? runCts = null; ReportResult? result = null; ReportQueryOutcome? lastOutcome = null; ReportParameterSet? lastParameters = null;
         var columnSchema = ReportColumns.SchemaFor(definition);
         bool ClassifiedAllowed() { try { return context.ClassifiedAllowed?.Invoke() ?? false; } catch (Exception) { return false; } }
         var layout = ReportColumns.Resolve(columnSchema, SafeGet(context.Preferences, ReportColumns.PreferenceKey(definition.Key)), ClassifiedAllowed());
@@ -164,9 +170,51 @@ public static class ReportParameterPanel
             try { context.Preferences.Set(ReportColumns.PreferenceKey(definition.Key), ReportColumns.Persist(layout)); }
             catch (Exception error) { status.Text = "Kolon düzeni kaydedilemedi: " + AuditStore.Sanitize(error.Message); }
         }
+        void RenderState(ReportResultStateModel model)
+        {
+            stateActions.Children.Clear();
+            if (model.ShowsGrid || model.Kind == ReportResultKind.None) { stateHost.Visibility = Visibility.Collapsed; return; }
+            var hc = SeverityStyle.IsHighContrast; var style = SeverityStyle.For(model.Level, hc);
+            stateTitle.Text = $"{style.Glyph} {model.Title}"; stateText.Text = model.Text;
+            stateHost.BorderBrush = SeverityStyle.AccentBrush(model.Level, hc); stateHost.BorderThickness = new Thickness(style.BorderWeight);
+            AutomationProperties.SetName(stateHost, $"{style.Word}: {model.Title}. {model.Text}");
+            Button? first = null;
+            foreach (var action in model.Actions)
+            {
+                var button = new Button { Tag = "report-result-action-" + action.Key, Content = action.Label, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 8, 4) };
+                var key = action.Key; button.Click += async (_, _) => await RunAction(key);
+                stateActions.Children.Add(button); first ??= button;
+            }
+            stateHost.Visibility = Visibility.Visible;
+            // The primary call to action takes the keyboard once the surface is laid out (#819 trap: focus before layout is refused).
+            if (first is not null) stateHost.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() => { if (stateHost.IsVisible && !running) first.Focus(); }));
+        }
+        async Task RunAction(string key)
+        {
+            switch (key)
+            {
+                case ReportResultStates.ActionRetry: await StartQuery(); break;
+                case ReportResultStates.ActionDiagnostics: context.Navigate?.Invoke("diagnostics"); break;
+                case ReportResultStates.ActionOpenOrders: context.Navigate?.Invoke("orders"); break;
+                case ReportResultStates.ActionWidenRange:
+                    var today = DateTime.SpecifyKind((context.NowUtc ?? DateTime.UtcNow).Date, DateTimeKind.Utc);
+                    applying = true; try { from.SelectedDate = AsPickerDay(today.AddDays(-ReportResultStates.WidenToDays)); to.SelectedDate = AsPickerDay(today); } finally { applying = false; }
+                    Revalidate(); await StartQuery(); break;
+                case ReportResultStates.ActionClearState: state.SelectedIndex = 0; await StartQuery(); break;
+                case ReportResultStates.ActionResetColumns: layout = ReportColumns.Default(columnSchema); SaveLayout(); RenderResult(); status.Text = "Kolon düzeni varsayılana döndü."; break;
+            }
+        }
         void RenderResult()
         {
-            if (result is null) { resultHost.Visibility = Visibility.Collapsed; return; }
+            var model = ReportResultStates.Compose(lastOutcome, lastParameters, schema, layout.VisibleKeys);
+            if (model.Kind == ReportResultKind.None) { resultHost.Visibility = Visibility.Collapsed; return; }
+            RenderState(model);
+            if (!model.ShowsGrid || result is null)
+            {
+                grid.Visibility = Visibility.Collapsed; grid.ItemsSource = null; resultSummary.Text = result is null ? model.Title : $"{result.Rows.Count:N0} satır · {ReportColumns.Summary(layout, ClassifiedAllowed())}";
+                resultHost.Visibility = Visibility.Visible; exportButton.IsEnabled = false; columnsButton.IsEnabled = result is not null; return;
+            }
+            grid.Visibility = Visibility.Visible; columnsButton.IsEnabled = true;
             buildingGrid = true;
             try
             {
@@ -213,18 +261,16 @@ public static class ReportParameterPanel
             var findings = Revalidate(); if (!ReportParameters.IsValid(findings)) { status.Text = "Önce parametre hatalarını düzeltin."; return; }
             lastAction = "query"; progress = new ReportRunProgressState(); BeginRun(); status.Text = "Sorgu çalıştırılıyor…";
             var reporter = new Progress<ReportRunProgressEvent>(e => { progress.Apply(e); RenderProgress(); });
+            lastParameters = Current();
             try
             {
-                var outcome = await context.Query(Current(), reporter, runCts!.Token);
-                status.Text = outcome.Message;
-                if (outcome.State == ReportRunState.Succeeded && outcome.Result is not null)
-                {
-                    result = outcome.Result; layout = ReportColumns.Resolve(columnSchema, SafeGet(context.Preferences, ReportColumns.PreferenceKey(definition.Key)), ClassifiedAllowed()); RenderResult();
-                }
+                var outcome = await context.Query(lastParameters, reporter, runCts!.Token);
+                status.Text = outcome.Message; lastOutcome = outcome; result = outcome.State == ReportRunState.Succeeded ? outcome.Result : null;
+                layout = ReportColumns.Resolve(columnSchema, SafeGet(context.Preferences, ReportColumns.PreferenceKey(definition.Key)), ClassifiedAllowed());
             }
-            catch (OperationCanceledException) { status.Text = "Sorgu iptal edildi."; }
-            catch (Exception error) { var safe = AuditStore.Sanitize(error.Message); status.Text = "Çalıştırılamadı: " + safe; progress.Apply(new(progress.Running ?? ReportRunStage.Query, ReportRunStageStatus.Failed, Note: safe)); }
-            finally { EndRun(); }
+            catch (OperationCanceledException) { status.Text = "Sorgu iptal edildi."; lastOutcome = new(ReportRunState.Cancelled, null, status.Text); result = null; }
+            catch (Exception error) { var safe = AuditStore.Sanitize(error.Message); status.Text = "Çalıştırılamadı: " + safe; progress.Apply(new(progress.Running ?? ReportRunStage.Query, ReportRunStageStatus.Failed, Note: safe)); lastOutcome = new(ReportRunState.Failed, null, status.Text); result = null; }
+            finally { EndRun(); RenderResult(); }
         }
         async Task StartExport(bool isRetry)
         {

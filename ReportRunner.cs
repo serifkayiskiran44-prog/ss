@@ -3,8 +3,8 @@ using System.Text;
 
 namespace TrMarketplaceHubDesktop;
 
-/// <summary>A report's rows as produced by the query, ready for the result grid and for an export of the chosen columns.</summary>
-public sealed record ReportResult(ReportDefinition Definition, ReportParameterSet Parameters, IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows, DateTime CreatedUtc);
+/// <summary>A report's rows as produced by the query, ready for the result grid and for an export of the chosen columns. <paramref name="StoreTotal"/> is how many orders the store holds regardless of the filters (#850: it tells "nothing matched" from "nothing exists").</summary>
+public sealed record ReportResult(ReportDefinition Definition, ReportParameterSet Parameters, IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows, DateTime CreatedUtc, int StoreTotal = 0);
 
 public sealed record ReportQueryOutcome(ReportRunState State, ReportResult? Result, string Message);
 
@@ -42,7 +42,8 @@ public static class ReportRunner
             progress?.Report(new(ReportRunStage.Query, ReportRunStageStatus.Done, rows.Count, rows.Count));
             stage = ReportRunStage.Generate; progress?.Report(new(stage, ReportRunStageStatus.Running, 0, rows.Count));
             cancellationToken.ThrowIfCancellationRequested();
-            var result = new ReportResult(definition, parameters, rows, DateTime.UtcNow);
+            var storeTotal = rows.Count > 0 ? rows.Count : await Task.Run(() => StoreOrderCount(directory, parameters.StoreKey), cancellationToken);
+            var result = new ReportResult(definition, parameters, rows, DateTime.UtcNow, storeTotal);
             progress?.Report(new(stage, ReportRunStageStatus.Done, rows.Count, rows.Count));
             var message = rows.Count == 0 ? "Aralıkta sipariş yok." : $"{rows.Count:N0} sipariş listelendi.";
             Record(directory, runs, started, ReportRunState.Succeeded, rows.Count, note, parameters.StoreKey, message);
@@ -57,11 +58,20 @@ public static class ReportRunner
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or Microsoft.Data.Sqlite.SqliteException)
         {
+            // #850: the exception type and its sanitized text go to the run store and the audit trail (the safe diagnostics);
+            // the screen gets the redacted line ReportResultStates.SafeUiMessage makes of the message.
             var safe = AuditStore.Sanitize(error.Message);
             progress?.Report(new(stage, ReportRunStageStatus.Failed, Note: safe));
-            Record(directory, runs, started, ReportRunState.Failed, 0, note, parameters.StoreKey, safe);
+            Record(directory, runs, started, ReportRunState.Failed, 0, note, parameters.StoreKey, $"{error.GetType().Name}: {safe}");
             return new(ReportRunState.Failed, null, "Sorgu çalıştırılamadı: " + safe);
         }
+    }
+
+    /// <summary>How many orders the store holds at all -- by shop id, whatever the date, state or search.</summary>
+    public static int StoreOrderCount(string? directory, string storeKey)
+    {
+        var (_, shop) = ReportParameters.SplitStore(storeKey);
+        return new OrdersStore(directory).ReadPage(null, shop, null, null, 0, 1).Total;
     }
 
     /// <summary>Writes the chosen columns of a result as CSV; the columns must belong to the report's schema and the renderer's allow-list.</summary>
