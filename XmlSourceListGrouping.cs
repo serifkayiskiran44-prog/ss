@@ -69,7 +69,7 @@ public static class XmlSourceListGrouping
         return (SourceHealthBand.Healthy, "");
     }
 
-    static string HealthWord(string state) => state switch
+    public static string HealthWord(string state) => state switch
     {
         "TIMEOUT" => "zaman aşımı", "AUTH_ERROR" => "yetki hatası", "RATE_LIMITED" => "istek sınırı", "SERVER_ERROR" => "sunucu hatası",
         "CLIENT_ERROR" => "istek reddedildi", "NETWORK_ERROR" => "ağ hatası", "NOT_CONFIGURED" => "adres yok", "LIVE_API_BLOCKED" => "canlı erişim kapalı", _ => state.ToLowerInvariant(),
