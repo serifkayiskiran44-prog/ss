@@ -120,6 +120,8 @@ public sealed class DataBackupService
             var attributes = File.GetAttributes(full);
             if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
             if (full.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) continue;
+            // #894: the feed cache is derived data under its own retention; a backup carries the sources, not their downloads.
+            if (Path.GetRelativePath(DataDirectory, full).StartsWith(FeedCache.FolderName + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
             yield return Path.GetRelativePath(DataDirectory, full);
         }
     }
