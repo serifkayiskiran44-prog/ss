@@ -24,7 +24,10 @@
   <StatusBar DockPanel.Dock="Bottom" Background="#EAF0F4" Padding="12,5"><TextBlock x:Name="StatusText" Text="Hazır" TextWrapping="Wrap"/></StatusBar>
   <Expander DockPanel.Dock="Bottom" Header="İşlem geçmişi" Background="White" Margin="16,0,16,8"><ListBox x:Name="LogList" Height="100" BorderThickness="0"/></Expander>
   <Border DockPanel.Dock="Top" Background="White" Margin="16,12,16,10" Padding="12,5" CornerRadius="6"><DockPanel><Button DockPanel.Dock="Right" Content="Havuzu yenile" Click="Refresh_Click"/><TextBlock x:Name="SummaryText" Foreground="#4C6676" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel></Border>
+  <Grid>
   <TabControl x:Name="ModuleTabs" Margin="16,0,16,12" Background="White" BorderThickness="0"><TabControl.Template><ControlTemplate TargetType="TabControl"><Border Background="{TemplateBinding Background}" CornerRadius="7" Padding="8"><ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/></Border></ControlTemplate></TabControl.Template></TabControl>
+   <StackPanel x:Name="ToastHost" HorizontalAlignment="Right" VerticalAlignment="Top" Width="360" Margin="0,8,28,0" Panel.ZIndex="10" Visibility="Collapsed" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="Bildirimler"/>
+  </Grid>
  </DockPanel>
 </Grid></Window>
 

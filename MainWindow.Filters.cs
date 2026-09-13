@@ -86,7 +86,7 @@ public partial class MainWindow {
  void SaveProductLayout()
  {
   if (applyingProductLayout || products.Columns.Count == 0) return;
-  try { uiPreferences.Set(ProductLayoutKey, DataGridLayoutCodec.Serialize(CaptureProductLayout())); } catch (Exception e) { Log(Safe(e)); }
+  try { uiPreferences.Set(ProductLayoutKey, DataGridLayoutCodec.Serialize(CaptureProductLayout())); } catch (Exception e) { Log(Safe(e), NotificationSeverity.Error); }
  }
  // Product list density (#793). One selector on the same DataGrid the list already owns -- no parallel styles --
  // driving the shared metrics table so font, row height, thumbnail and hit target scale together. The choice is
@@ -107,7 +107,7 @@ public partial class MainWindow {
   {
    var mode = ProductListDensity.Normalize(box.SelectedItem as string);
    ApplyProductDensity(mode);
-   try { uiPreferences.Set(ProductDensityKey, mode); } catch (Exception e) { Log(Safe(e)); }
+   try { uiPreferences.Set(ProductDensityKey, mode); } catch (Exception e) { Log(Safe(e), NotificationSeverity.Error); }
   };
   return box;
  }
@@ -181,7 +181,7 @@ public partial class MainWindow {
   if (product is null) { productAuditTimelinePanel.Children.Add(new TextBlock { Text = "Ürün seçince değişiklik geçmişi burada görünür.", TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) }); return; }
   ProductAuditTimelineView view;
   try { view = ProductAuditTimeline.Build(new AuditStore(dataDirectory).List(AuditStore.RetentionLimit), product.Id, DateTime.UtcNow); }
-  catch (Exception e) { Log(Safe(e)); productAuditTimelinePanel.Children.Add(new TextBlock { Text = "Denetim geçmişi okunamadı.", Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)) }); return; }
+  catch (Exception e) { Log(Safe(e), NotificationSeverity.Error); productAuditTimelinePanel.Children.Add(new TextBlock { Text = "Denetim geçmişi okunamadı.", Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)) }); return; }
   productAuditTimelinePanel.Children.Add(new TextBlock { Text = view.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });
   foreach (var entry in view.Entries)
   {

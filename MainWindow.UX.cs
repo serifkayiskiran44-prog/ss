@@ -14,6 +14,9 @@ public partial class MainWindow
         }
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.D1 or Key.NumPad1) { Navigate("dashboard"); e.Handled = true; return; }
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.D2 or Key.NumPad2) { Navigate("products"); e.Handled = true; return; }
+        // #814: Escape closes the newest toast when the keyboard is in the toast host; elsewhere Escape keeps
+        // its owner (the product inspect drawer binds it itself).
+        if (e.Key == Key.Escape && ToastHost.IsKeyboardFocusWithin) { DismissTopToast(); e.Handled = true; return; }
         // #812: the sidebar collapses from the keyboard too.
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.B) { ToggleSidebar(); e.Handled = true; return; }
         // #810: the drill-through trail is walkable from the keyboard, not only from the "‹ Geri" button.
@@ -59,7 +62,7 @@ public partial class MainWindow
     {
         try { await globalSearchIndex.EnsureFreshAsync(lifetime.Token); }
         catch (OperationCanceledException) { }
-        catch (Exception error) { Log($"Global arama indeksi hazırlanamadı: {Safe(error)}"); }
+        catch (Exception error) { Log($"Global arama indeksi hazırlanamadı: {Safe(error)}", NotificationSeverity.Error); }
     }
 
     void ShowGlobalResults(string query, IReadOnlyList<GlobalSearchHit> hits)

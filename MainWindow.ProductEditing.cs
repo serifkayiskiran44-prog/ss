@@ -43,7 +43,7 @@ public partial class MainWindow
             SaveProductEdit();
             return true;
         }
-        catch (Exception ex) { Log(Safe(ex)); return false; }
+        catch (Exception ex) { Log(Safe(ex), NotificationSeverity.Error); return false; }
         finally { resolvingProductEdit = false; }
     }
 
