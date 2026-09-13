@@ -117,6 +117,7 @@ public partial class MainWindow
    item.Content = shown.Content;
    item.ToolTip = shown.ToolTip;
    item.HorizontalContentAlignment = collapsed ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+   item.FontSize = collapsed ? DesignTokens.IconSizeNavigation : DesignTokens.TextBodySize; // #860: the rail glyph at the navigation icon size
    System.Windows.Automation.AutomationProperties.SetName(item, shown.AccessibleName);
   }
   if (!collapsed) FilterNavigationItems();

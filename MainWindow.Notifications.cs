@@ -57,8 +57,8 @@ public partial class MainWindow
             var style = SeverityStyle.For(SeverityStyle.FromNotification(toast.Severity), SeverityStyle.IsHighContrast);
             var (glyph, word, brush) = (style.Glyph, style.Word, style.Accent);
             var body = new DockPanel { LastChildFill = true };
-            var close = new Button { Content = "✕", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(6, 0, 0, 0), MinWidth = 26, Background = Brushes.Transparent, Foreground = new SolidColorBrush(brush), BorderBrush = new SolidColorBrush(brush), ToolTip = "Bildirimi kapat (Esc)" };
-            AutomationProperties.SetName(close, $"{word} bildirimini kapat");
+            var close = new Button { Content = "✕", Margin = new Thickness(6, 0, 0, 0), Background = Brushes.Transparent, Foreground = new SolidColorBrush(brush), BorderBrush = new SolidColorBrush(brush), ToolTip = "Bildirimi kapat (Esc)" };
+            AutomationProperties.SetName(close, $"{word} bildirimini kapat"); IconStyles.ApplyIconButton(close, IconRole.Inline);
             var id = toast.Id;
             close.Click += (_, _) => { notificationQueue.Dismiss(id); RenderToasts(); };
             DockPanel.SetDock(close, System.Windows.Controls.Dock.Right);
@@ -72,7 +72,7 @@ public partial class MainWindow
                 body.Children.Add(go);
             }
             var text = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)), VerticalAlignment = VerticalAlignment.Center };
-            text.Inlines.Add(new System.Windows.Documents.Run($"{glyph} {word} · ") { FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(brush) });
+            text.Inlines.Add(IconStyles.GlyphRun(glyph, IconRole.Status, new SolidColorBrush(brush))); text.Inlines.Add(new System.Windows.Documents.Run($" {word} · ") { FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(brush) });
             text.Inlines.Add(new System.Windows.Documents.Run(toast.Text));
             if (toast.Count > 1) text.Inlines.Add(new System.Windows.Documents.Run($"  ×{toast.Count}") { FontWeight = FontWeights.SemiBold });
             body.Children.Add(text);

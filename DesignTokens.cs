@@ -23,6 +23,8 @@ public static class DesignTokens
         ("CardPadding", typeof(Thickness)), ("HeaderPadding", typeof(Thickness)), ("TabPadding", typeof(Thickness)), ("NavigationItemPadding", typeof(Thickness)), ("NavigationItemMargin", typeof(Thickness)),
         ("ControlMinHeight", typeof(double)), ("RowHeight", typeof(double)),
         ("BorderHairline", typeof(double)), ("BorderEmphasis", typeof(double)), ("CardRadius", typeof(CornerRadius)), ("ShellRadius", typeof(CornerRadius)),
+        // #860: icons
+        ("IconSizeInline", typeof(double)), ("IconSizeToolbar", typeof(double)), ("IconSizeNavigation", typeof(double)), ("IconButtonMinSize", typeof(double)), ("ToolbarButtonMinSize", typeof(double)),
         // #859: the scale as margins
         ("PageMargin", typeof(Thickness)), ("SectionMargin", typeof(Thickness)), ("InlineMargin", typeof(Thickness)), ("ChipPadding", typeof(Thickness)), ("TitleBlockMargin", typeof(Thickness)), ("HintBlockMargin", typeof(Thickness)), ("BodyBlockMargin", typeof(Thickness)),
         // #858: typography
@@ -82,6 +84,13 @@ public static class DesignTokens
     public static double BorderEmphasis => D("BorderEmphasis");
     public static CornerRadius CardRadius => R("CardRadius");
     public static CornerRadius ShellRadius => R("ShellRadius");
+
+    // #860: icons
+    public static double IconSizeInline => D("IconSizeInline");
+    public static double IconSizeToolbar => D("IconSizeToolbar");
+    public static double IconSizeNavigation => D("IconSizeNavigation");
+    public static double IconButtonMinSize => D("IconButtonMinSize");
+    public static double ToolbarButtonMinSize => D("ToolbarButtonMinSize");
 
     // #859: the scale as margins
     public static Thickness PageMargin => T("PageMargin");

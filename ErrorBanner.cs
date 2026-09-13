@@ -83,7 +83,9 @@ public static class ErrorBanner
         var brush = new SolidColorBrush(style.Accent);
         var body = new StackPanel();
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) };
-        text.Inlines.Add(new System.Windows.Documents.Run($"{glyph} {model.Title} · ") { FontWeight = FontWeights.SemiBold, Foreground = brush });
+        // #860: the glyph is a run on the text's own baseline, sized for a status surface.
+        text.Inlines.Add(IconStyles.GlyphRun(glyph, IconRole.Status, brush));
+        text.Inlines.Add(new System.Windows.Documents.Run($" {model.Title} · ") { FontWeight = FontWeights.SemiBold, Foreground = brush });
         text.Inlines.Add(new System.Windows.Documents.Run(model.Text));
         if (model.Count > 1) text.Inlines.Add(new System.Windows.Documents.Run($"  ×{model.Count}") { FontWeight = FontWeights.SemiBold });
         body.Children.Add(text);

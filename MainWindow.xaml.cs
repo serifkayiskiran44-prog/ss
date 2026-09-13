@@ -52,7 +52,7 @@ public partial class MainWindow : Window
  {
   http=httpClient??new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(60)};
   dataDirectory=directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");startupRecovery=new StartupRecovery(dataDirectory);store=new CatalogStore(dataDirectory);new SyncStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromHours(1));new XmlRunStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromMinutes(10));globalSearchIndex=new GlobalSearchIndexService(dataDirectory);logPath=Path.Combine(dataDirectory,"operations.log");
-  InitializeComponent();FontFamily=DesignTokens.FontFamilyBody;FontSize=DesignTokens.TextBodySize;uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
+  InitializeComponent();FontFamily=DesignTokens.FontFamilyBody;FontSize=DesignTokens.TextBodySize;IconStyles.ApplyIconButton(BackButton,IconRole.Inline);uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
   GlobalSearchBox.TextChanged += GlobalSearchBox_TextChanged;
@@ -219,7 +219,7 @@ public partial class MainWindow : Window
   foreach(var step in steps){
    var (glyph,word)=step.Status switch{ImportStageStatus.Done=>("✔","tamam"),ImportStageStatus.Current=>("●","sırada"),ImportStageStatus.Blocked=>("✖","engelli"),ImportStageStatus.Stale=>("⚠","geçersiz"),ImportStageStatus.Running=>("⟳","sürüyor"),_=>("○","bekliyor")};
    var chip=new Button{Content=$"{glyph} {step.Label}",IsEnabled=step.CanJump,Margin=new Thickness(0,0,6,0),Padding=new Thickness(8,3,8,3),ToolTip=step.Reason.Length>0?step.Reason:$"{step.Label}: {word}",Tag=step.Stage,Focusable=true};
-   System.Windows.Automation.AutomationProperties.SetName(chip,$"{step.Label}: {word}"+(step.Reason.Length>0?". "+step.Reason:""));
+   System.Windows.Automation.AutomationProperties.SetName(chip,$"{step.Label}: {word}"+(step.Reason.Length>0?". "+step.Reason:""));IconStyles.ApplyIconButton(chip,IconRole.Status);
    chip.Click+=(_,_)=>JumpToImportStage((ImportStage)chip.Tag);
    importStepper.Children.Add(chip);}
   RefreshPreviewToolbar();}

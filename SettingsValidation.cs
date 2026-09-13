@@ -210,7 +210,8 @@ public static class SettingsValidationBanner
         var label = SettingsTaxonomy.FindEntry(issue.EntryKey)?.Entry.Label ?? issue.EntryKey;
         var text = new StackPanel();
         var title = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        title.Inlines.Add(new Run($"{style.Glyph} {style.Word} · ") { FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(style.Accent) });
+        title.Inlines.Add(IconStyles.GlyphRun(style.Glyph, IconRole.Status, new SolidColorBrush(style.Accent)));
+        title.Inlines.Add(new Run($" {style.Word} · ") { FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(style.Accent) });
         title.Inlines.Add(new Run(issue.Title) { FontWeight = FontWeights.SemiBold });
         title.Inlines.Add(new Run($" · {label}"));
         text.Children.Add(title);

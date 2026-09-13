@@ -37,6 +37,13 @@
     <sys:Double x:Key="ControlMinHeight">30</sys:Double>
     <sys:Double x:Key="RowHeight">36</sys:Double>
 
+    <!-- Icons (#860): the app draws icons as text glyphs; a size per role and the square minimum of an icon button. -->
+    <sys:Double x:Key="IconSizeInline">13</sys:Double>
+    <sys:Double x:Key="IconSizeToolbar">16</sys:Double>
+    <sys:Double x:Key="IconSizeNavigation">14</sys:Double>
+    <sys:Double x:Key="IconButtonMinSize">26</sys:Double>
+    <sys:Double x:Key="ToolbarButtonMinSize">32</sys:Double>
+
     <!-- Borders and radii -->
     <sys:Double x:Key="BorderHairline">1</sys:Double>
     <sys:Double x:Key="BorderEmphasis">2</sys:Double>
