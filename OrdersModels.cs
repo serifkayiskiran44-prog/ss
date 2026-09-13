@@ -24,7 +24,7 @@ public sealed class OrderSnapshot
  public string DeliveryLabel=>Shipments.Count==0?"Bilinmiyor":string.Join(", ",Shipments.Select(s=>OrdersRules.Label(s.State)).Distinct());
  public string TrackingNumbers=>string.Join(", ",Shipments.Select(s=>s.TrackingNumber).Where(s=>s.Length>0));
  public string Carriers=>string.Join(", ",Shipments.Select(s=>s.Carrier).Where(s=>s.Length>0).Distinct());
- public string SyncLabel=>LastSync==default?"API senkronizasyonu yok":LastSync.ToLocalTime().ToString("g");
+ public string SyncLabel=>LastSync==default?"API senkronizasyonu yok":TimeDisplay.Format(LastSync);
  // Delivery SLA of the whole order (#789): the worst package wins -- a delayed package makes the order late,
  // otherwise the longest transit shows, otherwise delivered/unshipped. Time-dependent, so never serialized.
  [JsonIgnore] public string SlaLabel=>SlaLabelAt(DateTimeOffset.UtcNow);

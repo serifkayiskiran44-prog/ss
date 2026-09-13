@@ -7,13 +7,13 @@ namespace TrMarketplaceHubDesktop;
 public sealed record ReturnRequestRow(string Id, string Type, string Status, string Marker, string Word, string Message, DateTime CreatedUtc, SeverityLevel Level)
 {
     /// <summary>Type, state and date only: a request message is free text from a marketplace or an operator and may name a customer, so it stays in the exception queue, not in this overview.</summary>
-    public string Line => $"{Marker} {(Type == "Cancel" ? "iptal talebi" : "iade talebi")} · {Word} · {CreatedUtc.ToLocalTime().ToString("d", CultureInfo.CurrentCulture)}";
+    public string Line => $"{Marker} {(Type == "Cancel" ? "iptal talebi" : "iade talebi")} · {Word} · {TimeDisplay.FormatDate(CreatedUtc)}";
 }
 
 /// <summary>One applied return event on the timeline.</summary>
 public sealed record ReturnEventRow(DateTimeOffset AtUtc, string Sku, int Quantity, decimal Refund, string Currency, int StockRestored)
 {
-    public string Line => $"{AtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)} · {Sku} × {Quantity.ToString(CultureInfo.CurrentCulture)} · iade {Refund.ToString("0.00", CultureInfo.CurrentCulture)} {Currency} · stoğa {StockRestored.ToString(CultureInfo.CurrentCulture)}";
+    public string Line => $"{TimeDisplay.Format(AtUtc)} · {Sku} × {Quantity.ToString(CultureInfo.CurrentCulture)} · iade {Refund.ToString("0.00", CultureInfo.CurrentCulture)} {Currency} · stoğa {StockRestored.ToString(CultureInfo.CurrentCulture)}";
 }
 
 public enum ReturnLineState { None, Partial, Full, Over }

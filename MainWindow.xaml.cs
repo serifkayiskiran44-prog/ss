@@ -520,7 +520,7 @@ public partial class MainWindow : Window
   {
    var summary=await Task.Run(()=>{var count=store.Products().Count(p=>p.SourceId==id);var run=new XmlRunStore(dataDirectory).List(id,1).FirstOrDefault();var quarantine=new SourceMissingQuarantine(dataDirectory).List(id);return (count,run,pending:quarantine.Count(x=>x.State=="PENDING_ACTION"),warning:quarantine.Count(x=>x.State=="WARNING"),persisted:store.Sources().FirstOrDefault(x=>x.Id==id));});
    if(source?.Id!=id)return;
-    var runText=summary.run==null?"Henüz çalışmadı":$"{summary.run.Status} · {summary.run.StartedUtc.ToLocalTime():g} · +{summary.run.Added}/~{summary.run.Updated}/={summary.run.Unchanged}";
+    var runText=summary.run==null?"Henüz çalışmadı":$"{summary.run.Status} · {TimeDisplay.Format(summary.run.StartedUtc)} · +{summary.run.Added}/~{summary.run.Updated}/={summary.run.Unchanged}";
     var pending=summary.pending;var warning=summary.warning;var persisted=summary.persisted;
     xmlSourceHealth.Text=$"Kaynak özeti: {summary.count:N0} ürün · son çalışma {runText} · source-health: {warning} uyarı / {pending} bekleyen · durum {persisted?.LastFeedState ?? candidate.LastFeedState}";
     var h=persisted??candidate;var runSnapshot=summary.run==null?null:new SourceRunSnapshot(summary.run.Status,summary.run.StartedUtc,summary.run.FinishedUtc,summary.run.LeaseUntilUtc,summary.run.Error);

@@ -27,7 +27,7 @@ public static class StatusTooltip
         if (!string.IsNullOrWhiteSpace(content.Reason))
             lines.Add("Neden: " + (LooksLikeRawPayload(content.Reason) ? RawPayloadHidden : Sentence(content.Reason, MaxReasonLength)));
         if (content.LastChangeUtc is { } at)
-            lines.Add($"Son değişiklik: {Relative(at, nowUtc)} ({at.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)})");
+            lines.Add($"Son değişiklik: {Relative(at, nowUtc)} ({TimeDisplay.Format(at)})");
         if (!string.IsNullOrWhiteSpace(content.Source)) lines.Add("Kaynak: " + Sentence(content.Source, 120));
         if (!string.IsNullOrWhiteSpace(content.Detail)) lines.Add(Sentence(content.Detail, 120));
         if (!string.IsNullOrWhiteSpace(content.NextAction)) lines.Add("Sonraki adım: " + Sentence(content.NextAction, 160));

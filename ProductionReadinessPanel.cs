@@ -19,7 +19,7 @@ public static class ProductionReadinessPanel
         {
             var report = service.Build();
             checks.ItemsSource = report.Checks;
-            summary.Text = $"{report.AtUtc.ToLocalTime():g} · {report.Passed} geçti · {report.Warnings} uyarı · {report.Blocked} bloklu · {report.Errors} hata · " +
+            summary.Text = $"{TimeDisplay.Format(report.AtUtc)} · {report.Passed} geçti · {report.Warnings} uyarı · {report.Blocked} bloklu · {report.Errors} hata · " +
                 (report.Ready ? "Yerel üretim geçidi hazır." : "Canlı kullanım öncesi bloklu kontroller var.");
         }
 

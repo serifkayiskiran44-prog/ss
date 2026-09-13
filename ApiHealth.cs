@@ -41,7 +41,7 @@ public sealed class ApiHealthRecord
     public string RateLimitSummary => RateLimitRemaining.HasValue || RateLimitLimit.HasValue
         ? $"{RateLimitRemaining?.ToString(CultureInfo.InvariantCulture) ?? "?"}/{RateLimitLimit?.ToString(CultureInfo.InvariantCulture) ?? "?"}"
         : "-";
-    public string BackoffSummary => BackoffUntilUtc is { } until && until > DateTimeOffset.UtcNow ? until.ToLocalTime().ToString("g") : "-";
+    public string BackoffSummary => BackoffUntilUtc is { } until && until > DateTimeOffset.UtcNow ? TimeDisplay.Format(until) : "-";
 }
 
 public sealed record ApiHealthSummary(int Total, int Healthy, int Blocked, int AuthErrors, int RateLimited, int OtherErrors, int BackingOff);

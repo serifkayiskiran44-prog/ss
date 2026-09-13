@@ -126,7 +126,7 @@ public static class DashboardPanel
                 // next action), bound through the row style so it also shows on keyboard focus.
                 channels.ItemsSource = snapshot.Connections.Select(x => new
                 {
-                    x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError,
+                    x.Channel, x.ShopId, x.Status, LastTestLabel = TimeDisplay.Format(x.LastTestUtc), x.LastError,
                     Tooltip = StatusTooltip.Compose(new StatusTooltipContent(x.Status, x.LastError, x.LastTestUtc, $"{x.Channel} / {x.ShopId}",
                         string.Equals(x.Status, "CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase) ? "" : "Bağlantıyı Mağaza bağlantıları ekranından yeniden test edin."), DateTime.UtcNow),
                 }).ToList();
@@ -136,7 +136,7 @@ public static class DashboardPanel
                 RenderAlerts();
                 trends.ItemsSource = snapshot.OrderTrend.Select(x => new { DateLabel = x.Date.ToString("dd.MM.yyyy"), x.Orders, StockLabel = x.CurrentStock < 0 ? "—" : x.CurrentStock.ToString("N0") }).ToList();
                 var ops = OperationsSummaryService.From(snapshot);
-                status.Text = ops.HasAction ? $"{snapshot.TotalProducts:N0} toplam ürün · {snapshot.PendingSyncs:N0} bekleyen/çalışan sync · Açık sipariş {ops.OpenOrders:N0} · Sync hata {ops.FailedSyncs:N0} · Son XML: {snapshot.LastXmlStatus} ({snapshot.LastXmlUtc?.ToLocalTime().ToString("g") ?? "yok"})" : ops.EmptyState.Length > 0 ? ops.EmptyState : $"{snapshot.TotalProducts:N0} toplam ürün · Açık uyarı yok · {snapshot.GeneratedUtc.ToLocalTime():g}";
+                status.Text = ops.HasAction ? $"{snapshot.TotalProducts:N0} toplam ürün · {snapshot.PendingSyncs:N0} bekleyen/çalışan sync · Açık sipariş {ops.OpenOrders:N0} · Sync hata {ops.FailedSyncs:N0} · Son XML: {snapshot.LastXmlStatus} ({TimeDisplay.Format(snapshot.LastXmlUtc, missing: "yok")})" : ops.EmptyState.Length > 0 ? ops.EmptyState : $"{snapshot.TotalProducts:N0} toplam ürün · Açık uyarı yok · {TimeDisplay.Format(snapshot.GeneratedUtc)}";
             }
             catch (Exception error)
             {

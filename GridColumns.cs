@@ -9,8 +9,8 @@ using System.Windows.Threading;
 
 namespace TrMarketplaceHubDesktop;
 
-/// <summary>What a grid text column holds, and so whether it may be trimmed: prose can be, an identifier or a number never is.</summary>
-public enum GridTextKind { Text, Identifier, Number }
+/// <summary>What a grid text column holds: prose (trimmed with a tooltip), an identifier (never trimmed), a number (right-aligned, formatted), or a stored UTC time (shown local, always with a tooltip).</summary>
+public enum GridTextKind { Text, Identifier, Number, Time }
 
 /// <summary>The tooltip's text: the cell's value through the central redaction, a raw payload hidden whole, nothing for an empty cell.</summary>
 public sealed class GridTooltipConverter : IValueConverter
@@ -56,7 +56,8 @@ public static class GridColumns
     public static bool GetIsNumeric(DependencyObject element) => (bool)element.GetValue(IsNumericProperty);
     public static void SetIsNumeric(DependencyObject element, bool value) => element.SetValue(IsNumericProperty, value);
 
-    static readonly HashSet<string> TextTailWords = new(StringComparer.Ordinal) { "label", "source", "currency", "kind", "status", "name", "text", "mode", "reason", "note", "message", "error", "path", "url", "location", "utc", "date", "time", "at", "class", "mark", "title", "order" };
+    static readonly HashSet<string> TextTailWords = new(StringComparer.Ordinal) { "label", "source", "currency", "kind", "status", "name", "text", "mode", "reason", "note", "message", "error", "path", "url", "location", "class", "mark", "title", "order" };
+    static readonly HashSet<string> TimeTailWords = new(StringComparer.Ordinal) { "utc", "at", "date", "time", "when", "timestamp" };
     static readonly HashSet<string> NumberWords = new(StringComparer.Ordinal) { "price", "cost", "stock", "count", "total", "quantity", "qty", "rate", "amount", "percent", "version", "days", "seconds", "duration", "margin", "fee", "weight", "desi", "score", "added", "updated", "unchanged", "ordered", "shipped", "returned", "cancelled", "outstanding", "orders" };
     static readonly HashSet<string> IdentifierWords = new(StringComparer.Ordinal) { "sku", "barcode", "id", "key", "code", "gtin", "asin", "ean", "tracking" };
     static readonly HashSet<string> MoneyWords = new(StringComparer.Ordinal) { "price", "cost", "total", "amount", "fee", "margin" };
@@ -75,6 +76,7 @@ public static class GridColumns
         if (words.Count == 0) return GridTextKind.Text;
         var last = words[^1];
         if (TextTailWords.Contains(last)) return GridTextKind.Text;
+        if (TimeTailWords.Contains(last)) return GridTextKind.Time;
         if (NumberWords.Contains(last)) return GridTextKind.Number;
         if (IdentifierWords.Contains(last)) return GridTextKind.Identifier;
         if (words.Any(NumberWords.Contains)) return GridTextKind.Number;
@@ -101,11 +103,19 @@ public static class GridColumns
         if (k == GridTextKind.Number && string.IsNullOrEmpty(format)) format = DefaultFormat(path);
         // A binding formats with the element's xml:lang (en-US unless a window says otherwise), not the thread's culture: a Turkish
         // machine would read "1,234.50" in a grid beside "1.234,50" everywhere else. The column formats with the current culture.
-        var binding = new Binding(path) { NotifyOnTargetUpdated = k == GridTextKind.Text, ConverterCulture = CultureInfo.CurrentCulture }; if (!string.IsNullOrEmpty(format)) binding.StringFormat = format;
+        var binding = new Binding(path) { NotifyOnTargetUpdated = k is GridTextKind.Text or GridTextKind.Time, ConverterCulture = CultureInfo.CurrentCulture }; if (!string.IsNullOrEmpty(format)) binding.StringFormat = format;
+        if (k == GridTextKind.Time) binding.Converter = new TimeDisplayConverter();
         var element = new Style(typeof(TextBlock));
         element.Setters.Add(new Setter(TextBlock.TextWrappingProperty, TextWrapping.NoWrap));
-        element.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, k == GridTextKind.Text ? TextTrimming.CharacterEllipsis : TextTrimming.None));
+        element.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, k is GridTextKind.Text or GridTextKind.Time ? TextTrimming.CharacterEllipsis : TextTrimming.None));
         if (k == GridTextKind.Text) element.Setters.Add(new Setter(MonitorTrimmingProperty, true));
+        if (k == GridTextKind.Time)
+        {
+            // A stored UTC instant shown as the local wall clock; the tooltip (zone offset, age, UTC) is always there, on the text and on the cell for the keyboard.
+            element.Setters.Add(new Setter(Typography.NumeralAlignmentProperty, FontNumeralAlignment.Tabular));
+            element.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding(path) { Converter = new TimeTooltipConverter(), ConverterCulture = CultureInfo.CurrentCulture }));
+            element.Setters.Add(new Setter(MonitorTooltipProperty, true));
+        }
         if (k == GridTextKind.Number)
         {
             // Digits line up down the column: right-aligned, tabular figures (every digit the same width); the header follows through the shared style.
@@ -140,10 +150,33 @@ public static class GridColumns
     {
         var trimmed = IsTrimmed(block);
         SetIsTrimmed(block, trimmed);
-        DependencyObject? node = block;
-        while (node is not null && node is not DataGridCell) node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
-        if (node is not DataGridCell cell) return;
+        if (OwningCell(block) is not DataGridCell cell) return;
         if (trimmed) { cell.ToolTip = GridTooltipConverter.Redact(block.Text); ToolTipService.SetShowsToolTipOnKeyboardFocus(cell, true); }
         else cell.ClearValue(FrameworkElement.ToolTipProperty); // a style-provided tooltip, if the grid has one, comes back
+    }
+
+    /// <summary>Set by the time column's element style: the text block's own (bound) tooltip is handed to its cell so the keyboard can open it.</summary>
+    public static readonly DependencyProperty MonitorTooltipProperty = DependencyProperty.RegisterAttached("MonitorTooltip", typeof(bool), typeof(GridColumns), new PropertyMetadata(false, OnMonitorTooltipChanged));
+    public static bool GetMonitorTooltip(DependencyObject element) => (bool)element.GetValue(MonitorTooltipProperty);
+    public static void SetMonitorTooltip(DependencyObject element, bool value) => element.SetValue(MonitorTooltipProperty, value);
+
+    static void OnMonitorTooltipChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not TextBlock block || e.NewValue is not true) return;
+        block.Loaded += (_, _) => CopyTooltip(block);
+        block.TargetUpdated += (_, _) => block.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => CopyTooltip(block)));
+    }
+
+    static void CopyTooltip(TextBlock block)
+    {
+        if (OwningCell(block) is not DataGridCell cell) return;
+        cell.ToolTip = block.ToolTip; ToolTipService.SetShowsToolTipOnKeyboardFocus(cell, true);
+    }
+
+    static DataGridCell? OwningCell(DependencyObject block)
+    {
+        DependencyObject? node = block;
+        while (node is not null && node is not DataGridCell) node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+        return node as DataGridCell;
     }
 }

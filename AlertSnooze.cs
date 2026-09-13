@@ -45,7 +45,7 @@ public static class AlertSnoozeRules
         var left = snooze.UntilUtc - nowUtc;
         if (left <= TimeSpan.Zero) return "ertelemesi doldu";
         var span = left < TimeSpan.FromHours(1) ? $"{Math.Max(1, (int)Math.Ceiling(left.TotalMinutes))} dk" : left < TimeSpan.FromDays(1) ? $"{(int)Math.Ceiling(left.TotalHours)} sa" : $"{(int)Math.Ceiling(left.TotalDays)} gün";
-        return $"{span} daha ertelendi (bitiş {snooze.UntilUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)})";
+        return $"{span} daha ertelendi (bitiş {TimeDisplay.Format(snooze.UntilUtc)})";
     }
 }
 

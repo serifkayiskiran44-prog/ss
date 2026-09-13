@@ -66,7 +66,7 @@ public static class EtsyReadinessPanel
         var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 8, 4, 10) };
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, MinHeight = 240 };
         foreach (var c in new[] { ("Kontrol", "Key", 170d), ("Durum", "Status", 100d), ("Açıklama", "Detail", 900d) }) grid.Columns.Add(GridColumns.Text(c.Item1, c.Item2, c.Item3));
-        void Refresh() { var r = service.Build(); grid.ItemsSource = r.Checks; summary.Text = $"{r.AtUtc.ToLocalTime():g} · {r.OverallStatus}"; }
+        void Refresh() { var r = service.Build(); grid.ItemsSource = r.Checks; summary.Text = $"{TimeDisplay.Format(r.AtUtc)} · {r.OverallStatus}"; }
         root.Children.Add(new TextBlock { Text = "Etsy satışa hazırlık", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = Spacing.TitleBlock });
         root.Children.Add(new TextBlock { Text = "Credential, ilan şablonu, ürün eşleme ve dry-run kontrolleri tek ekranda gösterilir. Bu ekran canlı marketplace değişikliği yapmaz.", TextWrapping = TextWrapping.Wrap, Margin = Spacing.HintBlock });
         var buttons = new WrapPanel(); var refresh = new Button { Content = "Kontrolleri yenile", Margin = Spacing.Control }; refresh.Click += (_, _) => { try { Refresh(); } catch (Exception e) { MessageBox.Show(AuditStore.Sanitize(e.Message)); } }; buttons.Children.Add(refresh);

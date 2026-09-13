@@ -58,7 +58,7 @@ public static class ApiHealthPanel
         grid.SelectionChanged += (_, _) =>
         {
             selected = grid.SelectedItem as ApiHealthRecord;
-            detail.Text = selected is null ? "Bir bağlantı seçin." : $"{selected.Channel} / {selected.ShopId}\nDurum: {selected.State} · Auth: {selected.AuthStatus} · HTTP: {selected.HttpStatus?.ToString() ?? "-"}\nSon deneme: {selected.LastAttemptUtc.ToLocalTime():g} · Son başarılı: {selected.LastSuccessUtc?.ToLocalTime().ToString("g") ?? "yok"}\nRate-limit: {selected.RateLimitSummary} · Reset: {selected.RateLimitResetUtc?.ToLocalTime().ToString("g") ?? "yok"}\nÖnerilen bekleme: {selected.BackoffSummary}\n{selected.LastError}";
+            detail.Text = selected is null ? "Bir bağlantı seçin." : $"{selected.Channel} / {selected.ShopId}\nDurum: {selected.State} · Auth: {selected.AuthStatus} · HTTP: {selected.HttpStatus?.ToString() ?? "-"}\nSon deneme: {TimeDisplay.Format(selected.LastAttemptUtc)} · Son başarılı: {TimeDisplay.Format(selected.LastSuccessUtc, missing: "yok")}\nRate-limit: {selected.RateLimitSummary} · Reset: {TimeDisplay.Format(selected.RateLimitResetUtc, missing: "yok")}\nÖnerilen bekleme: {selected.BackoffSummary}\n{selected.LastError}";
         };
         query.TextChanged += (_, _) => Reload(); state.SelectionChanged += (_, _) => Reload(); refresh.Click += (_, _) => Reload(); openConnections.Click += (_, _) => navigate?.Invoke("connections");
         openChannel.Click += (_, _) =>

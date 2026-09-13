@@ -38,7 +38,7 @@ public static class MarketplaceConnectionsPanel
         {
             selectedId = item?.Id ?? "";
             if (item is null) { shop.Text = "default"; display.Text = ""; enabled.IsChecked = true; status.Text = "Yeni mağaza kaydı."; }
-            else { channel.SelectedValue = item.Channel; shop.Text = item.ShopId; display.Text = item.DisplayName; enabled.IsChecked = item.Enabled; status.Text = $"Durum: {item.Status}\nSon test: {item.LastTestUtc?.ToLocalTime().ToString("g") ?? "yok"}\n{item.LastError}"; }
+            else { channel.SelectedValue = item.Channel; shop.Text = item.ShopId; display.Text = item.DisplayName; enabled.IsChecked = item.Enabled; status.Text = $"Durum: {item.Status}\nSon test: {TimeDisplay.Format(item.LastTestUtc, missing: "yok")}\n{item.LastError}"; }
             UpdateCapabilities();
         }
         void UpdateCapabilities()
