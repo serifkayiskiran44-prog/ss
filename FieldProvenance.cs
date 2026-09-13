@@ -11,6 +11,8 @@ public sealed class FieldOrigin
     public int SourceRevision { get; set; }
     public string RunId { get; set; } = "";
     public DateTime ObservedUtc { get; set; }
+    /// <summary>#896: the words of the last priority decision on this field, when two sources contested it; empty otherwise.</summary>
+    public string Decision { get; set; } = "";
 }
 
 /// <summary>
@@ -59,12 +61,13 @@ public static class FieldProvenance
         ArgumentNullException.ThrowIfNull(sourceById);
         if (origin is null) return "kaydedilmedi";
         var when = Ago(nowUtc - origin.ObservedUtc);
-        if (string.Equals(origin.Kind, ManualKind, StringComparison.OrdinalIgnoreCase)) return $"elle · {when}";
+        if (string.Equals(origin.Kind, ManualKind, StringComparison.OrdinalIgnoreCase)) return $"elle · {when}" + (origin.Decision.Length > 0 ? " · " + origin.Decision : "");
         var source = origin.SourceId.Length > 0 ? sourceById(origin.SourceId) : null;
         var who = source is null ? (origin.SourceId.Length > 0 ? "kaynak silinmiş" : "kaynak bilinmiyor") : AuditStore.Redact(source.Name).Trim();
         var revision = origin.SourceRevision > 0 ? $" · rev. {origin.SourceRevision.ToString(CultureInfo.CurrentCulture)}" : "";
         var run = origin.RunId.Length > 0 ? $" · çalıştırma {origin.RunId[..Math.Min(8, origin.RunId.Length)]}" : "";
-        return $"{who}{revision}{run} · {when}";
+        var decision = origin.Decision.Length > 0 ? " · " + origin.Decision : "";
+        return $"{who}{revision}{run} · {when}{decision}";
     }
 
     static string ValueOf(CatalogProduct p, string field) => field switch

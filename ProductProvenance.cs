@@ -24,9 +24,11 @@ public static class ProductProvenance
     public const string Unknown = "Kaynak bulunamadı";
     const string Manual = "manual";
 
-    public static ProductProvenanceView Build(CatalogProduct product, XmlSource? source, DateTime nowUtc)
+    public static ProductProvenanceView Build(CatalogProduct product, XmlSource? source, DateTime nowUtc, Func<string, XmlSource?>? sourceById = null)
     {
         ArgumentNullException.ThrowIfNull(product);
+        // #896: a field another source holds is resolved by id; without a resolver only the product's home source is known.
+        XmlSource? Resolve(string id) => sourceById?.Invoke(id) ?? (source is not null && string.Equals(source.Id, id, StringComparison.Ordinal) ? source : null);
         var warnings = new List<string>();
         var sourceName = string.IsNullOrWhiteSpace(source?.Name) ? "" : source!.Name.Trim();
         var feedBacked = !product.SourceKind.Equals(Manual, StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(product.SourceId);
@@ -35,10 +37,13 @@ public static class ProductProvenance
         ProductProvenanceRow Row(string field, string key, string marker, bool locked)
         {
             var operatorOwned = marker.Equals(Manual, StringComparison.OrdinalIgnoreCase) || sourceName.Length == 0 && !feedBacked;
-            var origin = operatorOwned ? "Elle girildi" : sourceName.Length > 0 ? sourceName : Unknown;
             // #895: a field that recorded its own origin says it -- source, revision, run, moment, or the operator -- in place of the product-level time.
             var recorded = FieldProvenance.Of(product, key);
-            var evidence = recorded is null ? "" : FieldProvenance.Describe(recorded, id => source is not null && string.Equals(source.Id, id, StringComparison.Ordinal) ? source : null, nowUtc);
+            // #896: a field another source won (priority or freshness) names that source, not the product's home source.
+            var holder = recorded is { Kind: FieldProvenance.FeedKind, SourceId.Length: > 0 } ? Resolve(recorded.SourceId) : null;
+            var holderName = string.IsNullOrWhiteSpace(holder?.Name) ? "" : AuditStore.Redact(holder!.Name).Trim();
+            var origin = operatorOwned ? "Elle girildi" : holderName.Length > 0 ? holderName : sourceName.Length > 0 ? sourceName : Unknown;
+            var evidence = recorded is null ? "" : FieldProvenance.Describe(recorded, Resolve, nowUtc);
             var detail = operatorOwned
                 ? (locked ? "Alan kilitli; içe aktarma bu alanı değiştirmez." : "İçe aktarma bu alanı yeniden yazabilir.") + (evidence.Length > 0 ? " · " + evidence : "")
                 : (evidence.Length > 0 ? evidence : $"Son güncelleme: {touched}") + (locked ? " · Alan kilitli; içe aktarma bu alanı değiştirmez." : "");

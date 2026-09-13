@@ -32,6 +32,8 @@ public class XmlSource
  public string LastCredentialState { get; set; } = "UNKNOWN";
  // #893: the configuration revision this record is at (0 = never saved through the ledger); a save whose loaded revision is stale is refused.
  public int ConfigRevision { get; set; }
+ // #896: the source's priority when two sources carry the same product -- the higher one wins a field, equal ones go to the fresher feed.
+ public int Priority {get;set;}=100;
  public string Id {get;set;}=Guid.NewGuid().ToString("N"); public string Name {get;set;}=""; public string Location {get;set;}=""; public bool Enabled {get;set;}=true;public int IntervalMinutes {get;set;}=30;
  public string ItemPath {get;set;}="";public string DecimalSeparator {get;set;}=".";public Dictionary<string,string> Fields {get;set;}=new();
  public decimal ExchangeRate {get;set;}=1;public decimal MarkupPercent {get;set;}=40;public decimal FixedAmount {get;set;}=0;public decimal MinimumPrice {get;set;}=0;public string Currency {get;set;}="USD";

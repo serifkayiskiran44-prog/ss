@@ -315,8 +315,10 @@ public partial class MainWindow {
   productProvenanceBody.Children.Clear();
   productProvenanceExpander.Visibility = product is null ? Visibility.Collapsed : Visibility.Visible;
   if (product is null) return;
-  var source = string.IsNullOrWhiteSpace(product.SourceId) ? null : store.Sources().FirstOrDefault(s => s.Id == product.SourceId);
-  var view = ProductProvenance.Build(product, source, DateTime.UtcNow);
+  var sources = store.Sources();
+  var source = string.IsNullOrWhiteSpace(product.SourceId) ? null : sources.FirstOrDefault(s => s.Id == product.SourceId);
+  // #896: a field another source won names that source.
+  var view = ProductProvenance.Build(product, source, DateTime.UtcNow, id => sources.FirstOrDefault(s => s.Id == id));
   productProvenanceExpander.Header = $"Köken · {view.Headline}";
   productProvenanceBody.Children.Add(new TextBlock { Text = view.SourceSummary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
   foreach (var row in view.Rows)
