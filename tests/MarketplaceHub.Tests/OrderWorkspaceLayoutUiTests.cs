@@ -34,7 +34,9 @@ public sealed class OrderWorkspaceLayoutUiTests
                 var layout = Descendants(panel).OfType<Grid>().Single(g => (string)g.Tag == "order-split");
                 var splitter = Descendants(panel).OfType<GridSplitter>().Single();
                 var grid = Descendants(panel).OfType<DataGrid>().First();
-                var scroll = Descendants(panel).OfType<ScrollViewer>().First(s => Grid.GetColumn(s) == 2 || Grid.GetRow(s) == 2);
+                // #837 docked a header above the body: the grid cell holds the detail host, the scroll sits inside it.
+                var host = Descendants(panel).OfType<DockPanel>().Single(d => (string)d.Tag == "order-detail-host");
+                var scroll = host.Children.OfType<ScrollViewer>().Single();
                 Assert.AreEqual(3, layout.ColumnDefinitions.Count); Assert.AreEqual(0, layout.RowDefinitions.Count);
                 Assert.AreEqual(OrderWorkspaceLayout.DefaultDetailWidth, layout.ColumnDefinitions[2].Width.Value, "Nothing remembered: the default detail width.");
                 Assert.IsTrue(splitter.Focusable && splitter.KeyboardIncrement > 0, "The splitter is keyboard-operable.");
@@ -42,9 +44,9 @@ public sealed class OrderWorkspaceLayoutUiTests
 
                 window.Width = 800; Drain(window);
                 Assert.AreEqual(3, layout.RowDefinitions.Count); Assert.AreEqual(0, layout.ColumnDefinitions.Count, "Below 900 DIP the detail stacks under the list.");
-                Assert.AreEqual(2, Grid.GetRow(scroll)); Assert.AreEqual(1, Grid.GetRow(splitter)); Assert.AreEqual(GridResizeDirection.Rows, splitter.ResizeDirection);
+                Assert.AreEqual(2, Grid.GetRow(host)); Assert.AreEqual(1, Grid.GetRow(splitter)); Assert.AreEqual(GridResizeDirection.Rows, splitter.ResizeDirection);
                 window.Width = 1400; Drain(window);
-                Assert.AreEqual(3, layout.ColumnDefinitions.Count); Assert.AreEqual(2, Grid.GetColumn(scroll)); Assert.AreEqual(GridResizeDirection.Columns, splitter.ResizeDirection);
+                Assert.AreEqual(3, layout.ColumnDefinitions.Count); Assert.AreEqual(2, Grid.GetColumn(host)); Assert.AreEqual(GridResizeDirection.Columns, splitter.ResizeDirection);
 
                 // A drag ends: the detail column's width is remembered in DIP, clamped.
                 layout.ColumnDefinitions[2].Width = new GridLength(450); Drain(window);
