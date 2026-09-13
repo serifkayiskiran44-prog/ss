@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Data.Sqlite;
@@ -12,17 +13,16 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using TrMarketplaceHubDesktop;
 using TrMarketplaceHubDesktop.Catalog;
 
-// #843 on the real matrix panel: with an Etsy store (live capability) and a Trendyol store (local-only in this
-// build) the legend above the matrix lists exactly the states on screen with counts, each chip a focusable tab
-// stop whose tooltip opens from the keyboard and reads the same in high contrast (glyph + word), and the cells
-// carry the legend's description as their tooltip.
+// #844 on the real matrix panel: the legend chips toggle "any of" row filters with counts that stay those of the
+// whole matrix; a store switch (shop filter) recomputes both; a filter that matches nothing in the current
+// store shows the zero-result text; a reset clears; chips are keyboard toggles.
 [TestClass]
-public sealed class ChannelMatrixLegendUiTests
+public sealed class ChannelMatrixReadinessFilterUiTests
 {
     [TestMethod]
-    public void TheLegendListsOnlyPresentStatesWithCountsAndKeyboardTooltips()
+    public void ChipsToggleFiltersCountsStayWholeStoreSwitchRecomputesAndZeroResultIsNamed()
     {
-        var root = Path.Combine(Path.GetTempPath(), "matrix-legend-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "matrix-filter-" + Guid.NewGuid().ToString("N"));
         RunSta(() =>
         {
             try
@@ -47,27 +47,36 @@ public sealed class ChannelMatrixLegendUiTests
                     window.Show();
                     var matrix = Descendants(panel).OfType<DataGrid>().Single(g => (string)g.Tag == "channel-matrix");
                     for (var i = 0; i < 200 && matrix.Items.Count == 0; i++) { Drain(window); Thread.Sleep(50); }
-                    Assert.AreEqual(2, matrix.Items.Count);
                     var legend = Descendants(panel).OfType<WrapPanel>().Single(w => (string)w.Tag == "channel-matrix-legend");
-                    // #844 made the chips toggle buttons (the legend doubles as the readiness filter); they are still the legend.
-                    var chips = legend.Children.OfType<System.Windows.Controls.Primitives.ToggleButton>().ToList();
-                    // A connection saved but never tested is NOT_CONFIGURED -- a real connection problem, so the Etsy cells read "bağlantı"; Trendyol has no live capability in this build, so its cells read "yalnız yerel" whatever its connection says.
-                    CollectionAssert.AreEqual(new[] { "AUTH_ERROR", "LOCAL_ONLY" }, chips.Select(c => (string)c.Tag).ToArray(), "Only the two states on screen, in legend order.");
-                    string ChipText(System.Windows.Controls.Primitives.ToggleButton c) => ((TextBlock)c.Content).Text;
-                    Assert.AreEqual("⚠ bağlantı (2)", ChipText(chips[0])); Assert.AreEqual("⊘ yalnız yerel (2)", ChipText(chips[1]));
-                    Assert.IsTrue(chips.All(c => c.Focusable && c.IsTabStop && ToolTipService.GetShowsToolTipOnKeyboardFocus(c) == true), "Chips are tab stops with keyboard tooltips.");
-                    StringAssert.Contains(chips[1].ToolTip?.ToString() ?? "", "canlı ilan yeteneği yok");
-                    StringAssert.Contains(System.Windows.Automation.AutomationProperties.GetHelpText(chips[0]), "bağlantısı başarısız");
-                    Assert.IsTrue(chips.All(c => ChipText(c).Any(ch => !char.IsLetterOrDigit(ch) && !char.IsWhiteSpace(ch) && ch != '(' && ch != ')')), "Every chip leads with a glyph -- colour is never the only signal.");
+                    List<ToggleButton> Chips() => legend.Children.OfType<ToggleButton>().ToList();
+                    ToggleButton Chip(string key) => Chips().Single(c => (string)c.Tag == key);
+                    string ChipText(ToggleButton c) => ((TextBlock)c.Content).Text;
+                    var empty = Descendants(panel).OfType<TextBlock>().Single(t => (string)t.Tag == "channel-matrix-empty");
+                    var shop = Descendants(panel).OfType<TextBox>().Single(t => t.ToolTip?.ToString() == "Mağaza filtresi");
 
-                    var rows = ((IEnumerable<ChannelMatrixRow>)matrix.ItemsSource).ToList();
-                    var trendyolIndex = matrix.Columns.ToList().FindIndex(c => (c.Header?.ToString() ?? "").StartsWith("Trendyol", StringComparison.Ordinal)) - 2;
-                    Assert.IsTrue(trendyolIndex >= 0);
-                    Assert.AreEqual("⊘ yalnız yerel", rows[0].Labels[trendyolIndex]); StringAssert.Contains(rows[0].Descriptions[trendyolIndex], "canlı ilan");
-                    var firstRow = Descendants(matrix).OfType<DataGridRow>().First();
-                    var storeCell = Descendants(firstRow).OfType<DataGridCell>().First(c => c.Column.DisplayIndex == 2);
-                    Assert.IsNotNull(storeCell.ToolTip, "A store cell carries the legend's description as its tooltip.");
-                    Assert.IsTrue(ToolTipService.GetShowsToolTipOnKeyboardFocus(storeCell) == true);
+                    Assert.AreEqual(2, matrix.Items.Count); Assert.AreEqual(2, Chips().Count); Assert.IsTrue(Chips().All(c => c.IsChecked == false && c.Focusable && c.IsTabStop));
+                    Assert.AreEqual(Visibility.Collapsed, empty.Visibility);
+
+                    // Toggle the connection-problem state: both products have an Etsy cell, so both stay; the chip reads as on.
+                    Chip("AUTH_ERROR").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); Drain(window);
+                    Assert.AreEqual(2, matrix.Items.Count); Assert.IsTrue(Chip("AUTH_ERROR").IsChecked == true); StringAssert.Contains(System.Windows.Automation.AutomationProperties.GetName(Chip("AUTH_ERROR")), "filtre açık");
+                    Assert.IsTrue(legend.Children.OfType<Button>().Any(b => (string)b.Tag == "channel-matrix-filter-reset"), "A reset appears while a filter is active.");
+
+                    // Store switch to Trendyol only: the pivot has no connection-problem cells there -> zero result, named; counts recomputed for that store.
+                    shop.Text = "T1"; Drain(window);
+                    Assert.AreEqual(0, matrix.Items.Count); Assert.AreEqual(Visibility.Visible, empty.Visibility); StringAssert.Contains(empty.Text, "bağlantı"); StringAssert.Contains(empty.Text, "filtreyi kaldırın");
+                    Assert.IsFalse(Chips().Any(c => (string)c.Tag == "AUTH_ERROR"), "No connection-problem cell exists in this store, so its chip is not offered here...");
+                    Assert.AreEqual("⊘ yalnız yerel (2)", ChipText(Chip("LOCAL_ONLY")), "...while the local-only count is that of the whole store view, not of the filtered rows.");
+
+                    // Combined: add the local-only state -> rows return (any of).
+                    Chip("LOCAL_ONLY").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); Drain(window);
+                    Assert.AreEqual(2, matrix.Items.Count); Assert.AreEqual(Visibility.Collapsed, empty.Visibility);
+
+                    // Back to all stores: both chips present, both on, everything shown; reset clears both.
+                    shop.Text = ""; Drain(window);
+                    Assert.AreEqual(2, Chips().Count); Assert.IsTrue(Chips().All(c => c.IsChecked == true));
+                    legend.Children.OfType<Button>().Single(b => (string)b.Tag == "channel-matrix-filter-reset").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); Drain(window);
+                    Assert.IsTrue(Chips().All(c => c.IsChecked == false)); Assert.AreEqual(2, matrix.Items.Count); Assert.IsFalse(legend.Children.OfType<Button>().Any());
                 }
                 finally { window.Close(); }
             }
