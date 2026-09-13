@@ -58,6 +58,8 @@ public class CatalogProduct {
  // Independent, named price points (e.g. "Etsy fixed", "Wholesale") a channel can select instead of the formula-based PricePolicy.
  // Absent/empty on records written before this field existed; legacy Price/formula behavior is unchanged when empty.
  public List<CatalogPriceField> PriceFields {get;set;}=new();
+ // #895: where each written field came from (source, source revision, import run, moment; or the operator). Null on records written before this existed.
+ public Dictionary<string,FieldOrigin>? FieldOrigins {get;set;}
 }
 public sealed record CatalogPriceField(string Name, decimal Value, string Currency);
 public record XmlScan(string ItemPath,IReadOnlyList<string> Paths,Dictionary<string,string> SuggestedFields);
@@ -70,6 +72,9 @@ public sealed class XmlImportContext
  public bool CompleteFeed { get; init; }
  public bool AllowMappingRevisionChange { get; init; }
  public DateTimeOffset? ObservedAtUtc { get; init; }
+ // #895: the run and the source configuration revision this import writes under, stamped on every field it writes.
+ public string RunId { get; init; } = "";
+ public int SourceRevision { get; init; }
 }
 public sealed record XmlMappingSnapshot(string Fingerprint, int ItemCount, IReadOnlyList<string> MissingFields, IReadOnlyList<string> Warnings)
 {

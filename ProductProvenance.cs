@@ -32,23 +32,26 @@ public static class ProductProvenance
         var feedBacked = !product.SourceKind.Equals(Manual, StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(product.SourceId);
         var touched = product.SourceUpdatedUtc is { } when ? Ago(nowUtc - when) : "bilinmiyor";
 
-        ProductProvenanceRow Row(string field, string marker, bool locked)
+        ProductProvenanceRow Row(string field, string key, string marker, bool locked)
         {
             var operatorOwned = marker.Equals(Manual, StringComparison.OrdinalIgnoreCase) || sourceName.Length == 0 && !feedBacked;
             var origin = operatorOwned ? "Elle girildi" : sourceName.Length > 0 ? sourceName : Unknown;
+            // #895: a field that recorded its own origin says it -- source, revision, run, moment, or the operator -- in place of the product-level time.
+            var recorded = FieldProvenance.Of(product, key);
+            var evidence = recorded is null ? "" : FieldProvenance.Describe(recorded, id => source is not null && string.Equals(source.Id, id, StringComparison.Ordinal) ? source : null, nowUtc);
             var detail = operatorOwned
-                ? (locked ? "Alan kilitli; içe aktarma bu alanı değiştirmez." : "İçe aktarma bu alanı yeniden yazabilir.")
-                : $"Son güncelleme: {touched}" + (locked ? " · Alan kilitli; içe aktarma bu alanı değiştirmez." : "");
+                ? (locked ? "Alan kilitli; içe aktarma bu alanı değiştirmez." : "İçe aktarma bu alanı yeniden yazabilir.") + (evidence.Length > 0 ? " · " + evidence : "")
+                : (evidence.Length > 0 ? evidence : $"Son güncelleme: {touched}") + (locked ? " · Alan kilitli; içe aktarma bu alanı değiştirmez." : "");
             return new(field, origin, detail, operatorOwned);
         }
 
         var rows = new List<ProductProvenanceRow>
         {
-            Row("Fiyat", product.PriceSource, product.LockPrice),
-            Row("Stok", product.StockSource, product.LockStock),
-            Row("Görseller", product.MediaSource, product.LockImages),
-            Row("Başlık", product.SourceKind, product.LockName),
-            Row("Açıklama", product.SourceKind, product.LockDescription),
+            Row("Fiyat", "Price", product.PriceSource, product.LockPrice),
+            Row("Stok", "Stock", product.StockSource, product.LockStock),
+            Row("Görseller", "ImageUrls", product.MediaSource, product.LockImages),
+            Row("Başlık", "Name", product.SourceKind, product.LockName),
+            Row("Açıklama", "Description", product.SourceKind, product.LockDescription),
         };
 
         string summary;

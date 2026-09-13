@@ -39,6 +39,8 @@ public static class ProductDirtySections
         ["Id"] = ("identity", "Kimlik"),
         ["UpdatedUtc"] = ("identity", "Güncelleme zamanı"),
         ["SourceUpdatedUtc"] = ("identity", "Kaynak güncelleme zamanı"),
+        // #895: field origins are evidence the store writes with the values; they belong with the record's history, not to an editable section.
+        ["FieldOrigins"] = ("audit", "Alan kökenleri"),
 
         ["Name"] = ("content", "Başlık"),
         ["Description"] = ("content", "Açıklama"),
