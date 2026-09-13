@@ -60,6 +60,8 @@ public static class XmlAuthStore
  public static XmlAuth Load(string id,string? directory=null){var path=PathFor(id,directory);if(!File.Exists(path))return new();var plain=CredentialStore.Unprotect(File.ReadAllBytes(path));try{return JsonSerializer.Deserialize<XmlAuth>(plain)??new();}finally{System.Security.Cryptography.CryptographicOperations.ZeroMemory(plain);}}
  /// <summary>#892: whether a credential is saved for the source -- presence only; a blob this machine cannot open is unreadable, never an exception on a health surface.</summary>
  public static CredentialPresence Presence(string id,string? directory=null){try{return SourceCredentialHealth.PresenceOf(Load(id,directory));}catch(Exception){return CredentialPresence.Unreadable;}}
+ /// <summary>#901: removes the saved credential of a source that is being deleted; nothing to do when there is none, and an id that is not a source id is ignored.</summary>
+ public static void Delete(string id,string? directory=null){try{var path=PathFor(id,directory);if(File.Exists(path))File.Delete(path);}catch(InvalidOperationException){}}
  public static void Save(string id,XmlAuth auth,string? directory=null){var path=PathFor(id,directory);Directory.CreateDirectory(Path.GetDirectoryName(path)!);var plain=JsonSerializer.SerializeToUtf8Bytes(auth);try{var tmp=path+".tmp";File.WriteAllBytes(tmp,CredentialStore.Protect(plain));File.Move(tmp,path,true);}finally{System.Security.Cryptography.CryptographicOperations.ZeroMemory(plain);}}
 }
 
