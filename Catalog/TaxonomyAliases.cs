@@ -45,10 +45,28 @@ public sealed class TaxonomyAliasStore
     /// <summary>Saves an alias for a category: refused when the category is unknown, inactive or not a category, when the alias is the category's own name or another category's name, or when the same alias already names another category; the same alias for the same category is updated in place.</summary>
     public TaxonomyAliasView Save(string alias, string localId, bool approved, string source = "manual")
     {
+        using var c = Open(); using var tx = c.BeginTransaction();
+        var (text, key, target) = Validate(c, tx, alias, localId);
+        var now = DateTime.UtcNow;
+        using var upsert = c.CreateCommand(); upsert.Transaction = tx;
+        upsert.CommandText = "INSERT INTO TaxonomyAliases(Key,Alias,LocalId,Approved,Source,UpdatedUtc) VALUES($key,$alias,$local,$approved,$source,$updated) ON CONFLICT(Key) DO UPDATE SET Alias=excluded.Alias,Approved=excluded.Approved,Source=excluded.Source,UpdatedUtc=excluded.UpdatedUtc";
+        upsert.Parameters.AddWithValue("$key", key); upsert.Parameters.AddWithValue("$alias", text); upsert.Parameters.AddWithValue("$local", localId); upsert.Parameters.AddWithValue("$approved", approved ? 1 : 0); upsert.Parameters.AddWithValue("$source", (source ?? "manual").Trim()); upsert.Parameters.AddWithValue("$updated", now.ToString("O", CultureInfo.InvariantCulture));
+        upsert.ExecuteNonQuery(); tx.Commit();
+        return new(text, key, localId, target.Name, approved, (source ?? "manual").Trim(), now, approved ? TaxonomyAliasView.ApprovedStatus : TaxonomyAliasView.Pending);
+    }
+
+    /// <summary>Save's rules as a dry run: the reason a save would be refused, or null when it would be accepted — so a bulk approval (#913) can check every item before it writes one.</summary>
+    public string? Refusal(string alias, string localId)
+    {
+        try { using var c = Open(); using var tx = c.BeginTransaction(); Validate(c, tx, alias, localId); return null; }
+        catch (InvalidOperationException error) { return error.Message; }
+    }
+
+    (string Text, string Key, TaxonomyEntry Target) Validate(SqliteConnection c, SqliteTransaction tx, string alias, string localId)
+    {
         var text = (alias ?? "").Trim();
         if (text.Length == 0 || text.Length > AliasLimit || text.Any(char.IsControl)) throw new InvalidOperationException("Takma ad 1-200 karakter olmalı ve kontrol karakteri içermemeli.");
         var key = Key(text); if (key.Length == 0) throw new InvalidOperationException("Takma ad harf veya rakam içermeli.");
-        using var c = Open(); using var tx = c.BeginTransaction();
         var target = Entry(c, tx, localId) ?? throw new InvalidOperationException("Takma adın bağlanacağı yerel kategori bulunamadı.");
         if (target.Kind != TaxonomyKind.Category) throw new InvalidOperationException("Takma adlar yalnız kategorilere bağlanır.");
         if (!target.Active) throw new InvalidOperationException("Pasif kategoriye takma ad bağlanamaz.");
@@ -60,12 +78,7 @@ public sealed class TaxonomyAliasStore
             var holder = Entry(c, tx, existing);
             throw new InvalidOperationException($"'{text}' takma adı zaten başka bir kategoriye bağlı ({holder?.Name ?? "silinmiş kategori"}); önce oradan kaldırın.");
         }
-        var now = DateTime.UtcNow;
-        using var upsert = c.CreateCommand(); upsert.Transaction = tx;
-        upsert.CommandText = "INSERT INTO TaxonomyAliases(Key,Alias,LocalId,Approved,Source,UpdatedUtc) VALUES($key,$alias,$local,$approved,$source,$updated) ON CONFLICT(Key) DO UPDATE SET Alias=excluded.Alias,Approved=excluded.Approved,Source=excluded.Source,UpdatedUtc=excluded.UpdatedUtc";
-        upsert.Parameters.AddWithValue("$key", key); upsert.Parameters.AddWithValue("$alias", text); upsert.Parameters.AddWithValue("$local", localId); upsert.Parameters.AddWithValue("$approved", approved ? 1 : 0); upsert.Parameters.AddWithValue("$source", (source ?? "manual").Trim()); upsert.Parameters.AddWithValue("$updated", now.ToString("O", CultureInfo.InvariantCulture));
-        upsert.ExecuteNonQuery(); tx.Commit();
-        return new(text, key, localId, target.Name, approved, (source ?? "manual").Trim(), now, approved ? TaxonomyAliasView.ApprovedStatus : TaxonomyAliasView.Pending);
+        return (text, key, target);
     }
 
     public IReadOnlyList<TaxonomyAliasView> List()
