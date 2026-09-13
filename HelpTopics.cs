@@ -14,7 +14,7 @@ public static class HelpTopics
         new HelpTopic("sync", "Sync merkezi", "Önizleme ve açık retry onayı.", "Failed işi sınıfına göre düzeltin veya yeniden önizleyin."),
         new HelpTopic("connections", "Mağaza bağlantıları", "Şifreli credential store ve shop kimliği.", "NOT_CONFIGURED/LIVE_API_BLOCKED durumunda canlı çağrı yapılmaz."),
         new HelpTopic("settings", "Ayarlar", "Yerel ayar dosyaları.", "Bozuk workspace state güvenli varsayılana döner."),
-        new HelpTopic("reports", "Raporlar ve destek", "Yerel audit/diagnostics.", "Secret içermeyen support package üretin.")
+        new HelpTopic("reports", "Raporlar", "Rapor kataloğu: amaç, veri kapsamı, son çalıştırma, kayıtlı filtre ve çıktı türü.", "Kartı seçip Enter ile raporun sahibi ekranı açın.")
     });
     public static HelpTopic? ForRoute(string route) => All.FirstOrDefault(x => x.Route.Equals(route, StringComparison.OrdinalIgnoreCase));
 }

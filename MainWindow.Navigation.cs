@@ -84,6 +84,7 @@ public partial class MainWindow
   Page("shipping","Navlungo","Kargo bağlantısı ve mevcut hizmet işlemleri",NavlungoPanel.Create(),"Kargo bağlantısı");
   Group("YÖNETİM");
   Page("readiness","Üretim hazırlığı","Yerel veri, secret güvenliği, connector capability ve API sağlık geçidi",ProductionReadinessPanel.Create(dataDirectory));
+  Page("reports","Raporlar","Rapor kataloğu: amaç, veri kapsamı, son çalıştırma, kayıtlı filtre ve çıktı türü",ReportsPanel.Create(dataDirectory,key=>Navigate(key),()=>AllowedStoreKeys()));
   Page("diagnostics","Tanılama / audit","Güvenli sistem sağlık özeti, audit trail ve destek paketi",DiagnosticsPanel.Create(dataDirectory,key=>Navigate(key)));
   var settings=new StackPanel{Margin=new Thickness(20)};
   settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));

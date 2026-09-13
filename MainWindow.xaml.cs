@@ -195,13 +195,14 @@ public partial class MainWindow : Window
  // Split from ExportProductsToXmlAsync so tests can drive the actual export without the real SaveFileDialog.
  async Task ExportProductsToXmlFileAsync(string path)
  {
-  var q=search.Text.Trim();var filter=productFilter;
+  var started=DateTime.UtcNow;var q=search.Text.Trim();var filter=productFilter;
   var first=await Task.Run(()=>store.Search(q,0,1000,filter));
   var all=new List<CatalogProduct>(first.Items);
   for(var offset=1000;offset<first.Total;offset+=1000)all.AddRange((await Task.Run(()=>store.Search(q,offset,1000,filter))).Items);
   if(all.Count==0)throw new InvalidOperationException("Aktarılacak ürün yok.");
   var xml=await XmlCatalogExporter.ExportAsync(all,XmlCatalogExporter.StandardTemplate);
   File.WriteAllText(path,xml);
+  new ReportRunStore(dataDirectory).Record("products-xml",started,ReportRunState.Succeeded,all.Count);
   Log($"{all.Count} ürün XML olarak dışa aktarıldı: {path}");
  }
 
