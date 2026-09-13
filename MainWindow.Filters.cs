@@ -398,7 +398,7 @@ public partial class MainWindow {
  // currently in the list, so a filter change that leaves rows behind is stated rather than silently acted on.
  readonly TextBlock productSelectionHeadline = new() { FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
  readonly TextBlock productSelectionDetail = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(10, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Color.FromRgb(76, 102, 118)) };
- Border? productSelectionBar;
+ Border? productSelectionBar; string? productSelectionNote; // #873: what a refresh dropped from the selection, until the next change by hand
  Border BuildProductSelectionBar()
  {
   var clear = new Button { Content = "Seçimi temizle", Margin = new Thickness(6, 0, 0, 0), Padding = new Thickness(10, 3, 10, 3) };
@@ -416,9 +416,9 @@ public partial class MainWindow {
   if (productSelectionBar is null) return;
   var visible = products.ItemsSource?.OfType<CatalogProduct>().ToList() ?? [];
   var summary = ProductSelectionSummary.Describe(products.SelectedItems.OfType<CatalogProduct>().ToList(), visible, productTotal);
-  productSelectionBar.Visibility = summary.IsVisible ? Visibility.Visible : Visibility.Collapsed;
-  productSelectionHeadline.Text = summary.Headline;
-  productSelectionDetail.Text = string.Join(" ", new[] { summary.ScopeText, summary.RiskText }.Where(x => x.Length > 0));
+  productSelectionBar.Visibility = summary.IsVisible || productSelectionNote is not null ? Visibility.Visible : Visibility.Collapsed;
+  productSelectionHeadline.Text = summary.IsVisible ? summary.Headline : "Seçim güncellendi";
+  productSelectionDetail.Text = string.Join(" ", new[] { summary.ScopeText, summary.RiskText, productSelectionNote ?? "" }.Where(x => x.Length > 0));
   System.Windows.Automation.AutomationProperties.SetHelpText(productSelectionBar, productSelectionDetail.Text);
  }
  // Product row state hierarchy (#794). LoadingRow is the one hook that also fires when a recycled row is reused,
