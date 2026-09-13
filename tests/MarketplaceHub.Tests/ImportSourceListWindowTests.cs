@@ -42,16 +42,14 @@ public sealed class ImportSourceListWindowTests
                 CollectionAssert.AreEqual(new[] { "beta", "alpha", "off", "old" }, sources.Items.OfType<XmlSource>().Select(x => x.Id).ToArray(), "Last-used, then usable, then disabled, then unsupported.");
                 Assert.AreEqual("beta", ((XmlSource)sources.SelectedItem).Id, "The last-used source is preselected.");
 
-                string RowText(int index)
+                // #829 grouped the list, so containers live under group items: look the container up by item.
+                ListBoxItem Container(int index)
                 {
-                    var container = (ListBoxItem)sources.ItemContainerGenerator.ContainerFromIndex(index);
-                    return Descendants(container).OfType<TextBlock>().First().Text;
+                    var item = sources.Items[index];
+                    return sources.ItemContainerGenerator.ContainerFromItem(item) as ListBoxItem ?? Descendants(sources).OfType<ListBoxItem>().First(c => c.DataContext == item);
                 }
-                string RowTip(int index)
-                {
-                    var container = (ListBoxItem)sources.ItemContainerGenerator.ContainerFromIndex(index);
-                    return Descendants(container).OfType<TextBlock>().First().ToolTip?.ToString() ?? "";
-                }
+                string RowText(int index) => Descendants(Container(index)).OfType<TextBlock>().First().Text;
+                string RowTip(int index) => Descendants(Container(index)).OfType<TextBlock>().First().ToolTip?.ToString() ?? "";
                 sources.ScrollIntoView(sources.Items[3]); Drain(window);
                 StringAssert.StartsWith(RowText(0), "★", "The last-used row is marked.");
                 StringAssert.Contains(RowText(0), "XML adresi");
