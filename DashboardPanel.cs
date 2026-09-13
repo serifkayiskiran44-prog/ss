@@ -58,6 +58,7 @@ public static class DashboardPanel
 
         var service = new DashboardDataService(directory);
         var preferences = PreferenceSchema.OpenStore(directory);
+        var latencyStore = new LatencyStore(directory);
         var alerts = new NotificationStore(directory); var snoozes = new AlertSnoozeStore(directory);
         void RenderAlerts() => RenderAlertsFrom(alerts.List(), snoozes.Active(DateTime.UtcNow));
         // #874: an acknowledgement or a snooze shows at once (the list re-rendered with the change applied locally), the store is asked to
@@ -97,6 +98,7 @@ public static class DashboardPanel
         async Task RefreshAsync(bool force)
         {
             CommandState.Apply(refresh, DisabledReason.Busy("Yenileme sürüyor.")); status.Text = "Yerel veri kaynakları okunuyor…";
+            var latency = UiLatency.Begin(latencyStore, UiLatency.DashboardView, force ? LatencyPhase.Refresh : LatencyPhase.Load, storeKey);
             try
             {
                 var snapshot = await Task.Run(() => service.Load(bypassCache: force));
@@ -148,9 +150,11 @@ public static class DashboardPanel
                 trends.ItemsSource = snapshot.OrderTrend.Select(x => new { DateLabel = x.Date.ToString("dd.MM.yyyy"), x.Orders, StockLabel = x.CurrentStock < 0 ? "—" : x.CurrentStock.ToString("N0") }).ToList();
                 var ops = OperationsSummaryService.From(snapshot);
                 status.Text = ops.HasAction ? $"{snapshot.TotalProducts:N0} toplam ürün · {snapshot.PendingSyncs:N0} bekleyen/çalışan sync · Açık sipariş {ops.OpenOrders:N0} · Sync hata {ops.FailedSyncs:N0} · Son XML: {snapshot.LastXmlStatus} ({TimeDisplay.Format(snapshot.LastXmlUtc, missing: "yok")})" : ops.EmptyState.Length > 0 ? ops.EmptyState : $"{snapshot.TotalProducts:N0} toplam ürün · Açık uyarı yok · {TimeDisplay.Format(snapshot.GeneratedUtc)}";
+                latency.Complete(snapshot.Connections.Count);
             }
             catch (Exception error)
             {
+                latency.Fail();
                 status.Text = MarketplaceConnectionStore.Redact(error.Message);
                 errors.Show(error, () => RefreshAsync(force: true));
                 // #807: a refresh that failed must not leave the previous figures looking current.

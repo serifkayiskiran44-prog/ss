@@ -21,6 +21,7 @@ public partial class MainWindow
  // selects the product; null until the panel is built.
  Func<string, string, string, bool>? ordersReveal;
  UiPreferenceStore uiPreferences = null!;
+ LatencyStore latencyStore = null!;
  string? currentRoute;
  bool selectingRoute;
  TabControl? etsyTabs;
