@@ -45,6 +45,8 @@ public static class XmlCatalog
    : "XML yapısı veya eşleme değişti; yeni eşleme revizyonunu kaydedip tekrar önizleyin.");
  }
 
+ /// <summary>#897: the required mappings (Name, Cost, Stock, and Sku or Barcode) a source does not provide -- empty when the mapping is complete.</summary>
+ public static IReadOnlyList<string> MissingRequiredMappings(XmlSource source) => RequiredFields(source);
  static IReadOnlyList<string> RequiredFields(XmlSource source)
  {
   var required = new List<string> { "Name", "Cost", "Stock" };

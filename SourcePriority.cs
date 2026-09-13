@@ -46,9 +46,14 @@ public static class SourcePriority
     public static bool IsStale(FieldOrigin holder, XmlSource? holderSource, DateTime nowUtc)
     {
         ArgumentNullException.ThrowIfNull(holder);
-        var interval = TimeSpan.FromMinutes(Math.Max(1, holderSource?.IntervalMinutes ?? 30));
-        var grace = interval * 3 < MinimumStaleGrace ? MinimumStaleGrace : interval * 3;
-        return nowUtc - holder.ObservedUtc > grace;
+        return nowUtc - holder.ObservedUtc > StaleGrace(holderSource);
+    }
+
+    /// <summary>The grace after which a source's observation is stale: three of its intervals, at least six hours (shared with the #897 fallback verdict).</summary>
+    public static TimeSpan StaleGrace(XmlSource? source)
+    {
+        var interval = TimeSpan.FromMinutes(Math.Max(1, source?.IntervalMinutes ?? 30));
+        return interval * 3 < MinimumStaleGrace ? MinimumStaleGrace : interval * 3;
     }
 
     /// <summary>Decides whether the incoming feed may write a field the given origin holds; null when there is no contest (no holder, the same source, or an operator's field without a lock which the feed overwrites as before).</summary>

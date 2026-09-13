@@ -323,6 +323,11 @@ public partial class MainWindow {
   productProvenanceBody.Children.Add(new TextBlock { Text = view.SourceSummary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
   foreach (var row in view.Rows)
    productProvenanceBody.Children.Add(new TextBlock { Text = $"{row.Field}: {row.Origin} — {row.Detail}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(0, 2, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+  // #897: the fallback verdict -- eligibility in words from persisted facts; nothing switches by itself.
+  var fallback = LinkedSourceGraph.Evaluate(product, sources, store.Sightings(product.Id), DateTime.UtcNow);
+  productProvenanceBody.Children.Add(new TextBlock { Text = "Yedek kaynak: " + fallback.Headline, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(0, 6, 0, 0), Tag = LinkedSourceGraph.Tag });
+  foreach (var candidate in fallback.Candidates)
+   productProvenanceBody.Children.Add(new TextBlock { Text = $"· {candidate.Name}: {(candidate.Eligible ? "uygun" : "uygun değil")} — {string.Join("; ", candidate.Reasons)}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(8, 2, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
   foreach (var warning in view.Warnings)
    productProvenanceBody.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = Spacing.AboveInline });
   System.Windows.Automation.AutomationProperties.SetName(productProvenanceExpander, "Alan kökenleri: " + view.Headline);
