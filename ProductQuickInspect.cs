@@ -43,6 +43,7 @@ public static class ProductQuickInspect
         // #907: the canonical weight and box beside the texts as given.
         Add("Stok", "Ağırlık (kargo)", ProductUnits.DescribeWeight(product));
         Add("Stok", "Boyut (kargo)", ProductUnits.DescribeDimensions(product));
+        Add("Stok", "Desi (kargo)", ProductDimensions.Describe(product)); // #908: the desi with its origin, or why there is none
 
         Add("Kaynak", "Kaynak türü", product.SourceKind);
         Add("Kaynak", "Son kaynak güncellemesi", product.SourceUpdatedUtc is { } touched ? Ago(nowUtc - touched) : null);

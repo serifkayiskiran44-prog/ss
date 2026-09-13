@@ -73,22 +73,33 @@ public static class ProductUnits
             if (pm.Success && pm.Groups[2].Value.Length == 0 && sharedUnit.Length > 0) piece = pm.Groups[1].Value + " " + sharedUnit;
             var quantity = Parse(piece, UnitKind.Length, cultureName);
             if (!quantity.IsKnown) return new(null, null, null, text, quantity.Diagnostic, quantity.Blocking);
+            if (quantity.Canonical <= 0) return new(null, null, null, text, "kenar pozitif olmalı; sıfır olamaz", true); // #908
             values[i] = quantity.Canonical;
         }
         return new(values[0], values[1], values[2], text, "", false);
     }
 
-    /// <summary>Applies the pipeline to a product's original texts: canonical values when readable, null otherwise; the originals stay. Returns the findings (blocking ones refuse the write).</summary>
-    public static IReadOnlyList<UnitFinding> Apply(CatalogProduct product, string? cultureName)
+    /// <summary>Applies the pipeline to a product's original texts: canonical values when readable, null otherwise; the originals stay. With the stored record given (#908), a text the operator did not change keeps the canonical value it was stored with — a feed's "1,5 kg" is never re-read with the operator's culture on a save that touched something else. Returns the findings (blocking ones refuse the write).</summary>
+    public static IReadOnlyList<UnitFinding> Apply(CatalogProduct product, string? cultureName, CatalogProduct? stored = null)
     {
         ArgumentNullException.ThrowIfNull(product);
         var findings = new List<UnitFinding>();
-        var weight = Parse(product.WeightText, UnitKind.Weight, cultureName); product.WeightKg = weight.Canonical;
-        if (weight.Diagnostic.Length > 0) findings.Add(new(weight.Blocking, "Ağırlık", "Ağırlık: " + weight.Diagnostic));
-        var box = ParseDimensions(product.DimensionsText, cultureName); product.LengthCm = box.LengthCm; product.WidthCm = box.WidthCm; product.HeightCm = box.HeightCm;
-        if (box.Diagnostic.Length > 0) findings.Add(new(box.Blocking, "Boyut", "Boyut: " + box.Diagnostic));
+        if (stored is not null && Same(product.WeightText, stored.WeightText)) product.WeightKg = stored.WeightKg;
+        else
+        {
+            var weight = Parse(product.WeightText, UnitKind.Weight, cultureName); product.WeightKg = weight.Canonical;
+            if (weight.Diagnostic.Length > 0) findings.Add(new(weight.Blocking, "Ağırlık", "Ağırlık: " + weight.Diagnostic));
+        }
+        if (stored is not null && Same(product.DimensionsText, stored.DimensionsText)) { product.LengthCm = stored.LengthCm; product.WidthCm = stored.WidthCm; product.HeightCm = stored.HeightCm; }
+        else
+        {
+            var box = ParseDimensions(product.DimensionsText, cultureName); product.LengthCm = box.LengthCm; product.WidthCm = box.WidthCm; product.HeightCm = box.HeightCm;
+            if (box.Diagnostic.Length > 0) findings.Add(new(box.Blocking, "Boyut", "Boyut: " + box.Diagnostic));
+        }
         return findings;
     }
+
+    static bool Same(string? a, string? b) => string.Equals((a ?? "").Trim(), (b ?? "").Trim(), StringComparison.Ordinal);
 
     /// <summary>The validation view of a stored record, without re-reading the numbers: a text that has no canonical value beside it was ambiguous or unreadable when it was written.</summary>
     public static IReadOnlyList<UnitFinding> Findings(CatalogProduct product)

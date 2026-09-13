@@ -27,7 +27,9 @@ public static class FieldProvenance
 {
     public const string ManualKind = "manual";
     public const string FeedKind = "xml";
-    public static readonly IReadOnlyList<string> Fields = new[] { "Cost", "Price", "Currency", "Stock", "Name", "Description", "ImageUrls", "Gtin" };
+    /// <summary>#908: computed from other fields of the same record (the desi from the box), so neither a feed's nor the operator's.</summary>
+    public const string DerivedKind = "derived";
+    public static readonly IReadOnlyList<string> Fields = new[] { "Cost", "Price", "Currency", "Stock", "Name", "Description", "ImageUrls", "Gtin", "WeightText", "DimensionsText", "Desi" }; // #908: the box texts and the desi
 
     /// <summary>Stamps the fields a feed just wrote on a product.</summary>
     public static void StampFeed(CatalogProduct product, IEnumerable<string> fields, string sourceId, int sourceRevision, string runId, DateTime observedUtc)
@@ -61,6 +63,7 @@ public static class FieldProvenance
         ArgumentNullException.ThrowIfNull(sourceById);
         if (origin is null) return "kaydedilmedi";
         var when = Ago(nowUtc - origin.ObservedUtc);
+        if (string.Equals(origin.Kind, DerivedKind, StringComparison.OrdinalIgnoreCase)) return $"boyuttan hesaplandı · {when}"; // #908
         if (string.Equals(origin.Kind, ManualKind, StringComparison.OrdinalIgnoreCase)) return $"elle · {when}" + (origin.Decision.Length > 0 ? " · " + origin.Decision : "");
         var source = origin.SourceId.Length > 0 ? sourceById(origin.SourceId) : null;
         var who = source is null ? (origin.SourceId.Length > 0 ? "kaynak silinmiş" : "kaynak bilinmiyor") : AuditStore.Redact(source.Name).Trim();
@@ -76,6 +79,7 @@ public static class FieldProvenance
         "Stock" => p.Stock.ToString(CultureInfo.InvariantCulture),
         "Name" => TitleNormalizer.Normalize(p.Name).Normalized, // #905: whitespace and invisible characters are not an edit
         "Description" => p.Description ?? "", "ImageUrls" => p.ImageUrls ?? "", "Gtin" => p.Gtin ?? "",
+        "WeightText" => p.WeightText ?? "", "DimensionsText" => p.DimensionsText ?? "", "Desi" => p.Desi?.ToString(CultureInfo.InvariantCulture) ?? "", // #908
         _ => "",
     };
 
