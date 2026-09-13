@@ -11,6 +11,11 @@ public static class ChannelListingMatrixPanel
         var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1450 };
         panel.Children.Add(Heading("Kanal yayın durumu ve ürün matrisi"));
         panel.Children.Add(Hint("Ürün × kanal × mağaza görünümünde yerel plan, mapping, sync ve bağlantı durumunu karşılaştırın. Bu ekran yalnızca yerel plan/önizleme okur; canlı ürün, stok veya fiyat yazmaz."));
+        // #816: one error surface for this workspace; failures land here with retry / go-to-source / diagnostics
+        // instead of a modal MessageBox.
+        var errorHost = new StackPanel { Visibility = Visibility.Collapsed };
+        var errors = new ErrorSurface(errorHost, navigate);
+        panel.Children.Add(errorHost);
         var query = new TextBox { Width = 240, ToolTip = "SKU, ürün, kanal, ilan veya hata ara" };
         var channel = new TextBox { Width = 130, ToolTip = "Kanal filtresi (etsy, ebay...)" };
         var shop = new TextBox { Width = 140, ToolTip = "Mağaza filtresi" };
@@ -22,16 +27,16 @@ public static class ChannelListingMatrixPanel
         IReadOnlyList<ChannelListingMatrixRow> all = [];
         void RefreshGrid() { var filtered = ChannelListingMatrixService.Filter(all, query.Text, statusFilter.SelectedItem?.ToString() ?? "Tümü", channel.Text, shop.Text); grid.ItemsSource = filtered; status.Text = $"{filtered.Count:N0} satır · {filtered.Count(x => x.MappingStatus == "MISSING")} mapping eksik · {filtered.Count(x => x.MappingStatus == "ERROR")} sync hatası · {filtered.Count(x => x.MappingStatus == "AUTH_ERROR")} bağlantı uyarısı"; }
         async Task RefreshAsync() { status.Text = "Matris hazırlanıyor…"; all = await Task.Run(() => new ChannelListingMatrixService(directory).Build()); RefreshGrid(); }
-        var refresh = AsyncButton("Matrisi yenile", RefreshAsync);
-        var product = Button("Ürün havuzuna git", () => navigate?.Invoke("products"));
-        var channelOpen = Button("Seçili kanala git", () => { if (grid.SelectedItem is not ChannelListingMatrixRow row) throw new InvalidOperationException("Önce matristen satır seçin."); navigate?.Invoke(row.Channel); });
+        var refresh = AsyncButton(errors, "Matrisi yenile", RefreshAsync);
+        var product = Button(errors, "Ürün havuzuna git", () => navigate?.Invoke("products"));
+        var channelOpen = Button(errors, "Seçili kanala git", () => { if (grid.SelectedItem is not ChannelListingMatrixRow row) throw new InvalidOperationException("Önce matristen satır seçin."); navigate?.Invoke(row.Channel); });
         var bar = new WrapPanel(); bar.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(query); bar.Children.Add(new TextBlock { Text = "Kanal", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(channel); bar.Children.Add(new TextBlock { Text = "Mağaza", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(shop); bar.Children.Add(statusFilter); bar.Children.Add(refresh); bar.Children.Add(product); bar.Children.Add(channelOpen); panel.Children.Add(bar); panel.Children.Add(grid); panel.Children.Add(status);
         query.TextChanged += (_, _) => RefreshGrid(); channel.TextChanged += (_, _) => RefreshGrid(); shop.TextChanged += (_, _) => RefreshGrid(); statusFilter.SelectionChanged += (_, _) => RefreshGrid(); _ = RefreshAsync();
         return Scroll(panel);
     }
     static TextBlock Heading(string text) => new() { Text = text, FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 8, 4, 12) };
     static TextBlock Hint(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)), Margin = new Thickness(4, 8, 4, 8) };
-    static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Yayın matrisi", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
-    static Button AsyncButton(string text, Func<Task> action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += async (_, _) => { try { button.IsEnabled = false; await action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Yayın matrisi", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { button.IsEnabled = true; } }; return button; }
+    static Button Button(ErrorSurface errors, string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { errors.Clear(); action(); } catch (Exception error) { errors.Show(error, null, "connections", "Bağlantılara git"); } }; return button; }
+    static Button AsyncButton(ErrorSurface errors, string text, Func<Task> action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += async (_, _) => { try { button.IsEnabled = false; errors.Clear(); await action(); } catch (Exception error) { errors.Show(error, action, "connections", "Bağlantılara git"); } finally { button.IsEnabled = true; } }; return button; }
     static ScrollViewer Scroll(UIElement content) => new() { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };
 }

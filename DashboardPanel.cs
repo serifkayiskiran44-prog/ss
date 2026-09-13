@@ -29,6 +29,10 @@ public static class DashboardPanel
         var status = new TextBlock { Text = "Yerel veriler yükleniyor…", Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 0, 4, 10) };
         panel.Children.Add(status);
         // #811: why the board is empty, shown above the figures it would otherwise fill with zeros.
+        // #816: a failed refresh is a banner with a retry, above the figures it could not refresh.
+        var errorHost = new StackPanel { Visibility = Visibility.Collapsed };
+        var errors = new ErrorSurface(errorHost, navigate);
+        panel.Children.Add(errorHost);
         var onboarding = new StackPanel { Margin = new Thickness(4, 0, 4, 10) };
         panel.Children.Add(onboarding);
         var cards = new UniformGrid { Columns = 3, Margin = new Thickness(0, 0, 0, 12) };
@@ -75,6 +79,7 @@ public static class DashboardPanel
             try
             {
                 var snapshot = await Task.Run(() => service.Load(bypassCache: force));
+                errors.Clear();
                 cards.Children.Clear();
                 lastSnapshot = snapshot;
                 // #807: every card carries its own data time, coverage and fresh/stale state.
@@ -123,6 +128,7 @@ public static class DashboardPanel
             catch (Exception error)
             {
                 status.Text = MarketplaceConnectionStore.Redact(error.Message);
+                errors.Show(error, () => RefreshAsync(force: true));
                 // #807: a refresh that failed must not leave the previous figures looking current.
                 if (lastSnapshot is { } previous)
                 {
