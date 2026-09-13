@@ -57,14 +57,7 @@ public static class ImportMappingTable
     };
 
     /// <summary>A sample is a specimen of untrusted supplier data: redacted, never a raw body, one short line.</summary>
-    public static string SafeSample(string? raw)
-    {
-        var text = (raw ?? "").Trim();
-        if (text.Length == 0) return "";
-        if (StatusTooltip.LooksLikeRawPayload(text)) return StatusTooltip.RawPayloadHidden;
-        text = Regex.Replace(AuditStore.Redact(text), @"\s+", " ").Trim();
-        return text.Length <= SampleLength ? text : text[..(SampleLength - 1)] + "…";
-    }
+    public static string SafeSample(string? raw) => ImportSampleViewer.Bound(raw, SampleLength).Text; // #882: bounded, grapheme-safe, with an explicit truncated mark
 
     public static MappingTableView Compose(IReadOnlyList<MappingRowInput> rows, IReadOnlyCollection<string> knownPaths, Func<string, string?> sampleFor, IReadOnlyList<IReadOnlyList<string>>? requiredGroups = null)
     {

@@ -98,8 +98,8 @@ public sealed class ImportMappingTableTests
 
         var description = view.Rows.Single(r => r.Key == "Description").Sample;
         Assert.IsFalse(description.Contains("ali@example.com") || description.Contains("abc123"), description);
-        Assert.IsTrue(description.Length <= ImportMappingTable.SampleLength, $"{description.Length} chars");
-        StringAssert.EndsWith(description, "…");
+        Assert.IsTrue(description.Length <= ImportMappingTable.SampleLength + ImportSampleViewer.TruncatedMark(int.MaxValue).Length, $"{description.Length} chars");
+        StringAssert.Contains(description, "[kısaltıldı:"); // #882: the truncated state is explicit
         Assert.AreEqual(StatusTooltip.RawPayloadHidden, view.Rows.Single(r => r.Key == "ImageUrls").Sample, "A JSON body in a field is evidence, not a sample.");
         Assert.AreEqual("", ImportMappingTable.SafeSample("   "));
     }
