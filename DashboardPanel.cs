@@ -58,6 +58,8 @@ public static class DashboardPanel
 
         var service = new DashboardDataService(directory);
         var preferences = new UiPreferenceStore(directory);
+        var alerts = new NotificationStore(directory);
+        void RenderAlerts() => NotificationCenterPanel.Render(notifications, NotificationCenter.Build(alerts.List(), DateTime.UtcNow), navigate, id => { alerts.Acknowledge(id); RenderAlerts(); }, id => { alerts.Unacknowledge(id); RenderAlerts(); }, DateTime.UtcNow);
         DashboardSnapshot? lastSnapshot = null;
         var storeScope = "tüm mağazalar";
         var applyingStoreFilter = false;
@@ -120,7 +122,10 @@ public static class DashboardPanel
                     Tooltip = StatusTooltip.Compose(new StatusTooltipContent(x.Status, x.LastError, x.LastTestUtc, $"{x.Channel} / {x.ShopId}",
                         string.Equals(x.Status, "CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase) ? "" : "Bağlantıyı Mağaza bağlantıları ekranından yeniden test edin."), DateTime.UtcNow),
                 }).ToList();
-                notifications.Children.Clear(); foreach (var item in snapshot.Notifications) AddNotification(notifications, item, navigate);
+                // #851: the notification centre is the persisted alert ledger -- the live findings are synced in (new / repeated /
+                // reopened / resolved) and shown grouped by severity, source and store, the acknowledged ones apart.
+                alerts.Sync(snapshot.Notifications.Where(NotificationCenter.IsAlert).Select(NotificationCenter.ToAlert), DateTime.UtcNow);
+                RenderAlerts();
                 trends.ItemsSource = snapshot.OrderTrend.Select(x => new { DateLabel = x.Date.ToString("dd.MM.yyyy"), x.Orders, StockLabel = x.CurrentStock < 0 ? "—" : x.CurrentStock.ToString("N0") }).ToList();
                 var ops = OperationsSummaryService.From(snapshot);
                 status.Text = ops.HasAction ? $"{snapshot.TotalProducts:N0} toplam ürün · {snapshot.PendingSyncs:N0} bekleyen/çalışan sync · Açık sipariş {ops.OpenOrders:N0} · Sync hata {ops.FailedSyncs:N0} · Son XML: {snapshot.LastXmlStatus} ({snapshot.LastXmlUtc?.ToLocalTime().ToString("g") ?? "yok"})" : ops.EmptyState.Length > 0 ? ops.EmptyState : $"{snapshot.TotalProducts:N0} toplam ürün · Açık uyarı yok · {snapshot.GeneratedUtc.ToLocalTime():g}";
@@ -234,13 +239,4 @@ public static class DashboardPanel
         parent.Children.Add(button);
     }
 
-    static void AddNotification(Panel parent, DashboardNotification item, Action<string> navigate)
-    {
-        var row = new DockPanel { Margin = new Thickness(2, 3, 2, 3), LastChildFill = true };
-        var open = new Button { Content = "Aç", Tag = item.RouteKey, Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(4, 0, 0, 0) };
-        open.Click += (_, _) => navigate((string)open.Tag);
-        DockPanel.SetDock(open, Dock.Right); row.Children.Add(open);
-        row.Children.Add(new TextBlock { Text = $"{item.Severity} · {item.Title}\n{item.Detail}", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4) });
-        parent.Children.Add(row);
-    }
 }

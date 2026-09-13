@@ -7,7 +7,8 @@ using TrMarketplaceHubDesktop.Catalog;
 namespace TrMarketplaceHubDesktop;
 
 public sealed record DashboardConnectionRow(string Channel, string ShopId, string DisplayName, bool Enabled, string Status, DateTime? LastTestUtc, string LastError, string RouteKey);
-public sealed record DashboardNotification(string Severity, string Title, string Detail, string RouteKey);
+/// <param name="StoreKey">The store the finding belongs to ("channel|shop"), empty when it is about the whole workspace (#851).</param>
+public sealed record DashboardNotification(string Severity, string Title, string Detail, string RouteKey, string StoreKey = "");
 public sealed record DashboardTrendPoint(DateTime Date, int Orders, int CurrentStock);
 public sealed record DashboardSnapshot(
     int TotalProducts,
@@ -169,11 +170,11 @@ public sealed class DashboardDataService
         var notifications = new List<DashboardNotification>();
 
         foreach (var job in failedSync.Take(20))
-            notifications.Add(new("Hata", $"Sync başarısız · {job.Channel}/{job.Operation}", MarketplaceConnectionStore.Redact(job.LastError), "sync"));
+            notifications.Add(new("Hata", $"Sync başarısız · {job.Channel}/{job.Operation}", MarketplaceConnectionStore.Redact(job.LastError), "sync", DashboardStoreFilter.KeyFor(job.Channel, job.ShopId)));
         foreach (var run in xmlRuns.Where(x => x.Status == "Failed").Take(10))
             notifications.Add(new("Hata", $"XML çalışması başarısız · {run.SourceId}", MarketplaceConnectionStore.Redact(run.Error), "xml"));
         foreach (var connection in connectionRows.Where(x => !string.Equals(x.Status, "CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase)).Take(20))
-            notifications.Add(new("Uyarı", $"Bağlantı: {connection.DisplayName}", $"Durum: {connection.Status} · {connection.LastError}", connection.RouteKey));
+            notifications.Add(new("Uyarı", $"Bağlantı: {connection.DisplayName}", $"Durum: {connection.Status} · {connection.LastError}", connection.RouteKey, DashboardStoreFilter.KeyFor(connection.Channel, connection.ShopId)));
         if (products.Any(x => x.Active && x.Stock <= 0))
             notifications.Add(new("Uyarı", "Kritik stok", $"{products.Count(x => x.Active && x.Stock <= 0):N0} aktif ürün stokta yok.", "products"));
         if (stockWaiting > 0)
