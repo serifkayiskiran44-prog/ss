@@ -9,7 +9,7 @@ namespace TrMarketplaceHubDesktop;
 
 public static class DashboardPanel
 {
-    public static FrameworkElement Create(string? directory, Action<string> navigate, Action<DrillRequest>? drill = null, Action<string>? storeChanged = null)
+    public static FrameworkElement Create(string? directory, Action<string> navigate, Action<DrillRequest>? drill = null, Action<string>? storeChanged = null, Func<string, bool>? routeExists = null)
     {
         var root = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };
         var panel = new StackPanel();
@@ -28,6 +28,9 @@ public static class DashboardPanel
         panel.Children.Add(toolbar);
         var status = new TextBlock { Text = "Yerel veriler yükleniyor…", Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 0, 4, 10) };
         panel.Children.Add(status);
+        // #811: why the board is empty, shown above the figures it would otherwise fill with zeros.
+        var onboarding = new StackPanel { Margin = new Thickness(4, 0, 4, 10) };
+        panel.Children.Add(onboarding);
         var cards = new UniformGrid { Columns = 3, Margin = new Thickness(0, 0, 0, 12) };
         panel.Children.Add(cards);
         var channelGroup = new GroupBox { Header = "Kanal / mağaza sağlığı", Margin = new Thickness(4), Padding = new Thickness(8) };
@@ -94,6 +97,7 @@ public static class DashboardPanel
                     }
                 }
                 finally { applyingStoreFilter = false; }
+                ShowEmptyState(onboarding, snapshot, storeKey, storeScope, navigate, routeExists ?? (_ => true));
                 ShowAnomalies(anomalies, snapshot, card => Drill(card.Route, card.Title, "anomaly", card.Key, card.Title), storeScope);
                 channels.ItemsSource = snapshot.Connections.Select(x => new { x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError }).ToList();
                 notifications.Children.Clear(); foreach (var item in snapshot.Notifications) AddNotification(notifications, item, navigate);
@@ -155,6 +159,40 @@ public static class DashboardPanel
             AutomationProperties.SetName(border, $"{card.Title}, {card.Count}, {card.Age}");
             parent.Children.Add(border);
         }
+    }
+
+    // #811: one cause, one sentence, one safe next step -- and no button when the screen it needs is missing.
+    static void ShowEmptyState(Panel parent, DashboardSnapshot snapshot, string storeKey, string scope, Action<string> navigate, Func<string, bool> routeExists)
+    {
+        parent.Children.Clear();
+        var filtered = storeKey != DashboardStoreFilter.AllStoresKey;
+        var visible = filtered ? snapshot.Connections.Count(c => DashboardStoreFilter.KeyFor(c.Channel, c.ShopId) == storeKey) : snapshot.Connections.Count;
+        var state = DashboardEmptyState.Evaluate(new DashboardEmptyInput
+        {
+            Connections = snapshot.Connections.Count,
+            Sources = snapshot.XmlSources,
+            SourcesEverRun = snapshot.SourcesEverRun,
+            SourcesWithSuccessfulFeed = snapshot.SourcesWithSuccessfulFeed,
+            Products = snapshot.TotalProducts,
+            Orders = snapshot.OpenOrders,
+            Filtered = filtered,
+            VisibleRecords = visible,
+            ScopeLabel = scope,
+        }, routeExists);
+        if (!state.IsEmpty) { parent.Visibility = Visibility.Collapsed; return; }
+        parent.Visibility = Visibility.Visible;
+        var body = new StackPanel();
+        body.Children.Add(new TextBlock { Text = state.Title, FontWeight = FontWeights.SemiBold, FontSize = 14, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) });
+        body.Children.Add(new TextBlock { Text = state.Detail, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+        if (state.HasAction)
+        {
+            var go = new Button { Content = state.ActionLabel, Tag = state.Route, Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left };
+            go.Click += (_, _) => navigate((string)go.Tag);
+            body.Children.Add(go);
+        }
+        var border = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(196, 132, 22)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(253, 248, 238)), Padding = new Thickness(12), Child = body };
+        AutomationProperties.SetName(border, $"{state.Title}. {state.Detail}");
+        parent.Children.Add(border);
     }
 
     static void AddColumn(DataGrid grid, string header, string path, double width) => grid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new System.Windows.Data.Binding(path), Width = width });

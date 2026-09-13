@@ -27,7 +27,7 @@ public partial class MainWindow
    item.Selected+=(_,_)=>SelectRoute(key, !selectingRoute, title, description);
   }
   Group("KATALOG VE TEDARİK");
-  Page("dashboard","Genel bakış","Ürün, sipariş, XML, bağlantı ve sync durumunu tek ekranda izleyin.",DashboardPanel.Create(dataDirectory,key=>Navigate(key),DrillThrough,SwitchDashboardStore));
+  Page("dashboard","Genel bakış","Ürün, sipariş, XML, bağlantı ve sync durumunu tek ekranda izleyin.",DashboardPanel.Create(dataDirectory,key=>Navigate(key),DrillThrough,SwitchDashboardStore,key=>routes.ContainsKey(key)));
   Page("onboarding","İlk kurulum","Mağaza, XML, stok, fiyat ve Excel başlangıç adımlarını güvenli önizlemeyle tamamlayın.",OnboardingPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("products","Ürün yönetimi","Ortak ürün havuzu • Ürün seçerek kartını, fiyatını ve stok kilitlerini düzenleyin.",builtPages["Ürün havuzu"]);
   Page("bulk-products","Toplu ürün işlemleri","Seçili veya filtrelenmiş ürünleri preview, sürüm kontrolü ve açık onay ile güncelleyin.",BulkProductsPanel.Create(dataDirectory,key=>Navigate(key)));

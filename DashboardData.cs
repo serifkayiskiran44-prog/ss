@@ -39,6 +39,11 @@ public sealed record DashboardSnapshot(
     public int OversellRiskProducts { get; init; }
     public DateTime? OversellOldestUtc { get; init; }
     public int StaleSources { get; init; }
+
+    // #811: why the board is empty, not just that it is. Additive and defaulted; an older snapshot reports
+    // nothing ever run, which is what a board with no source history honestly looks like.
+    public int SourcesEverRun { get; init; }
+    public int SourcesWithSuccessfulFeed { get; init; }
     public DateTime? StaleSourceOldestUtc { get; init; }
     public DateTime? FailedSyncOldestUtc { get; init; }
     public DateTime? UnmappedOrderOldestUtc { get; init; }
@@ -218,6 +223,11 @@ public sealed class DashboardDataService
             StaleSourceOldestUtc = staleSources.Count == 0 ? null : staleSources.Min(x => x.LastSuccessfulFeedUtc ?? DateTime.MinValue) is var oldestFeed && oldestFeed == DateTime.MinValue ? null : oldestFeed,
             FailedSyncOldestUtc = failedSync.Count == 0 ? null : failedSync.Min(x => x.UpdatedUtc),
             UnmappedOrderOldestUtc = stockWaiting == 0 ? null : orders.Where(order => catalog.GetOrderStockStatus(order.Marketplace, order.ShopId, order.OrderId) is null).Select(x => x.UpdatedAt.UtcDateTime).DefaultIfEmpty().Min() is var oldestOrder && oldestOrder == default ? null : oldestOrder,
+
+            // #811: a feed that has run at least once but never delivered a successful feed is disconnected,
+            // which is a different problem from one that has never been started.
+            SourcesEverRun = sources.Count(x => x.LastRunUtc.HasValue),
+            SourcesWithSuccessfulFeed = sources.Count(x => x.LastSuccessfulFeedUtc.HasValue),
         };
     }
 
