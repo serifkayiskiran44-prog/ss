@@ -25,7 +25,7 @@ public static class ChannelListingMatrixPanel
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, Height = 560, EnableRowVirtualization = true, EnableColumnVirtualization = false, SelectionMode = DataGridSelectionMode.Single };
         // #842: the product × store pivot with sticky axes -- the two product columns frozen, the store headers in the
         // header row -- virtualized in both directions, cell-selectable from the keyboard. The flat list stays as a view.
-        var matrix = new DataGrid { Tag = "channel-matrix", AutoGenerateColumns = false, IsReadOnly = true, Height = 560, EnableRowVirtualization = true, EnableColumnVirtualization = true, SelectionMode = DataGridSelectionMode.Single, SelectionUnit = DataGridSelectionUnit.Cell, FrozenColumnCount = 2, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserReorderColumns = false };
+        var matrix = new DataGrid { Tag = "channel-matrix", AutoGenerateColumns = false, IsReadOnly = true, Height = 560, EnableRowVirtualization = true, EnableColumnVirtualization = true, SelectionMode = DataGridSelectionMode.Extended, SelectionUnit = DataGridSelectionUnit.Cell, FrozenColumnCount = 2, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserReorderColumns = false };
         VirtualizingPanel.SetIsVirtualizing(matrix, true); VirtualizingPanel.SetVirtualizationMode(matrix, VirtualizationMode.Recycling);
         var view = new ComboBox { Width = 110, ItemsSource = new[] { "Matris", "Liste" }, SelectedIndex = 0, ToolTip = "Görünüm: ürün × mağaza matrisi veya düz liste" }; System.Windows.Automation.AutomationProperties.SetName(view, "Görünüm");
         ChannelMatrix current = new(Array.Empty<ChannelMatrixColumn>(), Array.Empty<ChannelMatrixRow>());
@@ -50,12 +50,14 @@ public static class ChannelListingMatrixPanel
             if (legend.Children.Count == 0) legend.Children.Add(new TextBlock { Text = "Gösterilecek hücre yok.", Opacity = 0.8 });
         }
         IReadOnlyList<ChannelListingMatrixRow> all = [];
+        // #845: the last bulk result stays readable across refreshes; applied previews are remembered so one never applies twice.
+        var lastBulkNote = ""; var appliedBulkPreviews = new HashSet<Guid>();
         void RefreshGrid()
         {
             var filtered = ChannelListingMatrixService.Filter(all, query.Text, statusFilter.SelectedItem?.ToString() ?? "Tümü", channel.Text, shop.Text); grid.ItemsSource = filtered;
             current = ChannelMatrixPivot.Build(filtered, allowedStoreKeys?.Invoke()); readiness = ChannelMatrixReadinessFilter.Apply(current, activeStates); RenderMatrix(matrix, readiness.Matrix); RenderLegend(); emptyText.Text = readiness.EmptyText; emptyText.Visibility = readiness.IsEmpty && view.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
             var isMatrix = view.SelectedIndex == 0; matrix.Visibility = isMatrix ? Visibility.Visible : Visibility.Collapsed; grid.Visibility = isMatrix ? Visibility.Collapsed : Visibility.Visible;
-            status.Text = $"{filtered.Count:N0} satır · {current.Rows.Count:N0} ürün × {current.Columns.Count:N0} mağaza" + (readiness.HiddenRows > 0 ? $" · {readiness.HiddenRows:N0} ürün durum filtresiyle gizli" : "") + $" · {filtered.Count(x => x.MappingStatus == "MISSING")} mapping eksik · {filtered.Count(x => x.MappingStatus == "ERROR")} sync hatası · {filtered.Count(x => x.AuthStatus == "AUTH_ERROR")} bağlantı uyarısı";
+            status.Text = (lastBulkNote.Length > 0 ? lastBulkNote + " · " : "") + $"{filtered.Count:N0} satır · {current.Rows.Count:N0} ürün × {current.Columns.Count:N0} mağaza" + (readiness.HiddenRows > 0 ? $" · {readiness.HiddenRows:N0} ürün durum filtresiyle gizli" : "") + $" · {filtered.Count(x => x.MappingStatus == "MISSING")} mapping eksik · {filtered.Count(x => x.MappingStatus == "ERROR")} sync hatası · {filtered.Count(x => x.AuthStatus == "AUTH_ERROR")} bağlantı uyarısı";
         }
         async Task RefreshAsync() { status.Text = "Matris hazırlanıyor…"; all = await Task.Run(() => new ChannelListingMatrixService(directory).Build()); RefreshGrid(); }
         var refresh = AsyncButton(errors, "Matrisi yenile", RefreshAsync);
@@ -65,7 +67,21 @@ public static class ChannelListingMatrixPanel
             if (view.SelectedIndex == 0) { var cell = matrix.CurrentCell; if (!cell.IsValid || cell.Column is null || cell.Column.DisplayIndex < 2 || cell.Column.DisplayIndex - 2 >= current.Columns.Count) throw new InvalidOperationException("Önce matristen bir mağaza hücresi seçin."); navigate?.Invoke(current.Columns[cell.Column.DisplayIndex - 2].Channel); return; }
             if (grid.SelectedItem is not ChannelListingMatrixRow row) throw new InvalidOperationException("Önce matristen satır seçin."); navigate?.Invoke(row.Channel);
         });
-        var bar = new WrapPanel(); bar.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(query); bar.Children.Add(new TextBlock { Text = "Kanal", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(channel); bar.Children.Add(new TextBlock { Text = "Mağaza", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(shop); bar.Children.Add(statusFilter); bar.Children.Add(view); bar.Children.Add(refresh); bar.Children.Add(product); bar.Children.Add(channelOpen); panel.Children.Add(bar); panel.Children.Add(legend); panel.Children.Add(emptyText); panel.Children.Add(matrix); panel.Children.Add(grid); panel.Children.Add(status);
+        // #845: the channel bulk action -- selected matrix cells become the drawer's products; the store they share is the
+        // default target; the drawer previews local plans and applies them only with approval, a fresh matrix and an offered store.
+        var bulk = Button(errors, "Toplu plan…", () =>
+        {
+            if (view.SelectedIndex != 0) throw new InvalidOperationException("Toplu plan matris görünümünde başlatılır: ürün hücrelerini seçin (Shift/Ctrl ile çoklu).");
+            var cells = matrix.SelectedCells.Where(c => c.IsValid).ToList();
+            var selected = cells.Select(c => c.Item).OfType<ChannelMatrixRow>().Distinct().ToList();
+            if (selected.Count == 0) throw new InvalidOperationException("Seçim boş: önce matristen ürün hücreleri seçin (Shift/Ctrl ile çoklu).");
+            var stores = cells.Where(c => c.Column is not null && c.Column.DisplayIndex >= 2 && c.Column.DisplayIndex - 2 < current.Columns.Count).Select(c => current.Columns[c.Column.DisplayIndex - 2]).Distinct().ToList();
+            var context = new ChannelMatrixBulkDrawer.Context(selected, current.Columns, stores.Count == 1 ? stores[0] : null, ChannelMatrixBulk.Revision(all), () => ChannelMatrixBulk.Revision(new ChannelListingMatrixService(directory).Build()), () => allowedStoreKeys?.Invoke(), new Catalog.CatalogStore(directory), new ChannelProductsStore(directory), appliedBulkPreviews);
+            var drawer = ChannelMatrixBulkDrawer.Build(Window.GetWindow(panel), context, result => { lastBulkNote = $"Son toplu plan: {result.Applied:N0} yazıldı · {result.Skipped:N0} atlandı · {result.Errors:N0} engelli"; _ = RefreshAsync(); });
+            drawer.ShowDialog();
+        });
+        bulk.Tag = "channel-matrix-bulk"; bulk.ToolTip = "Seçili ürünler için tek mağazada yerel kanal planı önizle ve onayla (canlı yazım yok)";
+        var bar = new WrapPanel(); bar.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(query); bar.Children.Add(new TextBlock { Text = "Kanal", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(channel); bar.Children.Add(new TextBlock { Text = "Mağaza", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(shop); bar.Children.Add(statusFilter); bar.Children.Add(view); bar.Children.Add(refresh); bar.Children.Add(product); bar.Children.Add(channelOpen); bar.Children.Add(bulk); panel.Children.Add(bar); panel.Children.Add(legend); panel.Children.Add(emptyText); panel.Children.Add(matrix); panel.Children.Add(grid); panel.Children.Add(status);
         query.TextChanged += (_, _) => RefreshGrid(); channel.TextChanged += (_, _) => RefreshGrid(); shop.TextChanged += (_, _) => RefreshGrid(); statusFilter.SelectionChanged += (_, _) => RefreshGrid(); view.SelectionChanged += (_, _) => RefreshGrid(); _ = RefreshAsync();
         return Scroll(panel);
     }
