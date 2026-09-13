@@ -95,7 +95,7 @@ public static class ChannelListingMatrixPanel
         for (var i = 0; i < matrix.Columns.Count; i++)
         {
             var column = matrix.Columns[i];
-            var cellStyle = new Style(typeof(DataGridCell)); cellStyle.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty, true)); cellStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding($"Descriptions[{i}]")));
+            var cellStyle = FocusStyles.AddTo(new Style(typeof(DataGridCell))); cellStyle.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty, true)); cellStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding($"Descriptions[{i}]")));
             target.Columns.Add(new DataGridTextColumn { Header = column.Header, Binding = new Binding($"Labels[{i}]"), Width = new DataGridLength(120), MinWidth = 90, CellStyle = cellStyle });
         }
         target.FrozenColumnCount = Math.Min(2, target.Columns.Count);

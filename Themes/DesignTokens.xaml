@@ -50,6 +50,34 @@
     <CornerRadius x:Key="CardRadius">6</CornerRadius>
     <CornerRadius x:Key="ShellRadius">7</CornerRadius>
 
+    <!-- Focus (#861): one keyboard focus ring for every control, a dark outer stroke and a light inner stroke drawn outside the bounds. -->
+    <Color x:Key="FocusRingColor">#173646</Color>
+    <Color x:Key="FocusRingInnerColor">#FFFFFF</Color>
+    <sys:Double x:Key="FocusRingThickness">2</sys:Double>
+    <sys:Double x:Key="FocusRingInnerThickness">1</sys:Double>
+    <Thickness x:Key="FocusRingMargin">-2</Thickness>
+    <SolidColorBrush x:Key="FocusRingBrush" Color="{StaticResource FocusRingColor}"/>
+    <SolidColorBrush x:Key="FocusRingInnerBrush" Color="{StaticResource FocusRingInnerColor}"/>
+    <Style x:Key="KeyboardFocusVisual" TargetType="Control">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Control">
+                    <Grid>
+                        <Rectangle x:Name="Outer" Margin="{StaticResource FocusRingMargin}" StrokeThickness="{StaticResource FocusRingThickness}" Stroke="{StaticResource FocusRingBrush}" SnapsToDevicePixels="True" IsHitTestVisible="False"/>
+                        <Rectangle x:Name="Inner" StrokeThickness="{StaticResource FocusRingInnerThickness}" Stroke="{StaticResource FocusRingInnerBrush}" SnapsToDevicePixels="True" IsHitTestVisible="False"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- High contrast: the system's text and window colours, the same shape. -->
+                        <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+                            <Setter TargetName="Outer" Property="Stroke" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"/>
+                            <Setter TargetName="Inner" Property="Stroke" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"/>
+                        </DataTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Typography scale (#858): one face for text, one for code and diagnostics; the roles' sizes and weights. -->
     <FontFamily x:Key="FontFamilyBody">Segoe UI</FontFamily>
     <FontFamily x:Key="FontFamilyMono">Consolas, Courier New</FontFamily>

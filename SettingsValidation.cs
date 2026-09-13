@@ -220,7 +220,7 @@ public static class SettingsValidationBanner
         AutomationProperties.SetAutomationId(go, issue.EntryKey); AutomationProperties.SetName(go, $"{GoLabel}: {label}");
         go.Click += (_, _) => open(issue.EntryKey);
         var dock = new DockPanel { LastChildFill = true }; DockPanel.SetDock(go, Dock.Right); dock.Children.Add(go); dock.Children.Add(text);
-        var row = new Border { Tag = "settings-issue", Child = dock, Focusable = true, BorderThickness = new Thickness(Math.Max(style.BorderWeight, 1), 0, 0, 0), BorderBrush = new SolidColorBrush(style.Accent), Padding = new Thickness(8, 4, 0, 4), Margin = new Thickness(0, 6, 0, 0) };
+        var row = FocusStyles.Apply(new Border { Tag = "settings-issue", Child = dock, Focusable = true, BorderThickness = new Thickness(Math.Max(style.BorderWeight, 1), 0, 0, 0), BorderBrush = new SolidColorBrush(style.Accent), Padding = new Thickness(8, 4, 0, 4), Margin = new Thickness(0, 6, 0, 0) });
         AutomationProperties.SetAutomationId(row, issue.EntryKey); AutomationProperties.SetName(row, $"{style.Word}: {issue.Title}, {label}"); AutomationProperties.SetHelpText(row, issue.Detail);
         row.KeyDown += (_, e) => { if (e.Key == Key.Enter) { open(issue.EntryKey); e.Handled = true; } };
         return row;

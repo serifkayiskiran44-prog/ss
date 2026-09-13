@@ -32,7 +32,7 @@ public static class FieldDiffRenderer
                 if (row.Kind != DiffKind.Removed) body.Children.Add(new TextBlock { Text = "Sonra: " + row.After + (row.AfterTruncated ? " (kısaltıldı)" : ""), TextWrapping = TextWrapping.Wrap });
             }
             var border = new Border { BorderBrush = accent, BorderThickness = new Thickness(p.BorderWeight, p.BorderWeight, p.BorderWeight, p.BorderWeight), Padding = new Thickness(8, 4, 8, 4), Margin = Spacing.BelowInline, Child = body, Focusable = true, Tag = row.Kind };
-            KeyboardNavigation.SetIsTabStop(border, true);
+            FocusStyles.MakeFocusable(border);
             System.Windows.Automation.AutomationProperties.SetName(border, $"{row.Field}: {p.Word}. " + (row.Kind == DiffKind.Unchanged ? row.After : $"Önce {row.Before}. Sonra {row.After}."));
             panel.Children.Add(border);
         }

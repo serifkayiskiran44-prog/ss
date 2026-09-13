@@ -118,7 +118,7 @@ public partial class MainWindow {
   var cell = new Style(typeof(DataGridCell));
   cell.Setters.Add(new Setter(PaddingProperty, metrics.CellPadding));
   cell.Setters.Add(new Setter(VerticalContentAlignmentProperty, VerticalAlignment.Center));
-  products.CellStyle = cell;
+  products.CellStyle = FocusStyles.AddTo(cell);
  }
  // Product card pricing summary (#798). One ranked block -- price, then approximate margin, then when it was
  // last calculated -- above the editable price fields, so the card leads with the number that matters instead

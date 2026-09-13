@@ -43,7 +43,7 @@ public static class DashboardPanel
         rowTooltip.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new System.Windows.Data.Binding("Tooltip")));
         rowTooltip.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty, true));
         rowTooltip.Setters.Add(new Setter(AutomationProperties.HelpTextProperty, new System.Windows.Data.Binding("Tooltip")));
-        channels.RowStyle = rowTooltip;
+        channels.RowStyle = FocusStyles.AddTo(rowTooltip);
         AddColumn(channels, "Kanal", "Channel", 100); AddColumn(channels, "Mağaza", "ShopId", 120); AddColumn(channels, "Durum", "Status", 170); AddColumn(channels, "Son test", "LastTestLabel", 150); AddColumn(channels, "Hata", "LastError", 300);
         channelGroup.Content = channels;
         panel.Children.Add(channelGroup);
