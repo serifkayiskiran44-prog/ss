@@ -88,7 +88,7 @@ public sealed class CategoryAttributeRuleStore
         foreach (var alias in new TaxonomyAliasStore(directory).List().Where(a => a.Approved && byId.ContainsKey(a.LocalId))) byKey.TryAdd(alias.Key, byId[alias.LocalId]);
         var rules = List().GroupBy(r => r.CategoryId, StringComparer.Ordinal).ToDictionary(g => g.Key, g => (IReadOnlyList<CategoryAttributeRule>)g.ToList(), StringComparer.Ordinal);
         var allowed = taxonomy.List(TaxonomyKind.Attribute).Where(e => e.Active && e.Value.Trim().Length > 0).GroupBy(e => Key(e.Name), StringComparer.Ordinal).ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(e => e.Value.Trim()).Distinct(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
-        return new(byKey, rules, allowed);
+        return new(byKey, rules, allowed, new AttributeValueMappingStore(directory).ApprovedMap()); // #916: the approved value aliases ride along
     }
 }
 
@@ -97,9 +97,10 @@ public sealed class CategoryAttributeSnapshot
     readonly IReadOnlyDictionary<string, TaxonomyEntry> categoriesByKey;
     readonly IReadOnlyDictionary<string, IReadOnlyList<CategoryAttributeRule>> rulesByCategory;
     readonly IReadOnlyDictionary<string, IReadOnlyList<string>> allowedByAttribute;
+    readonly IReadOnlyDictionary<string, string> valueAliases; // #916: attribute key + separator + alias key -> the canonical allowed value
 
-    internal CategoryAttributeSnapshot(IReadOnlyDictionary<string, TaxonomyEntry> categoriesByKey, IReadOnlyDictionary<string, IReadOnlyList<CategoryAttributeRule>> rulesByCategory, IReadOnlyDictionary<string, IReadOnlyList<string>> allowedByAttribute)
-    { this.categoriesByKey = categoriesByKey; this.rulesByCategory = rulesByCategory; this.allowedByAttribute = allowedByAttribute; }
+    internal CategoryAttributeSnapshot(IReadOnlyDictionary<string, TaxonomyEntry> categoriesByKey, IReadOnlyDictionary<string, IReadOnlyList<CategoryAttributeRule>> rulesByCategory, IReadOnlyDictionary<string, IReadOnlyList<string>> allowedByAttribute, IReadOnlyDictionary<string, string>? valueAliases = null)
+    { this.categoriesByKey = categoriesByKey; this.rulesByCategory = rulesByCategory; this.allowedByAttribute = allowedByAttribute; this.valueAliases = valueAliases ?? new Dictionary<string, string>(StringComparer.Ordinal); }
 
     /// <summary>"Renk=Kırmızı; Beden=M" → the pairs, keyed by the attribute's fold; a pair without '=' or with an empty name is ignored; the last value of a repeated name wins.</summary>
     public static IReadOnlyDictionary<string, (string Attribute, string Value)> Parse(string? attributesText)
@@ -132,7 +133,8 @@ public sealed class CategoryAttributeSnapshot
         foreach (var rule in rules)
         {
             if (!pairs.TryGetValue(rule.AttributeKey, out var pair) || pair.Value.Length == 0) { if (rule.Required) missing.Add(rule.Attribute); else optionalMissing.Add(rule.Attribute); continue; }
-            if (allowedByAttribute.TryGetValue(rule.AttributeKey, out var allowed) && !allowed.Any(v => string.Equals(v, pair.Value, StringComparison.OrdinalIgnoreCase) || TaxonomyAliasStore.Key(v) == TaxonomyAliasStore.Key(pair.Value)))
+            var value = valueAliases.TryGetValue(AttributeValueMappingStore.MapKey(rule.AttributeKey, TaxonomyAliasStore.Key(pair.Value)), out var canonical) ? canonical : pair.Value; // #916: an approved value alias is the only auto-apply
+            if (allowedByAttribute.TryGetValue(rule.AttributeKey, out var allowed) && !allowed.Any(v => string.Equals(v, value, StringComparison.OrdinalIgnoreCase) || TaxonomyAliasStore.Key(v) == TaxonomyAliasStore.Key(value)))
             { invalid.Add((rule.Attribute, pair.Value, string.Join(", ", allowed.Take(6)) + (allowed.Count > 6 ? ", …" : ""))); continue; }
             present.Add(rule.Attribute);
         }
