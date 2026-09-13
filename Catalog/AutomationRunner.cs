@@ -42,7 +42,7 @@ public static class AutomationRunner
                 try
                 {
                     if (requireListingMapping && channel.Equals("etsy", StringComparison.OrdinalIgnoreCase) && (!long.TryParse(entity, out var listingId) || listingId <= 0)) throw new InvalidOperationException("Etsy ilan eşlemesi eksik.");
-                    var payload = job.Kind == AutomationKind.Stock ? catalog.PreviewStock(channel, shop, product.Id).ToString(System.Globalization.CultureInfo.InvariantCulture) : catalog.PreviewPrice(channel, shop, product.Id).Price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+                    var payload = job.Kind == AutomationKind.Stock ? catalog.PreviewStock(channel, shop, product.Id).ToString(System.Globalization.CultureInfo.InvariantCulture) : catalog.PreviewPrice(channel, shop, product.Id, null, automatic: true).Price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) /* #924: an automatic live write never proceeds on a stale rate */;
                     sync.Enqueue(new SyncRequest(channel, operation, entity, $"{product.Id}:{product.UpdatedUtc.Ticks}:{payload}", shop)); queued++;
                 }
                 catch (Exception error)

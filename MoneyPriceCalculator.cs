@@ -12,6 +12,8 @@ public sealed record MoneyPriceInput(string Sku, string Channel, string Shop, de
     public decimal? FxRateTryPerUnit { get; init; }
     public DateTimeOffset? FxSnapshotUtc { get; init; }
     public DateTimeOffset? AsOfUtc { get; init; }
+    /// <summary>#924: how old the FX snapshot may be; null keeps the 24 hour default.</summary>
+    public TimeSpan? FxStaleAfter { get; init; }
 }
 
 public sealed record MoneyPriceResult(
@@ -38,7 +40,7 @@ public static class MoneyPriceCalculator
         if (input.FxSnapshotUtc is null)
             return Result(input, 0, 0, 0, MoneyPriceStatus.BlockedMissingInput);
         var now = input.AsOfUtc ?? DateTimeOffset.UtcNow;
-        if (now - input.FxSnapshotUtc.Value > TimeSpan.FromHours(24))
+        if (now - input.FxSnapshotUtc.Value > (input.FxStaleAfter ?? TimeSpan.FromHours(24))) // #924: the operator's window
             return Result(input, 0, 0, 0, MoneyPriceStatus.BlockedStaleFx);
         if (input.CommissionRatePercent is null || input.EstimatedShipping is null || input.TransactionCost is null || input.VatRatePercent is null)
             return Result(input, 0, 0, 0, MoneyPriceStatus.BlockedMissingInput);
