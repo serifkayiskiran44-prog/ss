@@ -59,14 +59,25 @@ public static class DashboardPanel
         var service = new DashboardDataService(directory);
         var preferences = new UiPreferenceStore(directory);
         var alerts = new NotificationStore(directory); var snoozes = new AlertSnoozeStore(directory);
-        void RenderAlerts()
+        void RenderAlerts() => RenderAlertsFrom(alerts.List(), snoozes.Active(DateTime.UtcNow));
+        // #874: an acknowledgement or a snooze shows at once (the list re-rendered with the change applied locally), the store is asked to
+        // keep it, and a refusal brings the stored state back with the error on the dashboard's own error surface, with a retry.
+        void RenderAlertsFrom(IReadOnlyList<LocalNotification> list, IReadOnlyList<AlertSnooze> active)
         {
             var now = DateTime.UtcNow;
             // #852: snoozes come from their own store (fingerprint and scope only); a snooze is set from the row's chooser and lifted from the snoozed list.
-            NotificationCenterPanel.Render(notifications, NotificationCenter.Build(alerts.List(), snoozes.Active(now), now), navigate,
-                id => { alerts.Acknowledge(id); RenderAlerts(); }, id => { alerts.Unacknowledge(id); RenderAlerts(); }, now,
-                (id, option) => { var alert = alerts.List().FirstOrDefault(a => a.Id == id); var chosen = AlertSnoozeRules.Option(option); if (alert is null || chosen is null) return; snoozes.Snooze(alert.Fingerprint, alert.Source, alert.StoreKey, alert.Severity, chosen.Duration, DateTime.UtcNow); RenderAlerts(); },
-                fingerprint => { snoozes.Clear(fingerprint); RenderAlerts(); });
+            NotificationCenterPanel.Render(notifications, NotificationCenter.Build(list, active, now), navigate,
+                id => Mutate($"ack:{id}", () => RenderAlertsFrom(list.Select(a => a.Id == id ? a with { Acknowledged = true } : a).ToList(), active), () => alerts.Acknowledge(id), () => RenderAlertsFrom(list, active)),
+                id => Mutate($"unack:{id}", () => RenderAlertsFrom(list.Select(a => a.Id == id ? a with { Acknowledged = false } : a).ToList(), active), () => alerts.Unacknowledge(id), () => RenderAlertsFrom(list, active)), now,
+                (id, option) => { var alert = list.FirstOrDefault(a => a.Id == id); var chosen = AlertSnoozeRules.Option(option); if (alert is null || chosen is null) return; Mutate($"snooze:{alert.Fingerprint}", () => RenderAlertsFrom(list.Where(a => a.Fingerprint != alert.Fingerprint).ToList(), active), () => snoozes.Snooze(alert.Fingerprint, alert.Source, alert.StoreKey, alert.Severity, chosen.Duration, DateTime.UtcNow), () => RenderAlertsFrom(list, active)); },
+                fingerprint => Mutate($"unsnooze:{fingerprint}", () => RenderAlertsFrom(list, active.Where(s => s.Fingerprint != fingerprint).ToList()), () => snoozes.Clear(fingerprint), () => RenderAlertsFrom(list, active)));
+        }
+        // The revert redraws from the inputs already in hand, never from a fresh read: a store that refuses a write may refuse the read that follows it.
+        void Mutate(string key, Action apply, Action commit, Action revert)
+        {
+            var report = OptimisticMutation.Run(key, apply, commit, revert,
+                reportError: text => errors.Show(new InvalidOperationException(text), retry: () => { Mutate(key, apply, commit, revert); return Task.CompletedTask; }, sourceRoute: "dashboard", sourceLabel: "Bildirimler"));
+            if (report.Outcome == MutationOutcome.Committed) { errors.Clear(); RenderAlerts(); }
         }
         DashboardSnapshot? lastSnapshot = null;
         var storeScope = "tüm mağazalar";
