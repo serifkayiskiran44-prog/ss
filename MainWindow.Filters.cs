@@ -13,21 +13,22 @@ public partial class MainWindow {
   var brand=new TextBox{Width=130,MaxLength=6000};var category=new TextBox{Width=130,MaxLength=6000};var sku=new TextBox{Width=160,MaxLength=6000};
   var description=new ComboBox{ItemsSource=new[]{"Tümü","Dolu","Boş"},SelectedIndex=0,Width=90};
   var image=new ComboBox{ItemsSource=new[]{"Tümü","Var","Yok"},SelectedIndex=0,Width=90};
+  var freshness=new ComboBox{ItemsSource=ProductFreshness.FilterChoices.Select(c=>c.Label).ToArray(),SelectedIndex=0,Width=190,ToolTip="Alan bazlı güncellik: fiyat, stok ve içerik alanlarının son gözlemi kendi kaynağının eşiğine göre"}; // #903
   var minPrice=new TextBox{Width=85};var maxPrice=new TextBox{Width=85};var sort=new ComboBox{ItemsSource=new[]{"Name","Sku","Barcode","Price","Cost","Stock","Updated"},SelectedIndex=0,Width=95};var descSort=new CheckBox{Content="Azalan"};
   // The sort controls are part of the persisted product list layout (#792); exposed to the layout code as delegates.
   applyProductSort=(by,descending)=>{sort.SelectedItem=by;descSort.IsChecked=descending;};captureProductSort=()=>(sort.SelectedItem?.ToString()??"Name",descSort.IsChecked==true);
-  foreach(var (title,control) in new (string,Control)[]{("Durum",status),("Marka (; ile ayır)",brand),("Kategori (; ile ayır)",category),("SKU (; ile ayır)",sku),("Açıklama",description),("Görsel kaydı",image),("Min fiyat",minPrice),("Max fiyat",maxPrice),("Sıralama",sort),("",descSort)}){
+  foreach(var (title,control) in new (string,Control)[]{("Durum",status),("Marka (; ile ayır)",brand),("Kategori (; ile ayır)",category),("SKU (; ile ayır)",sku),("Açıklama",description),("Görsel kaydı",image),("Güncellik",freshness),("Min fiyat",minPrice),("Max fiyat",maxPrice),("Sıralama",sort),("",descSort)}){
    var group=new StackPanel{Margin=Spacing.Inline};group.Children.Add(new TextBlock{Text=title});group.Children.Add(control);panel.Children.Add(group);
   }
   static string[] Values(string text)=>text.Split(new[]{';','\r','\n'},StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Distinct().ToArray();
   static bool? State(ComboBox box)=>box.SelectedIndex==0?null:box.SelectedIndex==1;
   decimal? Number(string text)=>decimal.TryParse(text,System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.CurrentCulture,out var value)?value:null;
-  CatalogFilter Current()=>new(){Active=State(status),Brands=Values(brand.Text),Categories=Values(category.Text),Skus=Values(sku.Text),DescriptionPresent=State(description),ImagePresent=State(image),MinPrice=Number(minPrice.Text),MaxPrice=Number(maxPrice.Text),SortBy=sort.SelectedItem?.ToString()??"Name",SortDescending=descSort.IsChecked==true};
-  void Apply(CatalogFilter filter){status.SelectedIndex=filter.Active is null?0:filter.Active.Value?1:2;description.SelectedIndex=filter.DescriptionPresent is null?0:filter.DescriptionPresent.Value?1:2;image.SelectedIndex=filter.ImagePresent is null?0:filter.ImagePresent.Value?1:2;brand.Text=string.Join(';',filter.Brands);category.Text=string.Join(';',filter.Categories);sku.Text=string.Join(';',filter.Skus);minPrice.Text=filter.MinPrice?.ToString(System.Globalization.CultureInfo.CurrentCulture)??"";maxPrice.Text=filter.MaxPrice?.ToString(System.Globalization.CultureInfo.CurrentCulture)??"";sort.SelectedItem=filter.SortBy;descSort.IsChecked=filter.SortDescending;}
+  CatalogFilter Current()=>new(){Active=State(status),Brands=Values(brand.Text),Categories=Values(category.Text),Skus=Values(sku.Text),DescriptionPresent=State(description),ImagePresent=State(image),Freshness=ProductFreshness.FilterChoices[Math.Max(0,freshness.SelectedIndex)].Key,MinPrice=Number(minPrice.Text),MaxPrice=Number(maxPrice.Text),SortBy=sort.SelectedItem?.ToString()??"Name",SortDescending=descSort.IsChecked==true};
+  void Apply(CatalogFilter filter){status.SelectedIndex=filter.Active is null?0:filter.Active.Value?1:2;description.SelectedIndex=filter.DescriptionPresent is null?0:filter.DescriptionPresent.Value?1:2;image.SelectedIndex=filter.ImagePresent is null?0:filter.ImagePresent.Value?1:2;freshness.SelectedIndex=Math.Max(0,ProductFreshness.FilterChoices.ToList().FindIndex(c=>c.Key==filter.Freshness));brand.Text=string.Join(';',filter.Brands);category.Text=string.Join(';',filter.Categories);sku.Text=string.Join(';',filter.Skus);minPrice.Text=filter.MinPrice?.ToString(System.Globalization.CultureInfo.CurrentCulture)??"";maxPrice.Text=filter.MaxPrice?.ToString(System.Globalization.CultureInfo.CurrentCulture)??"";sort.SelectedItem=filter.SortBy;descSort.IsChecked=filter.SortDescending;}
   var filterStore=new CatalogFilterStore(dataDirectory);var saved=new ComboBox{Width=170,DisplayMemberPath="Name"};var filterName=new TextBox{Width=140,ToolTip="Kaydedilecek filtre adı"};
   void ReloadSaved(){saved.ItemsSource=filterStore.List();}
   panel.Children.Add(Button("Filtreleri uygula",()=>{productFilter=Current();productOffset=0;RefreshProducts();}));
-  panel.Children.Add(Button("Filtreleri temizle",()=>{status.SelectedIndex=description.SelectedIndex=image.SelectedIndex=0;brand.Clear();category.Clear();sku.Clear();productFilter=new();productOffset=0;RefreshProducts();}));
+  panel.Children.Add(Button("Filtreleri temizle",()=>{status.SelectedIndex=description.SelectedIndex=image.SelectedIndex=freshness.SelectedIndex=0;brand.Clear();category.Clear();sku.Clear();productFilter=new();productOffset=0;RefreshProducts();}));
   panel.Children.Add(new TextBlock{Text="Kayıtlı filtre",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(8,0,2,0)});panel.Children.Add(saved);panel.Children.Add(filterName);
   panel.Children.Add(Button("Filtreyi kaydet",()=>{filterStore.Save(filterName.Text,Current());ReloadSaved();filterName.Clear();}));
   panel.Children.Add(Button("Filtreyi yükle",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");Apply(selected.Filter);productFilter=selected.Filter;productOffset=0;RefreshProducts();}));
@@ -321,6 +322,9 @@ public partial class MainWindow {
   var view = ProductProvenance.Build(product, source, DateTime.UtcNow, id => sources.FirstOrDefault(s => s.Id == id));
   productProvenanceExpander.Header = $"Köken · {view.Headline}";
   productProvenanceBody.Children.Add(new TextBlock { Text = view.SourceSummary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+  // #903: field-level freshness as the first line of the body -- it wraps here; the expander header cannot.
+  var freshnessView = ProductFreshness.Evaluate(product, id => sources.FirstOrDefault(s => s.Id == id), DateTime.UtcNow);
+  productProvenanceBody.Children.Add(new TextBlock { Text = "Güncellik: " + freshnessView.Headline, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(0, 2, 0, 4), Tag = "product-freshness" });
   foreach (var row in view.Rows)
    productProvenanceBody.Children.Add(new TextBlock { Text = $"{row.Field}: {row.Origin} — {row.Detail}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(0, 2, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
   // #897: the fallback verdict -- eligibility in words from persisted facts; nothing switches by itself.
@@ -383,7 +387,7 @@ public partial class MainWindow {
   if (productInspectDrawer is null) return;
   if (products.SelectedItem is not CatalogProduct product) { CloseProductInspect(); return; }
   var jobs = new SyncStore(dataDirectory).List().Where(j => j.EntityId == product.Id).ToList();
-  var view = ProductQuickInspect.Build(product, jobs, DateTime.UtcNow);
+  var view = ProductQuickInspect.Build(product, jobs, DateTime.UtcNow, store.Sources());
   productInspectTitle.Text = view.Rows.First(r => r.Label == "Ürün adı").Value;
   productInspectBody.Children.Clear();
   foreach (var section in view.Sections)

@@ -14,8 +14,10 @@ public sealed record CatalogFilter {
  public int? MinStock {get;init;}
  public int? MaxStock {get;init;}
  public bool? SourceMissing {get;init;}
+ /// <summary>#903: "stale:any", "stale:Price", "stale:Stock", "stale:Content", "fresh:any" or "unknown:any" -- empty for no freshness criterion.</summary>
+ public string Freshness {get;init;}="";
  public string SortBy {get;init;}="Name";
  public bool SortDescending {get;init;}
  /// <summary>#886: no criterion set -- the list shows the whole pool.</summary>
- public bool IsDefault=>Active is null&&Brands.Length==0&&Categories.Length==0&&Skus.Length==0&&SourceIds.Length==0&&DescriptionPresent is null&&ImagePresent is null&&MinPrice is null&&MaxPrice is null&&MinCost is null&&MaxCost is null&&MinStock is null&&MaxStock is null&&SourceMissing is null;
+ public bool IsDefault=>Active is null&&Brands.Length==0&&Categories.Length==0&&Skus.Length==0&&SourceIds.Length==0&&DescriptionPresent is null&&ImagePresent is null&&MinPrice is null&&MaxPrice is null&&MinCost is null&&MaxCost is null&&MinStock is null&&MaxStock is null&&SourceMissing is null&&Freshness.Length==0;
 }

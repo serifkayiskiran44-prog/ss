@@ -22,7 +22,7 @@ public static class ProductQuickInspect
 {
     const string Dash = "—";
 
-    public static ProductQuickInspectView Build(CatalogProduct product, IReadOnlyList<SyncJob> jobs, DateTime nowUtc)
+    public static ProductQuickInspectView Build(CatalogProduct product, IReadOnlyList<SyncJob> jobs, DateTime nowUtc, IReadOnlyList<XmlSource>? sources = null)
     {
         ArgumentNullException.ThrowIfNull(product); ArgumentNullException.ThrowIfNull(jobs);
         var rows = new List<ProductQuickInspectRow>();
@@ -43,6 +43,9 @@ public static class ProductQuickInspect
         Add("Kaynak", "Kaynak türü", product.SourceKind);
         Add("Kaynak", "Son kaynak güncellemesi", product.SourceUpdatedUtc is { } touched ? Ago(nowUtc - touched) : null);
         Add("Kaynak", "Satır durumu", ProductRowState.Classify(product, nowUtc).Badge);
+        // #903: field-level freshness, only when the caller can name the sources (the thresholds are theirs).
+        if (sources is not null)
+            foreach (var field in ProductFreshness.Evaluate(product, id => sources.FirstOrDefault(s => s.Id == id), nowUtc).Fields) Add("Güncellik", field.Label, field.Words);
 
         var missing = Missing(product);
         Add("Hazırlık", "Durum", missing.Count == 0 ? "Hazır" : $"Eksik ({missing.Count})");
