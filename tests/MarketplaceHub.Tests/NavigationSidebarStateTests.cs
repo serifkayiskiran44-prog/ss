@@ -23,7 +23,7 @@ public sealed class NavigationSidebarStateTests
             new UiPreferenceStore(root).Set(NavigationSidebar.PreferenceKey, NavigationSidebar.Serialize(chosen));
             SqliteConnection.ClearAllPools();
 
-            var restored = NavigationSidebar.Parse(new UiPreferenceStore(root).Get(NavigationSidebar.PreferenceKey));
+            var restored = NavigationSidebar.Parse(PreferenceSchema.Read(new UiPreferenceStore(root), NavigationSidebar.PreferenceKey));
             Assert.IsTrue(restored.Collapsed, "Collapsed is a choice, not a session accident.");
             Assert.AreEqual(260, restored.ExpandedWidth, "Expanding again must return to the width the operator had, not the default.");
             Assert.AreEqual(NavigationSidebar.CollapsedWidth, NavigationSidebar.CurrentWidth(restored));

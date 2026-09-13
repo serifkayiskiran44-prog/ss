@@ -51,7 +51,7 @@ public sealed class OrderWorkspaceLayoutUiTests
                 // A drag ends: the detail column's width is remembered in DIP, clamped.
                 layout.ColumnDefinitions[2].Width = new GridLength(450); Drain(window);
                 splitter.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent }); Drain(window);
-                Assert.AreEqual("450", new UiPreferenceStore(root).Get(OrderWorkspaceLayout.SplitPreferenceKey));
+                Assert.AreEqual("450", PreferenceSchema.Read(new UiPreferenceStore(root), OrderWorkspaceLayout.SplitPreferenceKey));
 
                 // Selection persistence: a search rebinds the list; the same order stays selected and its detail stays open.
                 var orders = ((IEnumerable<OrderSnapshot>)grid.ItemsSource).ToList();

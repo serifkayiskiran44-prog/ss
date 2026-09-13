@@ -30,12 +30,12 @@ public sealed class OrderColumnPresetsUiTests
             CollectionAssert.AreEqual(new[] { "OrderId", "ShopId", "DeliveryLabel", "SlaLabel", "Carriers", "TrackingNumbers", "SyncLabel" }, Visible(grid), "The shipping preset: its columns, in its order.");
             Assert.AreEqual(orderIdWidth, grid.Columns.Single(c => Key(c) == "OrderId").Width.Value, "A preset never resizes.");
             var prefs = new UiPreferenceStore(root);
-            Assert.AreEqual("shipping", prefs.Get(OrderColumnPresets.PresetPreferenceKey)); Assert.IsNull(prefs.Get(OrderColumnPresets.CustomLayoutPreferenceKey), "No custom layout was written by choosing a preset.");
+            Assert.AreEqual("shipping", PreferenceSchema.Read(prefs, OrderColumnPresets.PresetPreferenceKey)); Assert.IsNull(PreferenceSchema.Read(prefs, OrderColumnPresets.CustomLayoutPreferenceKey), "No custom layout was written by choosing a preset.");
 
             // The user hides a column: that is theirs -- the grid is Özel now and the layout is the custom one.
             grid.Columns.Single(c => Key(c) == "SlaLabel").Visibility = Visibility.Collapsed; Drain();
             Assert.AreEqual("Özel", combo.SelectedItem);
-            var custom = prefs.Get(OrderColumnPresets.CustomLayoutPreferenceKey);
+            var custom = PreferenceSchema.Read(prefs, OrderColumnPresets.CustomLayoutPreferenceKey);
             Assert.IsNotNull(custom); Assert.IsFalse(DataGridLayoutCodec.Deserialize(custom)!.Columns.Single(c => c.Key == "SlaLabel").Visible);
 
             // Restart: the mode and the custom layout come back.
@@ -45,7 +45,7 @@ public sealed class OrderColumnPresetsUiTests
 
             combo2.SelectedItem = "Operasyon"; Drain();
             CollectionAssert.AreEqual(new[] { "Marketplace", "ShopId", "OrderId", "RawStatus", "PaymentStatus", "StockDecisionLabel", "DeliveryLabel", "SlaLabel", "UrgencyLabel" }, Visible(grid2));
-            Assert.AreEqual(custom, prefs.Get(OrderColumnPresets.CustomLayoutPreferenceKey), "Choosing a preset leaves the custom layout byte-for-byte as it was.");
+            Assert.AreEqual(custom, PreferenceSchema.Read(prefs, OrderColumnPresets.CustomLayoutPreferenceKey), "Choosing a preset leaves the custom layout byte-for-byte as it was.");
 
             var (panel3, grid3, combo3) = Build(root);
             Assert.AreEqual("Operasyon", combo3.SelectedItem, "The preset survives a restart.");

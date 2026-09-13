@@ -37,7 +37,7 @@ public partial class MainWindow {
  }
  void ApplyProductColumnPreferences()
  {
-  var hidden = (uiPreferences.Get("columns:products") ?? "").Split('\u001f', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+  var hidden = (PreferenceSchema.Read(uiPreferences, "columns:products") ?? "").Split('\u001f', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
   foreach (var column in products.Columns)
   {
    var header = column.Header?.ToString() ?? "";
@@ -56,7 +56,7 @@ public partial class MainWindow {
  static string ColumnKey(DataGridColumn column) => column is DataGridBoundColumn { Binding: System.Windows.Data.Binding binding } ? binding.Path.Path : column.Header?.ToString() ?? "";
  void InitializeProductLayout()
  {
-  ApplyProductLayout(DataGridLayoutCodec.Deserialize(uiPreferences.Get(ProductLayoutKey)));
+  ApplyProductLayout(DataGridLayoutCodec.Deserialize(PreferenceSchema.Read(uiPreferences, ProductLayoutKey)));
   products.ColumnDisplayIndexChanged += (_, _) => SaveProductLayout(); products.ColumnReordered += (_, _) => SaveProductLayout();
   var width = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(DataGridColumn.WidthProperty, typeof(DataGridColumn));
   var visibility = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(DataGridColumn.VisibilityProperty, typeof(DataGridColumn));
@@ -86,7 +86,7 @@ public partial class MainWindow {
  void SaveProductLayout()
  {
   if (applyingProductLayout || products.Columns.Count == 0) return;
-  try { uiPreferences.Set(ProductLayoutKey, DataGridLayoutCodec.Serialize(CaptureProductLayout())); } catch (Exception e) { Log(Safe(e), NotificationSeverity.Error); }
+  try { PreferenceSchema.Write(uiPreferences, ProductLayoutKey, DataGridLayoutCodec.Serialize(CaptureProductLayout())); } catch (Exception e) { Log(Safe(e), NotificationSeverity.Error); }
  }
  // Product list density (#793). One selector on the same DataGrid the list already owns -- no parallel styles --
  // driving the shared metrics table so font, row height, thumbnail and hit target scale together. The choice is
@@ -94,20 +94,20 @@ public partial class MainWindow {
  // ItemsSource, so the selection and the virtualized panel are untouched.
  const string ProductDensityKey = "density:products";
  ComboBox? productDensityBox;
- internal string CurrentProductDensity() => ProductListDensity.Normalize(productDensityBox?.SelectedItem as string ?? uiPreferences.Get(ProductDensityKey));
+ internal string CurrentProductDensity() => ProductListDensity.Normalize(productDensityBox?.SelectedItem as string ?? PreferenceSchema.Read(uiPreferences, ProductDensityKey));
  ComboBox BuildProductDensitySelector()
  {
   var modes = new[] { ProductListDensity.Comfortable, ProductListDensity.Compact };
   var box = new ComboBox { Name = "ProductDensityBox", Width = 95, ItemsSource = modes.Select(ProductListDensity.Label).ToArray(), ToolTip = "Satır yoğunluğu" };
   productDensityBox = box;
-  var stored = ProductListDensity.Normalize(uiPreferences.Get(ProductDensityKey));
+  var stored = ProductListDensity.Normalize(PreferenceSchema.Read(uiPreferences, ProductDensityKey));
   box.SelectedIndex = Array.IndexOf(modes, stored);
   ApplyProductDensity(stored);
   box.SelectionChanged += (_, _) =>
   {
    var mode = ProductListDensity.Normalize(box.SelectedItem as string);
    ApplyProductDensity(mode);
-   try { uiPreferences.Set(ProductDensityKey, mode); } catch (Exception e) { Log(Safe(e), NotificationSeverity.Error); }
+   try { PreferenceSchema.Write(uiPreferences, ProductDensityKey, mode); } catch (Exception e) { Log(Safe(e), NotificationSeverity.Error); }
   };
   return box;
  }
@@ -449,7 +449,7 @@ public partial class MainWindow {
   foreach (var check in checks) fields.Children.Add(check);
   panel.Children.Add(list);
   // #818: the standard dialog shell; Kaydet is Enter, Vazgeç is Escape, the checklist scrolls.
-  var dialog = DialogShell.Create(this, "Ürün kolonları", panel, new DialogShell.Action[] { new("Vazgeç", IsCancel: true), new("Kaydet", IsPrimary: true, OnClick: () => { var hidden = products.Columns.Zip(checks).Where(x => x.Second.IsChecked != true).Select(x => x.First.Header?.ToString() ?? ""); uiPreferences.Set("columns:products", string.Join('\u001f', hidden)); ApplyProductColumnPreferences(); SaveProductLayout(); return true; }) }, 360, 500);
+  var dialog = DialogShell.Create(this, "Ürün kolonları", panel, new DialogShell.Action[] { new("Vazgeç", IsCancel: true), new("Kaydet", IsPrimary: true, OnClick: () => { var hidden = products.Columns.Zip(checks).Where(x => x.Second.IsChecked != true).Select(x => x.First.Header?.ToString() ?? ""); PreferenceSchema.Write(uiPreferences, "columns:products", string.Join('\u001f', hidden)); ApplyProductColumnPreferences(); SaveProductLayout(); return true; }) }, 360, 500);
   dialog.ShowDialog();
  }
 }

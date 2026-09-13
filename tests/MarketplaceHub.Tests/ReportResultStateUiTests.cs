@@ -140,7 +140,7 @@ public sealed class ReportResultStateUiTests
                     Assert.AreEqual(2, calls); StringAssert.Contains(Setup<TextBlock>("report-result-state-text").Text, "OrderId");
                     preferences.Set(ReportColumns.PreferenceKey("orders-csv"), "{stale");
                     Click(Descendants(slow).OfType<Button>().Single(b => (string?)b.Tag == "report-result-action-reset-columns"));
-                    Assert.AreEqual(ReportColumns.Persist(ReportColumns.Default(ReportColumns.OrdersSchema)), preferences.Get(ReportColumns.PreferenceKey("orders-csv")), "The action writes the default layout.");
+                    Assert.AreEqual(ReportColumns.Persist(ReportColumns.Default(ReportColumns.OrdersSchema)), PreferenceSchema.Read(preferences, ReportColumns.PreferenceKey("orders-csv")), "The action writes the default layout.");
                     StringAssert.Contains(Setup<TextBlock>("report-result-state-title").Text, "kolon düzeniyle", "The rows still lack the columns, so the state stays until a new query.");
                 }
                 finally { setupWindow.Close(); }

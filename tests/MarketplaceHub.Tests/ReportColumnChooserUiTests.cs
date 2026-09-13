@@ -89,7 +89,7 @@ public sealed class ReportColumnChooserUiTests
                     if (failure is not null) throw failure;
                     Drain(window);
                     CollectionAssert.AreEqual(new[] { "OrderId", "ShopId", "Status", "UpdatedUtc", "Price" }, Keys(), "The grid follows the saved layout.");
-                    var persisted = ReportColumns.Resolve(ReportColumns.OrdersSchema, new UiPreferenceStore(root).Get("report-columns:orders-csv"), false);
+                    var persisted = ReportColumns.Resolve(ReportColumns.OrdersSchema, PreferenceSchema.Read(new UiPreferenceStore(root), "report-columns:orders-csv"), false);
                     CollectionAssert.AreEqual(new[] { "OrderId", "ShopId", "Status", "UpdatedUtc", "Price" }, persisted.VisibleKeys.ToArray(), "The preference holds the layout.");
 
                     // The export writes exactly the visible columns in their order.
@@ -98,7 +98,7 @@ public sealed class ReportColumnChooserUiTests
 
                     // A grid reorder by the operator persists too.
                     Grid().Columns.Single(c => ReportParameterPanel.ColumnKey(c) == "Price").DisplayIndex = 0; Drain(window);
-                    CollectionAssert.AreEqual(new[] { "Price", "OrderId", "ShopId", "Status", "UpdatedUtc" }, ReportColumns.Resolve(ReportColumns.OrdersSchema, new UiPreferenceStore(root).Get("report-columns:orders-csv"), false).VisibleKeys.ToArray());
+                    CollectionAssert.AreEqual(new[] { "Price", "OrderId", "ShopId", "Status", "UpdatedUtc" }, ReportColumns.Resolve(ReportColumns.OrdersSchema, PreferenceSchema.Read(new UiPreferenceStore(root), "report-columns:orders-csv"), false).VisibleKeys.ToArray());
 
                     // Restart: a new panel reads the persisted layout back.
                     window.Close(); Open();

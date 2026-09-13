@@ -117,7 +117,7 @@ public static class DashboardPanel
                 try
                 {
                     var options = DashboardStoreFilter.Options(snapshot.Connections.Select(c => new DashboardStoreCandidate(c.Channel, c.ShopId, c.DisplayName, c.Enabled)).ToList());
-                    var selection = DashboardStoreFilter.Resolve(preferences.Get(DashboardStoreFilter.PreferenceKey), options);
+                    var selection = DashboardStoreFilter.Resolve(PreferenceSchema.Read(preferences, DashboardStoreFilter.PreferenceKey), options);
                     storeFilter.ItemsSource = options;
                     storeFilter.SelectedItem = options.FirstOrDefault(o => o.Key == selection.Selected.Key) ?? options[0];
                     storeScope = selection.Selected.Scope;
@@ -126,7 +126,7 @@ public static class DashboardPanel
                     if (selection.FellBack)
                     {
                         // The saved store is gone or switched off: say so and stop pointing at it.
-                        try { preferences.Set(DashboardStoreFilter.PreferenceKey, DashboardStoreFilter.AllStoresKey); } catch (Exception saveError) { System.Diagnostics.Debug.WriteLine(saveError.Message); }
+                        try { PreferenceSchema.Write(preferences, DashboardStoreFilter.PreferenceKey, DashboardStoreFilter.AllStoresKey); } catch (Exception saveError) { System.Diagnostics.Debug.WriteLine(saveError.Message); }
                         status.Text = selection.Notice;
                     }
                 }
@@ -166,7 +166,7 @@ public static class DashboardPanel
         storeFilter.SelectionChanged += async (_, _) =>
         {
             if (applyingStoreFilter || storeFilter.SelectedItem is not DashboardStoreOption chosen) return;
-            try { preferences.Set(DashboardStoreFilter.PreferenceKey, chosen.Key); } catch (Exception saveError) { System.Diagnostics.Debug.WriteLine(saveError.Message); }
+            try { PreferenceSchema.Write(preferences, DashboardStoreFilter.PreferenceKey, chosen.Key); } catch (Exception saveError) { System.Diagnostics.Debug.WriteLine(saveError.Message); }
             // #810: the trail was dug through the previous store's data, so the window drops it before the reload.
             storeChanged?.Invoke(chosen.Key);
             await RefreshAsync(force: false);

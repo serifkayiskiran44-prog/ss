@@ -167,7 +167,7 @@ public static class ReportParameterPanel
         }
         void SaveLayout()
         {
-            try { context.Preferences.Set(ReportColumns.PreferenceKey(definition.Key), ReportColumns.Persist(layout)); }
+            try { PreferenceSchema.Write(context.Preferences, ReportColumns.PreferenceKey(definition.Key), ReportColumns.Persist(layout)); }
             catch (Exception error) { status.Text = "Kolon düzeni kaydedilemedi: " + AuditStore.Sanitize(error.Message); }
         }
         void RenderState(ReportResultStateModel model)
@@ -336,7 +336,7 @@ public static class ReportParameterPanel
 
     /// <summary>A result column carries its schema key as its sort path ("[OrderId]"); the header is a label and may change.</summary>
     public static string? ColumnKey(DataGridColumn column) => column?.SortMemberPath is { Length: > 2 } path && path[0] == '[' && path[^1] == ']' ? path[1..^1] : null;
-    static string? SafeGet(UiPreferenceStore preferences, string key) { try { return preferences.Get(key); } catch (Exception) { return null; } }
+    static string? SafeGet(UiPreferenceStore preferences, string key) { try { return PreferenceSchema.Read(preferences, key); } catch (Exception) { return null; } }
     static DateTime? AsUtcDay(DateTime? picked) => picked is null ? null : DateTime.SpecifyKind(picked.Value.Date, DateTimeKind.Utc);
     static DateTime? AsPickerDay(DateTime? day) => day is null ? null : DateTime.SpecifyKind(day.Value.Date, DateTimeKind.Unspecified);
 }

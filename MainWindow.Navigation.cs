@@ -91,9 +91,9 @@ public partial class MainWindow
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var readiness=PreflightCenter.FromEtsy(new EtsyReadinessService().Build()); Log($"Yayın öncesi preflight: {readiness.Status}; engel={readiness.BlockingItems.Count}");
-  var initial = uiPreferences.Get("last-route");
+  var initial = PreferenceSchema.Read(uiPreferences, "last-route");
   Navigate(routes.ContainsKey(initial ?? "") ? initial! : "dashboard", false);
-  sidebarState = NavigationSidebar.Parse(uiPreferences.Get(NavigationSidebar.PreferenceKey));
+  sidebarState = NavigationSidebar.Parse(PreferenceSchema.Read(uiPreferences, NavigationSidebar.PreferenceKey));
   ApplySidebarState();
  }
  // #812: one place turns the state into the shell -- column width, brand, search box, group headers and every
@@ -122,7 +122,7 @@ public partial class MainWindow
   }
   if (!collapsed) FilterNavigationItems();
  }
- void SaveSidebarState() { try { uiPreferences.Set(NavigationSidebar.PreferenceKey, NavigationSidebar.Serialize(sidebarState)); } catch (Exception error) { Log("Menü durumu kaydedilemedi: " + error.Message); } }
+ void SaveSidebarState() { try { PreferenceSchema.Write(uiPreferences, NavigationSidebar.PreferenceKey, NavigationSidebar.Serialize(sidebarState)); } catch (Exception error) { Log("Menü durumu kaydedilemedi: " + error.Message); } }
  void ToggleSidebar()
  {
   sidebarState = NavigationSidebar.Toggle(sidebarState);
@@ -147,7 +147,7 @@ public partial class MainWindow
    if (!open.Allowed) { Log(open.Notice); return; }
   }
   currentRoute = key;
-  uiPreferences.Set("last-route", key);
+  PreferenceSchema.Write(uiPreferences, "last-route", key);
   var item = NavigationList.Items.OfType<ListBoxItem>().Single(i => i.Tag?.ToString() == key);
   selectingRoute = true;
   try { NavigationList.SelectedItem = item; ModuleTabs.SelectedItem = page; } finally { selectingRoute = false; }
