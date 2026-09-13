@@ -51,7 +51,7 @@ public sealed class BulkProductOperations
             else if (request.Kind == BulkProductOperationKind.SetCategory) clone.Category = request.Value.Trim();
             else if (request.Kind == BulkProductOperationKind.SetBrand) clone.Brand = request.Value.Trim();
             else if (request.Kind == BulkProductOperationKind.SetDescription) clone.Description = request.Value;
-            else if (request.Kind == BulkProductOperationKind.SetName) clone.Name = request.Value.Trim();
+            else if (request.Kind == BulkProductOperationKind.SetName) clone.Name = TitleNormalizer.Normalize(request.Value).Normalized; // #905
             afterValue = Value(clone, request.Kind);
             var status = beforeValue == afterValue ? "SKIP" : "READY"; var error = "";
             if (request.Kind == BulkProductOperationKind.SetName && string.IsNullOrWhiteSpace(clone.Name)) { status = "ERROR"; error = "Ürün adı boş olamaz."; }

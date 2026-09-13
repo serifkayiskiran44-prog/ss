@@ -51,7 +51,8 @@ public static class ProductValidation
         Length("content", "Fatura adı", product.InvoiceName, 300);
         Length("content", "Alt başlık", product.Subtitle, 300);
         Length("identity", "Raf", product.Shelf, 100);
-        Length("content", "Başlık", product.Name, 500);
+        // #905: the title pipeline never cuts -- over the limit is refused with the excess counted.
+        if (TitleNormalizer.OverLimit(product.Name) is { } overLimit) Add(Blocking, "content", "Başlık", overLimit);
         Length("identity", "SKU", product.Sku, 128);
         Length("identity", "Barkod", product.Barcode, 64);
         Length("content", "Marka", product.Brand, 200);
@@ -68,6 +69,7 @@ public static class ProductValidation
         // --- Warnings: saveable, but not ready to list. Same gaps the quick-inspect readiness reports. ---
         if (product.Price <= 0) Add(Warning, "price-stock", "Satış fiyatı", "Satış fiyatı girilmemiş; kanala gönderilemez.");
         if (string.IsNullOrWhiteSpace(product.Description)) Add(Warning, "content", "Açıklama", "Açıklama boş; çoğu pazaryeri açıklama ister.");
+        if (TitleNormalizer.Normalize(product.Name).Changed) Add(Warning, "content", "Başlık", "Başlıkta fazla boşluk veya görünmez karakter var; bir sonraki kayıtta düzeltilir.");
         if (string.IsNullOrWhiteSpace(product.ImageUrls)) Add(Warning, "media", "Görseller", "Görsel yok; ilan açılamaz.");
         if (product.Active && product.Stock == 0) Add(Warning, "price-stock", "Stok", "Ürün aktif ama stok sıfır.");
 

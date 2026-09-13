@@ -28,6 +28,7 @@ public partial class MainWindow
     {
         ValidBindings(productEditor);
         if (edit == null) return;
+        edit.Name = TitleNormalizer.Normalize(edit.Name).Normalized; // #905
         // #820: evaluate the whole record first; write each finding under its input, show the summary at the top,
         // focus the first blocker and refuse -- the store would refuse the same record, but without telling the
         // operator where.

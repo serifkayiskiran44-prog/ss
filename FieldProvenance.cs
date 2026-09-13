@@ -73,7 +73,7 @@ public static class FieldProvenance
     static string ValueOf(CatalogProduct p, string field) => field switch
     {
         "Cost" => p.Cost.ToString(CultureInfo.InvariantCulture), "Price" => p.Price.ToString(CultureInfo.InvariantCulture), "Currency" => p.Currency ?? "",
-        "Stock" => p.Stock.ToString(CultureInfo.InvariantCulture), "Name" => p.Name ?? "", "Description" => p.Description ?? "", "ImageUrls" => p.ImageUrls ?? "", "Gtin" => p.Gtin ?? "",
+        "Stock" => p.Stock.ToString(CultureInfo.InvariantCulture), "Name" => TitleNormalizer.Normalize(p.Name).Normalized, // #905: whitespace and invisible characters are not an edit "Description" => p.Description ?? "", "ImageUrls" => p.ImageUrls ?? "", "Gtin" => p.Gtin ?? "",
         _ => "",
     };
 
