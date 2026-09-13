@@ -28,6 +28,7 @@ public static class KeyboardShortcuts
         new("navigate-products", "Ürünlere git", ShortcutScope.Shell, Key.D2, ModifierKeys.Control),
         new("toggle-sidebar", "Menüyü daralt veya genişlet", ShortcutScope.Shell, Key.B, ModifierKeys.Control),
         new("back", "Geri (gezinti izinde bir adım)", ShortcutScope.Shell, Key.Left, ModifierKeys.Alt, "iz varken"),
+        new("forward", "İleri (gezinti izinde bir adım)", ShortcutScope.Shell, Key.Right, ModifierKeys.Alt, "iz varken"),
         new("refresh-products", "Ürün listesini yenile", ShortcutScope.Shell, Key.F5, ModifierKeys.None),
         new("dismiss-toast", "Bildirimi kapat", ShortcutScope.Shell, Key.Escape, ModifierKeys.None, "bildirim odaktayken"),
         new("shortcut-reference", "Klavye kısayolları listesi", ShortcutScope.Shell, Key.F1, ModifierKeys.None),

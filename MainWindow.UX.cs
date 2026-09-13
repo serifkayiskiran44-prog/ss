@@ -33,6 +33,8 @@ public partial class MainWindow
             case "toggle-sidebar": ToggleSidebar(); return true;
             // #810: the drill-through trail is walkable from the keyboard, not only from the "‹ Geri" button.
             case "back": if (!BackButton.IsEnabled) return false; Back_Click(BackButton, new RoutedEventArgs()); return true;
+            // #889: the forward branch is walkable from the keyboard too.
+            case "forward": if (!ForwardButton.IsEnabled) return false; Forward_Click(ForwardButton, new RoutedEventArgs()); return true;
             case "refresh-products": RefreshProducts(); return true;
             case "shortcut-reference": KeyboardShortcutReference.Show(this); return true;
             default: return false;

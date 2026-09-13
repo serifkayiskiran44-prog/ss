@@ -93,7 +93,10 @@ public partial class MainWindow
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var readiness=PreflightCenter.FromEtsy(new EtsyReadinessService().Build()); Log($"Yayın öncesi preflight: {readiness.Status}; engel={readiness.BlockingItems.Count}");
-  Navigate(PreferenceSchema.TryDecode(uiPreferences, "last-route", (string saved, out string route) => { route = saved; return routes.ContainsKey(saved); }, out var lastRoute) ? lastRoute : "dashboard", false);
+  // #889: the trail from the last session comes back first, re-validated against this session's screens, stores and records; when it has depth it decides the opening screen.
+  var restoredRoute = RestoreTrail();
+  Navigate(restoredRoute ?? (PreferenceSchema.TryDecode(uiPreferences, "last-route", (string saved, out string route) => { route = saved; return routes.ContainsKey(saved); }, out var lastRoute) ? lastRoute : "dashboard"), false);
+  if (restoredRoute is not null && drillStack.Current.EntityId.Length > 0) RevealEntity(drillStack.Current);
   sidebarState = PreferenceSchema.TryDecode<NavigationSidebarState>(uiPreferences, NavigationSidebar.PreferenceKey, NavigationSidebar.TryParse, out var savedSidebar) ? savedSidebar : NavigationSidebar.Default;
   ApplySidebarState();
  }
@@ -149,6 +152,7 @@ public partial class MainWindow
   }
   currentRoute = key;
   PreferenceSchema.Write(uiPreferences, "last-route", key);
+  SaveTrail();
   var item = NavigationList.Items.OfType<ListBoxItem>().Single(i => i.Tag?.ToString() == key);
   selectingRoute = true;
   try { NavigationList.SelectedItem = item; ModuleTabs.SelectedItem = page; } finally { selectingRoute = false; }
@@ -170,14 +174,15 @@ public partial class MainWindow
  // #810: a dashboard card drills through with its context; a wrong-store link is refused before anything moves.
  void DrillThrough(DrillRequest request)
  {
-  var open = drillStack.Open(request.Target, request.AllowedStoreKeys);
+  var target = Stamped(request.Target);
+  var open = drillStack.Open(target, request.AllowedStoreKeys);
   if (!open.Allowed) { Log(open.Notice); return; }
-  SelectRoute(request.Target.Route, false);
+  SelectRoute(target.Route, false);
  }
  void SwitchDashboardStore(string storeKey)
  {
   var current = drillStack.SwitchStore(storeKey);
-  if (currentRoute != current.Route) SelectRoute(current.Route, false); else { BreadcrumbText.Text = drillStack.TrailText(); RefreshBackButton(); }
+  if (currentRoute != current.Route) SelectRoute(current.Route, false); else { BreadcrumbText.Text = drillStack.TrailText(); RefreshBackButton(); SaveTrail(); }
  }
  // A crumb is only worth returning to if what it pointed at still exists.
  bool DrillEntityAlive(DrillTarget target)
@@ -194,6 +199,40 @@ public partial class MainWindow
   }
   catch (Exception error) { Log("Geri dönüş kontrolü yapılamadı: " + error.Message); return true; }
  }
+ // #889: the record's revision as it stands now, so a step notices a record that changed while it was away; a kind without one has none.
+ string DrillEntityRevision(DrillTarget target)
+ {
+  try
+  {
+   return target.EntityKind switch
+   {
+    "product" => new Catalog.CatalogStore(dataDirectory).FindProduct(target.EntityId) is { } product ? product.UpdatedUtc.ToString("O") : "",
+    "order" => target.EntityId.Split('|') is { Length: 3 } parts && new OrdersStore(dataDirectory).Find(parts[0], parts[1], parts[2]) is { } order ? order.UpdatedAt.ToString("O") : "",
+    "source" => new Catalog.CatalogStore(dataDirectory).Sources().FirstOrDefault(x => x.Id == target.EntityId) is { } source ? source.MappingRevision.ToString(System.Globalization.CultureInfo.InvariantCulture) : "",
+    _ => "",
+   };
+  }
+  catch (Exception error) { Log("Kayıt sürümü okunamadı: " + AuditStore.Redact(error.Message)); return ""; }
+ }
+ DrillTarget Stamped(DrillTarget target) => target.EntityId.Length > 0 && target.Revision.Length == 0 ? target with { Revision = DrillEntityRevision(target) } : target;
+ // #889: the saved trail comes back only through the stack's own re-validation; a trail that cannot be trusted is left behind with a note.
+ string? RestoreTrail()
+ {
+  try
+  {
+   if (!PreferenceSchema.TryDecode<DrillHistoryState>(uiPreferences, DrillHistoryCodec.PreferenceKey, DrillHistoryCodec.TryDeserialize, out var saved)) return null;
+   var restored = drillStack.Restore(saved, routes.ContainsKey, AllowedStoreKeys(), DrillEntityAlive);
+   foreach (var notice in restored.Notices) Log(notice);
+   return drillStack.CanGoBack ? drillStack.Current.Route : null;
+  }
+  catch (Exception error) { Log("Gezinti izi geri yüklenemedi: " + AuditStore.Redact(error.Message)); return null; }
+ }
+ // #889: the trail is saved with every navigation, like the last route, so a reset of the preferences is not undone by closing the window and a crash keeps the last step taken.
+ void SaveTrail()
+ {
+  try { PreferenceSchema.Write(uiPreferences, DrillHistoryCodec.PreferenceKey, DrillHistoryCodec.Serialize(drillStack.Snapshot())); }
+  catch (Exception error) { System.Diagnostics.Debug.WriteLine(error.Message); }
+ }
  // #813: the stores a link may name are the enabled connections on disk, read when asked; a failure to read
  // them allows nothing but the all-stores scope, so an unreadable store table cannot widen what a link opens.
  IReadOnlyList<string> AllowedStoreKeys()
@@ -204,6 +243,7 @@ public partial class MainWindow
  // One entry point for every workspace entity (#813): the same trail, the same refusal, the same reveal.
  bool OpenWorkspaceLink(DrillTarget target)
  {
+  target = Stamped(target);
   var open = drillStack.Open(target, AllowedStoreKeys());
   if (!open.Allowed) { Log(open.Notice); return false; }
   SelectRoute(target.Route, false);
@@ -247,7 +287,11 @@ public partial class MainWindow
   catch (Exception error) { Log("Kayıt seçilemedi: " + error.Message); return false; }
  }
  /// <summary>#871: Back explains itself when there is no trail.</summary>
- void RefreshBackButton() => CommandState.Apply(BackButton, drillStack.CanGoBack ? null : DisabledReason.StoreState("Geri gidilecek iz yok."));
+ void RefreshBackButton()
+ {
+  CommandState.Apply(BackButton, drillStack.CanGoBack ? null : DisabledReason.StoreState("Geri gidilecek iz yok."));
+  CommandState.Apply(ForwardButton, drillStack.CanGoForward ? null : DisabledReason.StoreState("İleri gidilecek iz yok."));
+ }
 
  void FilterNavigationItems()
  {
@@ -264,11 +308,20 @@ public partial class MainWindow
  void Back_Click(object sender, RoutedEventArgs e)
  {
   if (!drillStack.CanGoBack) return;
-  var back = drillStack.Back(DrillEntityAlive);
-  if (back.DroppedStaleEntity) Log(back.Notice);
-  SelectRoute(back.Target.Route, false);
-  // #813: Back restores the selection the crumb names, not just the screen.
-  if (back.Target.EntityId.Length > 0) RevealEntity(back.Target);
+  Land(drillStack.Back(DrillEntityAlive, DrillEntityRevision));
+ }
+ // #889: Forward walks the branch Back left behind, with the same checks.
+ void Forward_Click(object sender, RoutedEventArgs e)
+ {
+  if (!drillStack.CanGoForward) return;
+  Land(drillStack.Forward(DrillEntityAlive, DrillEntityRevision));
+ }
+ void Land(DrillBackResult step)
+ {
+  if (step.DroppedStaleEntity || step.RevisionChanged) Log(step.Notice);
+  SelectRoute(step.Target.Route, false);
+  // #813: a step restores the selection the crumb names, not just the screen.
+  if (step.Target.EntityId.Length > 0) RevealEntity(step.Target);
  }
 }
 

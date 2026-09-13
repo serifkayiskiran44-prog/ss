@@ -58,6 +58,7 @@ public static class PreferenceSchema
         new("order-split", "layout:orders:split", 1, Identity),
         new("report-columns", "report-columns:", 1, Identity),
         new("window", WindowGeometry.PreferenceKey, 1, Identity),
+        new("trail", DrillHistoryCodec.PreferenceKey, 1, Identity),
     };
     static readonly List<string> diagnostics = new();
     static readonly object gate = new();
