@@ -20,6 +20,7 @@ public static class WorkspaceLinks
         ["product"] = "products",
         ["order"] = "orders",
         ["source"] = "xml",
+        ["correlation"] = CorrelationChain.Route, // #883: the audit centre's chain view
     };
 
     public static string Format(DrillTarget target)

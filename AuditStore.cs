@@ -19,6 +19,8 @@ public sealed class AuditEvent
     public string ShopId { get; set; } = "";
     public string Outcome { get; set; } = "Info";
     public string Detail { get; set; } = "";
+    /// <summary>#883: the id of the operation this row was written under; empty for a row written outside any.</summary>
+    public string Correlation { get; set; } = "";
 }
 
 public sealed class AuditStore
@@ -29,27 +31,42 @@ public sealed class AuditStore
     {
         directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop"); Directory.CreateDirectory(directory); connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "audit.db") }.ToString();
         using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "CREATE TABLE IF NOT EXISTS AuditEvents(Id TEXT PRIMARY KEY,AtUtc TEXT NOT NULL,Module TEXT NOT NULL,Action TEXT NOT NULL,ProductId TEXT NOT NULL,OrderId TEXT NOT NULL,Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,Outcome TEXT NOT NULL,Detail TEXT NOT NULL);CREATE INDEX IF NOT EXISTS IX_AuditEvents_At ON AuditEvents(AtUtc DESC)"; command.ExecuteNonQuery();
+        EnsureCorrelationColumn(connection);
     }
     SqliteConnection Open() { var connection = SqliteConnectionPolicy.Open(connectionString); return connection; }
+    // #883: an audit store written before the column existed gains it in place; its rows keep an empty correlation.
+    static void EnsureCorrelationColumn(SqliteConnection connection)
+    {
+        using (var probe = connection.CreateCommand()) { probe.CommandText = "PRAGMA table_info(AuditEvents)"; using var reader = probe.ExecuteReader(); while (reader.Read()) if (string.Equals(reader.GetString(1), "Correlation", StringComparison.OrdinalIgnoreCase)) return; }
+        using var alter = connection.CreateCommand(); alter.CommandText = "ALTER TABLE AuditEvents ADD COLUMN Correlation TEXT NOT NULL DEFAULT '';CREATE INDEX IF NOT EXISTS IX_AuditEvents_Correlation ON AuditEvents(Correlation)"; alter.ExecuteNonQuery();
+    }
     public void Append(AuditEvent audit)
     {
-        audit.Module = Clean(audit.Module, 80); audit.Action = Clean(audit.Action, 120); audit.ProductId = Clean(audit.ProductId, 120); audit.OrderId = Clean(audit.OrderId, 120); audit.Marketplace = Clean(audit.Marketplace, 80); audit.ShopId = Clean(audit.ShopId, 160); audit.Outcome = Clean(audit.Outcome, 40); audit.Detail = Sanitize(audit.Detail); audit.AtUtc = audit.AtUtc == default ? DateTime.UtcNow : audit.AtUtc;
-        using var connection = Open(); using var transaction = connection.BeginTransaction(); using var command = connection.CreateCommand(); command.Transaction = transaction; command.CommandText = "INSERT INTO AuditEvents VALUES($id,$at,$module,$action,$product,$order,$marketplace,$shop,$outcome,$detail)"; command.Parameters.AddWithValue("$id", audit.Id); command.Parameters.AddWithValue("$at", audit.AtUtc.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$module", audit.Module); command.Parameters.AddWithValue("$action", audit.Action); command.Parameters.AddWithValue("$product", audit.ProductId); command.Parameters.AddWithValue("$order", audit.OrderId); command.Parameters.AddWithValue("$marketplace", audit.Marketplace); command.Parameters.AddWithValue("$shop", audit.ShopId); command.Parameters.AddWithValue("$outcome", audit.Outcome); command.Parameters.AddWithValue("$detail", audit.Detail); command.ExecuteNonQuery(); using var trim = connection.CreateCommand(); trim.Transaction = transaction; trim.CommandText = "DELETE FROM AuditEvents WHERE Id NOT IN (SELECT Id FROM AuditEvents ORDER BY AtUtc DESC LIMIT $limit)"; trim.Parameters.AddWithValue("$limit", RetentionLimit); trim.ExecuteNonQuery(); transaction.Commit();
+        audit.Correlation = CorrelationChain.SafeId(string.IsNullOrWhiteSpace(audit.Correlation) ? UiActivity.Current.Correlation : audit.Correlation); audit.Module = Clean(audit.Module, 80); audit.Action = Clean(audit.Action, 120); audit.ProductId = Clean(audit.ProductId, 120); audit.OrderId = Clean(audit.OrderId, 120); audit.Marketplace = Clean(audit.Marketplace, 80); audit.ShopId = Clean(audit.ShopId, 160); audit.Outcome = Clean(audit.Outcome, 40); audit.Detail = Sanitize(audit.Detail); audit.AtUtc = audit.AtUtc == default ? DateTime.UtcNow : audit.AtUtc;
+        using var connection = Open(); using var transaction = connection.BeginTransaction(); using var command = connection.CreateCommand(); command.Transaction = transaction; command.CommandText = "INSERT INTO AuditEvents(Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail,Correlation) VALUES($id,$at,$module,$action,$product,$order,$marketplace,$shop,$outcome,$detail,$correlation)"; command.Parameters.AddWithValue("$id", audit.Id); command.Parameters.AddWithValue("$correlation", audit.Correlation); command.Parameters.AddWithValue("$at", audit.AtUtc.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$module", audit.Module); command.Parameters.AddWithValue("$action", audit.Action); command.Parameters.AddWithValue("$product", audit.ProductId); command.Parameters.AddWithValue("$order", audit.OrderId); command.Parameters.AddWithValue("$marketplace", audit.Marketplace); command.Parameters.AddWithValue("$shop", audit.ShopId); command.Parameters.AddWithValue("$outcome", audit.Outcome); command.Parameters.AddWithValue("$detail", audit.Detail); command.ExecuteNonQuery(); using var trim = connection.CreateCommand(); trim.Transaction = transaction; trim.CommandText = "DELETE FROM AuditEvents WHERE Id NOT IN (SELECT Id FROM AuditEvents ORDER BY AtUtc DESC LIMIT $limit)"; trim.Parameters.AddWithValue("$limit", RetentionLimit); trim.ExecuteNonQuery(); transaction.Commit();
     }
     public IReadOnlyList<AuditEvent> List(int limit = 500, string? query = null)
     {
-        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like) ORDER BY AtUtc DESC LIMIT $limit"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) result.Add(Read(reader)); return result;
+        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail,Correlation FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like) ORDER BY AtUtc DESC LIMIT $limit"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) result.Add(Read(reader)); return result;
+    }
+    /// <summary>#883: every row written under one correlation, oldest first — the chain of one operation; an id that is not an identifier has no rows.</summary>
+    public IReadOnlyList<AuditEvent> ListByCorrelation(string? correlation, int limit = 500)
+    {
+        var id = CorrelationChain.SafeId(correlation); if (id.Length == 0) return Array.Empty<AuditEvent>();
+        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit));
+        using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail,Correlation FROM AuditEvents WHERE Correlation = $correlation ORDER BY AtUtc ASC, Id ASC LIMIT $limit"; command.Parameters.AddWithValue("$correlation", id); command.Parameters.AddWithValue("$limit", limit);
+        using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) result.Add(Read(reader)); return result;
     }
     public AuditEvent? LastFailure()
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE Outcome = $outcome ORDER BY AtUtc DESC LIMIT 1";
+        command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail,Correlation FROM AuditEvents WHERE Outcome = $outcome ORDER BY AtUtc DESC LIMIT 1";
         command.Parameters.AddWithValue("$outcome", "Failed");
         using var reader = command.ExecuteReader();
         return reader.Read() ? Read(reader) : null;
     }
-    static AuditEvent Read(SqliteDataReader reader) => new() { Id = reader.GetString(0), AtUtc = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), Module = reader.GetString(2), Action = reader.GetString(3), ProductId = reader.GetString(4), OrderId = reader.GetString(5), Marketplace = reader.GetString(6), ShopId = reader.GetString(7), Outcome = reader.GetString(8), Detail = reader.GetString(9) };
+    static AuditEvent Read(SqliteDataReader reader) => new() { Correlation = reader.GetString(10), Id = reader.GetString(0), AtUtc = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), Module = reader.GetString(2), Action = reader.GetString(3), ProductId = reader.GetString(4), OrderId = reader.GetString(5), Marketplace = reader.GetString(6), ShopId = reader.GetString(7), Outcome = reader.GetString(8), Detail = reader.GetString(9) };
     static string Clean(string value, int max) { var clean = Sanitize(value); return clean.Length > max ? clean[..max] : clean; }
     /// <summary>Audit-row sanitizer: every redaction below, then the caps a stored row needs.</summary>
     public static string Sanitize(string? value) => Redact(value, bounded: true);

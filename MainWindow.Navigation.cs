@@ -20,6 +20,7 @@ public partial class MainWindow
  // #813: the orders panel hands back its own reveal so an order crumb selects the order the way a product crumb
  // selects the product; null until the panel is built.
  Func<string, string, string, bool>? ordersReveal;
+ Func<string, bool>? diagnosticsReveal;
  UiPreferenceStore uiPreferences = null!;
  LatencyStore latencyStore = null!;
  string? currentRoute;
@@ -86,7 +87,7 @@ public partial class MainWindow
   Group("YÖNETİM");
   Page("readiness","Üretim hazırlığı","Yerel veri, secret güvenliği, connector capability ve API sağlık geçidi",ProductionReadinessPanel.Create(dataDirectory));
   Page("reports","Raporlar","Rapor kataloğu: amaç, veri kapsamı, son çalıştırma, kayıtlı filtre ve çıktı türü",ReportsPanel.Create(dataDirectory,key=>Navigate(key),()=>AllowedStoreKeys()));
-  Page("diagnostics","Tanılama / audit","Güvenli sistem sağlık özeti, audit trail ve destek paketi",DiagnosticsPanel.Create(dataDirectory,key=>Navigate(key)));
+  Page("diagnostics","Tanılama / audit","Güvenli sistem sağlık özeti, audit trail ve destek paketi",DiagnosticsPanel.Create(dataDirectory,key=>Navigate(key),reveal=>diagnosticsReveal=reveal,AllowedStoreKeys,target=>OpenWorkspaceLink(target)));
   // #853: one taxonomy over the settings that exist -- links to the owning screens, inline only for what the shell owns; a channel's credentials open on its own connection tab.
   Page("settings","Ayarlar","Genel, mağaza, bağlantı, içe aktarma, fiyat, bildirim ve tanılama ayarları tek ağaçta",SettingsPanel.Create(new SettingsPanel.Context(dataDirectory,key=>Navigate(key),key=>routes.ContainsKey(key),(route,section)=>{Navigate(route);if(section=="connection"&&routes.TryGetValue(route,out var page)&&page.Content is TabControl tabs)tabs.SelectedIndex=tabs.Items.Count-1;},settingsEditState,()=>SettingsValidation.Collect(dataDirectory,settingsEditState,DateTime.UtcNow)),select=>settingsSelect=select));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
@@ -237,6 +238,8 @@ public partial class MainWindow
     }
     case "order":
      return target.EntityId.Split('|') is { Length: 3 } parts && ordersReveal is { } reveal && reveal(parts[0], parts[1], parts[2]);
+    case "correlation":
+     return diagnosticsReveal is { } chain && chain(target.EntityId);
     default:
      return true;
    }
