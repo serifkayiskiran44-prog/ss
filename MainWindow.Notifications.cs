@@ -53,13 +53,9 @@ public partial class MainWindow
         ToastHost.Children.Clear();
         foreach (var toast in notificationQueue.Visible)
         {
-            var (glyph, word, brush) = toast.Severity switch
-            {
-                NotificationSeverity.Success => ("✔", "Başarılı", Color.FromRgb(31, 122, 73)),
-                NotificationSeverity.Warning => ("⚠", "Uyarı", Color.FromRgb(160, 82, 22)),
-                NotificationSeverity.Error => ("✖", "Hata", Color.FromRgb(190, 52, 52)),
-                _ => ("ℹ", "Bilgi", Color.FromRgb(23, 107, 115)),
-            };
+            // #817: the toast draws the same glyph, word and colour as every other severity surface.
+            var style = SeverityStyle.For(SeverityStyle.FromNotification(toast.Severity), SeverityStyle.IsHighContrast);
+            var (glyph, word, brush) = (style.Glyph, style.Word, style.Accent);
             var body = new DockPanel { LastChildFill = true };
             var close = new Button { Content = "✕", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(6, 0, 0, 0), MinWidth = 26, Background = Brushes.Transparent, Foreground = new SolidColorBrush(brush), BorderBrush = new SolidColorBrush(brush), ToolTip = "Bildirimi kapat (Esc)" };
             AutomationProperties.SetName(close, $"{word} bildirimini kapat");

@@ -168,15 +168,16 @@ public static class DashboardPanel
         foreach (var card in view.Cards)
         {
             var critical = card.Severity == DashboardAnomalies.Critical;
+            var style = SeverityStyle.For(SeverityStyle.FromAnomaly(card.Severity), SeverityStyle.IsHighContrast);
             var body = new StackPanel();
-            body.Children.Add(new TextBlock { Text = $"{(critical ? "✖" : "⚠")} {card.Title} · {card.Count:N0}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(critical ? Color.FromRgb(190, 52, 52) : Color.FromRgb(160, 82, 22)) });
+            body.Children.Add(new TextBlock { Text = $"{style.Glyph} {card.Title} · {card.Count:N0}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = SeverityStyle.AccentBrush(style.Level, SeverityStyle.IsHighContrast) });
             body.Children.Add(new TextBlock { Text = card.Impact, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
             body.Children.Add(new TextBlock { Text = $"{card.Age} · kapsam: {card.Scope}", TextWrapping = TextWrapping.Wrap, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
             var go = new Button { Content = card.NextAction, Tag = card.Route, Margin = new Thickness(0, 4, 0, 0), Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left };
             var drilled = card;
             go.Click += (_, _) => open(drilled);
             body.Children.Add(go);
-            var border = new Border { BorderBrush = new SolidColorBrush(critical ? Color.FromRgb(190, 52, 52) : Color.FromRgb(214, 226, 235)), BorderThickness = new Thickness(critical ? 2 : 1), Padding = new Thickness(8), Margin = new Thickness(2, 3, 2, 3), Child = body };
+            var border = new Border { BorderBrush = SeverityStyle.AccentBrush(style.Level, SeverityStyle.IsHighContrast), BorderThickness = new Thickness(style.BorderWeight), Padding = new Thickness(8), Margin = new Thickness(2, 3, 2, 3), Child = body };
             AutomationProperties.SetName(border, $"{card.Title}, {card.Count}, {card.Age}");
             parent.Children.Add(border);
         }

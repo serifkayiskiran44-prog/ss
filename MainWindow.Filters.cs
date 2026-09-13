@@ -231,16 +231,19 @@ public partial class MainWindow {
   if (product is null) { productValidationPanel.Visibility = Visibility.Collapsed; return; }
   var result = ProductValidation.Evaluate(product);
   var actionable = result.Findings.Where(f => f.Severity != ProductValidation.Info).ToList();
+  // #817: one aggregate decides the headline, the level that leads, and the single call to action.
+  var aggregate = SeverityStyle.Aggregate(actionable.Select(f => (SeverityStyle.FromValidation(f.Severity), f.Message)).ToList());
+  var highContrast = SeverityStyle.IsHighContrast;
   if (actionable.Count == 0) { productValidationPanel.Visibility = Visibility.Collapsed; return; }
   productValidationPanel.Visibility = Visibility.Visible;
   var header = new DockPanel { LastChildFill = true };
   if (result.FirstBlocking is { } first)
   {
-   var jump = new Button { Content = "İlk soruna git", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(6, 0, 0, 0), Tag = first.Section };
+   var jump = new Button { Content = aggregate.CallToAction, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(6, 0, 0, 0), Tag = first.Section };
    jump.Click += (_, _) => SelectProductSection((string)jump.Tag);
    DockPanel.SetDock(jump, System.Windows.Controls.Dock.Right); header.Children.Add(jump);
   }
-  header.Children.Add(new TextBlock { Text = result.Summary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(result.HasBlocking ? Color.FromRgb(190, 52, 52) : Color.FromRgb(160, 82, 22)) });
+  header.Children.Add(new TextBlock { Text = aggregate.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Foreground = SeverityStyle.AccentBrush(aggregate.Highest, highContrast) });
   productValidationPanel.Children.Add(header);
   foreach (var section in ProductWorkspaceSections.All)
   {
@@ -248,7 +251,7 @@ public partial class MainWindow {
    if (rows.Count == 0) continue;
    productValidationPanel.Children.Add(new TextBlock { Text = section.Label, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 4, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
    foreach (var finding in rows)
-    productValidationPanel.Children.Add(new TextBlock { Text = (finding.Severity == ProductValidation.Blocking ? "✖ " : "⚠ ") + finding.Message, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = new SolidColorBrush(finding.Severity == ProductValidation.Blocking ? Color.FromRgb(190, 52, 52) : Color.FromRgb(160, 82, 22)) });
+    productValidationPanel.Children.Add(new TextBlock { Text = SeverityStyle.For(SeverityStyle.FromValidation(finding.Severity), highContrast).Badge + " · " + finding.Message, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = SeverityStyle.AccentBrush(SeverityStyle.FromValidation(finding.Severity), highContrast) });
   }
   System.Windows.Automation.AutomationProperties.SetName(productValidationPanel, result.Summary);
  }

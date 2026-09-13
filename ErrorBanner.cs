@@ -77,10 +77,10 @@ public static class ErrorBanner
     public static Border Create(ErrorBannerModel model, Func<Task>? retry, Action<string>? navigate, Action dismiss)
     {
         ArgumentNullException.ThrowIfNull(model); ArgumentNullException.ThrowIfNull(dismiss);
-        var (glyph, word, color) = model.Severity == NotificationSeverity.Error
-            ? ("✖", "Hata", Color.FromRgb(190, 52, 52))
-            : ("⚠", "Uyarı", Color.FromRgb(160, 82, 22));
-        var brush = new SolidColorBrush(color);
+        // #817: glyph, word, weight and colour come from the one severity table.
+        var style = SeverityStyle.For(SeverityStyle.FromNotification(model.Severity), SeverityStyle.IsHighContrast);
+        var (glyph, word) = (style.Glyph, style.Word);
+        var brush = new SolidColorBrush(style.Accent);
         var body = new StackPanel();
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) };
         text.Inlines.Add(new System.Windows.Documents.Run($"{glyph} {model.Title} · ") { FontWeight = FontWeights.SemiBold, Foreground = brush });
@@ -109,8 +109,8 @@ public static class ErrorBanner
         body.Children.Add(actions);
         var border = new Border
         {
-            Child = body, Background = new SolidColorBrush(model.Severity == NotificationSeverity.Error ? Color.FromRgb(253, 240, 240) : Color.FromRgb(253, 248, 238)),
-            BorderBrush = brush, BorderThickness = new Thickness(model.Severity == NotificationSeverity.Error ? 2 : 1), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(4, 0, 4, 8),
+            Child = body, Background = new SolidColorBrush(style.Surface),
+            BorderBrush = brush, BorderThickness = new Thickness(style.BorderWeight), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(4, 0, 4, 8),
             Focusable = false, Tag = model,
         };
         border.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { dismiss(); e.Handled = true; } };

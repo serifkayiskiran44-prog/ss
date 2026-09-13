@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<TestSequence>
+  <Test Name="SeverityStyleWindowTests.MixedFindingsShowDistinctBadgesAndOneFocusableCallToActionForTheBlockingOne" DisplayName="MixedFindingsShowDistinctBadgesAndOneFocusableCallToActionForTheBlockingOne" Source="C:\Users\serif\Documents\Codex\2026-09-10\files-pasted-by-the-user-entegra\outputs\MonoBridgeDesktop\tests\MarketplaceHub.Tests\bin\Debug\net8.0-windows\MarketplaceHub.Tests.dll" Completed="False" />
+</TestSequence>

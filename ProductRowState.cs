@@ -99,8 +99,9 @@ public static class ProductRowState
         var colour = key switch
         {
             Disabled => Color.FromRgb(120, 128, 134),
-            Error => Color.FromRgb(190, 52, 52),
-            Warning => Color.FromRgb(196, 132, 22),
+            // #817: error and warning accents are the shared severity table's, so the row and the panel cannot drift.
+            Error => SeverityStyle.For(SeverityLevel.Blocking, false).Accent,
+            Warning => SeverityStyle.For(SeverityLevel.Warning, false).Accent,
             Pending => Color.FromRgb(52, 108, 190),
             Stale => Color.FromRgb(140, 120, 168),
             _ => Colors.Transparent,
