@@ -63,6 +63,8 @@ public class CatalogProduct {
  public string WeightText {get;set;}=""; public decimal? WeightKg {get;set;} public string DimensionsText {get;set;}=""; public decimal? LengthCm {get;set;} public decimal? WidthCm {get;set;} public decimal? HeightCm {get;set;}
  // #909: the product's tax class (a catalogue code; "" = not specified) and every change of it with its moment, its origin and the rate the code carried then.
  public string TaxClass {get;set;}=""; public List<TaxClassChange> TaxClassHistory {get;set;}=new();
+ // #910: country of origin as given (a code or a name) and as the canonical ISO 3166-1 alpha-2 code when it could be resolved; "" when it could not.
+ public string CountryOfOrigin {get;set;}=""; public string CountryOfOriginCode {get;set;}="";
  // Independent, named price points (e.g. "Etsy fixed", "Wholesale") a channel can select instead of the formula-based PricePolicy.
  // Absent/empty on records written before this field existed; legacy Price/formula behavior is unchanged when empty.
  public List<CatalogPriceField> PriceFields {get;set;}=new();

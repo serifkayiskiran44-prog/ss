@@ -29,7 +29,7 @@ public static class FieldProvenance
     public const string FeedKind = "xml";
     /// <summary>#908: computed from other fields of the same record (the desi from the box), so neither a feed's nor the operator's.</summary>
     public const string DerivedKind = "derived";
-    public static readonly IReadOnlyList<string> Fields = new[] { "Cost", "Price", "Currency", "Stock", "Name", "Description", "ImageUrls", "Gtin", "WeightText", "DimensionsText", "Desi", "TaxClass" }; // #908: the box texts and the desi; #909: the tax class
+    public static readonly IReadOnlyList<string> Fields = new[] { "Cost", "Price", "Currency", "Stock", "Name", "Description", "ImageUrls", "Gtin", "WeightText", "DimensionsText", "Desi", "TaxClass", "CountryOfOrigin" }; // #908: the box texts and the desi; #909: the tax class; #910: the country of origin
 
     /// <summary>Stamps the fields a feed just wrote on a product.</summary>
     public static void StampFeed(CatalogProduct product, IEnumerable<string> fields, string sourceId, int sourceRevision, string runId, DateTime observedUtc)
@@ -81,6 +81,7 @@ public static class FieldProvenance
         "Description" => p.Description ?? "", "ImageUrls" => p.ImageUrls ?? "", "Gtin" => p.Gtin ?? "",
         "WeightText" => p.WeightText ?? "", "DimensionsText" => p.DimensionsText ?? "", "Desi" => p.Desi?.ToString(CultureInfo.InvariantCulture) ?? "", // #908
         "TaxClass" => ProductTaxClass.Canonical(p.TaxClass), // #909
+        "CountryOfOrigin" => (p.CountryOfOrigin ?? "").Trim(), // #910
         _ => "",
     };
 

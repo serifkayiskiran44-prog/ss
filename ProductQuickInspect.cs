@@ -33,6 +33,7 @@ public static class ProductQuickInspect
         Add("Kimlik", "GTIN", string.IsNullOrWhiteSpace(product.Gtin) ? null : product.Gtin + " · " + GtinCode.Inspect(product.Gtin).Words); // #906
         Add("Kimlik", "Ürün adı", product.Name);
         Add("Kimlik", "Marka / kategori", Join(product.Brand, product.Category));
+        Add("Kimlik", "Menşei", ProductOrigin.Describe(product)); // #910: the code, the display name and the value as given
 
         Add("Fiyat", "Satış fiyatı", product.Price > 0 ? Money(product.Price, product.Currency) : null);
         Add("Fiyat", "Alış fiyatı", product.Cost > 0 ? Money(product.Cost, product.CostCurrency) : null);
