@@ -346,8 +346,23 @@ public partial class MainWindow {
   Grid.SetColumn(productInspectDrawer, 1); host.Children.Add(productInspectDrawer);
   products.InputBindings.Add(KeyboardShortcuts.Binding("product-inspect", new SimpleCommand(OpenProductInspect)));
   products.InputBindings.Add(KeyboardShortcuts.Binding("close-inspect", new SimpleCommand(CloseProductInspect)));
+  RowActionMenu.Attach(products, ProductRowActions, ex => Log("İşlem başarısız: " + AuditStore.Redact(ex.Message)));
   productInspectDrawer.InputBindings.Add(KeyboardShortcuts.Binding("close-inspect", new SimpleCommand(CloseProductInspect)));
   return host;
+ }
+
+ /// <summary>#870: the product grid's row menu, rebuilt from the selection; the destructive entries run through the same guarded methods as the buttons (typed confirmation, confirm dialog).</summary>
+ IReadOnlyList<RowAction> ProductRowActions()
+ {
+  var selected = products.SelectedItems.OfType<CatalogProduct>().ToList(); var n = selected.Count; var none = n == 0 ? "Önce ürün seçin." : null;
+  return new RowAction[]
+  {
+   new("product-inspect", "Hızlı incele", OpenProductInspect, none, Gesture: KeyboardShortcuts.Find("product-inspect")?.Gesture),
+   new("product-activate", n > 1 ? $"Aktife al ({n})" : "Aktife al", () => SetProductActive(true), none),
+   new("product-deactivate", n > 1 ? $"Pasife al ({n})" : "Pasife al", () => SetProductActive(false), none, Destructive: true),
+   new("product-delete", "Ürünü sil", DeleteSelectedProduct, none ?? (n > 1 ? "Silmek için tek ürün seçin." : edit == null ? "Önce ürün kartını açın." : null), Destructive: true),
+   new("product-copy-sku", n > 1 ? $"SKU'ları kopyala ({n})" : "SKU'yu kopyala", () => { Clipboard.SetText(string.Join(Environment.NewLine, selected.Select(x => x.Sku))); Log(n > 1 ? $"{n} SKU panoya kopyalandı." : "SKU panoya kopyalandı."); }, none),
+  };
  }
  internal void OpenProductInspect()
  {

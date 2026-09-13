@@ -414,6 +414,7 @@ public partial class MainWindow : Window
   sources.ItemTemplate=new DataTemplate{VisualTree=rowStack};
   var groupHeader=new FrameworkElementFactory(typeof(TextBlock));groupHeader.SetValue(TextBlock.FontWeightProperty,FontWeights.SemiBold);groupHeader.SetValue(FrameworkElement.MarginProperty,new Thickness(0,4,0,1));groupHeader.SetBinding(TextBlock.TextProperty,new Binding("."){Converter=new SourceGroupHeaderConverter()});
   sources.GroupStyle.Add(new GroupStyle{HeaderTemplate=new DataTemplate{VisualTree=groupHeader}});
+  RowActionMenu.Attach(sources,SourceRowActions,ex=>Log("İşlem başarısız: "+AuditStore.Redact(ex.Message)));
   sources.SelectionChanged+=(_,_)=>{if(changingSourceList)return;if(sources.SelectedItem is XmlSource s)SetSource(Clone(s));};
   Field(sourceGeneral,"Tedarikçi / XML adı","Name");Field(sourceGeneral,"HTTPS adresi veya XML dosyası","Location");Field(sourceGeneral,"Sayı kültürü (zorunlu, örn. tr-TR / en-US)","NumberCultureName");Field(sourceGeneral,"Eksik kaynak grace süresi (dakika)","MissingSourceGraceMinutes");sourceGeneral.Children.Add(Button("XML dosyası seç",()=>{if(source==null)return;var d=new OpenFileDialog{Filter="XML (*.xml)|*.xml",CheckFileExists=true};if(d.ShowDialog(this)==true){source.Location=d.FileName;BindSource();}}));
   Flag(sourceGeneral,"Kaynak aktif","Enabled");Flag(sourceGeneral,"Program açıkken otomatik havuz güncellemesi","AutoImport");Field(sourceGeneral,"Kontrol aralığı (dakika)","IntervalMinutes");Label(sourceGeneral,"Basic Auth kullanıcı adı (isteğe bağlı)",xmlUser);Label(sourceGeneral,"XML şifresi",xmlPassword);var healthBody=new StackPanel();healthBody.Children.Add(xmlSourceHealthHeadline);healthBody.Children.Add(xmlSourceHealthLines);healthBody.Children.Add(xmlSourceHealth);healthBody.Children.Add(xmlSourceHealthActions);xmlSourceHealthPanel.Child=healthBody;sourceGeneral.Children.Add(xmlSourceHealthPanel);sourceGeneral.Children.Add(AsyncButton("Kaynak sağlığını kontrol et (tam okuma)",CheckXmlSourceAsync));sourceGeneral.Children.Add(Hint("Şifre Windows hesabına özel şifrelenir. XML sınırı 25 MB; HTTPS, timeout, HTTP durum kodu ve gzip yanıtı denetlenir. Kaynaktan kaybolan ürünler korunur; otomatik Etsy gönderimi yapılmaz."));
@@ -535,6 +536,9 @@ public partial class MainWindow : Window
  {
   var current=CurrentSource();var clone=Clone(current);clone.Id=Guid.NewGuid().ToString("N");clone.Name=(string.IsNullOrWhiteSpace(current.Name)?"XML kaynağı":current.Name)+" kopya";clone.AutoImport=false;clone.LastRunUtc=null;clone.LastStatus="Kopyalandı; adres ve yetkilendirme doğrulanmalı.";store.SaveSource(clone);XmlAuthStore.Save(clone.Id,new(),dataDirectory);RefreshSources(false);sources.SelectedItem=clone;SetSource(clone);Log("XML kaynağı eşleme ve kurallarıyla çoğaltıldı; gizli yetkilendirme kopyalanmadı.");
  }
+ /// <summary>#870: the source list's row menu; both actions are the page's own buttons, so they carry the same guards.</summary>
+ IReadOnlyList<RowAction> SourceRowActions(){var none=sources.SelectedItem is XmlSource?null:"Önce kaynak seçin.";return new RowAction[]{new("source-inspect","XML'i oku / alanları bul",()=>RunGuarded(InspectAsync),none),new("source-health","Kaynak sağlığını kontrol et (tam okuma)",()=>RunGuarded(CheckXmlSourceAsync),none)};}
+ async void RunGuarded(Func<Task> work){try{await work();}catch(Exception ex){Log("İşlem başarısız: "+AuditStore.Redact(ex.Message));}}
  async Task CheckXmlSourceAsync()
  {
   if(source==null)throw new InvalidOperationException("Önce XML kaynağı seçin.");
