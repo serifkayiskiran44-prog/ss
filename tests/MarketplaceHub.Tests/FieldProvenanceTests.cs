@@ -103,5 +103,19 @@ public sealed class FieldProvenanceTests
         }
     }
 
+    // #905 fix-up: the title pipeline's comment had swallowed the description, images and GTIN arms of the manual stamp,
+    // so an operator's edit to those three fields compared "" with "" and kept the feed's origin.
+    [TestMethod]
+    public void AManualEditToTheDescriptionImagesOrGtinIsStampedAsTheOperators()
+    {
+        var before = new CatalogProduct { Sku = "A", Name = "Kupa", Description = "Eski", ImageUrls = "https://img.example.com/1.jpg", Gtin = "4006381333931" };
+        FieldProvenance.StampFeed(before, FieldProvenance.Fields, "src-1", 1, "run-1", Now.AddHours(-1));
+        var after = new CatalogProduct { Sku = "A", Name = "Kupa", Description = "Yeni", ImageUrls = "https://img.example.com/2.jpg", Gtin = "96385074", FieldOrigins = new Dictionary<string, FieldOrigin>(before.FieldOrigins!) };
+        var changed = FieldProvenance.StampManual(before, after, Now);
+        CollectionAssert.AreEquivalent(new[] { "Description", "ImageUrls", "Gtin" }, changed.ToList());
+        foreach (var field in new[] { "Description", "ImageUrls", "Gtin" }) Assert.AreEqual(FieldProvenance.ManualKind, FieldProvenance.Of(after, field)!.Kind, field);
+        Assert.AreEqual(FieldProvenance.FeedKind, FieldProvenance.Of(after, "Name")!.Kind, "an unchanged field keeps the feed's origin");
+    }
+
     static ProductProvenanceRow Row(ProductProvenanceView view, string field) => view.Rows.Single(r => r.Field == field);
 }

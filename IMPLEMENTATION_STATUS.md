@@ -2211,3 +2211,13 @@ A feed's or an operator's "1,5 kg", "1500 g", "20 x 30 x 40 cm" is kept as given
 REAL_WORK_COUNT=4; FILES_CHANGED=ProductUnits.cs (new), Catalog/Models.cs, ProductDirtySections.cs, Catalog/XmlCatalog.cs, Catalog/CatalogStore.cs, MainWindow.xaml.cs, ProductValidation.cs, ProductQuickInspect.cs, tests/MarketplaceHub.Tests/ProductUnitsTests.cs (new); TEST_RESULT=717 passed, 0 failed (full Release suite; last green run 715, +2); artifact: self-contained win-x64 Release publish, SHA-256 44823f527f9db572368bf8f85856b1abdb7abe184cd5bcda8d8ec630474f9ef8 (publish/ not committed).
 
 Not done: the box's desi is computed on the parsed dimensions but not written into `Desi` (the #319 shipping-cost input) — deriving it automatically would overwrite an operator's desi, so that link stays for a later issue with its own rule; the canonical values are not per-field provenance (#895 tracks eight fields) and carry no origin of their own beyond the text they sit beside; imperial units (lb, oz, in) are refused, not converted; the Excel import and the migration do not map the two new fields; the editor shows the texts, the drawer the canonical values — no inline conversion preview while typing.
+
+## #905 fix-up — manual provenance for description, images and GTIN (2026-09-14), branch codex/issue-905-fixup-provenance-arms off codex/issue-907-product-units (d61a436)
+
+Regression found while reading the provenance owner for #908: the `// #905` comment placed at the end of `FieldProvenance.ValueOf`'s "Name" arm sat on the same line as the "Description", "ImageUrls" and "Gtin" arms and commented them out, so since 5f0f8db every manual edit to those three fields compared "" with "" and left no operator origin — the feed's stamp stayed on a field the operator had rewritten, and the Köken view kept naming the source. The three arms are back on their own line; nothing else changed.
+
+`tests/MarketplaceHub.Tests/FieldProvenanceTests.cs` (+1; it fails on the committed line — the stamp list comes back empty): an operator's edit to the description, the images and the GTIN is stamped manual, the unchanged title keeps the feed's origin.
+
+REAL_WORK_COUNT=1; FILES_CHANGED=FieldProvenance.cs, tests/MarketplaceHub.Tests/FieldProvenanceTests.cs; TEST_RESULT=718 passed, 0 failed (full Release suite; last green run 717, +1); artifact: self-contained win-x64 Release publish, SHA-256 129415cc2f0f735fcaa3be38d2f5318b219fecfd40c7c1eebe9d0b8a666fc06a (publish/ not committed).
+
+Not done: records saved between 5f0f8db and this fix keep the feed as the origin of an operator's description, images or GTIN until their next save — nothing rewrites history, and no audit row marks the window.
