@@ -75,8 +75,11 @@ public sealed class ReportsPanelUiTests
                     search.Text = ""; Drain(window);
                     Assert.AreEqual(ReportCatalog.Definitions.Count, Cards().Count); Assert.AreEqual(Visibility.Collapsed, empty.Visibility);
 
-                    // A card opens its owner screen.
+                    // A card selects its report: the setup opens beside the grid (#847) and "Ekranda aç" opens the owner screen.
                     Card("support-package").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); Drain(window);
+                    var setupHost = Descendants(panel).OfType<Border>().Single(b => (string?)b.Tag == "report-setup-host");
+                    Assert.AreEqual(Visibility.Visible, setupHost.Visibility); Assert.AreEqual(0, navigated.Count, "Selecting a card does not navigate by itself.");
+                    Descendants(setupHost).OfType<Button>().Single(b => (string?)b.Tag == "report-param-open").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); Drain(window);
                     Assert.AreEqual("diagnostics", navigated.Last());
 
                     // Fifty cards, one with a long name: rows wrap, DIP width holds, the card shows the trimmed title and the tooltip the whole one.

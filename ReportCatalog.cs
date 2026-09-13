@@ -44,6 +44,7 @@ public static class ReportCatalog
         new("import-rejections", "Reddedilen içe aktarım satırları", "Excel önizlemesinin reddettiği satırları satır, neden kodu ve alan ile dışa aktarır.", "Excel önizlemesi", ReportScope.Global, new[] { "Excel", "CSV" }, "excel"),
         new("product-orders", "Ürün sipariş özeti", "Seçili ürünün sipariş sayısını, adedini ve son siparişini gösterir.", "Siparişler", ReportScope.Store, new[] { "Ekranda" }, "products"),
         new("orders", "Sipariş ve kargo listesi", "Sipariş kayıtlarını durum, aciliyet ve kargo bilgisiyle listeler.", "Siparişler, kargo", ReportScope.Store, new[] { "Ekranda" }, "orders"),
+        new("orders-csv", "Sipariş listesi (CSV)", "Seçili mağazanın siparişlerini tarih aralığı ve teslimat durumuna göre CSV dosyasına yazar; müşteri alanı içermez.", "Siparişler", ReportScope.Store, new[] { "CSV" }, "reports"),
         new("listing-matrix", "Kanal yayın matrisi", "Ürün × mağaza yayın, mapping, sync ve bağlantı durumunu karşılaştırır.", "Ürün havuzu, kanal planları, sync, bağlantılar", ReportScope.Store, new[] { "Ekranda" }, "listing-matrix"),
         new("data-quality", "Veri kalite raporu", "Duplicate, zorunlu alan, fiyat/stok/döviz, URL ve kaynak bulgularını listeler.", "Ürün havuzu, kanal planları", ReportScope.Global, new[] { "Ekranda" }, "data-quality"),
         new("api-health", "API bağlantı sağlığı", "Auth, erişilebilirlik, rate-limit, kota ve son hata durumunu gösterir.", "Bağlantılar", ReportScope.Store, new[] { "Ekranda" }, "api-health"),

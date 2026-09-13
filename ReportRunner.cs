@@ -1,0 +1,76 @@
+using System.IO;
+using System.Text;
+
+namespace TrMarketplaceHubDesktop;
+
+public sealed record ReportRunOutcome(ReportRunState State, int Rows, string Message);
+
+/// <summary>
+/// The one report the reports workspace runs by itself (#847): the orders list as CSV through the existing
+/// <see cref="ReportTemplateRenderer"/>, whose column allow-list has no customer field, so the file can never
+/// carry personal data. Parameters are validated again here (the drawer's own check is not enough), the store must
+/// be one the shell offers, the file is written whole then moved into place, and every outcome -- written,
+/// cancelled, failed -- lands in <see cref="ReportRunStore"/> with the parameter summary as its note.
+/// </summary>
+public static class ReportRunner
+{
+    public const string OrdersCsvKey = "orders-csv";
+    public static readonly IReadOnlyList<string> OrdersCsvColumns = new[] { "OrderId", "ShopId", "Status", "Price", "Currency", "UpdatedUtc" };
+
+    public static bool CanRun(ReportDefinition definition) => definition is not null && string.Equals(definition.Key, OrdersCsvKey, StringComparison.Ordinal);
+
+    public static async Task<ReportRunOutcome> RunAsync(string? directory, ReportDefinition definition, ReportParameterSet parameters, string path, IReadOnlyCollection<string>? allowedStoreKeys, CancellationToken cancellationToken = default, IProgress<int>? progress = null)
+    {
+        ArgumentNullException.ThrowIfNull(definition); ArgumentNullException.ThrowIfNull(parameters);
+        if (!CanRun(definition)) throw new InvalidOperationException("Bu rapor sahibi ekranda üretilir; buradan çalıştırılmaz.");
+        var findings = ReportParameters.Validate(parameters, definition, allowedStoreKeys, DateTime.UtcNow);
+        if (!ReportParameters.IsValid(findings)) throw new InvalidOperationException(findings.First(f => f.Level == SeverityLevel.Blocking).Message);
+        if (string.IsNullOrWhiteSpace(path) || !path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Rapor dosyası .csv ile bitmeli.", nameof(path));
+        var started = DateTime.UtcNow; var runs = new ReportRunStore(directory); var summary = ReportParameters.Summary(parameters, ReportParameters.SchemaFor(definition));
+        try
+        {
+            var rows = await Task.Run(() => OrdersCsvRows(directory, parameters, cancellationToken, progress), cancellationToken);
+            var csv = ReportTemplateRenderer.Render(new ReportTemplate("orders", OrdersCsvColumns), rows);
+            cancellationToken.ThrowIfCancellationRequested();
+            var temp = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", Path.GetFileNameWithoutExtension(path) + ".tmp-" + Guid.NewGuid().ToString("N")[..8] + ".csv");
+            try { File.WriteAllText(temp, csv, new UTF8Encoding(true)); File.Move(temp, path, overwrite: true); }
+            finally { if (File.Exists(temp)) File.Delete(temp); }
+            runs.Record(OrdersCsvKey, started, ReportRunState.Succeeded, rows.Count, summary, parameters.StoreKey);
+            return new(ReportRunState.Succeeded, rows.Count, rows.Count == 0 ? "Aralıkta sipariş yok; yalnız başlık satırı yazıldı." : $"{rows.Count:N0} sipariş yazıldı.");
+        }
+        catch (OperationCanceledException)
+        {
+            runs.Record(OrdersCsvKey, started, ReportRunState.Cancelled, 0, summary, parameters.StoreKey);
+            return new(ReportRunState.Cancelled, 0, "Rapor iptal edildi; dosya yazılmadı.");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            runs.Record(OrdersCsvKey, started, ReportRunState.Failed, 0, AuditStore.Sanitize(error.Message), parameters.StoreKey);
+            return new(ReportRunState.Failed, 0, "Rapor yazılamadı: " + AuditStore.Sanitize(error.Message));
+        }
+    }
+
+    /// <summary>One row per order of the parameter store, within the whole-day range (by the record's update time) and the delivery state; "Unknown" also means "no package".</summary>
+    public static IReadOnlyList<IReadOnlyDictionary<string, object?>> OrdersCsvRows(string? directory, ReportParameterSet parameters, CancellationToken cancellationToken = default, IProgress<int>? progress = null)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        var (channel, shop) = ReportParameters.SplitStore(parameters.StoreKey); var store = new OrdersStore(directory); var rows = new List<IReadOnlyDictionary<string, object?>>();
+        var from = parameters.FromUtc?.Date ?? DateTime.MinValue; var to = parameters.ToUtc?.Date ?? DateTime.MaxValue.Date;
+        const int PageSize = 1000;
+        for (var offset = 0; ; offset += PageSize)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var page = store.ReadPage(null, shop, null, parameters.Query, offset, PageSize);
+            foreach (var order in page.Items)
+            {
+                if (!string.Equals(order.Marketplace, channel, StringComparison.OrdinalIgnoreCase)) continue;
+                var day = order.UpdatedAt.UtcDateTime.Date; if (day < from || day > to) continue;
+                if (parameters.DeliveryState.Length > 0 && !(order.Shipments.Any(s => s.State == parameters.DeliveryState) || (parameters.DeliveryState == "Unknown" && order.Shipments.Count == 0))) continue;
+                rows.Add(new Dictionary<string, object?> { ["OrderId"] = order.OrderId, ["ShopId"] = order.ShopId, ["Status"] = order.DeliveryLabel, ["Price"] = order.Total, ["Currency"] = order.Currency, ["UpdatedUtc"] = order.UpdatedAt.UtcDateTime });
+            }
+            progress?.Report(page.Total == 0 ? 100 : Math.Min(100, (offset + page.Items.Count) * 100 / page.Total));
+            if (page.Items.Count == 0 || offset + PageSize >= page.Total) break;
+        }
+        return rows;
+    }
+}
