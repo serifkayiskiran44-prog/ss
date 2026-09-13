@@ -2,7 +2,8 @@ using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
 
-public sealed record ProductContentDiffRow(string Field, string Before, string After, bool BeforeTruncated, bool AfterTruncated);
+// #832: the kind rides along so the renderer can say added / removed / changed without reading the values.
+public sealed record ProductContentDiffRow(string Field, string Before, string After, bool BeforeTruncated, bool AfterTruncated, DiffKind Kind = DiffKind.Changed);
 
 public sealed record ProductContentDiffView(IReadOnlyList<ProductContentDiffRow> Rows, string Headline, bool IsStale, string Warning)
 {
@@ -18,8 +19,7 @@ public sealed record ProductContentDiffView(IReadOnlyList<ProductContentDiffRow>
 /// </summary>
 public static class ProductContentDiff
 {
-    public const int MaxPreviewLength = 400;
-    const string Empty = "(boş)";
+    public const int MaxPreviewLength = FieldDiff.MaxLength;
 
     static readonly (string Field, Func<CatalogProduct, string?> Read)[] Fields =
     [
@@ -42,7 +42,7 @@ public static class ProductContentDiff
             if (string.Equals(before, after, StringComparison.Ordinal)) continue;
             var (beforeText, beforeCut) = Present(before);
             var (afterText, afterCut) = Present(after);
-            rows.Add(new(field, beforeText, afterText, beforeCut, afterCut));
+            rows.Add(new(field, beforeText, afterText, beforeCut, afterCut, FieldDiff.Classify(before, after)));
         }
 
         var stale = stored is not null && stored.UpdatedUtc != baseline.UpdatedUtc;
@@ -51,11 +51,6 @@ public static class ProductContentDiff
         return new(rows, headline, stale, warning);
     }
 
-    static (string Text, bool Truncated) Present(string value)
-    {
-        var safe = AuditStore.Sanitize(value).Replace('\r', ' ').Replace('\n', ' ').Trim();
-        while (safe.Contains("  ", StringComparison.Ordinal)) safe = safe.Replace("  ", " ", StringComparison.Ordinal);
-        if (safe.Length == 0) return (Empty, false);
-        return safe.Length > MaxPreviewLength ? (safe[..MaxPreviewLength] + "…", true) : (safe, false);
-    }
+    // #832: one owner for value presentation (mask, flatten, cap) -- FieldDiff -- so every diff reads the same.
+    static (string Text, bool Truncated) Present(string value) => FieldDiff.PresentValue(value);
 }

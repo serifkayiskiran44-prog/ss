@@ -210,12 +210,8 @@ public partial class MainWindow {
   body.Children.Add(new TextBlock { Text = diff.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
   if (diff.Warning.Length > 0)
    body.Children.Add(new TextBlock { Text = "⚠ " + diff.Warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 0, 0, 8) });
-  foreach (var row in diff.Rows)
-  {
-   body.Children.Add(new TextBlock { Text = row.Field, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 2) });
-   body.Children.Add(new TextBlock { Text = "Önce: " + row.Before, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
-   body.Children.Add(new TextBlock { Text = "Sonra: " + row.After, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(46, 90, 46)) });
-  }
+  // #832: the shared renderer -- added / removed / changed read from glyph, word and border, not from colour.
+  body.Children.Add(FieldDiffRenderer.Render(diff.Rows.Select(r => new FieldDiffRow(r.Field, r.Before, r.After, r.Kind, r.BeforeTruncated, r.AfterTruncated)).ToList(), SeverityStyle.IsHighContrast));
   // #818: the standard dialog shell -- fitted to the work area, resizable, scrolling body, Kapat on Escape.
   var dialog = DialogShell.Create(this, "İçerik değişiklik önizlemesi", body, new DialogShell.Action[] { new("Kapat", IsCancel: true) }, 620, 480);
   dialog.ShowDialog();
