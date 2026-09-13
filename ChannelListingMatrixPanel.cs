@@ -90,8 +90,8 @@ public static class ChannelListingMatrixPanel
     {
         ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(matrix);
         target.ItemsSource = null; target.Columns.Clear();
-        var sku = GridColumns.Text("SKU", "Sku", new DataGridLength(110)); sku.MinWidth = 80; target.Columns.Add(sku);
-        var product = GridColumns.Text("Ürün", "ProductName", new DataGridLength(220)); product.MinWidth = 120; target.Columns.Add(product);
+        var sku = GridColumns.Text("SKU", "Sku", new DataGridLength(110)); sku.MinWidth = Math.Max(sku.MinWidth, 80); target.Columns.Add(sku);
+        var product = GridColumns.Text("Ürün", "ProductName", new DataGridLength(220)); product.MinWidth = Math.Max(product.MinWidth, 120); target.Columns.Add(product);
         for (var i = 0; i < matrix.Columns.Count; i++)
         {
             var column = matrix.Columns[i];

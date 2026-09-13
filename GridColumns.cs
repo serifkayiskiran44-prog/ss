@@ -9,7 +9,7 @@ using System.Windows.Threading;
 
 namespace TrMarketplaceHubDesktop;
 
-/// <summary>What a grid text column holds: prose (trimmed with a tooltip), an identifier (never trimmed), a number (right-aligned, formatted), or a stored UTC time (shown local, always with a tooltip).</summary>
+/// <summary>What a grid text column holds: prose or an identifier (an ellipsis with a tooltip when the column is too narrow), a number (right-aligned, formatted, never trimmed), or a stored UTC time (shown local, always with a tooltip).</summary>
 public enum GridTextKind { Text, Identifier, Number, Time }
 
 /// <summary>The tooltip's text: the cell's value through the central redaction, a raw payload hidden whole, nothing for an empty cell.</summary>
@@ -107,8 +107,9 @@ public static class GridColumns
         if (k == GridTextKind.Time) binding.Converter = new TimeDisplayConverter();
         var element = new Style(typeof(TextBlock));
         element.Setters.Add(new Setter(TextBlock.TextWrappingProperty, TextWrapping.NoWrap));
-        element.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, k is GridTextKind.Text or GridTextKind.Time ? TextTrimming.CharacterEllipsis : TextTrimming.None));
-        if (k == GridTextKind.Text) element.Setters.Add(new Setter(MonitorTrimmingProperty, true));
+        // Prose, an identifier and a time end in an ellipsis when the column is too narrow (a hard cut hides more, #867); a number is never trimmed, it gets the room.
+        element.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, k == GridTextKind.Number ? TextTrimming.None : TextTrimming.CharacterEllipsis));
+        if (k is GridTextKind.Text or GridTextKind.Identifier) element.Setters.Add(new Setter(MonitorTrimmingProperty, true));
         if (k == GridTextKind.Time)
         {
             // A stored UTC instant shown as the local wall clock; the tooltip (zone offset, age, UTC) is always there, on the text and on the cell for the keyboard.
@@ -124,7 +125,30 @@ public static class GridColumns
         }
         var column = new DataGridTextColumn { Header = header, Binding = binding, Width = width, ElementStyle = element };
         if (k == GridTextKind.Number) SetIsNumeric(column, true);
+        column.MinWidth = Math.Max(column.MinWidth, HeaderMinWidth(header));
         return column;
+    }
+
+    /// <summary>Room a sorted header keeps beside its text for the sort arrow.</summary>
+    public const double SortIndicatorRoom = 12;
+    static readonly Dictionary<string, double> headerWidths = new(StringComparer.Ordinal);
+
+    /// <summary>The narrowest a column may be without cutting its own header (#867): the header's text in the header face, the header padding, and the sort arrow's room.</summary>
+    public static double HeaderMinWidth(string? header)
+    {
+        var text = (header ?? "").Trim(); if (text.Length == 0) return 0;
+        lock (headerWidths)
+        {
+            if (!headerWidths.TryGetValue(text, out var width))
+            {
+                var typeface = new Typeface(DesignTokens.FontFamilyBody, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+                var measured = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, DesignTokens.TextBodySize, Brushes.Black, 1.0).WidthIncludingTrailingWhitespace;
+                var padding = DesignTokens.HeaderPadding;
+                width = Math.Ceiling(measured + padding.Left + padding.Right + SortIndicatorRoom);
+                headerWidths[text] = width;
+            }
+            return width;
+        }
     }
 
     /// <summary>Whether the block's text is wider than the block: the trimmed state the framework does not expose.</summary>

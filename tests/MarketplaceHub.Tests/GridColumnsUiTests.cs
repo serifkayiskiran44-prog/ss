@@ -13,8 +13,9 @@ using TrMarketplaceHubDesktop;
 using TrMarketplaceHubDesktop.Catalog;
 
 // #864 on the real main window: the product grid's name column trims a long Turkish name and carries it whole in a
-// keyboard-openable cell tooltip while trimmed; the SKU column never trims; the dashboard's connections grid trims
-// its long status text the same way; a resize that widens the column takes the tooltip away.
+// keyboard-openable cell tooltip while trimmed; a narrowed SKU column ends in an ellipsis with the SKU whole in the
+// tooltip and never goes narrower than its header (#867); the dashboard's connections grid trims its long status
+// text the same way; a resize that widens the column takes the tooltip away.
 [TestClass]
 public sealed class GridColumnsUiTests
 {
@@ -42,7 +43,9 @@ public sealed class GridColumnsUiTests
                 var nameCell = cells[grid.Columns.IndexOf(nameColumn)]; var skuCell = cells[grid.Columns.IndexOf(skuColumn)];
                 var nameText = (TextBlock)nameCell.Content; Assert.IsTrue(GridColumns.GetIsTrimmed(nameText), "A 90-DIP name column trims the long name."); Assert.AreEqual(TextTrimming.CharacterEllipsis, nameText.TextTrimming);
                 Assert.AreEqual(name, (string)nameCell.ToolTip, "The tooltip carries the whole name."); Assert.IsTrue(ToolTipService.GetShowsToolTipOnKeyboardFocus(nameCell));
-                var skuText = (TextBlock)skuCell.Content; Assert.AreEqual(TextTrimming.None, skuText.TextTrimming); Assert.IsFalse(GridColumns.GetIsTrimmed(skuText), "The SKU is whole.");
+                skuColumn.Width = 60; Drain(window); // the column stops at its header's width, still too narrow for the SKU
+                var skuText = (TextBlock)skuCell.Content; Assert.AreEqual(TextTrimming.CharacterEllipsis, skuText.TextTrimming); Assert.IsTrue(GridColumns.GetIsTrimmed(skuText), "A narrowed SKU column ends in an ellipsis (#867)."); Assert.AreEqual("SKU-ÇĞİÖŞÜ-000123456789", (string)skuCell.ToolTip, "and the tooltip carries the SKU whole.");
+                Assert.IsTrue(skuCell.ActualWidth >= GridColumns.HeaderMinWidth("Stok kodu / SKU") - 1, "a column is never narrower than its header");
                 nameColumn.Width = 700; Drain(window);
                 Assert.IsFalse(GridColumns.GetIsTrimmed(nameText)); Assert.IsNull(nameCell.ToolTip, "Widened, the tooltip goes away.");
 

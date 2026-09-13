@@ -222,7 +222,7 @@ public static class ReportParameterPanel
                 foreach (var choice in layout.Columns.Where(c => c.Visible))
                 {
                     var column = GridColumns.Text(choice.Column.Label, $"[{choice.Column.Key}]", new DataGridLength(choice.Width), GridColumns.KindFor(choice.Column.Key));
-                    column.SortMemberPath = $"[{choice.Column.Key}]"; column.MinWidth = ReportColumns.MinWidth; grid.Columns.Add(column);
+                    column.SortMemberPath = $"[{choice.Column.Key}]"; column.MinWidth = Math.Max(column.MinWidth, ReportColumns.MinWidth); grid.Columns.Add(column);
                 }
                 grid.ItemsSource = result.Rows;
             }

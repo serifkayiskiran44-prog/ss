@@ -13,9 +13,9 @@ using TrMarketplaceHubDesktop;
 
 // #864 (DESIGN: DataGrid text truncation and tooltip policy). A shared text column: prose (a title, a source, a
 // status, an error) is trimmed with an ellipsis on one line and, only while it is trimmed, carries a tooltip with
-// the full text that the keyboard can open on the cell as the mouse can on hover; an identifier or a number is
-// never trimmed and never gets a tooltip. The tooltip text passes the redaction that every other surface uses, so
-// a token, an address or a raw payload never opens in a bubble.
+// the full text that the keyboard can open on the cell as the mouse can on hover; an identifier does the same
+// (#867); a number is never trimmed and never gets a tooltip. The tooltip text passes the redaction that every
+// other surface uses, so a token, an address or a raw payload never opens in a bubble.
 [TestClass]
 public sealed class GridColumnsTests
 {
@@ -36,13 +36,17 @@ public sealed class GridColumnsTests
             Assert.AreEqual(true, Setter(title.ElementStyle, GridColumns.MonitorTrimmingProperty), "The text block watches its own trimming.");
             Assert.IsNull(title.CellStyle, "The column leaves the grid's own cell style (density, selection, focus) in place; the tooltip lands on the cell while trimmed.");
 
-            // An identifier and a number: never trimmed, no tooltip.
-            foreach (var column in new[] { GridColumns.Text("SKU", "Sku", 80), GridColumns.Text("Fiyat", "Price", 80, format: "N2") })
-            {
-                Assert.AreEqual(TextTrimming.None, Setter(column.ElementStyle, TextBlock.TextTrimmingProperty));
-                Assert.IsFalse(column.ElementStyle.Setters.OfType<Setter>().Any(s => s.Property == GridColumns.MonitorTrimmingProperty), $"{column.Header}: never trimmed, never a tooltip");
-            }
-            Assert.AreEqual("N2", ((Binding)GridColumns.Text("Fiyat", "Price", 80, format: "N2").Binding).StringFormat);
+            // An identifier too long for its column ends in an ellipsis and carries itself whole in the tooltip (#867: a hard cut hides more); a number is never trimmed and never gets a tooltip.
+            var sku = GridColumns.Text("SKU", "Sku", 80);
+            Assert.AreEqual(TextTrimming.CharacterEllipsis, Setter(sku.ElementStyle, TextBlock.TextTrimmingProperty)); Assert.AreEqual(true, Setter(sku.ElementStyle, GridColumns.MonitorTrimmingProperty));
+            var price = GridColumns.Text("Fiyat", "Price", 80, format: "N2");
+            Assert.AreEqual(TextTrimming.None, Setter(price.ElementStyle, TextBlock.TextTrimmingProperty));
+            Assert.IsFalse(price.ElementStyle.Setters.OfType<Setter>().Any(s => s.Property == GridColumns.MonitorTrimmingProperty), "a number: never trimmed, never a tooltip");
+            Assert.AreEqual("N2", ((Binding)price.Binding).StringFormat);
+            // A column is never narrower than its own header (#867).
+            Assert.IsTrue(GridColumns.HeaderMinWidth("Sipariş durumu (kaynak)") > 143, "the header's text, its padding and the sort arrow's room");
+            Assert.AreEqual(GridColumns.HeaderMinWidth("Sipariş durumu (kaynak)"), GridColumns.Text("Sipariş durumu (kaynak)", "RawStatus", 150).MinWidth);
+            Assert.AreEqual(0, GridColumns.HeaderMinWidth(""));
 
             // The tooltip converter redacts and hides what must not open in a bubble.
             var converter = new GridTooltipConverter();
@@ -64,7 +68,8 @@ public sealed class GridColumnsTests
                 Assert.IsTrue(GridColumns.GetIsTrimmed(titleText), "A long title in a 120-DIP column is trimmed.");
                 var bubble = (string)titleCell.ToolTip; StringAssert.StartsWith(bubble, "Şüpheli işlemlerin"); StringAssert.Contains(bubble, "日本語"); Assert.IsFalse(bubble.Contains("top-secret-token"), "The tooltip is redacted.");
                 Assert.IsTrue(ToolTipService.GetShowsToolTipOnKeyboardFocus(titleCell), "The keyboard opens the tooltip on the cell.");
-                var skuText = (TextBlock)cells[1].Content; Assert.IsFalse(GridColumns.GetIsTrimmed(skuText), "An identifier is never trimmed."); Assert.AreEqual(TextTrimming.None, skuText.TextTrimming); Assert.IsNull(cells[1].ToolTip);
+                var skuText = (TextBlock)cells[1].Content; Assert.IsTrue(GridColumns.GetIsTrimmed(skuText), "A 24-character identifier in a 60-DIP column ends in an ellipsis."); Assert.AreEqual(TextTrimming.CharacterEllipsis, skuText.TextTrimming); Assert.AreEqual("SKU-ÇĞİÖŞÜ-000123456789", (string)cells[1].ToolTip, "and carries itself whole in the tooltip.");
+                var priceText = (TextBlock)cells[2].Content; Assert.AreEqual(TextTrimming.None, priceText.TextTrimming); Assert.IsNull(cells[2].ToolTip, "a number is never trimmed and has no tooltip");
                 titleColumn.Width = 900; Drain(window);
                 Assert.IsFalse(GridColumns.GetIsTrimmed(titleText), "Widened, the title is whole."); Assert.IsNull(titleCell.ToolTip, "No tooltip when nothing is hidden.");
             }
