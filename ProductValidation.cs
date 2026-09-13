@@ -62,6 +62,8 @@ public static class ProductValidation
         foreach (var unitFinding in ProductUnits.Findings(product)) Add(unitFinding.Blocking ? Blocking : Warning, "price-stock", unitFinding.Field, unitFinding.Message);
         // #908: the box stands or falls together and every side and the desi are positive; a typed desi that disagrees with the box is flagged, never overwritten.
         foreach (var dimensionFinding in ProductDimensions.Findings(product)) Add(dimensionFinding.Blocking ? Blocking : Warning, "price-stock", dimensionFinding.Field, dimensionFinding.Message);
+        // #909: an unknown tax class is flagged (the price preview refuses it); a known class whose rate the record does not carry is flagged until the next save.
+        foreach (var (taxSeverity, taxMessage) in ProductTaxClass.Findings(product)) Add(taxSeverity, "price-stock", "Vergi sınıfı", taxMessage);
         Length("content", "Marka", product.Brand, 200);
         Length("content", "Kategori", product.Category, 200);
         Length("content", "Açıklama", product.Description, 20000);

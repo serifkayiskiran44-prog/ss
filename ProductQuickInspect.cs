@@ -37,6 +37,7 @@ public static class ProductQuickInspect
         Add("Fiyat", "Satış fiyatı", product.Price > 0 ? Money(product.Price, product.Currency) : null);
         Add("Fiyat", "Alış fiyatı", product.Cost > 0 ? Money(product.Cost, product.CostCurrency) : null);
         Add("Fiyat", "KDV", product.VatRate.ToString("0.##", CultureInfo.CurrentCulture) + "%");
+        Add("Fiyat", "Vergi sınıfı", ProductTaxClass.Describe(product, nowUtc)); // #909: the class as resolved and its last change
 
         Add("Stok", "Stok", product.Stock.ToString("N0", CultureInfo.CurrentCulture));
         Add("Stok", "Kilitler", Join(product.LockPrice ? "fiyat" : "", product.LockStock ? "stok" : "", product.LockName ? "başlık" : "", product.LockImages ? "görsel" : ""));

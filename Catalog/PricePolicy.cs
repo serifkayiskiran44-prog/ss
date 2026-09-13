@@ -41,9 +41,11 @@ public partial class CatalogStore {
   }
   // A TRY policy has no FX leg to go stale; a non-TRY policy must carry a real observed-rate timestamp.
   var fxSnapshot=p.Currency=="TRY"?DateTimeOffset.UtcNow:p.FxRateObservedUtc;
+  // #909: the tax class reaches the price only here, as the VAT percentage the gate already takes -- a known class supplies it, a missing one leaves the rule's, an unknown one is refused by name instead of blurring into "missing input".
+  if(ProductTaxClass.Resolve(product) is {State:TaxClassResolution.Unknown} unknownTax)throw new InvalidOperationException($"Fiyat gönderimi engellendi: {unknownTax.Words}; {ch.Trim().ToLowerInvariant()}/{shop.Trim()}.");
   var money=MoneyPriceCalculator.Calculate(new MoneyPriceInput(product.Sku,ch,shop,salePrice,product.Cost,saleCurrency){
    CommissionRatePercent=p.CommissionPercent,EstimatedShipping=p.EstimatedShippingTry,TransactionCost=p.TransactionCostTry,
-   VatRatePercent=p.VatRatePercent,VatIncludedInSale=p.VatIncludedInSale,
+   VatRatePercent=ProductTaxClass.RateFor(product,p.VatRatePercent),VatIncludedInSale=p.VatIncludedInSale,
    FxRateTryPerUnit=p.Currency=="TRY"?null:p.TryPerUnit,FxSnapshotUtc=fxSnapshot});
   PriceDispatchPreflight.EnsureReady(money);
   // The operator's minimum-margin guard (#790). Before #285 it was compared with the naive formula-minus-cost,

@@ -61,6 +61,8 @@ public class CatalogProduct {
  public decimal? Desi {get;set;}
  // #907: weight and box as given (the provenance) and as canonical kilograms / centimetres when the text could be read; null when it could not.
  public string WeightText {get;set;}=""; public decimal? WeightKg {get;set;} public string DimensionsText {get;set;}=""; public decimal? LengthCm {get;set;} public decimal? WidthCm {get;set;} public decimal? HeightCm {get;set;}
+ // #909: the product's tax class (a catalogue code; "" = not specified) and every change of it with its moment, its origin and the rate the code carried then.
+ public string TaxClass {get;set;}=""; public List<TaxClassChange> TaxClassHistory {get;set;}=new();
  // Independent, named price points (e.g. "Etsy fixed", "Wholesale") a channel can select instead of the formula-based PricePolicy.
  // Absent/empty on records written before this field existed; legacy Price/formula behavior is unchanged when empty.
  public List<CatalogPriceField> PriceFields {get;set;}=new();

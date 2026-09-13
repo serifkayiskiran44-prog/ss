@@ -65,6 +65,8 @@ public static class ProductDirtySections
         ["LengthCm"] = ("price-stock", "Uzunluk (cm)"),
         ["WidthCm"] = ("price-stock", "Genişlik (cm)"),
         ["HeightCm"] = ("price-stock", "Yükseklik (cm)"),
+        ["TaxClass"] = ("price-stock", "Vergi sınıfı"),
+        ["TaxClassHistory"] = ("price-stock", "Vergi sınıfı geçmişi"),
         ["LockPrice"] = ("price-stock", "Fiyat kilidi"),
         ["LockStock"] = ("price-stock", "Stok kilidi"),
         ["PriceFields"] = ("price-stock", "Fiyat alanları"),
