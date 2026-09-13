@@ -72,8 +72,9 @@ public partial class CatalogStore
     find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE json_extract(Json,'$.Sku')=$sku COLLATE BINARY LIMIT 2";
     find.Parameters.AddWithValue("$sku",pair.Key);using var reader=find.ExecuteReader();while(reader.Read())matches.Add(JsonSerializer.Deserialize<CatalogProduct>(reader.GetString(0))!);
    }
-   if(matches.Count!=1)throw new InvalidOperationException($"SKU {pair.Key}: tek bir merkezi ürün eşleşmesi bulunamadı.");
-   var product=matches[0];
+   // #902: the order-line identity rule lives with the other keys -- the SKU alone, exactly one product.
+   var match=ProductIdentity.ResolveSku(matches,pair.Key);if(match.Product is null)throw new InvalidOperationException($"SKU {pair.Key}: {match.Reason}.");
+   var product=match.Product;
    if(!product.Active)throw new InvalidOperationException($"SKU {pair.Key}: ürün pasif.");
    if(product.Stock<pair.Value)throw new InvalidOperationException($"SKU {pair.Key}: stok yetersiz ({product.Stock}/{pair.Value}).");
    var movement=new OrderStockMovement(product.Id,product.Sku,pair.Value,product.Stock,product.Stock-pair.Value);

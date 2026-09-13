@@ -407,7 +407,8 @@ public partial class MainWindow : Window
  // #832: the XML row diff -- the selected preview row against the pool product it would touch (by SKU, else
  // barcode), rendered by the shared FieldDiffRenderer so added / removed / changed / unchanged read without colour.
  readonly Button previewDiffButton=new(){Content="Satır farkı",Padding=new Thickness(8,3,8,3),Margin=new Thickness(0,0,6,0),IsEnabled=false,ToolTip="Seçili satırın havuzdaki ürüne göre alan alan farkı"};
- CatalogProduct? ExistingProductFor(CatalogProduct row){var pool=store.Products();if(!string.IsNullOrWhiteSpace(row.Sku)){var bySku=pool.FirstOrDefault(x=>x.Sku==row.Sku);if(bySku!=null)return bySku;}return string.IsNullOrWhiteSpace(row.Barcode)?null:pool.FirstOrDefault(x=>x.Barcode==row.Barcode);}
+ // #902: the same identity rule as the import -- an ambiguous or conflicting row resolves to no product here, as it would be refused there.
+  CatalogProduct? ExistingProductFor(CatalogProduct row)=>ProductIdentity.Resolve(store.Products(),row.Sku,row.Barcode).Product;
  Window BuildPreviewRowDiff(){
   if(preview.SelectedItems.Count!=1||preview.SelectedItem is not CatalogProduct row)throw new InvalidOperationException("Fark için önizlemeden tek bir satır seçin.");
   var existing=ExistingProductFor(row);var rows=FieldDiff.Build(existing,row,FieldDiff.ProductFields,includeUnchanged:true);
