@@ -21,7 +21,7 @@ public sealed class XmlSourceHealthPanelTests
     {
         var healthy = XmlSourceHealthPanel.Compose(Facts(lastSuccess: Now.AddHours(-1), run: new("Completed", Now.AddHours(-1), Now.AddHours(-1), null, "")), Now);
         Assert.AreEqual(SourceHealthVerdict.Healthy, healthy.Verdict); Assert.AreEqual("Sağlıklı", healthy.Headline); Assert.AreEqual(SeverityLevel.Success, healthy.Level);
-        Assert.AreEqual(7, healthy.Lines.Count);
+        Assert.AreEqual(8, healthy.Lines.Count); Assert.AreEqual("Kimlik bilgisi", healthy.Lines[7].Label); Assert.AreEqual("bilinmiyor", healthy.Lines[7].Value);
         StringAssert.Contains(healthy.Lines[0].Value, "erişilebilir"); StringAssert.Contains(healthy.Lines[0].Value, "HTTP 200"); StringAssert.Contains(healthy.Lines[0].Value, "5 dk önce");
         Assert.AreEqual("Son başarı", healthy.Lines[2].Label); StringAssert.Contains(healthy.Lines[2].Value, "1 sa önce"); StringAssert.Contains(healthy.Lines[2].Value, "120 ürün");
         StringAssert.Contains(healthy.Lines[3].Value, "yok"); Assert.AreEqual("gerekmiyor", healthy.Lines[5].Value);

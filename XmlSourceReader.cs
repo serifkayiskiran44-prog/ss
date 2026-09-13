@@ -24,6 +24,7 @@ public class XmlSourceReader(HttpClient client)
    }
    using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,timeout.Token);
    if((int)response.StatusCode is >=300 and <400)throw new InvalidOperationException("XML adresi yönlendiriliyor. Son HTTPS adresini kullanın.");
+   if((int)response.StatusCode is 401 or 403)throw new XmlSourceAuthException((int)response.StatusCode,auth!=null&&!string.IsNullOrEmpty(auth.User));
    if(!response.IsSuccessStatusCode)throw new InvalidOperationException($"XML alınamadı (HTTP {(int)response.StatusCode}).");
    var mediaType=response.Content.Headers.ContentType?.MediaType;
    if(mediaType is not null&&(mediaType.Equals("text/html",StringComparison.OrdinalIgnoreCase)||mediaType.Equals("application/xhtml+xml",StringComparison.OrdinalIgnoreCase)))throw new InvalidOperationException($"Sunucu XML yerine HTML içerik türü ('{mediaType}') döndürdü; hata veya giriş sayfası olabilir.");
@@ -57,6 +58,8 @@ public static class XmlAuthStore
 {
  private static string PathFor(string id,string? directory=null){if(!Guid.TryParse(id,out var key))throw new InvalidOperationException("Kaynak kimliği geçersiz.");return Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"source-auth",key.ToString("N")+".bin");}
  public static XmlAuth Load(string id,string? directory=null){var path=PathFor(id,directory);if(!File.Exists(path))return new();var plain=CredentialStore.Unprotect(File.ReadAllBytes(path));try{return JsonSerializer.Deserialize<XmlAuth>(plain)??new();}finally{System.Security.Cryptography.CryptographicOperations.ZeroMemory(plain);}}
+ /// <summary>#892: whether a credential is saved for the source -- presence only; a blob this machine cannot open is unreadable, never an exception on a health surface.</summary>
+ public static CredentialPresence Presence(string id,string? directory=null){try{return SourceCredentialHealth.PresenceOf(Load(id,directory));}catch(Exception){return CredentialPresence.Unreadable;}}
  public static void Save(string id,XmlAuth auth,string? directory=null){var path=PathFor(id,directory);Directory.CreateDirectory(Path.GetDirectoryName(path)!);var plain=JsonSerializer.SerializeToUtf8Bytes(auth);try{var tmp=path+".tmp";File.WriteAllBytes(tmp,CredentialStore.Protect(plain));File.Move(tmp,path,true);}finally{System.Security.Cryptography.CryptographicOperations.ZeroMemory(plain);}}
 }
 

@@ -28,6 +28,8 @@ public class XmlSource
  public int? LastHealthHttpStatus { get; set; }
  public long? LastHealthLatencyMs { get; set; }
  public string LastHealthError { get; set; } = "";
+ // #892: the credential state as a word (presence and the last real answer), persisted so a restart and the source list show it before the next probe. Never a value.
+ public string LastCredentialState { get; set; } = "UNKNOWN";
  public string Id {get;set;}=Guid.NewGuid().ToString("N"); public string Name {get;set;}=""; public string Location {get;set;}=""; public bool Enabled {get;set;}=true;public int IntervalMinutes {get;set;}=30;
  public string ItemPath {get;set;}="";public string DecimalSeparator {get;set;}=".";public Dictionary<string,string> Fields {get;set;}=new();
  public decimal ExchangeRate {get;set;}=1;public decimal MarkupPercent {get;set;}=40;public decimal FixedAmount {get;set;}=0;public decimal MinimumPrice {get;set;}=0;public string Currency {get;set;}="USD";

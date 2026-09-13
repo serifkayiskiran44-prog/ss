@@ -60,6 +60,7 @@ public static class XmlSourceListGrouping
         }
         var health = (source.LastHealthState ?? "").Trim().ToUpperInvariant();
         var checkedOnce = health.Length > 0 && health != "NEVER_CHECKED";
+        if (SourceCredentialHealth.ShouldFailFast(source.LastCredentialState)) return (SourceHealthBand.Problem, "kimlik bilgisi: " + SourceCredentialHealth.Describe(source.LastCredentialState).Word);
         if (checkedOnce && health != "HEALTHY") return (SourceHealthBand.Problem, "erişim: " + HealthWord(health) + SafeError(source.LastHealthError));
         if (checkedOnce && source.LastHealthLatencyMs is { } ms && ms >= DegradedLatencyMs) return (SourceHealthBand.Problem, $"yavaş · {ms.ToString("N0", CultureInfo.CurrentCulture)} ms");
         if (run is { Status: "Failed" or "Abandoned" }) return (SourceHealthBand.Problem, "son çalıştırma başarısız" + SafeError(run.Error));

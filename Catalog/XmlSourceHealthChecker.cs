@@ -10,7 +10,7 @@ public sealed record XmlSourceHealthResult(string State, int? HttpStatus, long L
 
 public static class XmlSourceHealthChecker
 {
-    public static async Task<XmlSourceHealthResult> CheckAsync(HttpClient http, XmlSource source, CancellationToken cancellationToken = default, TimeSpan? timeout = null)
+    public static async Task<XmlSourceHealthResult> CheckAsync(HttpClient http, XmlSource source, CancellationToken cancellationToken = default, TimeSpan? timeout = null, XmlAuth? auth = null)
     {
         var checkedUtc = DateTimeOffset.UtcNow;
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -36,6 +36,9 @@ public static class XmlSourceHealthChecker
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            // #892: the probe answers the same question the download asks -- with the saved credential, so a working one is healthy and a rejected one is a credential finding, never a bare 401.
+            if (auth is { User.Length: > 0 } && !auth.User.Contains(':') && !auth.User.Any(char.IsControl) && !auth.Password.Any(char.IsControl))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(auth.User + ":" + auth.Password)));
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token).ConfigureAwait(false);
             clock.Stop();
             var observation = ApiHealthClassifier.FromResponse(response, checkedUtc);

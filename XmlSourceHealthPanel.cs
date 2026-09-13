@@ -19,7 +19,11 @@ public sealed record SourceHealthFacts(
     int MappingRevision, int LastAppliedMappingRevision, string LastShapeFingerprint, string? CurrentShapeFingerprint,
     SourceRunSnapshot? LastRun, int ProductCount, int QuarantinePending, int QuarantineWarning,
     int? ValidationBlocking, int? ValidationWarning, int? ValidationRows, DateTime? ValidationUtc,
-    ImportProgressStage? RetryStage, bool ImportRunning);
+    ImportProgressStage? RetryStage, bool ImportRunning)
+{
+    /// <summary>#892: the source's credential state word (see <see cref="SourceCredentialHealth"/>); empty when unknown.</summary>
+    public string CredentialState { get; init; } = "";
+}
 
 public sealed record SourceHealthPanelModel(SourceHealthVerdict Verdict, SeverityLevel Level, string Headline, IReadOnlyList<SourceHealthLine> Lines, IReadOnlyList<SourceHealthAction> Actions);
 
@@ -61,9 +65,10 @@ public static class XmlSourceHealthPanel
             Validation(f, nowUtc),
             Retry(f, runFailed),
             new("Havuz", $"{f.ProductCount.ToString("N0", CultureInfo.CurrentCulture)} ürün" + (f.QuarantinePending + f.QuarantineWarning > 0 ? $" · kaynakta kayıp: {f.QuarantinePending.ToString("N0", CultureInfo.CurrentCulture)} bekleyen / {f.QuarantineWarning.ToString("N0", CultureInfo.CurrentCulture)} uyarı" : ""), f.QuarantinePending > 0 ? SeverityLevel.Warning : SeverityLevel.Info),
+            Credential(f),
         };
         var verdict = !checkedOnce && !everRan ? SourceHealthVerdict.NeverRun
-            : (checkedOnce && !reachable) || runFailed || f.RetryStage is not null ? SourceHealthVerdict.Failed
+            : (checkedOnce && !reachable) || runFailed || f.RetryStage is not null || SourceCredentialHealth.ShouldFailFast(f.CredentialState) ? SourceHealthVerdict.Failed
             : slow || shapeDrift || mappingDrift || incomplete || f.QuarantinePending > 0 || f.ValidationBlocking > 0 ? SourceHealthVerdict.Degraded
             : SourceHealthVerdict.Healthy;
         var (level, headline) = verdict switch
@@ -88,6 +93,9 @@ public static class XmlSourceHealthPanel
             ? new("Erişim", "erişilebilir" + http + when, SeverityLevel.Success)
             : new("Erişim", XmlSourceListGrouping.HealthWord(health) + http + when, SeverityLevel.Blocking, SafeError(f.HealthError));
     }
+
+    /// <summary>#892: the credential as a word -- gerekmiyor, kayıtlı · doğrulandı, eksik, reddedildi, okunamadı -- never a value.</summary>
+    static SourceHealthLine Credential(SourceHealthFacts f) { var v = SourceCredentialHealth.Describe(f.CredentialState); return new("Kimlik bilgisi", v.Word, v.Level, v.Detail); }
 
     static SourceHealthLine Drift(SourceHealthFacts f, bool shapeDrift, bool mappingDrift)
     {
