@@ -47,7 +47,7 @@ public static class ChannelMatrixBulkDrawer
         var reason = new TextBlock { Tag = "channel-matrix-bulk-reason", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 4), Visibility = Visibility.Collapsed };
         var lines = new ItemsControl { Tag = "channel-matrix-bulk-lines", Margin = new Thickness(0, 4, 0, 2) };
         var more = new TextBlock { Tag = "channel-matrix-bulk-more", Opacity = 0.85, Margin = Spacing.BelowInline, Visibility = Visibility.Collapsed };
-        var approve = new CheckBox { Tag = "channel-matrix-bulk-approve", Content = "Yukarıdaki yerel planların oluşturulmasını onaylıyorum (canlı yazım yok).", IsEnabled = false, Margin = new Thickness(0, 8, 0, 4) };
+        var approve = new CheckBox { Tag = "channel-matrix-bulk-approve", Content = "Yukarıdaki yerel planların oluşturulmasını onaylıyorum (canlı yazım yok).", Margin = new Thickness(0, 8, 0, 4) }; CommandState.Apply(approve, DisabledReason.StoreState("Önce önizleme alın."));
         var status = new TextBlock { Tag = "channel-matrix-bulk-status", TextWrapping = TextWrapping.Wrap, Margin = Spacing.AboveInline };
         body.Children.Add(summary); body.Children.Add(reason); body.Children.Add(lines); body.Children.Add(more); body.Children.Add(approve); body.Children.Add(status);
 
@@ -63,17 +63,17 @@ public static class ChannelMatrixBulkDrawer
             reason.Text = model.Reason; reason.Visibility = model.Reason.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             lines.ItemsSource = model.Lines.Select(l => l.Text).ToList();
             more.Text = model.LinesTruncated > 0 ? $"… ve {model.LinesTruncated:N0} daha (toplam {model.Lines.Count + model.LinesTruncated:N0} satır)" : ""; more.Visibility = model.LinesTruncated > 0 ? Visibility.Visible : Visibility.Collapsed;
-            approve.IsEnabled = model.CanApply; if (!model.CanApply) approve.IsChecked = false;
+            CommandState.Apply(approve, model.CanApply ? null : DisabledReason.StoreState(model.Reason.Length > 0 ? model.Reason : "Uygulanacak değişiklik yok.")); if (!model.CanApply) approve.IsChecked = false;
             window.Tag = preview;
         }
         async Task PreviewAsync()
         {
             if (busy) return;
             var t = Target();
-            if (t is null) { preview = null; summary.Text = "Bu oturumda sunulan mağaza yok; toplu plan oluşturulamaz."; reason.Visibility = Visibility.Collapsed; approve.IsEnabled = false; return; }
+            if (t is null) { preview = null; summary.Text = "Bu oturumda sunulan mağaza yok; toplu plan oluşturulamaz."; reason.Visibility = Visibility.Collapsed; CommandState.Apply(approve, DisabledReason.StoreState("Bu oturumda sunulan mağaza yok.")); return; }
             var categoryText = category.Text.Trim();
             if (categoryText.Length == 0) { preview = null; Render(t); reason.Text = "Hedef kategori girin, sonra Önizle."; reason.Visibility = Visibility.Visible; summary.Text = "Önizleme alınmadı."; return; }
-            busy = true; previewButton.IsEnabled = false; approve.IsEnabled = false; status.Text = ""; summary.Text = "Önizleme hazırlanıyor…";
+            busy = true; CommandState.Apply(previewButton, DisabledReason.Busy("Önizleme hazırlanıyor.")); CommandState.Apply(approve, DisabledReason.Busy("Önizleme hazırlanıyor.")); status.Text = ""; summary.Text = "Önizleme hazırlanıyor…";
             var ids = context.Products.Select(p => (p.ProductId, p.Sku, p.ProductName)).ToList();
             var request = new BulkProductOperationRequest(BulkProductOperationKind.SetChannelMapping, Channel: t.Channel, ShopId: t.ShopId, TargetCategory: categoryText);
             var token = cts.Token;
@@ -90,11 +90,11 @@ public static class ChannelMatrixBulkDrawer
             }
             catch (OperationCanceledException) { preview = null; summary.Text = "Önizleme iptal edildi; hiçbir şey yazılmadı."; }
             catch (Exception error) { preview = null; Render(t); reason.Text = AuditStore.Sanitize(error.Message); reason.Visibility = Visibility.Visible; }
-            finally { busy = false; previewButton.IsEnabled = true; }
+            finally { busy = false; CommandState.Apply(previewButton, null); }
         }
         async Task ApplyAsync(BulkProductPreview current)
         {
-            applying = true; if (applyButton is not null) applyButton.IsEnabled = false; previewButton.IsEnabled = false; status.Text = "Uygulanıyor… yalnızca yerel plan yazılır.";
+            applying = true; if (applyButton is not null) CommandState.Apply(applyButton, DisabledReason.Busy("Uygulama sürüyor.")); CommandState.Apply(previewButton, DisabledReason.Busy("Uygulama sürüyor.")); status.Text = "Uygulanıyor… yalnızca yerel plan yazılır.";
             try
             {
                 var progress = new Progress<int>(p => status.Text = $"Uygulanıyor… %{p}");
@@ -107,7 +107,7 @@ public static class ChannelMatrixBulkDrawer
             }
             catch (OperationCanceledException) { status.Text = "Uygulama iptal edildi; hiçbir plan yazılmadı."; }
             catch (Exception error) { status.Text = "Uygulanamadı: " + AuditStore.Sanitize(error.Message); }
-            finally { applying = false; if (applyButton is not null) applyButton.IsEnabled = true; previewButton.IsEnabled = true; }
+            finally { applying = false; if (applyButton is not null) CommandState.Apply(applyButton, null); CommandState.Apply(previewButton, null); }
         }
         bool OnApply()
         {

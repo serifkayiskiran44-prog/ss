@@ -25,7 +25,7 @@ public static class OrdersPanel
   var viewStore=new UiPreferenceStore(directory);var savedViews=new ComboBox{Width=165,DisplayMemberPath="Name"};var viewName=new TextBox{Width=130,ToolTip="Kayıtlı sipariş görünümü adı"};bar.Children.Add(new TextBlock{Text="Görünüm",Margin=new Thickness(8,4,2,4),VerticalAlignment=VerticalAlignment.Center});bar.Children.Add(savedViews);bar.Children.Add(viewName);
   // #834: column presets built from the grid's real columns; the user's own layout is kept apart and never overwritten by a preset.
   var presetController=new OrderColumnPresetController(viewStore.Get,viewStore.Set);var columnPreset=new ComboBox{Width=150,ToolTip="Kolon ön ayarı: operasyon, kargo, finans (salt okunur) veya kendi düzenin",ItemsSource=OrderColumnPresets.Options.Select(o=>o.Label).ToList()};System.Windows.Automation.AutomationProperties.SetName(columnPreset,"Kolon ön ayarı");bar.Children.Add(new TextBlock{Text="Kolonlar",Margin=new Thickness(8,4,2,4),VerticalAlignment=VerticalAlignment.Center});bar.Children.Add(columnPreset);
-  var refresh=Button(bar,"Etsy'den yenile");var cancel=Button(bar,"İptal");cancel.IsEnabled=false;var add=Button(bar,"+ Yerel sipariş");
+  var refresh=Button(bar,"Etsy'den yenile");var cancel=Button(bar,"İptal");CommandState.Apply(cancel,DisabledReason.StoreState("İptal edilecek yenileme yok."));var add=Button(bar,"+ Yerel sipariş");
   var status=Text("Kayıtlar yükleniyor…");top.Children.Add(status);
   var layout=new Grid{Tag="order-split"};root.Children.Add(layout);
   // #836: a resizable split whose detail width is remembered in DIP and clamped to the workspace; below 900 DIP the detail stacks under the list.
@@ -146,7 +146,7 @@ public static class OrdersPanel
      }
      detail.Children.Add(Text("Önizleme anlık bilgidir; düğmeye basıldığında stok yeniden doğrulanır."));
     }
-    var applyStock=Button(detail,"Kaydedilmiş siparişi stoktan düş");applyStock.IsEnabled=receipt==null;
+    var applyStock=Button(detail,"Kaydedilmiş siparişi stoktan düş");CommandState.Apply(applyStock,receipt==null?null:DisabledReason.StoreState("Stok bu sipariş için zaten düşüldü."));
     applyStock.Click+=(_,_)=>{try{
      var saved=store.ReadAll().Single(x=>x.Marketplace==o.Marketplace&&x.ShopId==o.ShopId&&x.OrderId==o.OrderId);
      var preview=new OrderStockDecisionService(catalog).CreatePreview(saved);var result=new OrderStockDecisionService(catalog).ApplyApproved(preview,true);
@@ -188,12 +188,12 @@ public static class OrdersPanel
   cancel.Click+=(_,_)=>running?.Cancel();root.Unloaded+=(_,_)=>{running?.Cancel();timelineCts?.Cancel();};
   refresh.Click+=async(_,_)=>
   {
-   if(running!=null)return;using var cts=new CancellationTokenSource(TimeSpan.FromMinutes(3));running=cts;refresh.IsEnabled=add.IsEnabled=false;cancel.IsEnabled=true;detail.IsEnabled=false;status.Text="Etsy siparişleri okunuyor; tüm sayfalar başarılı olunca kayıtlar güncellenecek…";
+   if(running!=null)return;using var cts=new CancellationTokenSource(TimeSpan.FromMinutes(3));running=cts;CommandState.Apply(refresh,DisabledReason.Busy("Yenileme sürüyor."));CommandState.Apply(add,DisabledReason.Busy("Yenileme sürüyor."));CommandState.Apply(cancel,null);detail.IsEnabled=false;status.Text="Etsy siparişleri okunuyor; tüm sayfalar başarılı olunca kayıtlar güncellenecek…";
    try{if(authorize==null)throw new InvalidOperationException("Önce Etsy API sekmesinde mağaza bağlantısını kurun.");var credentials=await authorize();using var http=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(45)};var rows=await new OrdersEtsyClient(http).ReadAsync(credentials,cts.Token);cts.Token.ThrowIfCancellationRequested();await Task.Run(()=>store.SaveBatch(rows),cts.Token);Load();status.Text=$"Etsy: {rows.Count} sipariş alındı · {DateTime.Now:g}. Taşıyıcı teslimat verisi bu API'de sağlanmaz.";}
    catch(OperationCanceledException){status.Text="Alım iptal edildi veya zaman aşımı; önceki kayıtlar korundu.";}
    catch(InvalidOperationException e){status.Text=e.Message;}
    catch{status.Text="Siparişler alınamadı. Bağlantı, mağaza ve transactions_r iznini kontrol edin. Önceki kayıtlar korundu.";}
-   finally{running=null;refresh.IsEnabled=add.IsEnabled=true;cancel.IsEnabled=false;detail.IsEnabled=true;}
+   finally{running=null;CommandState.Apply(refresh,null);CommandState.Apply(add,null);CommandState.Apply(cancel,DisabledReason.StoreState("İptal edilecek yenileme yok."));detail.IsEnabled=true;}
   };
   // #813: the window reveals an order the same way it reveals a product or a source -- reload, clear the
   // filters that would hide it, select it (selection opens the detail) and scroll to it. False when it is gone.

@@ -154,7 +154,7 @@ public partial class MainWindow
   PageTitle.Text = title ?? routeTitles[key];
   PageDescription.Text = description ?? item.ToolTip?.ToString() ?? "";
   BreadcrumbText.Text = drillStack.TrailText();
-  BackButton.IsEnabled = drillStack.CanGoBack;
+  RefreshBackButton();
  }
  // #853: the settings shell exposes its category selector so a deep link ("settings/pricing") lands on the category.
  Action<string>? settingsSelect;
@@ -176,7 +176,7 @@ public partial class MainWindow
  void SwitchDashboardStore(string storeKey)
  {
   var current = drillStack.SwitchStore(storeKey);
-  if (currentRoute != current.Route) SelectRoute(current.Route, false); else { BreadcrumbText.Text = drillStack.TrailText(); BackButton.IsEnabled = drillStack.CanGoBack; }
+  if (currentRoute != current.Route) SelectRoute(current.Route, false); else { BreadcrumbText.Text = drillStack.TrailText(); RefreshBackButton(); }
  }
  // A crumb is only worth returning to if what it pointed at still exists.
  bool DrillEntityAlive(DrillTarget target)
@@ -243,6 +243,9 @@ public partial class MainWindow
   }
   catch (Exception error) { Log("Kayıt seçilemedi: " + error.Message); return false; }
  }
+ /// <summary>#871: Back explains itself when there is no trail.</summary>
+ void RefreshBackButton() => CommandState.Apply(BackButton, drillStack.CanGoBack ? null : DisabledReason.StoreState("Geri gidilecek iz yok."));
+
  void FilterNavigationItems()
  {
   var query = NavigationSearchBox.Text.Trim();

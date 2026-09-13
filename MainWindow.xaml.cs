@@ -52,7 +52,7 @@ public partial class MainWindow : Window
  {
   http=httpClient??new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(60)};
   dataDirectory=directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");startupRecovery=new StartupRecovery(dataDirectory);store=new CatalogStore(dataDirectory);new SyncStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromHours(1));new XmlRunStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromMinutes(10));globalSearchIndex=new GlobalSearchIndexService(dataDirectory);logPath=Path.Combine(dataDirectory,"operations.log");
-  InitializeComponent();FontFamily=DesignTokens.FontFamilyBody;FontSize=DesignTokens.TextBodySize;IconStyles.ApplyIconButton(BackButton,IconRole.Inline);BackButton.ToolTip = KeyboardShortcuts.Hint("Geri", "back"); GlobalSearchBox.ToolTip = KeyboardShortcuts.Hint("Genel arama", "global-search"); ShortcutsButton.ToolTip = KeyboardShortcuts.Hint("Klavye kısayolları", "shortcut-reference"); IconStyles.ApplyIconButton(ShortcutsButton, IconRole.Inline);uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
+  InitializeComponent();FontFamily=DesignTokens.FontFamilyBody;FontSize=DesignTokens.TextBodySize;IconStyles.ApplyIconButton(BackButton,IconRole.Inline);BackButton.ToolTip = KeyboardShortcuts.Hint("Geri", "back"); GlobalSearchBox.ToolTip = KeyboardShortcuts.Hint("Genel arama", "global-search"); ShortcutsButton.ToolTip = KeyboardShortcuts.Hint("Klavye kısayolları", "shortcut-reference"); IconStyles.ApplyIconButton(ShortcutsButton, IconRole.Inline);RefreshBackButton();uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
   GlobalSearchBox.TextChanged += GlobalSearchBox_TextChanged;
@@ -126,7 +126,7 @@ public partial class MainWindow : Window
   var expires=new DatePicker();expires.SetBinding(DatePicker.SelectedDateProperty,new Binding("ExpiresOn"){Mode=BindingMode.TwoWay,ValidatesOnExceptions=true});Label(productEditor,"Son kullanma tarihi (isteğe bağlı)",expires);
   productEditor.Children.Add(Button("Tarihi temizle",()=>expires.SelectedDate=null));
   productEditor.Children.Add(Hint("Operasyon bilgileri XML yenilemesinde korunur. Fatura adı yerel kayıttır; fatura entegrasyonuna otomatik gönderilmez."));
-  productEditor.Children.Add(Button("Ürünü ve kilitleri kaydet",()=>{SaveProductEdit();RefreshProducts();Log("Ürün ve alan kilitleri kaydedildi.");}));productEditor.IsEnabled=false;
+  productEditor.Children.Add(Button("Ürünü ve kilitleri kaydet",()=>{SaveProductEdit();RefreshProducts();Log("Ürün ve alan kilitleri kaydedildi.");}));CommandState.Apply(productEditor,DisabledReason.Selection("Önce ürün seçin."));
   Tab("Ürün havuzu",Split(Dock(bar,BuildProductSelectionBar(),BuildProductInspectHost(products)),BuildProductWorkspace(),350));
  }
  // #801: every workspace tab carries its catalogue key in Tag, so a deep link ("products#media"), the tab strip
@@ -219,7 +219,7 @@ public partial class MainWindow : Window
   IReadOnlyList<ImportStep> steps;try{var state=CurrentImportFlowState();lastFlowState=state;steps=ImportStepper.Compute(state);}catch(Exception e){lastFlowState=null;Log("Aktarım adımları hesaplanamadı: "+Safe(e));return;}
   foreach(var step in steps){
    var (glyph,word)=step.Status switch{ImportStageStatus.Done=>("✔","tamam"),ImportStageStatus.Current=>("●","sırada"),ImportStageStatus.Blocked=>("✖","engelli"),ImportStageStatus.Stale=>("⚠","geçersiz"),ImportStageStatus.Running=>("⟳","sürüyor"),_=>("○","bekliyor")};
-   var chip=new Button{Content=$"{glyph} {step.Label}",IsEnabled=step.CanJump,Margin=new Thickness(0,0,6,0),Padding=new Thickness(8,3,8,3),ToolTip=step.Reason.Length>0?step.Reason:$"{step.Label}: {word}",Tag=step.Stage,Focusable=true};
+   var chip=new Button{Content=$"{glyph} {step.Label}",Margin=new Thickness(0,0,6,0),Padding=new Thickness(8,3,8,3),ToolTip=step.Reason.Length>0?step.Reason:$"{step.Label}: {word}",Tag=step.Stage,Focusable=true};CommandState.Apply(chip,step.CanJump?null:DisabledReason.StoreState(step.Reason.Length>0?step.Reason:$"{step.Label}: {word}"));
    System.Windows.Automation.AutomationProperties.SetName(chip,$"{step.Label}: {word}"+(step.Reason.Length>0?". "+step.Reason:""));IconStyles.ApplyIconButton(chip,IconRole.Status);
    chip.Click+=(_,_)=>JumpToImportStage((ImportStage)chip.Tag);
    importStepper.Children.Add(chip);}
@@ -384,8 +384,8 @@ public partial class MainWindow : Window
   lastPreviewToolbar=m;var hc=SeverityStyle.IsHighContrast;
   previewToolbarCounts.Text=m.CountsText;previewToolbarValidation.Text=$"{SeverityStyle.For(m.ValidationLevel,hc).Glyph} {m.ValidationText}";previewToolbarValidation.Foreground=SeverityStyle.AccentBrush(m.ValidationLevel,hc);
   previewToolbarStatus.Text=$"{SeverityStyle.For(m.StatusLevel,hc).Glyph} {m.StatusText}";previewToolbarStatus.Foreground=SeverityStyle.AccentBrush(m.StatusLevel,hc);previewToolbar.BorderBrush=SeverityStyle.AccentBrush(m.StatusLevel,hc);previewToolbar.BorderThickness=new Thickness(SeverityStyle.For(m.StatusLevel,hc).BorderWeight);
-  previewApplyButton.Content=m.ApplyLabel;previewApplyButton.IsEnabled=m.CanApply;previewApplyButton.ToolTip=m.CanApply?"Seçili satırları yerel ürün havuzuna yazar; pazaryerine gönderim yapılmaz.":m.ApplyReason;ToolTipService.SetShowOnDisabled(previewApplyButton,true);System.Windows.Automation.AutomationProperties.SetHelpText(previewApplyButton,m.CanApply?"":m.ApplyReason);
-  previewCancelButton.Visibility=m.CanCancel?Visibility.Visible:Visibility.Collapsed;previewRecomputeButton.IsEnabled=m.CanRecompute;previewDiffButton.IsEnabled=state.PreviewExists&&preview.SelectedItems.Count==1;
+  previewApplyButton.Content=m.ApplyLabel;previewApplyButton.ToolTip="Seçili satırları yerel ürün havuzuna yazar; pazaryerine gönderim yapılmaz.";CommandState.Apply(previewApplyButton,m.CanApply?null:DisabledReason.StoreState(m.ApplyReason));
+  previewCancelButton.Visibility=m.CanCancel?Visibility.Visible:Visibility.Collapsed;CommandState.Apply(previewRecomputeButton,m.CanRecompute?null:DisabledReason.StoreState("Yeniden hesaplanacak önizleme yok."));CommandState.Apply(previewDiffButton,!state.PreviewExists?DisabledReason.StoreState("Henüz önizleme yok."):preview.SelectedItems.Count!=1?DisabledReason.Selection("Farkı görmek için önizlemede tek satır seçin."):null);
   System.Windows.Automation.AutomationProperties.SetName(previewToolbar,$"Önizleme araç çubuğu: {m.CountsText}. {m.ValidationText}. {m.StatusText}."+(m.CanApply?"":" "+m.ApplyReason));}
 
  // #832: the XML row diff -- the selected preview row against the pool product it would touch (by SKU, else

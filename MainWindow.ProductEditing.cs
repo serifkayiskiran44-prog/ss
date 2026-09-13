@@ -140,7 +140,7 @@ public partial class MainWindow
         edit = row == null ? null : store.FindProduct(row.Id);
         productEditBaseline = edit == null ? null : JsonSerializer.Serialize(edit);
         productEditor.DataContext = edit;
-        productEditor.IsEnabled = edit != null;
+        CommandState.Apply(productEditor,(edit != null)?null:DisabledReason.Selection("Önce ürün seçin."));
         ShowProductChannelStatus(edit);
         ShowProductPriceSummary(edit);
         ShowProductStockSummary(edit);

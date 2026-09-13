@@ -59,7 +59,7 @@ public partial class MainWindow
         async Task ExportRejectedAsync(string path, ExcelPreview current)
         {
             rejectedExportCts?.Cancel(); rejectedExportCts = new CancellationTokenSource(); var token = rejectedExportCts.Token; var started = DateTime.UtcNow; var runs = new ReportRunStore(dataDirectory);
-            cancelRejectedExport.Visibility = Visibility.Visible; errors.IsEnabled = false; status.Text = $"{current.Errors.Count:N0} reddedilen satır yazılıyor…";
+            cancelRejectedExport.Visibility = Visibility.Visible; CommandState.Apply(errors, DisabledReason.Busy("Dışa aktarma sürüyor.")); status.Text = $"{current.Errors.Count:N0} reddedilen satır yazılıyor…";
             try
             {
                 var result = await Task.Run(() => path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) ? RejectedRowsExport.WriteCsv(path, RejectedRowsExport.Build(current.Errors), token) : CatalogExcel.ExportErrors(path, current, token), token);
@@ -69,7 +69,7 @@ public partial class MainWindow
                 else Log(result.Error, NotificationSeverity.Error);
             }
             catch (OperationCanceledException) { runs.Record("import-rejections", started, ReportRunState.Cancelled, 0); status.Text = RejectedRowsExportResult.WasCancelled.Error; }
-            finally { cancelRejectedExport.Visibility = Visibility.Collapsed; errors.IsEnabled = true; }
+            finally { cancelRejectedExport.Visibility = Visibility.Collapsed; CommandState.Apply(errors, null); }
         }
         async Task ApplyExcelAsync()
         {
@@ -78,17 +78,17 @@ public partial class MainWindow
             if (selectedProducts.Count == 0) throw new InvalidOperationException("Önizlemeden en az bir geçerli satır seçin.");
             var selected = selectedProducts.Select(x => decisions.Preview.Rows.IndexOf(x)).Where(x => x >= 0).ToArray();
             if (selected.Length != selectedProducts.Count) throw new InvalidOperationException("Seçili satır önizleme dışında.");
-            excelCts?.Dispose(); excelCts = new CancellationTokenSource(); excelApplyButton!.IsEnabled = false; excelCancelButton!.IsEnabled = true;
+            excelCts?.Dispose(); excelCts = new CancellationTokenSource(); CommandState.Apply(excelApplyButton!, DisabledReason.Busy("Uygulama sürüyor.")); CommandState.Apply(excelCancelButton!, null);
             try
             {
                 var source = new XmlSource { Id = "excel-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(selectedPath))).ToLowerInvariant()[..16], Name = Path.GetFileName(selectedPath), NumberCultureName = profile.CultureName };
                 undo = await excelCoordinator.ApplyWithUndoAsync(store, source, decisions.Preview, selected, selectedPath, profile, excelCts.Token);
                 status.Text = "Seçili Excel satırları atomik olarak uygulandı; geri alma kaydı oluşturuldu."; RefreshProducts();
             }
-            finally { excelApplyButton!.IsEnabled = true; excelCancelButton!.IsEnabled = false; excelCts?.Dispose(); excelCts = null; }
+            finally { CommandState.Apply(excelApplyButton!, null); CommandState.Apply(excelCancelButton!, DisabledReason.StoreState("İptal edilecek uygulama yok.")); excelCts?.Dispose(); excelCts = null; }
         }
         excelApplyButton = Button("Seçili önizleme satırlarını uygula", () => _ = RunAsync(ApplyExcelAsync));
-        excelCancelButton = Button("Excel uygulamasını iptal et", () => excelCts?.Cancel()); excelCancelButton.IsEnabled = false;
+        excelCancelButton = Button("Excel uygulamasını iptal et", () => excelCts?.Cancel()); CommandState.Apply(excelCancelButton, DisabledReason.StoreState("İptal edilecek uygulama yok."));
         var rollback = Button("Son Excel uygulamasını geri al", () => { if (undo is null) { status.Text = "Geri alınacak Excel işlemi yok."; return; } store.Undo(undo); undo = null; status.Text = "Son Excel uygulaması geri alındı."; RefreshProducts(); });
         var profileRow = new WrapPanel(); profileRow.Children.Add(new TextBlock { Text = "Profil", Margin = Spacing.Inline, VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(profileBox); profileRow.Children.Add(new TextBlock { Text = "Ad", Margin = Spacing.Inline, VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(profileName); profileRow.Children.Add(new TextBlock { Text = "Kültür", Margin = Spacing.Inline, VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(culture); profileRow.Children.Add(saveProfile); profileRow.Children.Add(newProfile); panel.Children.Add(profileRow);
         var details = new StackPanel(); Label(details, "Başlık alias'ları", aliases); Label(details, "Varsayılan alanlar", defaults); Label(details, "Dışa aktarım görünür alanları", visibleFields); panel.Children.Add(details);

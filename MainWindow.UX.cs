@@ -56,7 +56,7 @@ public partial class MainWindow
         var query = GlobalSearchBox.Text.Trim();
         if (query.Length < 2) { StatusText.Text = "Arama için en az 2 karakter girin."; GlobalSearchBox.Focus(); return; }
         var previous = globalSearchCts; globalSearchCts = null; previous?.Cancel(); previous?.Dispose();
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); globalSearchCts = cancellation; var revision = ++globalSearchRevision; GlobalSearchButton.IsEnabled = false; StatusText.Text = "Yerel arama hazırlanıyor…";
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); globalSearchCts = cancellation; var revision = ++globalSearchRevision; CommandState.Apply(GlobalSearchButton, DisabledReason.Busy("Arama sürüyor.")); StatusText.Text = "Yerel arama hazırlanıyor…";
         try
         {
             await Task.Delay(150, cancellation.Token);
@@ -68,7 +68,7 @@ public partial class MainWindow
         catch (Exception error) { if (revision == globalSearchRevision) StatusText.Text = $"Arama yapılamadı: {Safe(error)}"; }
         finally
         {
-            if (ReferenceEquals(globalSearchCts, cancellation)) { globalSearchCts = null; GlobalSearchButton.IsEnabled = true; }
+            if (ReferenceEquals(globalSearchCts, cancellation)) { globalSearchCts = null; CommandState.Apply(GlobalSearchButton, null); }
         }
     }
 

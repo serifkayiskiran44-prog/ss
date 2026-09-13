@@ -51,7 +51,7 @@ public static class ReportParameterPanel
         root.Children.Add(new TextBlock { Text = definition.Purpose, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 10), Opacity = 0.9 });
 
         var storeItems = (allowed ?? Array.Empty<string>()).Select(k => new ReportStoreOption(k, ReportParameters.StoreLabel(k))).ToList();
-        var store = new ComboBox { Tag = "report-param-store", ItemsSource = storeItems, DisplayMemberPath = "Label", IsEnabled = storeItems.Count > 0 };
+        var store = new ComboBox { Tag = "report-param-store", ItemsSource = storeItems, DisplayMemberPath = "Label" }; CommandState.Apply(store, storeItems.Count == 0 ? DisabledReason.StoreState("Bağlı mağaza yok.") : null);
         var storeField = FormField.Build(new FormFieldSpec("Mağaza", Required: true, Help: storeItems.Count == 0 ? "Bu oturumda sunulan mağaza yok; önce bir bağlantı ekleyip etkinleştirin." : "Rapor yalnız seçili mağazanın kayıtlarını okur."), store);
         var from = new DatePicker { Tag = "report-param-from" }; var fromField = FormField.Build(new FormFieldSpec("Başlangıç tarihi", Required: true, Help: "Kayıt güncelleme gününe göre, gün dahil."), from);
         var to = new DatePicker { Tag = "report-param-to" }; var toField = FormField.Build(new FormFieldSpec("Bitiş tarihi", Required: true, Help: $"En fazla {ReportParameters.MaxRangeDays} günlük aralık."), to);
@@ -137,8 +137,8 @@ public static class ReportParameterPanel
             queryField.SetValidation(Message(findings, "query"), Level(findings, "query"));
             var blocking = findings.Where(f => f.Level == SeverityLevel.Blocking).ToList(); var glyph = SeverityStyle.For(SeverityLevel.Blocking, SeverityStyle.IsHighContrast).Glyph;
             validation.Text = blocking.Count == 0 ? "" : string.Join(Environment.NewLine, blocking.Select(f => $"{glyph} {f.Message}")); validation.Visibility = blocking.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-            run.IsEnabled = blocking.Count == 0 && !running;
-            exportButton.IsEnabled = !running && result is not null;
+            CommandState.Apply(run, running ? DisabledReason.Busy("Rapor çalışıyor.") : blocking.Count > 0 ? DisabledReason.Validation($"{blocking.Count} engelleyici bulgu var.") : null);
+            CommandState.Apply(exportButton, running ? DisabledReason.Busy("Rapor çalışıyor.") : result is null ? DisabledReason.StoreState("Henüz sonuç yok.") : null);
             return findings;
         }
         void RenderProgress()
@@ -212,9 +212,9 @@ public static class ReportParameterPanel
             if (!model.ShowsGrid || result is null)
             {
                 grid.Visibility = Visibility.Collapsed; grid.ItemsSource = null; resultSummary.Text = result is null ? model.Title : $"{result.Rows.Count:N0} satır · {ReportColumns.Summary(layout, ClassifiedAllowed())}";
-                resultHost.Visibility = Visibility.Visible; exportButton.IsEnabled = false; columnsButton.IsEnabled = result is not null; return;
+                resultHost.Visibility = Visibility.Visible; CommandState.Apply(exportButton, DisabledReason.StoreState("Dışa aktarılacak sonuç yok.")); CommandState.Apply(columnsButton, result is null ? DisabledReason.StoreState("Henüz sonuç yok.") : null); return;
             }
-            grid.Visibility = Visibility.Visible; columnsButton.IsEnabled = true;
+            grid.Visibility = Visibility.Visible; CommandState.Apply(columnsButton, null);
             buildingGrid = true;
             try
             {
@@ -229,7 +229,7 @@ public static class ReportParameterPanel
             finally { buildingGrid = false; }
             resultSummary.Text = $"{result.Rows.Count:N0} satır · {ReportColumns.Summary(layout, ClassifiedAllowed())}";
             resultHost.Visibility = Visibility.Visible;
-            exportButton.IsEnabled = !running;
+            CommandState.Apply(exportButton, running ? DisabledReason.Busy("Rapor çalışıyor.") : null);
         }
         void PersistGridOrder()
         {
@@ -254,9 +254,9 @@ public static class ReportParameterPanel
         void RefreshSaved(string? select = null)
         {
             var views = context.Preferences.ListViews(module); saved.ItemsSource = views; saved.SelectedItem = select is null ? null : views.FirstOrDefault(v => v.Name == select);
-            load.IsEnabled = views.Count > 0; delete.IsEnabled = views.Count > 0;
+            var noViews = views.Count == 0 ? DisabledReason.StoreState("Kayıtlı filtre yok.") : null; CommandState.Apply(load, noViews); CommandState.Apply(delete, noViews);
         }
-        void BeginRun() { runCts?.Dispose(); runCts = new CancellationTokenSource(); running = true; run.IsEnabled = false; exportButton.IsEnabled = false; cancel.IsEnabled = true; progressHost.Visibility = Visibility.Visible; RenderProgress(); }
+        void BeginRun() { runCts?.Dispose(); runCts = new CancellationTokenSource(); running = true; CommandState.Apply(run, DisabledReason.Busy("Rapor çalışıyor.")); CommandState.Apply(exportButton, DisabledReason.Busy("Rapor çalışıyor.")); CommandState.Apply(cancel, null); progressHost.Visibility = Visibility.Visible; RenderProgress(); }
         void EndRun() { running = false; if (progress.Running is not null) progress.Cancel(DateTime.UtcNow); RenderProgress(); Revalidate(); }
         async Task StartQuery()
         {

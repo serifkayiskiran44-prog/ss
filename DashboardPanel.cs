@@ -85,7 +85,7 @@ public static class DashboardPanel
         // the user asking for an authoritative re-read and always bypasses it.
         async Task RefreshAsync(bool force)
         {
-            refresh.IsEnabled = false; status.Text = "Yerel veri kaynakları okunuyor…";
+            CommandState.Apply(refresh, DisabledReason.Busy("Yenileme sürüyor.")); status.Text = "Yerel veri kaynakları okunuyor…";
             try
             {
                 var snapshot = await Task.Run(() => service.Load(bypassCache: force));
@@ -150,7 +150,7 @@ public static class DashboardPanel
                         AddCard(cards, kpi.Title, kpi.Value, RouteFor(kpi.Key), navigate, DashboardKpiFreshness.AfterRefreshFailure(kpi.Freshness));
                 }
             }
-            finally { refresh.IsEnabled = true; }
+            finally { CommandState.Apply(refresh, null); }
         }
         storeFilter.SelectionChanged += async (_, _) =>
         {
