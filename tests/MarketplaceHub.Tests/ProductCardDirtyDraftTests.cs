@@ -124,7 +124,7 @@ public sealed class ProductCardDirtyDraftTests
                 grid.SelectedItem = grid.Items.OfType<CatalogProduct>().Single(x => x.Sku == "A");
                 reopened.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var editor = (StackPanel)typeof(MainWindow).GetField("productEditor", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(reopened);
-                var name = editor.Children.OfType<TextBox>().Single(x => BindingOperations.GetBinding(x, TextBox.TextProperty)?.Path.Path == "Name");
+                var name = editor.Children.Cast<UIElement>().SelectMany(c => c is Panel row ? row.Children.Cast<UIElement>() : new UIElement[] { c }).OfType<TextBox>().Single(x => BindingOperations.GetBinding(x, TextBox.TextProperty)?.Path.Path == "Name");
                 Assert.AreEqual("Unsaved A draft", name.Text);
             }
             finally { reopened.Close(); }
@@ -162,7 +162,7 @@ public sealed class ProductCardDirtyDraftTests
     public void InvalidNumericTextCannotBeSilentlyDiscardedOrSaved()
     {
         Run(f => {
-            var price = f.Editor.Children.OfType<TextBox>().Single(x => BindingOperations.GetBinding(x, TextBox.TextProperty)?.Path.Path == "Price");
+            var price = f.Editor.Children.Cast<UIElement>().SelectMany(c => c is Panel row ? row.Children.Cast<UIElement>() : new UIElement[] { c }).OfType<TextBox>().Single(x => BindingOperations.GetBinding(x, TextBox.TextProperty)?.Path.Path == "Price");
             price.Text = "invalid-price"; price.GetBindingExpression(TextBox.TextProperty).UpdateSource();
             Assert.IsTrue(Validation.GetHasError(price));
             f.Answer("Kaydet"); f.Grid.SelectedItem = f.Row("B"); f.Drain();
@@ -194,7 +194,7 @@ public sealed class ProductCardDirtyDraftTests
             Window = new MainWindow(Root); Window.Show(); Call("Navigate", "products", true);
             Grid = (DataGrid)Field("products"); Editor = (StackPanel)Field("productEditor");
             Grid.SelectedItem = Row("A"); Drain();
-            Name = Editor.Children.OfType<TextBox>().Single(x => BindingOperations.GetBinding(x, TextBox.TextProperty)?.Path.Path == "Name");
+            Name = Editor.Children.Cast<UIElement>().SelectMany(c => c is Panel row ? row.Children.Cast<UIElement>() : new UIElement[] { c }).OfType<TextBox>().Single(x => BindingOperations.GetBinding(x, TextBox.TextProperty)?.Path.Path == "Name");
         }
         public object Field(string name) => typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(Window);
         public void Call(string name, params object[] args) => typeof(MainWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(Window, args);

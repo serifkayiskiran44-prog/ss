@@ -20,7 +20,7 @@ public sealed class ProductCardPriceFieldsUiTests
     {
         Run(f =>
         {
-            var desi = f.Editor.Children.OfType<TextBox>().Single(x => BindingOperations.GetBinding(x, TextBox.TextProperty)?.Path.Path == "Desi");
+            var desi = f.Editor.Children.Cast<UIElement>().SelectMany(c => c is Panel row ? row.Children.Cast<UIElement>() : new UIElement[] { c }).OfType<TextBox>().Single(x => BindingOperations.GetBinding(x, TextBox.TextProperty)?.Path.Path == "Desi");
             desi.Text = 2.5m.ToString(CultureInfo.CurrentCulture); // matches the binding's culture-dependent decimal parsing (e.g. "2,5" under tr-TR).
             desi.GetBindingExpression(TextBox.TextProperty).UpdateSource();
 

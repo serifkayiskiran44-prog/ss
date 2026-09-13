@@ -29,7 +29,8 @@ public static class OnboardingPanel
         void Refresh() { var summary = statusService.Build(channel.Text, shop.Text); summaryGrid!.ItemsSource = summary.Steps; heading.Text = $"İlk kurulum sihirbazı · {summary.Completed}/{summary.Total} hazır"; }
         var resume = stateStore.Get().CurrentStep; tabs.SelectedIndex = resume switch { "xml" => 1, "stock" => 2, "price" => 3, "excel" => 4, "complete" => 5, _ => 0 }; Refresh(); return root;
     }
-    static void AddField(Panel panel, string label, Control control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(4, 10, 2, 2), Foreground = Brushes.DarkSlateGray }); panel.Children.Add(control); }
+    // #819: the shared form row -- label above, spoken required marker, help slot, validation slot, DIP spacing.
+    static void AddField(Panel panel, string label, Control control) => panel.Children.Add(FormField.Build(new FormFieldSpec(label), control).Root);
     static TextBlock Text(string value, int size = 12) => new() { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 8), Foreground = Brushes.DarkSlateGray };
     static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "İlk kurulum", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
 }

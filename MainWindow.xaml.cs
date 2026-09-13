@@ -73,8 +73,20 @@ public partial class MainWindow : Window
  Button Button(string text,Action action){var b=new Button{Content=text};b.Click+=(_,_)=>{try{action();}catch(Exception e){Log(Safe(e), NotificationSeverity.Error);}};return b;}
  Button AsyncButton(string text,Func<Task> action)=>Button(text,()=>_=RunAsync(action));
  static void Label(Panel panel,string text,UIElement control){panel.Children.Add(new TextBlock{Text=text,Margin=new Thickness(4,7,4,0)});panel.Children.Add(control);}
+ // #819: every product/source text row is the shared form row -- label above, "zorunlu" spoken for the fields the
+ // store refuses without (ProductValidation's blocking rules), help under the input, a validation slot under that.
+ static bool RequiredFor(string property)=>property is "Name" or "Currency";
+ static string HelpFor(string property)=>property switch{
+  "Name"=>"Mağazada görünen ad; en fazla 200 karakter.",
+  "Sku"=>"SKU veya barkoddan en az biri zorunlu.",
+  "Barcode"=>"SKU yoksa barkod zorunlu.",
+  "Currency"=>"Üç harfli kod, örneğin TRY.",
+  "Price"=>"Satış fiyatı; negatif olamaz.",
+  "Cost"=>"Alış fiyatı; negatif olamaz.",
+  "Stock"=>"Negatif olamaz.",
+  _=>""};
  static TextBox Field(Panel panel,string label,string property,int height=0)
- {var box=new TextBox();if(height>0){box.Height=height;box.AcceptsReturn=true;box.TextWrapping=TextWrapping.Wrap;box.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;}box.SetBinding(TextBox.TextProperty,new Binding(property){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged,ValidatesOnExceptions=true});Label(panel,label,box);return box;}
+ {var box=new TextBox();if(height>0){box.Height=height;box.AcceptsReturn=true;box.TextWrapping=TextWrapping.Wrap;box.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;}box.SetBinding(TextBox.TextProperty,new Binding(property){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged,ValidatesOnExceptions=true});panel.Children.Add(FormField.Build(new FormFieldSpec(label,RequiredFor(property),HelpFor(property)),box).Root);return box;}
  static void Flag(Panel panel,string label,string property){var c=new CheckBox{Content=label};c.SetBinding(CheckBox.IsCheckedProperty,new Binding(property){Mode=BindingMode.TwoWay});panel.Children.Add(c);}
  static ScrollViewer Scroll(UIElement content)=>new(){Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Padding=new Thickness(10)};
  static void Column(DataGrid grid,string label,string property,double width=120){var binding=new Binding(property);if(property is "Price" or "Cost" or "FormulaPriceTry")binding.StringFormat="N2";else if(property=="AppliedTryRate")binding.StringFormat="N4";grid.Columns.Add(new DataGridTextColumn{Header=label,Binding=binding,Width=width});}
