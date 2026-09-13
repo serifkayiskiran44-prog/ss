@@ -48,13 +48,13 @@ public static class MediaPanel
             "</StackPanel></Border></DataTemplate>");
         var gallerySummary = new TextBlock { Margin = new Thickness(3, 2, 3, 6), TextWrapping = TextWrapping.Wrap, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)) };
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, Height = 330, EnableRowVirtualization = true, ClipboardCopyMode = DataGridClipboardCopyMode.None };
-        grid.Columns.Add(new DataGridTextColumn { Header = "Durum", Binding = new System.Windows.Data.Binding("Status"), Width = 130 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "URL", Binding = new System.Windows.Data.Binding("Url"), Width = 360 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Kaynak", Binding = new System.Windows.Data.Binding("Source"), Width = 150 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Sıra", Binding = new System.Windows.Data.Binding("SortOrder"), Width = 55 });
+        grid.Columns.Add(GridColumns.Text("Durum", "Status", 130));
+        grid.Columns.Add(GridColumns.Text("URL", "Url", 360));
+        grid.Columns.Add(GridColumns.Text("Kaynak", "Source", 150));
+        grid.Columns.Add(GridColumns.Text("Sıra", "SortOrder", 55));
         grid.Columns.Add(new DataGridCheckBoxColumn { Header = "Ana", Binding = new System.Windows.Data.Binding("IsPrimary"), Width = 55 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Son doğrulama", Binding = new System.Windows.Data.Binding("LastValidatedUtc"), Width = 160 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Hata", Binding = new System.Windows.Data.Binding("Error"), Width = 300 });
+        grid.Columns.Add(GridColumns.Text("Son doğrulama", "LastValidatedUtc", 160));
+        grid.Columns.Add(GridColumns.Text("Hata", "Error", 300));
         // #797: the image and its placeholder live in one fixed box, so loading -> ready -> broken never resizes
         // anything. The placeholder is the shared ProductMediaPresentation description (glyph, word, hint).
         var preview = new System.Windows.Controls.Image { Stretch = System.Windows.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };

@@ -220,7 +220,10 @@ public static class ReportParameterPanel
             {
                 grid.ItemsSource = null; grid.Columns.Clear();
                 foreach (var choice in layout.Columns.Where(c => c.Visible))
-                    grid.Columns.Add(new DataGridTextColumn { Header = choice.Column.Label, SortMemberPath = $"[{choice.Column.Key}]", Binding = new Binding($"[{choice.Column.Key}]"), Width = new DataGridLength(choice.Width), MinWidth = ReportColumns.MinWidth });
+                {
+                    var column = GridColumns.Text(choice.Column.Label, $"[{choice.Column.Key}]", new DataGridLength(choice.Width), GridColumns.KindFor(choice.Column.Key));
+                    column.SortMemberPath = $"[{choice.Column.Key}]"; column.MinWidth = ReportColumns.MinWidth; grid.Columns.Add(column);
+                }
                 grid.ItemsSource = result.Rows;
             }
             finally { buildingGrid = false; }

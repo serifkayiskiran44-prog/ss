@@ -13,7 +13,7 @@ public static class ProductionReadinessPanel
         var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 8, 4, 10) };
         var checks = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, MinHeight = 280, EnableRowVirtualization = true };
         foreach (var column in new[] { ("Kontrol", "Key", 190d), ("Durum", "Status", 95d), ("Açıklama", "Detail", 850d) })
-            checks.Columns.Add(new DataGridTextColumn { Header = column.Item1, Binding = new Binding(column.Item2), Width = column.Item3 });
+            checks.Columns.Add(GridColumns.Text(column.Item1, column.Item2, column.Item3));
 
         void Refresh()
         {

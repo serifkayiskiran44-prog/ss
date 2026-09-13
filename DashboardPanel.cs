@@ -230,7 +230,7 @@ public static class DashboardPanel
         parent.Children.Add(border);
     }
 
-    static void AddColumn(DataGrid grid, string header, string path, double width) => grid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new System.Windows.Data.Binding(path), Width = width });
+    static void AddColumn(DataGrid grid, string header, string path, double width) => grid.Columns.Add(GridColumns.Text(header, path, width));
 
     static void AddCard(Panel parent, string label, string value, string route, Action<string> navigate, DashboardKpiFreshnessInfo? freshness = null)
     {

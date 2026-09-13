@@ -93,7 +93,8 @@ public partial class MainWindow : Window
  {var box=new TextBox();if(height>0){box.Height=height;box.AcceptsReturn=true;box.TextWrapping=TextWrapping.Wrap;box.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;}box.SetBinding(TextBox.TextProperty,new Binding(property){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged,ValidatesOnExceptions=true});var row=FormField.Build(new FormFieldSpec(label,RequiredFor(property),HelpFor(property)),box);formRows[(panel,property)]=row;panel.Children.Add(row.Root);return box;}
  static void Flag(Panel panel,string label,string property){var c=new CheckBox{Content=label};c.SetBinding(CheckBox.IsCheckedProperty,new Binding(property){Mode=BindingMode.TwoWay});panel.Children.Add(c);}
  static ScrollViewer Scroll(UIElement content)=>new(){Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Padding=new Thickness(10)};
- static void Column(DataGrid grid,string label,string property,double width=120){var binding=new Binding(property);if(property is "Price" or "Cost" or "FormulaPriceTry")binding.StringFormat="N2";else if(property=="AppliedTryRate")binding.StringFormat="N4";grid.Columns.Add(new DataGridTextColumn{Header=label,Binding=binding,Width=width});}
+ static DataGridTextColumn ReadOnlyColumn(string header,string path,double width){var column=GridColumns.Text(header,path,width);column.IsReadOnly=true;return column;}
+ static void Column(DataGrid grid,string label,string property,double width=120){var format=property is "Price" or "Cost" or "FormulaPriceTry"?"N2":property=="AppliedTryRate"?"N4":null;grid.Columns.Add(GridColumns.Text(label,property,width,format:format));}
  void Tab(string name,UIElement content)=>builtPages.Add(name,content);
  static Grid Split(UIElement left,UIElement right,double rightWidth)
  {var g=new Grid{Margin=new Thickness(10)};g.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});g.ColumnDefinitions.Add(new(){Width=new GridLength(rightWidth==350?330:1,rightWidth==350?GridUnitType.Pixel:GridUnitType.Star)});g.Children.Add(left);Grid.SetColumn(right,1);g.Children.Add(right);return g;}
@@ -419,13 +420,13 @@ public partial class MainWindow : Window
   sources.Height=115;
   var mapTop=new StackPanel();Label(mapTop,"Ürün XPath yolu (/Products/Product gibi)",itemPath);Label(mapTop,"Ondalık ayırıcı",decimalSeparator);mapTop.Children.Add(Hint("XML'i oku: alanlar otomatik önerilir. Değiştirmek için listeden seç. Birden fazla görsel yolu gerekiyorsa | ile birleştirebilirsin."));
   mapTop.Children.Add(mappingSummary);mappingFirstProblem.Click+=(_,_)=>FocusFirstMappingProblem();mapTop.Children.Add(mappingFirstProblem);
-  mapping.Columns.Add(new DataGridTextColumn{Header="Ürün alanı",Binding=new Binding("Label"),IsReadOnly=true,Width=125});
-  mapping.Columns.Add(new DataGridTextColumn{Header="Zorunlu",Binding=new Binding("RequiredMark"),IsReadOnly=true,Width=80});
-  mapping.Columns.Add(new DataGridTextColumn{Header="Tür",Binding=new Binding("TypeLabel"),IsReadOnly=true,Width=110});
+  mapping.Columns.Add(ReadOnlyColumn("Ürün alanı","Label",125));
+  mapping.Columns.Add(ReadOnlyColumn("Zorunlu","RequiredMark",80));
+  mapping.Columns.Add(ReadOnlyColumn("Tür","TypeLabel",110));
   var selector=new FrameworkElementFactory(typeof(ComboBox));selector.SetValue(ComboBox.ItemsSourceProperty,xmlPaths);selector.SetValue(ComboBox.IsEditableProperty,true);selector.SetValue(ComboBox.IsTextSearchEnabledProperty,true);selector.SetBinding(ComboBox.TextProperty,new Binding("Path"){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged});mapping.RowHeight=42;
   mapping.Columns.Add(new DataGridTemplateColumn{Header="XML alanını seç",CellTemplate=new DataTemplate{VisualTree=selector},Width=new DataGridLength(1,DataGridLengthUnitType.Star)});
-  mapping.Columns.Add(new DataGridTextColumn{Header="Örnek (ilk kayıt)",Binding=new Binding("Sample"),IsReadOnly=true,Width=180});
-  mapping.Columns.Add(new DataGridTextColumn{Header="Durum",Binding=new Binding("StatusLabel"),IsReadOnly=true,Width=150});
+  mapping.Columns.Add(ReadOnlyColumn("Örnek (ilk kayıt)","Sample",180));
+  mapping.Columns.Add(ReadOnlyColumn("Durum","StatusLabel",150));
   var mappingRowStyle=RowSelection.AddToRowStyle(FocusStyles.AddTo(new Style(typeof(DataGridRow))));mappingRowStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty,new Binding("Reason")));mappingRowStyle.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty,true));mapping.RowStyle=mappingRowStyle;
   mapping.CellEditEnding+=(_,_)=>Dispatcher.BeginInvoke(new Action(RefreshMappingTable),System.Windows.Threading.DispatcherPriority.Background);
   

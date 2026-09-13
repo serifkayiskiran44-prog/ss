@@ -23,7 +23,7 @@ public static class ApiHealthPanel
         var summary = Text(""); top.Children.Add(summary);
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, EnableRowVirtualization = true, MinHeight = 300 };
         VirtualizingPanel.SetIsVirtualizing(grid, true); VirtualizingPanel.SetVirtualizationMode(grid, VirtualizationMode.Recycling);
-        foreach (var column in new[] { ("Kanal", "Channel", 100d), ("Mağaza", "ShopId", 120d), ("Durum", "State", 130d), ("Auth", "AuthStatus", 90d), ("HTTP", "HttpStatus", 60d), ("Hata sınıfı", "ErrorClass", 110d), ("Rate limit", "RateLimitSummary", 100d), ("Son başarılı", "LastSuccessUtc", 155d), ("Backoff", "BackoffSummary", 145d), ("Son hata", "LastError", 310d) }) grid.Columns.Add(new DataGridTextColumn { Header = column.Item1, Binding = new Binding(column.Item2), Width = column.Item3 });
+        foreach (var column in new[] { ("Kanal", "Channel", 100d), ("Mağaza", "ShopId", 120d), ("Durum", "State", 130d), ("Auth", "AuthStatus", 90d), ("HTTP", "HttpStatus", 60d), ("Hata sınıfı", "ErrorClass", 110d), ("Rate limit", "RateLimitSummary", 100d), ("Son başarılı", "LastSuccessUtc", 155d), ("Backoff", "BackoffSummary", 145d), ("Son hata", "LastError", 310d) }) grid.Columns.Add(GridColumns.Text(column.Item1, column.Item2, column.Item3));
         // #815: the shared status tooltip on every health row -- state, the last error as the reason (raw bodies
         // hidden by the template), last change, the connection as the source, and a next step that fits the state.
         grid.LoadingRow += (_, e) =>

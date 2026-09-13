@@ -65,7 +65,7 @@ public static class EtsyReadinessPanel
         var service = new EtsyReadinessService(directory);
         var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 8, 4, 10) };
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, MinHeight = 240 };
-        foreach (var c in new[] { ("Kontrol", "Key", 170d), ("Durum", "Status", 100d), ("Açıklama", "Detail", 900d) }) grid.Columns.Add(new DataGridTextColumn { Header = c.Item1, Binding = new Binding(c.Item2), Width = c.Item3 });
+        foreach (var c in new[] { ("Kontrol", "Key", 170d), ("Durum", "Status", 100d), ("Açıklama", "Detail", 900d) }) grid.Columns.Add(GridColumns.Text(c.Item1, c.Item2, c.Item3));
         void Refresh() { var r = service.Build(); grid.ItemsSource = r.Checks; summary.Text = $"{r.AtUtc.ToLocalTime():g} · {r.OverallStatus}"; }
         root.Children.Add(new TextBlock { Text = "Etsy satışa hazırlık", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = Spacing.TitleBlock });
         root.Children.Add(new TextBlock { Text = "Credential, ilan şablonu, ürün eşleme ve dry-run kontrolleri tek ekranda gösterilir. Bu ekran canlı marketplace değişikliği yapmaz.", TextWrapping = TextWrapping.Wrap, Margin = Spacing.HintBlock });

@@ -14,12 +14,12 @@ public static class MarketplaceConnectionsPanel
         var store = new MarketplaceConnectionStore(dataDirectory);
         var rows = new ObservableCollection<MarketplaceConnection>(store.List());
         var grid = new DataGrid { ItemsSource = rows, AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, MinHeight = 260 };
-        grid.Columns.Add(new DataGridTextColumn { Header = "Kanal", Binding = new System.Windows.Data.Binding("Channel"), Width = 100 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Mağaza", Binding = new System.Windows.Data.Binding("DisplayName"), Width = 190 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Mağaza kimliği", Binding = new System.Windows.Data.Binding("ShopId"), Width = 130 });
+        grid.Columns.Add(GridColumns.Text("Kanal", "Channel", 100));
+        grid.Columns.Add(GridColumns.Text("Mağaza", "DisplayName", 190));
+        grid.Columns.Add(GridColumns.Text("Mağaza kimliği", "ShopId", 130));
         grid.Columns.Add(new DataGridCheckBoxColumn { Header = "Etkin", Binding = new System.Windows.Data.Binding("Enabled"), Width = 55 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Durum", Binding = new System.Windows.Data.Binding("Status"), Width = 155 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Son hata", Binding = new System.Windows.Data.Binding("LastError"), Width = 260 });
+        grid.Columns.Add(GridColumns.Text("Durum", "Status", 155));
+        grid.Columns.Add(GridColumns.Text("Son hata", "LastError", 260));
 
         var channel = new ComboBox { ItemsSource = MarketplaceConnectionCatalog.All, DisplayMemberPath = "Name", SelectedValuePath = "Id", SelectedValue = "etsy", Width = 180 };
         var shop = new TextBox { Text = "default", Width = 180 };
