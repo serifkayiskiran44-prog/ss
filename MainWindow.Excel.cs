@@ -49,7 +49,7 @@ public partial class MainWindow
         var saveProfile = Button("Profili kaydet", () => { ApplyProfileText(); profileStore.Save(profile); LoadProfiles(); status.Text = "Excel profili yerel olarak kaydedildi."; });
         var newProfile = Button("Yeni profil", () => { profile = new ExcelImportProfile { Name = "Yeni profil" }; profileName.Text = profile.Name; culture.Text = profile.CultureName; aliases.Clear(); defaults.Clear(); if (selectedPath is not null) RenderPreview(); });
         var choose = Button("Excel seç ve önizle", () => { var dialog = new OpenFileDialog { Filter = "Excel dosyası (*.xlsx)|*.xlsx" }; if (dialog.ShowDialog(this) != true) return; selectedPath = dialog.FileName; manualMapping = null; RenderPreview(); });
-        var map = Button("Kolonları elle eşle", () => { if (selectedPath is null) { status.Text = "Önce Excel dosyasını seçin."; return; } var headers = CatalogExcel.Headers(selectedPath); var result = ShowMappingDialog(headers, manualMapping); if (result is null) return; manualMapping = result; profile.ColumnMappings = result.Columns.ToDictionary(x => x.Key, x => headers[x.Value - 1], StringComparer.OrdinalIgnoreCase); RenderPreview(); });
+        var map = Button("Kolonları elle eşle", () => { if (selectedPath is null) { status.Text = "Önce Excel dosyasını seçin."; return; } var headers = CatalogExcel.Headers(selectedPath); var result = ShowMappingDialog(selectedPath, headers, manualMapping); if (result is null) return; manualMapping = result; profile.ColumnMappings = result.Columns.ToDictionary(x => x.Key, x => headers[x.Value - 1], StringComparer.OrdinalIgnoreCase); RenderPreview(); });
         var export = Button("Filtreli ürünleri dışa aktar", () => { ApplyProfileText(); var query = new TextBox { Width = 380, Text = "", ToolTip = "SKU/ürün/marka/kategori filtre metni" }; var dialog = new Window { Title = "Dışa aktarım filtresi", Width = 480, Height = 180, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }; var ok = new Button { Content = "Excel'e aktar", Margin = new Thickness(3) }; var box = new StackPanel { Margin = new Thickness(14) }; box.Children.Add(new TextBlock { Text = "Filtre (boş: tüm ürünler)" }); box.Children.Add(query); box.Children.Add(ok); dialog.Content = box; ok.Click += (_, _) => dialog.DialogResult = true; if (dialog.ShowDialog() != true) return; var products = store.Products().Where(p => string.IsNullOrWhiteSpace(query.Text) || $"{p.Sku} {p.Barcode} {p.Name} {p.Brand} {p.Category}".Contains(query.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)).ToList(); var save = new SaveFileDialog { Filter = "Excel dosyası (*.xlsx)|*.xlsx", FileName = "urunler.xlsx" }; if (save.ShowDialog(this) != true) return; CatalogExcel.Export(save.FileName, products, profile.VisibleFields); status.Text = $"{products.Count} ürün ve seçili alanlar dışa aktarıldı."; });
         // #826: only the refused rows, stable schema, cancellable while it writes, disk errors reported as a sentence.
         CancellationTokenSource? rejectedExportCts = null;
@@ -95,12 +95,19 @@ public partial class MainWindow
     }
 
     static Dictionary<string, string> ParsePairs(string text) => text.Split(['\r', '\n'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(x => x.Split('=', 2)).Where(x => x.Length == 2 && x[0].Trim().Length > 0).ToDictionary(x => x[0].Trim(), x => x[1].Trim(), StringComparer.OrdinalIgnoreCase);
-    static ExcelColumnMapping? ShowMappingDialog(IReadOnlyList<string> headers, ExcelColumnMapping? existing)
+    // #833: the dialog is built by ExcelMappingDialog (required markers, masked samples, missing count, first-problem
+    // jump, confirm gated on a mapping that can import); the page only supplies the file's headers and first row.
+    internal ExcelMappingDialogView BuildExcelMappingDialog(string path, ExcelColumnMapping? existing)
     {
-        var fields = new[] { ("Sku", "SKU"), ("Name", "Ürün adı"), ("Cost", "Alış"), ("Price", "Satış"), ("Stock", "Stok"), ("Barcode", "Barkod"), ("Brand", "Marka"), ("Category", "Kategori"), ("Description", "Açıklama"), ("Currency", "Döviz"), ("Active", "Aktif"), ("Gtin", "GTIN"), ("ImageUrls", "Görseller") };
-        Window window = null!;
-        var content = new StackPanel { Margin = new Thickness(16) }; var combos = new Dictionary<string, ComboBox>();
-        foreach (var field in fields) { var row = new DockPanel { Margin = new Thickness(0, 3, 0, 3) }; row.Children.Add(new TextBlock { Text = field.Item2, Width = 120, VerticalAlignment = VerticalAlignment.Center }); var combo = new ComboBox { ItemsSource = new[] { "(eşlenmemiş)" }.Concat(headers).ToList(), SelectedItem = existing?.Columns.TryGetValue(field.Item1, out var column) == true && column <= headers.Count ? headers[column - 1] : "(eşlenmemiş)" }; DockPanel.SetDock(combo, System.Windows.Controls.Dock.Right); row.Children.Add(combo); content.Children.Add(row); combos[field.Item1] = combo; }
-        var result = new ExcelColumnMapping?[] { null }; var ok = new Button { Content = "Eşlemeyi kullan", Margin = new Thickness(0, 12, 0, 0) }; ok.Click += (_, _) => { var map = new Dictionary<string, int>(); foreach (var field in fields) { var value = combos[field.Item1].SelectedItem?.ToString(); if (value is null or "(eşlenmemiş)") continue; var index = headers.IndexOf(value); if (index >= 0) map[field.Item1] = index + 1; } result[0] = new ExcelColumnMapping(map); window.DialogResult = true; }; content.Children.Add(ok); /* #818 */ window = DialogShell.Create(Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault(), "Excel kolon eşleme", content, new DialogShell.Action[] { new("Vazgeç", IsCancel: true) }, 520, 700); window.ShowDialog(); return result[0];
+        var headers = CatalogExcel.Headers(path);
+        IReadOnlyDictionary<string, string> firstRow;
+        try { firstRow = CatalogExcel.FirstRow(path); } catch (Exception e) { firstRow = new Dictionary<string, string>(); Log("Örnek satır okunamadı: " + Safe(e)); }
+        return ExcelMappingDialog.Build(this, headers, header => firstRow.TryGetValue(header, out var v) ? v : null, existing);
+    }
+    ExcelColumnMapping? ShowMappingDialog(string path, IReadOnlyList<string> headers, ExcelColumnMapping? existing)
+    {
+        _ = headers;
+        var view = BuildExcelMappingDialog(path, existing);
+        return view.Window.ShowDialog() == true ? view.Result : null;
     }
 }

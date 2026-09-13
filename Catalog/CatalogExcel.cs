@@ -39,6 +39,15 @@ public sealed record ExcelColumnMapping(IReadOnlyDictionary<string, int> Columns
 public static class CatalogExcel
 {
     public static IReadOnlyList<string> Headers(string path) { EnsureFile(path); using var book = new XLWorkbook(path); var sheet = book.Worksheets.FirstOrDefault() ?? throw new InvalidDataException("Çalışma sayfası bulunamadı."); var row = sheet.FirstRowUsed() ?? throw new InvalidDataException("Başlık satırı bulunamadı."); return row.CellsUsed().Select(c => c.GetString().Trim()).ToList(); }
+    // #833: the first data row by header, as raw cell text -- a specimen for the mapping dialog, which masks it before showing.
+    public static IReadOnlyDictionary<string, string> FirstRow(string path)
+    {
+        EnsureFile(path); using var book = new XLWorkbook(path); var sheet = book.Worksheets.FirstOrDefault() ?? throw new InvalidDataException("Çalışma sayfası bulunamadı.");
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        var header = sheet.Row(1); var last = header.LastCellUsed()?.Address.ColumnNumber ?? 0;
+        for (var c = 1; c <= last; c++) { var name = header.Cell(c).GetString().Trim(); if (name.Length == 0 || result.ContainsKey(name)) continue; result[name] = sheet.Cell(2, c).GetFormattedString(); }
+        return result;
+    }
     // #826: only the refused rows, in the stable five-column schema (row, reason code, field, safe value, message),
     // written beside the target and moved at the end; a cancellation or a disk error leaves no partial file.
     public static void ExportErrors(string path, ExcelPreview preview) => ExportErrors(path, preview, CancellationToken.None);
