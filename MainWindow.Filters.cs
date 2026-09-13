@@ -137,7 +137,7 @@ public partial class MainWindow {
  {
   productPriceSummaryPanel.Children.Clear();
   if (product is null) return;
-  var summary = ProductPriceSummary.Build(product, DateTime.UtcNow);
+  var sourceList = store.Sources(); var summary = ProductPriceSummary.Build(product, DateTime.UtcNow, id => sourceList.FirstOrDefault(s => s.Id == id)); // #922: the card names where the cost came from
   var headline = new TextBlock { FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Text = summary.SalePrice, VerticalAlignment = VerticalAlignment.Center };
   var currency = new TextBlock { Text = " " + summary.Currency, FontSize = DesignTokens.TextBodySize, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(3, 0, 0, 3), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) };
   var priceLine = new StackPanel { Orientation = Orientation.Horizontal, Children = { headline, currency } };
@@ -151,6 +151,7 @@ public partial class MainWindow {
   };
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Kâr (yaklaşık): {summary.Margin}", Foreground = marginBrush, FontWeight = FontWeights.SemiBold });
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Son hesaplama: {summary.Calculated}", FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Alış kökeni: {summary.CostOrigin}", FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) }); // #922
   foreach (var warning in summary.Warnings)
    productPriceSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(DesignTokens.TextMutedColor), Margin = Spacing.AboveInline });

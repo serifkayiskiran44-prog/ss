@@ -14,7 +14,8 @@ public sealed record ProductPriceSummaryInfo(
     string Calculated,
     bool IsCalculationStale,
     IReadOnlyList<string> Warnings,
-    IReadOnlyList<string> Order);
+    IReadOnlyList<string> Order,
+    string CostOrigin = ""); // #922: the words for where the cost came from
 
 /// <summary>
 /// The product card's pricing block (#798): sale price, currency, when it was last calculated and whether the
@@ -36,13 +37,14 @@ public static class ProductPriceSummary
     public const decimal ThinMarginPercent = 10m;
     const string Dash = "—";
 
-    public static ProductPriceSummaryInfo Build(CatalogProduct product, DateTime nowUtc)
+    public static ProductPriceSummaryInfo Build(CatalogProduct product, DateTime nowUtc, Func<string, XmlSource?>? sourceById = null)
     {
         ArgumentNullException.ThrowIfNull(product);
         var warnings = new List<string>();
 
         var hasPrice = product.Price > 0;
         if (!hasPrice) warnings.Add("Satış fiyatı girilmemiş.");
+        if (product.Cost <= 0) warnings.Add("Alış fiyatı girilmemiş; kâr hesaplanamaz."); // #922: never a margin against a cost nobody entered
 
         var sameCurrency = string.Equals(product.Currency?.Trim(), product.CostCurrency?.Trim(), StringComparison.OrdinalIgnoreCase);
         if (hasPrice && product.Cost > 0 && !sameCurrency) warnings.Add("Alış ve satış para birimleri farklı; yaklaşık kâr hesaplanamıyor.");
@@ -72,7 +74,8 @@ public static class ProductPriceSummary
             Calculated: calculatedAt is { } when ? Ago(nowUtc - when) : "Hesaplanmadı",
             IsCalculationStale: stale,
             Warnings: warnings,
-            Order: ["Satış fiyatı", "Kâr (yaklaşık)", "Son hesaplama"]);
+            Order: ["Satış fiyatı", "Kâr (yaklaşık)", "Son hesaplama"],
+            CostOrigin: CostProvenance.Describe(product, sourceById, nowUtc)); // #922: the net margin names where its cost came from
     }
 
     // A currency label sits beside the price, so it is clamped rather than allowed to run over it; the price

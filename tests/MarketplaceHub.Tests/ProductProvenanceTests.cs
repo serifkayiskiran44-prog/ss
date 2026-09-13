@@ -36,7 +36,7 @@ public sealed class ProductProvenanceTests
     {
         var view = ProductProvenance.Build(Product(p => { p.PriceSource = "manual"; p.LockPrice = true; }), Source(), Now);
 
-        CollectionAssert.AreEquivalent(new[] { "Fiyat", "Stok", "Görseller", "Başlık", "Açıklama" }, view.Rows.Select(r => r.Field).ToArray());
+        CollectionAssert.AreEquivalent(new[] { "Fiyat", "Alış", "Stok", "Görseller", "Başlık", "Açıklama" }, view.Rows.Select(r => r.Field).ToArray()); // #922: the cost has its own row
         Assert.AreEqual("Tedarikçi A", Row(view, "Stok").Origin, "A feed-owned field names its source.");
         StringAssert.Contains(Row(view, "Stok").Detail, "4 saat önce");
         Assert.AreEqual("Elle girildi", Row(view, "Fiyat").Origin, "An operator-set field says so rather than crediting the feed.");
@@ -79,8 +79,8 @@ public sealed class ProductProvenanceTests
         var view = ProductProvenance.Build(Product(p => { p.PriceSource = "manual"; p.MediaSource = "manual"; }), Source(), Now);
 
         Assert.AreEqual(2, view.Rows.Count(r => r.IsOperatorOwned));
-        Assert.AreEqual(3, view.Rows.Count(r => !r.IsOperatorOwned));
-        StringAssert.Contains(view.Headline, "3 alan kaynaktan");
+        Assert.AreEqual(4, view.Rows.Count(r => !r.IsOperatorOwned)); // #922: the cost row joined the summary
+        StringAssert.Contains(view.Headline, "4 alan kaynaktan"); // #922
         StringAssert.Contains(view.Headline, "2 alan elle");
     }
 

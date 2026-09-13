@@ -13,6 +13,10 @@ public sealed class FieldOrigin
     public DateTime ObservedUtc { get; set; }
     /// <summary>#896: the words of the last priority decision on this field, when two sources contested it; empty otherwise.</summary>
     public string Decision { get; set; } = "";
+    /// <summary>#922: the origin a manual edit replaced when that origin was a feed's (or derived), carried through further manual edits so an override never forgets what it overrides; null for a value that never had a feed origin.</summary>
+    public FieldOrigin? Superseded { get; set; }
+    /// <summary>#922: the replaced value as invariant text (a number, a code or a text's normalized form) -- what the feed last wrote before the operator wrote over it.</summary>
+    public string SupersededValue { get; set; } = "";
 }
 
 /// <summary>
@@ -49,7 +53,10 @@ public static class FieldProvenance
         foreach (var field in Fields)
         {
             if (string.Equals(ValueOf(before, field), ValueOf(after, field), StringComparison.Ordinal)) continue;
-            after.FieldOrigins[field] = new FieldOrigin { Kind = ManualKind, ObservedUtc = observedUtc };
+            // #922: the origin being replaced rides along -- a feed's (or derived) origin directly, a manual one's own superseded origin -- with the value it had.
+            var previous = before.FieldOrigins is { } origins && origins.TryGetValue(field, out var replaced) ? replaced : null;
+            var manualBefore = previous is not null && string.Equals(previous.Kind, ManualKind, StringComparison.OrdinalIgnoreCase);
+            after.FieldOrigins[field] = new FieldOrigin { Kind = ManualKind, ObservedUtc = observedUtc, Superseded = previous is null ? null : manualBefore ? previous.Superseded : previous, SupersededValue = previous is null ? "" : manualBefore ? previous.SupersededValue : ValueOf(before, field) };
             changed.Add(field);
         }
         return changed;
@@ -85,7 +92,7 @@ public static class FieldProvenance
         _ => "",
     };
 
-    static string Ago(TimeSpan span)
+    internal static string Ago(TimeSpan span) // #922: shared with the cost provenance words
     {
         if (span < TimeSpan.Zero) span = TimeSpan.Zero;
         if (span.TotalMinutes < 1) return "az önce";

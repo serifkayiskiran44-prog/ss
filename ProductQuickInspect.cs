@@ -37,6 +37,8 @@ public static class ProductQuickInspect
 
         Add("Fiyat", "Satış fiyatı", product.Price > 0 ? Money(product.Price, product.Currency) : null);
         Add("Fiyat", "Alış fiyatı", product.Cost > 0 ? Money(product.Cost, product.CostCurrency) : null);
+        Func<string, XmlSource?>? sourceById = sources is null ? null : id => sources.FirstOrDefault(s => s.Id == id);
+        Add("Fiyat", "Alış kökeni", CostProvenance.Describe(product, sourceById, nowUtc)); // #922: where the cost came from -- source, revision, moment, or the operator over the feed's value; a missing cost said as such
         Add("Fiyat", "KDV", product.VatRate.ToString("0.##", CultureInfo.CurrentCulture) + "%");
         Add("Fiyat", "Vergi sınıfı", ProductTaxClass.Describe(product, nowUtc)); // #909: the class as resolved and its last change
 

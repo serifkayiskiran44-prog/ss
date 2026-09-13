@@ -50,9 +50,12 @@ public static class ProductProvenance
             return new(field, origin, detail, operatorOwned);
         }
 
+        // #922: the cost row reads the cost provenance owner -- a feed's value, the operator's, an override that still names the feed's last value, or a missing cost said as such; a missing or unrecorded cost on a product no feed owns is the operator's.
+        ProductProvenanceRow CostRow() { var cost = CostProvenance.Resolve(product, Resolve, nowUtc); return new("Alış", cost.OriginLabel, cost.Words, cost.OperatorOwned || (!feedBacked && cost.State is CostProvenanceView.Missing or CostProvenanceView.Unrecorded)); }
         var rows = new List<ProductProvenanceRow>
         {
             Row("Fiyat", "Price", product.PriceSource, product.LockPrice),
+            CostRow(), // #922
             Row("Stok", "Stock", product.StockSource, product.LockStock),
             Row("Görseller", "ImageUrls", product.MediaSource, product.LockImages),
             Row("Başlık", "Name", product.SourceKind, product.LockName),

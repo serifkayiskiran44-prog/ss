@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace TrMarketplaceHubDesktop;
 
-public sealed record ProfitabilityInput(string Sku, string Channel, decimal SalePrice, decimal Cost, decimal VatRate, decimal CommissionRate, decimal ShippingCost, decimal TransactionCost, string Currency, DateTimeOffset CostAtUtc, DateTimeOffset CommissionAtUtc, DateTimeOffset? ShippingAtUtc = null);
+public sealed record ProfitabilityInput(string Sku, string Channel, decimal SalePrice, decimal Cost, decimal VatRate, decimal CommissionRate, decimal ShippingCost, decimal TransactionCost, string Currency, DateTimeOffset CostAtUtc, DateTimeOffset CommissionAtUtc, DateTimeOffset? ShippingAtUtc = null, string CostProvenance = ""); // #922: the words for where the cost came from, carried into the result
 public sealed record ProfitabilityResult(ProfitabilityInput Input, decimal GrossContribution, decimal NetContribution, decimal MarginPercent, bool Stale, string Status);
 public sealed record AutoShippingCost(decimal? Cost, string Status); // Status: "OK" | "NEEDS_WEIGHT_DATA" | "SHIPPING_COST_UNKNOWN"
 
@@ -30,6 +30,7 @@ public static class ProfitabilitySimulator
     public static ProfitabilityResult Simulate(ProfitabilityInput input, DateTimeOffset? now = null, TimeSpan? staleAfter = null)
     {
         if (input.SalePrice < 0 || input.Cost < 0 || input.VatRate < 0 || input.CommissionRate < 0 || input.ShippingCost < 0 || input.TransactionCost < 0 || string.IsNullOrWhiteSpace(input.Currency)) throw new ArgumentException("Kârlılık girdileri geçersiz.");
+        if (input.Cost == 0) return new(input, 0, 0, 0, false, "COST_MISSING"); // #922: never a margin against a cost nobody entered
         var gross = input.SalePrice - input.Cost;
         var net = input.SalePrice - input.SalePrice * input.VatRate / 100m - input.SalePrice * input.CommissionRate / 100m - input.Cost - input.ShippingCost - input.TransactionCost;
         var margin = input.SalePrice == 0 ? 0 : decimal.Round(net / input.SalePrice * 100m, 4);
