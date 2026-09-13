@@ -9,16 +9,17 @@ namespace TrMarketplaceHubDesktop;
 public static class EbayPanel
 {
     private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(30) };
-    public static FrameworkElement Create()
+    /// <param name="directory">The data directory the encrypted store lives in (null: the profile default); the shell passes its own.</param>
+    /// <param name="editState">#854: the app's settings edit state; the secret is tracked by presence only.</param>
+    public static FrameworkElement Create(string? directory = null, SettingsEditState? editState = null)
     {
         var panel = new StackPanel();
         panel.Children.Add(Text("Kendi eBay geliştirici uygulamanızla OAuth bağlantısı. Ürün, stok ve sipariş aktarımı etkin değildir."));
         panel.Children.Add(Text("App ID / Cert ID ve OAuth RuName, eBay Developers hesabından alınır. Kabul adresi RuName altında kayıtlı, size ait HTTPS sayfasıyla birebir eşleşmelidir; sorgu veya # içermemelidir. Onaydan sonra tarayıcıdaki tam dönüş adresini aşağıya yapıştırın."));
         var inputs = new StackPanel();
         var clientId = Field(inputs, "App ID (Client ID)");
-        inputs.Children.Add(Text("Cert ID (Client Secret)"));
-        var secret = new PasswordBox { Margin = new Thickness(0, 0, 0, 8), MaxWidth = 650, HorizontalAlignment = HorizontalAlignment.Stretch };
-        inputs.Children.Add(secret);
+        // #855: the secret standard -- masked, paste-cleaned, never copied, presence only for a saved value, kept when left empty.
+        var secret = SecretField.Build("Cert ID (Client Secret)", "Şifreli saklanır; ekranda, kayıtlarda ve dışa aktarımlarda gösterilmez."); inputs.Children.Add(secret.Field.Root);
         var ruName = Field(inputs, "OAuth RuName (URL değil)");
         var callback = Field(inputs, "RuName altında kayıtlı kabul URL'si (HTTPS)");
         var sandbox = new CheckBox { Content = "Sandbox test ortamı (gerçek satıcı hesabından ayrı)", Margin = new Thickness(0, 4, 0, 12) };
@@ -36,9 +37,9 @@ public static class EbayPanel
         var complete = new Button { Content = "Dönüşü doğrula ve token al", HorizontalAlignment = HorizontalAlignment.Left };
         panel.Children.Add(complete);
         var status = Text("Bağlı değil — geliştirici anahtarları ve OAuth onayı gerekiyor.");
-        status.Foreground = Brushes.DarkOrange;
+        status.Foreground = Brushes.DarkOrange; status.Tag = "ebay-status";
         panel.Children.Add(status);
-        var store = new EbaySettingsStore();
+        var store = new EbaySettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "ebay.bin"));
         var api = new EbayConnection(Http);
         EbaySavedConnection? saved = null;
         EbayAuthorization? attempt = null;
@@ -46,14 +47,15 @@ public static class EbayPanel
         try {
             saved = store.Load();
             if (saved is not null) {
-                clientId.Text = saved.Settings.ClientId; secret.Password = saved.Settings.ClientSecret; ruName.Text = saved.Settings.RuName;
+                clientId.Text = saved.Settings.ClientId; secret.SetSaved(!string.IsNullOrEmpty(saved.Settings.ClientSecret)); ruName.Text = saved.Settings.RuName;
                 callback.Text = saved.Settings.CallbackUrl; sandbox.IsChecked = saved.Settings.Sandbox;
                 status.Text = saved.Tokens is null ? "Ayarlar kayıtlı; OAuth onayı yok." : "OAuth bilgileri kayıtlı; bu oturumda bağlantı henüz doğrulanmadı.";
             }
         } catch { status.Text = "Kayıtlı eBay bilgileri okunamadı. Bilgileri yeniden girip kaydedin."; }
-        EbaySettings Read() => new(clientId.Text.Trim(), secret.Password, ruName.Text.Trim(), callback.Text.Trim(), sandbox.IsChecked == true);
-        void Changed() { attempt = null; returned.Clear(); status.Text = "Ayarlar değişti; bağlantı doğrulanmadı. Kaydedin ve gerekirse yeniden OAuth onayı alın."; }
-        clientId.TextChanged += (_, _) => Changed(); secret.PasswordChanged += (_, _) => Changed(); ruName.TextChanged += (_, _) => Changed(); callback.TextChanged += (_, _) => Changed();
+        var tracker = editState?.Form("ebay-connection").Track("App ID", () => clientId.Text).Track("Cert ID", () => secret.Box.Password, secret: true).Track("RuName", () => ruName.Text).Track("Kabul URL'si", () => callback.Text).Track("Sandbox", () => sandbox.IsChecked == true ? "1" : "0"); tracker?.Snapshot();
+        EbaySettings Read() => new(clientId.Text.Trim(), secret.Resolve(saved?.Settings.ClientSecret), ruName.Text.Trim(), callback.Text.Trim(), sandbox.IsChecked == true);
+        void Changed() { attempt = null; returned.Clear(); status.Text = "Ayarlar değişti; bağlantı doğrulanmadı. Kaydedin ve gerekirse yeniden OAuth onayı alın."; tracker?.Recompute(); }
+        clientId.TextChanged += (_, _) => Changed(); secret.Box.PasswordChanged += (_, _) => Changed(); ruName.TextChanged += (_, _) => Changed(); callback.TextChanged += (_, _) => Changed();
         sandbox.Checked += (_, _) => Changed(); sandbox.Unchecked += (_, _) => Changed();
         async Task Run(Func<Task> action)
         {
@@ -70,7 +72,7 @@ public static class EbayPanel
         {
             var current = Read(); EbayConnection.Validate(current);
             var next = new EbaySavedConnection(current, saved?.Settings == current ? saved.Tokens : null);
-            store.Save(next); saved = next; return next;
+            store.Save(next); saved = next; secret.MarkSaved(); tracker?.Snapshot(); return next;
         }
         save.Click += async (_, _) => await Run(() => { SaveCurrent(); status.Text = "Ayarlar Windows kullanıcı profilinde şifreli kaydedildi; bağlantı doğrulanmadı."; return Task.CompletedTask; });
         authorize.Click += async (_, _) => await Run(() => {
@@ -103,7 +105,7 @@ public static class EbayPanel
                 + " Bu kontrol ödeme/Payoneer kurulumunu veya ürün yayınlama uygunluğunu doğrulamaz.";
         });
         disconnect.Click += async (_, _) => await Run(() => {
-            store.Delete(); saved = null; attempt = null; returned.Clear(); secret.Clear();
+            store.Delete(); saved = null; attempt = null; returned.Clear(); secret.MarkCleared(); tracker?.Snapshot();
             status.Text = "Yerel eBay bilgileri silindi. eBay tarafındaki uygulama iznini kaldırmak için hesap ayarlarınızı kullanın.";
             return Task.CompletedTask;
         });

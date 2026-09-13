@@ -33,13 +33,14 @@ public static class MarketplaceSetupPanel
         return new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
-    public static FrameworkElement CreateChannel(string id)
+    /// <param name="directory">The data directory the connection stores live in (null: the profile default); #855 passes the shell's so tests never touch the real profile.</param>
+    public static FrameworkElement CreateChannel(string id, string? directory=null, SettingsEditState? editState=null)
     {
         var channel=MarketplaceRegistry.All.Single(c=>c.Id==id);
         var content=new StackPanel{Margin=new Thickness(16)};
         content.Children.Add(Text(channel.Name+" bağlantısı",22));
-        if(id=="ebay")content.Children.Add(EbayPanel.Create());
-        else if(id=="ozon")content.Children.Add(OzonPanel.Create());
+        if(id=="ebay")content.Children.Add(EbayPanel.Create(directory,editState));
+        else if(id=="ozon")content.Children.Add(OzonPanel.Create(directory,editState));
         else content.Children.Add(Text(id=="joom"?"Satıcı kaydı / kabulü bekleniyor. API bağlantısı kurulmadı.":channel.Status,15,Brushes.DarkOrange));
         content.Children.Add(Text(channel.Prerequisites));
         var result=Text("");var actions=new WrapPanel();

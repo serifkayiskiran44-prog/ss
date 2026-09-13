@@ -60,7 +60,7 @@ public partial class MainWindow
    var channel=MarketplaceRegistry.All.Single(c=>c.Id==id);
    var tabs=new TabControl();
    tabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create(id,dataDirectory)});
-   tabs.Items.Add(new TabItem{Header="Bağlantı",Content=id=="joom"?JoomPanel.Create(dataDirectory):MarketplaceSetupPanel.CreateChannel(id)});
+   tabs.Items.Add(new TabItem{Header="Bağlantı",Content=id=="joom"?JoomPanel.Create(dataDirectory):MarketplaceSetupPanel.CreateChannel(id,dataDirectory,settingsEditState)});
    Page(id,channel.Name,id=="joom"?"Satıcı kaydı / kabulü bekleniyor • Canlı ürün aktarımı etkin değil.":"Yerel kanal ürün planları • API bağlantı kontrolü ayrı; canlı ürün aktarımı etkin değil.",tabs);
   }
   var amazonTabs=new TabControl();amazonTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("amazon",dataDirectory)});amazonTabs.Items.Add(new TabItem{Header="Bağlantı",Content=AmazonPanel.Create(dataDirectory)});Page("amazon","Amazon","SP-API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",amazonTabs);
