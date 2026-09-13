@@ -35,6 +35,11 @@ public static class DashboardPanel
         panel.Children.Add(cards);
         var channelGroup = new GroupBox { Header = "Kanal / mağaza sağlığı", Margin = new Thickness(4), Padding = new Thickness(8) };
         var channels = new DataGrid { Height = 220, IsReadOnly = true, AutoGenerateColumns = false, EnableRowVirtualization = true };
+        var rowTooltip = new Style(typeof(DataGridRow));
+        rowTooltip.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new System.Windows.Data.Binding("Tooltip")));
+        rowTooltip.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty, true));
+        rowTooltip.Setters.Add(new Setter(AutomationProperties.HelpTextProperty, new System.Windows.Data.Binding("Tooltip")));
+        channels.RowStyle = rowTooltip;
         AddColumn(channels, "Kanal", "Channel", 100); AddColumn(channels, "Mağaza", "ShopId", 120); AddColumn(channels, "Durum", "Status", 170); AddColumn(channels, "Son test", "LastTestLabel", 150); AddColumn(channels, "Hata", "LastError", 300);
         channelGroup.Content = channels;
         panel.Children.Add(channelGroup);
@@ -102,7 +107,14 @@ public static class DashboardPanel
                 finally { applyingStoreFilter = false; }
                 ShowEmptyState(onboarding, snapshot, storeKey, storeScope, navigate, routeExists ?? (_ => true));
                 ShowAnomalies(anomalies, snapshot, card => Drill(card.Route, card.Title, "anomaly", card.Key, card.Title), storeScope);
-                channels.ItemsSource = snapshot.Connections.Select(x => new { x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError }).ToList();
+                // #815: every connection row carries the shared status tooltip (status, reason, last change, source,
+                // next action), bound through the row style so it also shows on keyboard focus.
+                channels.ItemsSource = snapshot.Connections.Select(x => new
+                {
+                    x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError,
+                    Tooltip = StatusTooltip.Compose(new StatusTooltipContent(x.Status, x.LastError, x.LastTestUtc, $"{x.Channel} / {x.ShopId}",
+                        string.Equals(x.Status, "CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase) ? "" : "Bağlantıyı Mağaza bağlantıları ekranından yeniden test edin."), DateTime.UtcNow),
+                }).ToList();
                 notifications.Children.Clear(); foreach (var item in snapshot.Notifications) AddNotification(notifications, item, navigate);
                 trends.ItemsSource = snapshot.OrderTrend.Select(x => new { DateLabel = x.Date.ToString("dd.MM.yyyy"), x.Orders, StockLabel = x.CurrentStock < 0 ? "—" : x.CurrentStock.ToString("N0") }).ToList();
                 var ops = OperationsSummaryService.From(snapshot);

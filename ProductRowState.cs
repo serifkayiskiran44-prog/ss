@@ -117,11 +117,13 @@ public static class ProductRowState
     public static string Tooltip(ProductRowStateInfo info, CatalogProduct product)
     {
         ArgumentNullException.ThrowIfNull(info); ArgumentNullException.ThrowIfNull(product);
-        var lines = new List<string> { info.Badge };
-        if (info.Reason.Length > 0) lines.Add(info.Reason);
-        lines.Add($"Stok: {product.Stock.ToString(CultureInfo.CurrentCulture)}");
-        var text = AuditStore.Sanitize(string.Join("\n", lines)).Trim();
-        return text.Length > 400 ? text[..400] : text;
+        // #815: the shared template -- status, reason, last change, source, next action -- so this tooltip reads
+        // like every other status tooltip in the app and hides what it does not know.
+        return StatusTooltip.Compose(new StatusTooltipContent(
+            info.Badge, info.Reason, product.UpdatedUtc == default ? null : product.UpdatedUtc,
+            string.IsNullOrWhiteSpace(product.SourceId) ? "" : "Kaynak kaydı " + product.SourceId,
+            StatusTooltip.NextActionFor(info.Key),
+            $"Stok: {product.Stock.ToString(CultureInfo.CurrentCulture)}"), DateTime.UtcNow);
     }
 
     public static bool IsHighContrast => SystemParameters.HighContrast;

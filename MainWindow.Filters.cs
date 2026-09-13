@@ -419,6 +419,9 @@ public partial class MainWindow {
    e.Row.BorderThickness = ProductRowState.BorderThickness(state.Key);
    e.Row.BorderBrush = ProductRowState.AccentBrush(state.Key, ProductRowState.IsHighContrast);
    e.Row.ToolTip = state.Key == ProductRowState.Normal ? null : ProductRowState.Tooltip(state, product);
+   // #815: the tooltip is reachable from the keyboard and read by assistive tech, not only shown on hover.
+   ToolTipService.SetShowsToolTipOnKeyboardFocus(e.Row, true);
+   System.Windows.Automation.AutomationProperties.SetHelpText(e.Row, e.Row.ToolTip as string ?? "");
    System.Windows.Automation.AutomationProperties.SetItemStatus(e.Row, state.Badge);
   };
  }
