@@ -20,7 +20,7 @@ public sealed class DataBackupService
         DataDirectory = dataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
     }
 
-    public string Backup(string outputPath)
+    public string Backup(string outputPath, bool overwrite = false)
     {
         outputPath = Path.GetFullPath(outputPath);
         if (IsInside(outputPath, DataDirectory)) throw new InvalidOperationException("Yedek dosyası uygulama veri klasörünün içine yazılamaz.");
@@ -48,7 +48,7 @@ public sealed class DataBackupService
                 using var writer = new StreamWriter(manifestEntry.Open());
                 writer.Write(JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
             }
-            File.Move(temporary, outputPath, true);
+            ExportFiles.Commit(temporary, outputPath, overwrite);
             return outputPath;
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }

@@ -62,7 +62,7 @@ public static class ReportsPanel
                 var path = retry && lastPaths.TryGetValue(definition.Key, out var last) ? last : choosePath is not null ? choosePath(definition) : AskPath(panel, definition);
                 if (string.IsNullOrWhiteSpace(path)) return null;
                 lastPaths[definition.Key] = path;
-                var outcome = await ReportRunner.ExportAsync(directory, result, columns, path, token, progress);
+                var outcome = await ReportRunner.ExportAsync(directory, result, columns, path, token, progress, overwrite: true); // #880: the save dialog (or its injected stand-in) confirmed any replacement, and a retry rewrites its own run's file
                 Refresh();
                 return outcome.Message;
             } : null;
@@ -104,7 +104,7 @@ public static class ReportsPanel
 
     static string? AskPath(FrameworkElement owner, ReportDefinition definition)
     {
-        var dialog = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = $"{definition.Key}-{DateTime.Now:yyyyMMdd-HHmm}.csv", AddExtension = true };
+        var dialog = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = ExportFileNames.Build(definition.Key, "csv"), AddExtension = true };
         var window = Window.GetWindow(owner);
         return (window is null ? dialog.ShowDialog() : dialog.ShowDialog(window)) == true ? dialog.FileName : null;
     }

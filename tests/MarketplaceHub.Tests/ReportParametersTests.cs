@@ -108,7 +108,7 @@ public sealed class ReportParametersTests
             Assert.AreEqual("OrderId;ShopId;Status;Price;Currency;UpdatedUtc", lines[0]); Assert.AreEqual(4, lines.Length);
             StringAssert.Contains(lines.Single(l => l.StartsWith("1001", StringComparison.Ordinal)), ";Yolda;12.5;USD;"); Assert.IsFalse(File.ReadAllText(path).Contains("TRK0000000"), "The default export carries no tracking.");
             Assert.IsFalse(Directory.GetFiles(Path.GetDirectoryName(path)!).Any(f => f.Contains(".tmp-", StringComparison.Ordinal)), "No temp file is left behind.");
-            var chosen = await ReportRunner.ExportAsync(root, query.Result, new[] { "Tracking", "OrderId" }, path);
+            var chosen = await ReportRunner.ExportAsync(root, query.Result, new[] { "Tracking", "OrderId" }, path, overwrite: true); // #880: replacing the earlier export is asked for
             Assert.AreEqual(3, chosen.Rows); Assert.AreEqual("Tracking;OrderId", File.ReadAllLines(path)[0]); StringAssert.Contains(File.ReadAllText(path), "TR••••••1001;1001");
 
             Assert.AreEqual(1, (await ReportRunner.QueryAsync(root, def, p with { DeliveryState = "InTransit" }, allowed)).Result!.Rows.Count);
@@ -116,7 +116,7 @@ public sealed class ReportParametersTests
             Assert.AreEqual(1, (await ReportRunner.QueryAsync(root, def, p with { Query = "1002" }, allowed)).Result!.Rows.Count);
             var empty = await ReportRunner.QueryAsync(root, def, p with { FromUtc = DateTime.UtcNow.Date.AddDays(-300), ToUtc = DateTime.UtcNow.Date.AddDays(-200) }, allowed);
             Assert.AreEqual(0, empty.Result!.Rows.Count); StringAssert.Contains(empty.Message, "sipariş yok");
-            var emptyExport = await ReportRunner.ExportAsync(root, empty.Result, defaultColumns, path);
+            var emptyExport = await ReportRunner.ExportAsync(root, empty.Result, defaultColumns, path, overwrite: true);
             StringAssert.Contains(emptyExport.Message, "yalnız başlık"); Assert.AreEqual(1, File.ReadAllLines(path).Length);
 
             var runs = new ReportRunStore(root).Recent("orders-csv");
@@ -145,6 +145,11 @@ public sealed class ReportParametersTests
             var failed = await ReportRunner.ExportAsync(root, query.Result, defaultColumns, blocked);
             Assert.AreEqual(ReportRunState.Failed, failed.State); StringAssert.StartsWith(failed.Message, "Rapor yazılamadı"); Assert.AreEqual(ReportRunState.Failed, new ReportRunStore(root).Latest()["orders-csv"].State);
             Assert.IsFalse(Directory.GetFiles(Path.Combine(root, "out")).Any(f => f.Contains(".tmp-", StringComparison.Ordinal)));
+
+            // #880: without asking, an existing file is never replaced — the refusal is a Failed run that names the file and never the directory, and the file stays as it was.
+            var refused = await ReportRunner.ExportAsync(root, query.Result, defaultColumns, path);
+            Assert.AreEqual(ReportRunState.Failed, refused.State); StringAssert.Contains(refused.Message, "üzerine yazılmadı"); Assert.IsFalse(refused.Message.Contains(root, StringComparison.OrdinalIgnoreCase), "never the directory");
+            Assert.AreEqual(1, File.ReadAllLines(path).Length, "the existing header-only file is intact"); Assert.AreEqual(ReportRunState.Failed, new ReportRunStore(root).Latest()["orders-csv"].State);
 
             // The renderer's allow-list keeps customer fields out of any report template; the tracking column is the masked one.
             Assert.ThrowsException<InvalidOperationException>(() => ReportTemplateRenderer.Render(new ReportTemplate("orders", new[] { "OrderId", "CustomerName" }), Array.Empty<IReadOnlyDictionary<string, object?>>()));

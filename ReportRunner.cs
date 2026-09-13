@@ -75,7 +75,7 @@ public static class ReportRunner
     }
 
     /// <summary>Writes the chosen columns of a result as CSV; the columns must belong to the report's schema and the renderer's allow-list.</summary>
-    public static async Task<ReportRunOutcome> ExportAsync(string? directory, ReportResult result, IReadOnlyList<string> columns, string path, CancellationToken cancellationToken = default, IProgress<ReportRunProgressEvent>? progress = null)
+    public static async Task<ReportRunOutcome> ExportAsync(string? directory, ReportResult result, IReadOnlyList<string> columns, string path, CancellationToken cancellationToken = default, IProgress<ReportRunProgressEvent>? progress = null, bool overwrite = false)
     {
         ArgumentNullException.ThrowIfNull(result); ArgumentNullException.ThrowIfNull(columns);
         var schema = ReportColumns.SchemaFor(result.Definition).Select(c => c.Key).ToHashSet(StringComparer.Ordinal);
@@ -91,7 +91,7 @@ public static class ReportRunner
             var csv = ReportTemplateRenderer.Render(new ReportTemplate("orders", chosen), result.Rows);
             cancellationToken.ThrowIfCancellationRequested();
             var temp = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", Path.GetFileNameWithoutExtension(path) + ".tmp-" + Guid.NewGuid().ToString("N")[..8] + ".csv");
-            try { File.WriteAllText(temp, csv, new UTF8Encoding(true)); File.Move(temp, path, overwrite: true); }
+            try { File.WriteAllText(temp, csv, new UTF8Encoding(true)); ExportFiles.Commit(temp, path, overwrite); }
             finally { if (File.Exists(temp)) File.Delete(temp); }
             progress?.Report(new(ReportRunStage.Export, ReportRunStageStatus.Done, result.Rows.Count, result.Rows.Count));
             var message = result.Rows.Count == 0 ? "Aralıkta sipariş yok; yalnız başlık satırı yazıldı." : $"{result.Rows.Count:N0} sipariş yazıldı.";

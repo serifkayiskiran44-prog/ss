@@ -51,7 +51,7 @@ public static class CatalogExcel
     // #826: only the refused rows, in the stable five-column schema (row, reason code, field, safe value, message),
     // written beside the target and moved at the end; a cancellation or a disk error leaves no partial file.
     public static void ExportErrors(string path, ExcelPreview preview) => ExportErrors(path, preview, CancellationToken.None);
-    public static RejectedRowsExportResult ExportErrors(string path, ExcelPreview preview, CancellationToken cancellationToken)
+    public static RejectedRowsExportResult ExportErrors(string path, ExcelPreview preview, CancellationToken cancellationToken, bool overwrite = false)
     {
         var rows = RejectedRowsExport.Build(preview.Errors);
         string temporary;
@@ -68,7 +68,7 @@ public static class CatalogExcel
                 cancellationToken.ThrowIfCancellationRequested();
                 var r = rows[i]; sheet.Cell(i + 2, 1).Value = r.RowNumber; sheet.Cell(i + 2, 2).Value = r.ReasonCode; sheet.Cell(i + 2, 3).Value = r.Field; sheet.Cell(i + 2, 4).Value = r.SafeValue; sheet.Cell(i + 2, 5).Value = r.Message;
             }
-            sheet.Columns().AdjustToContents(); book.SaveAs(temporary); File.Move(temporary, path, true);
+            sheet.Columns().AdjustToContents(); book.SaveAs(temporary); ExportFiles.Commit(temporary, path, overwrite);
             return RejectedRowsExportResult.Ok(rows.Count);
         }
         catch (OperationCanceledException) { return RejectedRowsExportResult.WasCancelled; }
@@ -76,11 +76,11 @@ public static class CatalogExcel
         finally { try { if (File.Exists(temporary)) File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
     public static void Export(string path, IReadOnlyList<CatalogProduct> products) => Export(path, products, null);
-    public static void Export(string path, IReadOnlyList<CatalogProduct> products, IReadOnlyCollection<string>? visibleFields)
+    public static void Export(string path, IReadOnlyList<CatalogProduct> products, IReadOnlyCollection<string>? visibleFields, bool overwrite = false)
     {
         var all = new (string Key, string Header, Func<CatalogProduct, object?> Value)[] { ("Sku", "SKU", p => p.Sku), ("Barcode", "Barkod", p => p.Barcode), ("Name", "Ürün", p => p.Name), ("Brand", "Marka", p => p.Brand), ("Category", "Kategori", p => p.Category), ("Description", "Açıklama", p => p.Description), ("Cost", "Alış", p => p.Cost), ("Price", "Satış", p => p.Price), ("Currency", "Döviz", p => p.Currency), ("VatRate", "KDV %", p => p.VatRate), ("Stock", "Stok", p => p.Stock), ("Active", "Aktif", p => p.Active), ("Gtin", "GTIN", p => p.Gtin), ("ImageUrls", "Görseller", p => p.ImageUrls), ("SourceId", "XML Kaynağı", p => p.SourceId), ("SourceKind", "Veri kaynağı", p => p.SourceKind), ("PriceSource", "Fiyat kaynağı", p => p.PriceSource), ("StockSource", "Stok kaynağı", p => p.StockSource), ("MediaSource", "Medya kaynağı", p => p.MediaSource) };
         var columns = visibleFields is null || visibleFields.Count == 0 ? all : all.Where(x => visibleFields.Contains(x.Key, StringComparer.OrdinalIgnoreCase)).ToArray(); if (columns.Length == 0) throw new InvalidOperationException("Dışa aktarım için en az bir görünür alan seçin.");
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); var temporary = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, Path.GetFileNameWithoutExtension(path) + ".tmp-" + Guid.NewGuid().ToString("N") + ".xlsx"); /* #826: ClosedXML refuses a temp name without .xlsx */ try { using var book = new XLWorkbook(); var sheet = book.AddWorksheet("Ürünler"); for (var i = 0; i < columns.Length; i++) sheet.Cell(1, i + 1).Value = columns[i].Header; var row = 2; foreach (var product in products) { for (var i = 0; i < columns.Length; i++) sheet.Cell(row, i + 1).Value = columns[i].Value(product)?.ToString() ?? ""; row++; } sheet.Columns().AdjustToContents(); book.SaveAs(temporary); File.Move(temporary, path, true); } finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); var temporary = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, Path.GetFileNameWithoutExtension(path) + ".tmp-" + Guid.NewGuid().ToString("N") + ".xlsx"); /* #826: ClosedXML refuses a temp name without .xlsx */ try { using var book = new XLWorkbook(); var sheet = book.AddWorksheet("Ürünler"); for (var i = 0; i < columns.Length; i++) sheet.Cell(1, i + 1).Value = columns[i].Header; var row = 2; foreach (var product in products) { for (var i = 0; i < columns.Length; i++) sheet.Cell(row, i + 1).Value = columns[i].Value(product)?.ToString() ?? ""; row++; } sheet.Columns().AdjustToContents(); book.SaveAs(temporary); ExportFiles.Commit(temporary, path, overwrite); } finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
     public static ExcelPreview Preview(string path, ExcelColumnMapping? mapping = null) => Preview(path, mapping, DeterministicNumberParser.Culture("en-US"), null);
     public static ExcelPreview Preview(string path, CultureInfo culture) => Preview(path, null, culture, null);

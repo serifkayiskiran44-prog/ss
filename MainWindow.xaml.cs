@@ -192,9 +192,10 @@ public partial class MainWindow : Window
   // #821: deactivating many products is high-impact and local; the operator types the count, re-checked at the click.
   if(!active&&DestructiveConfirmation.RequiresTyping(new DestructiveIntent("Pasife al","seçili ürünler",selected.Count))){var intent=new DestructiveIntent("Pasife al","seçili ürünler",selected.Count);if(!DestructiveConfirmDialog.Show(this,intent,()=>{var now=products.SelectedItems.OfType<CatalogProduct>().Count();return now==0&&edit!=null?1:now;}))return;}foreach(var row in selected){var copy=Clone(row);copy.Active=active;store.SaveProduct(copy);}RefreshProducts();Log($"{selected.Count} ürün yerel havuzda {(active?"aktif":"pasif")} yapıldı. Canlı ilan durumu değiştirilmedi.");}
  void DeleteSelectedProduct(){if(edit==null)throw new InvalidOperationException("Önce ürün seç.");if(!DialogShell.Confirm(this,"Ürünü sil",edit.Name+"\n\nYerel havuzdan silinsin mi? XML içinde varsa sonraki alımda yeniden gelir. Etsy ilanı silinmez.","Sil"))return;store.DeleteProduct(edit);RefreshProducts();Log("Ürün yerel havuzdan silindi.");}
- async Task ExportProductsToXmlAsync(){var dialog=new SaveFileDialog{Filter="XML (*.xml)|*.xml",FileName="urunler.xml"};if(dialog.ShowDialog(this)!=true)return;await ExportProductsToXmlFileAsync(dialog.FileName);}
+ async Task ExportProductsToXmlAsync(){var dialog=new SaveFileDialog{Filter="XML (*.xml)|*.xml",FileName=ExportFileNames.Build("urunler","xml")};if(dialog.ShowDialog(this)!=true)return;await WriteProductsXmlAsync(dialog.FileName,overwrite:true);}
  // Split from ExportProductsToXmlAsync so tests can drive the actual export without the real SaveFileDialog.
- async Task ExportProductsToXmlFileAsync(string path)
+ Task ExportProductsToXmlFileAsync(string path)=>WriteProductsXmlAsync(path,overwrite:false);
+ async Task WriteProductsXmlAsync(string path,bool overwrite)
  {
   var started=DateTime.UtcNow;var q=search.Text.Trim();var filter=productFilter;
   var first=await Task.Run(()=>store.Search(q,0,1000,filter));
@@ -202,7 +203,7 @@ public partial class MainWindow : Window
   for(var offset=1000;offset<first.Total;offset+=1000)all.AddRange((await Task.Run(()=>store.Search(q,offset,1000,filter))).Items);
   if(all.Count==0)throw new InvalidOperationException("Aktarılacak ürün yok.");
   var xml=await XmlCatalogExporter.ExportAsync(all,XmlCatalogExporter.StandardTemplate);
-  File.WriteAllText(path,xml);
+  var temporary=path+".tmp-"+Guid.NewGuid().ToString("N");try{File.WriteAllText(temporary,xml);ExportFiles.Commit(temporary,path,overwrite);}finally{if(File.Exists(temporary))File.Delete(temporary);}
   new ReportRunStore(dataDirectory).Record("products-xml",started,ReportRunState.Succeeded,all.Count);
   Log($"{all.Count} ürün XML olarak dışa aktarıldı: {path}");
  }
@@ -503,7 +504,7 @@ public partial class MainWindow : Window
   var right=new StackPanel();right.Children.Add(Heading("Havuz → Etsy taslağı"));right.Children.Add(Hint("Havuzda ürün seç, şablonu kontrol et ve taslağı oluştur. Ürün başlığı ve açıklaması havuzdaki düzenlenmiş değerlerden alınır."));right.Children.Add(Button("Seçili ürünü kontrol et",CheckDraft));right.Children.Add(draftStatus);right.Children.Add(AsyncButton("Seçili ürüne Etsy taslağı oluştur",CreateDraftAsync));right.Children.Add(Hint("Taslak yayınlanmaz. Ürünün ilk görseli yüklenir (adresler | ile ayrılır; HTTPS veya yerel file:/// desteklenir). Ek görseller/video ve varyant/SKU envanteri Etsy üzerinden tamamlanmalı."));right.Children.Add(Heading("İlanı elle eşleştir"));right.Children.Add(Hint("Sonucu belirsiz bir oluşturma işleminde Etsy ilanları sekmesinden oluşan ilanı kontrol et. İlanı ve havuz ürününü seçip bağla."));right.Children.Add(Button("Seçili Etsy ilanını seçili ürüne bağla",LinkListing));Tab("Global Etsy şablonu",Split(Scroll(templateEditor),Scroll(right),550));
  }
  void LoadSourceTemplate(){var dialog=new OpenFileDialog{Filter="MonoBridge XML şablonu (*.json)|*.json",InitialDirectory=Path.Combine(AppContext.BaseDirectory,"templates")};if(dialog.ShowDialog(this)!=true)return;if(new FileInfo(dialog.FileName).Length>1024*1024)throw new InvalidOperationException("Şablon dosyası 1 MB sınırını aşıyor.");var s=JsonSerializer.Deserialize<XmlSource>(File.ReadAllText(dialog.FileName))??throw new InvalidOperationException("Şablon okunamadı.");s.Id=Guid.NewGuid().ToString("N");s.AutoImport=false;s.LastRunUtc=null;s.LastStatus="Şablondan açıldı; adresi ve eşleştirmeyi kontrol edin.";XmlCatalog.ValidateSource(s);SetSource(s);Log("XML şablonu açıldı; kaynak adresini gir ve önizle.");}
- void ExportSourceTemplate(){var s=Clone(CurrentSource());s.AutoImport=false;s.LastRunUtc=null;s.LastStatus="";var dialog=new SaveFileDialog{Filter="XML şablonu (*.json)|*.json",FileName="xml-sablonu.json"};if(dialog.ShowDialog(this)==true){File.WriteAllText(dialog.FileName,JsonSerializer.Serialize(s,new JsonSerializerOptions{WriteIndented=true}));Log("XML alan ve kural şablonu kaydedildi. Şifreler dışa aktarılmadı.");}}
+ void ExportSourceTemplate(){var s=Clone(CurrentSource());s.AutoImport=false;s.LastRunUtc=null;s.LastStatus="";var dialog=new SaveFileDialog{Filter="XML şablonu (*.json)|*.json",FileName=ExportFileNames.Build("xml-sablonu","json")};if(dialog.ShowDialog(this)==true){File.WriteAllText(dialog.FileName,JsonSerializer.Serialize(s,new JsonSerializerOptions{WriteIndented=true}));Log("XML alan ve kural şablonu kaydedildi. Şifreler dışa aktarılmadı.");}}
  static T Clone<T>(T item)=>JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(item))!;
  static void ValidBindings(DependencyObject root){if(Validation.GetHasError(root))throw new InvalidOperationException("Kırmızı işaretli sayı alanlarını düzelt.");for(int i=0;i<VisualTreeHelper.GetChildrenCount(root);i++)ValidBindings(VisualTreeHelper.GetChild(root,i));}
  void BindSource(){sourceGeneral.DataContext=null;sourceRules.DataContext=null;sourceGeneral.DataContext=source;sourceRules.DataContext=source;}

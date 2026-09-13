@@ -74,7 +74,7 @@ public static class RejectedRowsExport
     }
 
     /// <summary>UTF-8 (with BOM, so Excel opens it) CSV with the stable header; atomic; cancellable per row.</summary>
-    public static RejectedRowsExportResult WriteCsv(string path, IReadOnlyList<RejectedRow> rows, CancellationToken cancellationToken = default)
+    public static RejectedRowsExportResult WriteCsv(string path, IReadOnlyList<RejectedRow> rows, CancellationToken cancellationToken = default, bool overwrite = false)
     {
         ArgumentNullException.ThrowIfNull(rows);
         if (string.IsNullOrWhiteSpace(path)) return RejectedRowsExportResult.Failed("Dosya yolu boş.");
@@ -92,7 +92,7 @@ public static class RejectedRowsExport
                     writer.WriteLine(string.Join(",", new[] { row.RowNumber.ToString(CultureInfo.InvariantCulture), row.ReasonCode, row.Field, row.SafeValue, row.Message }.Select(Csv)));
                 }
             }
-            File.Move(temporary, path, true);
+            ExportFiles.Commit(temporary, path, overwrite);
             return RejectedRowsExportResult.Ok(rows.Count);
         }
         catch (OperationCanceledException) { return RejectedRowsExportResult.WasCancelled; }
