@@ -28,7 +28,7 @@ public static class SettingsPanel
         var categories = SettingsTaxonomy.Visible(context.RouteExists);
         var root = new DockPanel { Margin = new Thickness(DesignTokens.SpacePage), LastChildFill = true };
         var top = new StackPanel(); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
-        top.Children.Add(new TextBlock { Text = "Ayarlar", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 8, 4, 6) });
+        top.Children.Add(new TextBlock { Text = "Ayarlar", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(4, 8, 4, 6) });
         top.Children.Add(Hint("Var olan ayarlar tek ağaçta: her giriş, ayarı sahiplenen ekranı açar. Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindeki maskeli alanlarda düzenlenir; bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
         // #856: the validation banner sits above the search, under the title, so an issue is the first thing on the page.
         var banner = new StackPanel { Tag = "settings-banner-host", Visibility = Visibility.Collapsed }; top.Children.Add(banner);
@@ -51,7 +51,7 @@ public static class SettingsPanel
         void ShowEntries(string title, string description, IEnumerable<(SettingsCategory Category, SettingsEntry Entry)> entries, bool nameCategory)
         {
             content.Children.Clear();
-            content.Children.Add(new TextBlock { Tag = "settings-content-title", Text = title, FontSize = 16, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2) });
+            content.Children.Add(new TextBlock { Tag = "settings-content-title", Text = title, FontSize = DesignTokens.TextSubsectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2) });
             if (description.Length > 0) content.Children.Add(Hint(description));
             var any = false;
             foreach (var (category, entry) in entries) { content.Children.Add(Row(category, entry, context, nameCategory)); any = true; }
@@ -129,8 +129,8 @@ public static class SettingsPanel
         var label = new TextBlock { Text = (nameCategory ? category.Label + " › " : "") + entry.Label + (dirty is null ? "" : " " + DirtyMark), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
         body.Children.Add(label);
         body.Children.Add(new TextBlock { Text = entry.Description, TextWrapping = TextWrapping.Wrap, Opacity = 0.9, Margin = new Thickness(0, 2, 0, 4) });
-        if (dirty is not null) body.Children.Add(new TextBlock { Tag = "settings-dirty-badge", Text = $"{DirtyMark} {dirty.Summary}", TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = SeverityStyle.AccentBrush(SeverityLevel.Warning, SeverityStyle.IsHighContrast), Margin = new Thickness(0, 0, 0, 4) });
-        if (entry.SecretBearing) body.Children.Add(new TextBlock { Tag = "settings-secret-badge", Text = "🔒 " + SecretBadge, TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.85, Margin = new Thickness(0, 0, 0, 4) });
+        if (dirty is not null) body.Children.Add(new TextBlock { Tag = "settings-dirty-badge", Text = $"{DirtyMark} {dirty.Summary}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = SeverityStyle.AccentBrush(SeverityLevel.Warning, SeverityStyle.IsHighContrast), Margin = new Thickness(0, 0, 0, 4) });
+        if (entry.SecretBearing) body.Children.Add(new TextBlock { Tag = "settings-secret-badge", Text = "🔒 " + SecretBadge, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Opacity = 0.85, Margin = new Thickness(0, 0, 0, 4) });
         if (entry.Inline)
         {
             var inline = Inline(entry, context.Directory);
@@ -156,5 +156,5 @@ public static class SettingsPanel
         _ => null,
     };
 
-    static TextBlock Hint(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)), Margin = new Thickness(4, 4, 4, 8) };
+    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 4, 4, 8) }, TextRole.Hint);
 }

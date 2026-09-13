@@ -10,7 +10,7 @@ public static class AllegroPanel
     public static FrameworkElement Create(string? directory = null)
     {
         var store = new AllegroSettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "allegro.bin")); var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        var root = new StackPanel { Margin = new Thickness(18), MaxWidth = 820 }; root.Children.Add(new TextBlock { Text = "Allegro OAuth bağlantısı", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10) });
+        var root = new StackPanel { Margin = new Thickness(18), MaxWidth = 820 }; root.Children.Add(new TextBlock { Text = "Allegro OAuth bağlantısı", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(0, 0, 0, 10) });
         root.Children.Add(new TextBlock { Text = "Allegro public API ürün ve sipariş okumaları bu panelden salt okunur doğrulanır. OAuth bilgileri DPAPI ile şifrelenir; canlı yazma/fulfillment yoktur.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 0, 0, 12) });
         var client = Field(root, "Client ID"); var secret = Password(root, "Client secret"); var redirect = Field(root, "Redirect URI (HTTPS)"); var token = Password(root, "Access token"); var refresh = Password(root, "Refresh token"); var state = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 8, 0, 8) }; root.Children.Add(state);
         AllegroSettings Read() => new(client.Text.Trim(), secret.Password, redirect.Text.Trim(), token.Password, refresh.Password, false);

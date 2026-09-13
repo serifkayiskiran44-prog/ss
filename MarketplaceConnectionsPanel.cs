@@ -64,7 +64,7 @@ public static class MarketplaceConnectionsPanel
         channel.SelectedIndex = 0; UpdateCapabilities(); Show(null);
 
         var form = new StackPanel { Margin = new Thickness(12) };
-        form.Children.Add(new TextBlock { Text = "Seçili mağaza bağlantısı", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 4, 4, 10) });
+        form.Children.Add(new TextBlock { Text = "Seçili mağaza bağlantısı", FontSize = DesignTokens.TextSubsectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(4, 4, 4, 10) });
         AddLabel(form, "Kanal", channel); AddLabel(form, "Mağaza kimliği", shop); AddLabel(form, "Görünen ad", display); form.Children.Add(enabled);
         form.Children.Add(capability); form.Children.Add(status);
         var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 4) };

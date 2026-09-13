@@ -13,7 +13,7 @@ public static class ApiHealthPanel
         var connections = new MarketplaceConnectionStore(directory);
         var root = new DockPanel { Margin = new Thickness(12) };
         var top = new StackPanel(); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
-        top.Children.Add(Text("API bağlantı sağlığı", 22));
+        top.Children.Add(Text("API bağlantı sağlığı", TextRole.SectionTitle));
         top.Children.Add(Text("Auth, erişilebilirlik, rate-limit, son başarılı istek ve güvenli hata sınıflarını tek görünümde izleyin. Salt okunur testler Mağaza bağlantıları ekranındaki mevcut resmi connector akışından çalışır; bu merkez endpoint uydurmaz ve credential göstermez."));
         var bar = new WrapPanel(); top.Children.Add(bar);
         var query = new TextBox { Width = 220, ToolTip = "Kanal, mağaza, durum veya hata ara" };
@@ -68,6 +68,6 @@ public static class ApiHealthPanel
         };
         Reload(); return root;
     }
-    static TextBlock Text(string value, int size = 12) => new() { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 7), Foreground = Brushes.DarkSlateGray };
+    static TextBlock Text(string value, TextRole role = TextRole.Body) => TextStyles.Apply(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 7), Foreground = Brushes.DarkSlateGray }, role);
     static Button Button(string text) => new() { Content = text, Margin = new Thickness(3, 5, 3, 5) };
 }

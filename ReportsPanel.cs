@@ -109,8 +109,8 @@ public static class ReportsPanel
         return (window is null ? dialog.ShowDialog() : dialog.ShowDialog(window)) == true ? dialog.FileName : null;
     }
     static TextBlock Line(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 1) };
-    static TextBlock Heading(string text) => new() { Text = text, FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 8, 4, 12) };
-    static TextBlock Hint(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)), Margin = new Thickness(4, 8, 4, 8) };
+    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 12) }, TextRole.SectionTitle);
+    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 8) }, TextRole.Hint);
     static Button Button(ErrorSurface errors, string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { errors.Clear(); action(); } catch (Exception error) { errors.Show(error); } }; return button; }
     static ScrollViewer Scroll(UIElement content) => new() { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };
 }

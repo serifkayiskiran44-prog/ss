@@ -103,8 +103,8 @@ public static class ChannelListingMatrixPanel
         target.ItemsSource = matrix.Rows;
     }
     static void MatrixRowLoaded(object? sender, DataGridRowEventArgs e) { if (e.Row.Item is ChannelMatrixRow row) System.Windows.Automation.AutomationProperties.SetName(e.Row, $"{row.ProductName} ({row.Sku}): {row.Problems} sorunlu mağaza"); }
-    static TextBlock Heading(string text) => new() { Text = text, FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 8, 4, 12) };
-    static TextBlock Hint(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)), Margin = new Thickness(4, 8, 4, 8) };
+    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 12) }, TextRole.SectionTitle);
+    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 8) }, TextRole.Hint);
     static Button Button(ErrorSurface errors, string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { errors.Clear(); action(); } catch (Exception error) { errors.Show(error, null, "connections", "Bağlantılara git"); } }; return button; }
     static Button AsyncButton(ErrorSurface errors, string text, Func<Task> action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += async (_, _) => { try { button.IsEnabled = false; errors.Clear(); await action(); } catch (Exception error) { errors.Show(error, action, "connections", "Bağlantılara git"); } finally { button.IsEnabled = true; } }; return button; }
     static ScrollViewer Scroll(UIElement content) => new() { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };

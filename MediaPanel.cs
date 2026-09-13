@@ -207,8 +207,8 @@ public static class MediaPanel
         return Scroll(panel);
     }
 
-    static TextBlock Heading(string text) => new() { Text = text, FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 8, 4, 12) };
-    static TextBlock Hint(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)), Margin = new Thickness(4, 8, 4, 8) };
+    static TextBlock Heading(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 12) }, TextRole.SectionTitle);
+    static TextBlock Hint(string text) => TextStyles.Apply(new TextBlock { Text = text, Margin = new Thickness(4, 8, 4, 8) }, TextRole.Hint);
     static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += (_, _) => { try { action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Görsel merkezi", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
     static Button AsyncButton(string text, Func<Task> action) { var button = new Button { Content = text, Margin = new Thickness(3) }; button.Click += async (_, _) => { try { button.IsEnabled = false; await action(); } catch (Exception error) { MessageBox.Show(MarketplaceConnectionStore.Redact(error.Message), "Görsel merkezi", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { button.IsEnabled = true; } }; return button; }
     static ScrollViewer Scroll(UIElement content) => new() { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };

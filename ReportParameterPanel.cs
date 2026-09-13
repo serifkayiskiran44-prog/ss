@@ -47,7 +47,7 @@ public static class ReportParameterPanel
         var definition = context.Definition; var schema = ReportParameters.SchemaFor(definition); var module = ReportCatalog.FilterModulePrefix + definition.Key;
         var allowed = context.AllowedStoreKeys();
         var root = new StackPanel { Tag = "report-setup", Margin = new Thickness(12) };
-        root.Children.Add(new TextBlock { Tag = "report-setup-title", Text = definition.Title, FontSize = 16, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        root.Children.Add(new TextBlock { Tag = "report-setup-title", Text = definition.Title, FontSize = DesignTokens.TextSubsectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, TextWrapping = TextWrapping.Wrap });
         root.Children.Add(new TextBlock { Text = definition.Purpose, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 10), Opacity = 0.9 });
 
         var storeItems = (allowed ?? Array.Empty<string>()).Select(k => new ReportStoreOption(k, ReportParameters.StoreLabel(k))).ToList();
@@ -148,7 +148,7 @@ public static class ReportParameterPanel
             {
                 var row = new DockPanel { Tag = "report-run-stage-" + stage.Stage.ToString().ToLowerInvariant(), Margin = new Thickness(0, 1, 0, 1) };
                 var label = new TextBlock { Text = $"{ReportRunProgressState.Glyph(stage.Status)} {stage.Label}", Width = 120, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(label, Dock.Left); row.Children.Add(label);
-                var counter = new TextBlock { Tag = "report-run-counter", Text = (stage.Counter.Length > 0 ? stage.Counter + " · " : "") + ReportRunProgressState.StatusWord(stage.Status) + (stage.Elapsed > TimeSpan.Zero ? $" · {stage.Elapsed.TotalSeconds:0.#} sn" : ""), Width = 150, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 }; DockPanel.SetDock(counter, Dock.Right); row.Children.Add(counter);
+                var counter = new TextBlock { Tag = "report-run-counter", Text = (stage.Counter.Length > 0 ? stage.Counter + " · " : "") + ReportRunProgressState.StatusWord(stage.Status) + (stage.Elapsed > TimeSpan.Zero ? $" · {stage.Elapsed.TotalSeconds:0.#} sn" : ""), Width = 150, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, FontSize = DesignTokens.TextCaptionSize }; DockPanel.SetDock(counter, Dock.Right); row.Children.Add(counter);
                 var bar = new ProgressBar { Tag = "report-run-bar-" + stage.Stage.ToString().ToLowerInvariant(), Height = 10, Margin = new Thickness(6, 0, 6, 0), Minimum = 0, Maximum = 100, IsIndeterminate = stage.IsIndeterminate, Value = stage.Percent ?? (stage.Status == ReportRunStageStatus.Done ? 100 : 0) };
                 AutomationProperties.SetName(bar, $"{stage.Label}: {ReportRunProgressState.StatusWord(stage.Status)}" + (stage.Percent is { } pc ? $", yüzde {pc:0}" : stage.Counter.Length > 0 ? ", " + stage.Counter : ""));
                 row.Children.Add(bar); progressRows.Children.Add(row);

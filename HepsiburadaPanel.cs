@@ -10,7 +10,7 @@ public static class HepsiburadaPanel
     {
         var store = new HepsiburadaSettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "hepsiburada.bin"));
         var root = new StackPanel { Margin = new Thickness(18), MaxWidth = 820 };
-        root.Children.Add(new TextBlock { Text = "Hepsiburada bağlantısı", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10) });
+        root.Children.Add(new TextBlock { Text = "Hepsiburada bağlantısı", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(0, 0, 0, 10) });
         root.Children.Add(new TextBlock { Text = "Merchant ve API bilgileri DPAPI ile şifrelenir. Resmi sözleşme doğrulanmadan ürün, stok, fiyat veya sipariş isteği oluşturulmaz.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 0, 0, 12) });
         var merchant = Field(root, "Merchant ID"); var username = Field(root, "API kullanıcı adı"); var password = Password(root, "API şifresi"); var agent = Field(root, "User-Agent");
         var state = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 8, 0, 8) }; root.Children.Add(state);

@@ -11,7 +11,7 @@ public static class TrendyolPanel
     {
         var store = new TrendyolSettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "trendyol.bin"));
         var root = new StackPanel { Margin = new Thickness(18), MaxWidth = 820 };
-        root.Children.Add(new TextBlock { Text = "Trendyol bağlantısı", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10) });
+        root.Children.Add(new TextBlock { Text = "Trendyol bağlantısı", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(0, 0, 0, 10) });
         root.Children.Add(new TextBlock { Text = "API bilgileri DPAPI ile şifrelenir. Resmi sözleşme doğrulanmadan ürün, stok, fiyat veya sipariş isteği oluşturulmaz.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 0, 0, 12) });
         var supplier = Field(root, "Supplier ID"); var key = Field(root, "API key");
         // #855: the secret standard -- masked, paste-cleaned, never copied, presence only for a saved value, kept when left empty.

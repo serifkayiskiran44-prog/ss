@@ -130,8 +130,8 @@ public partial class MainWindow {
   productPriceSummaryPanel.Children.Clear();
   if (product is null) return;
   var summary = ProductPriceSummary.Build(product, DateTime.UtcNow);
-  var headline = new TextBlock { FontSize = 20, FontWeight = FontWeights.SemiBold, Text = summary.SalePrice, VerticalAlignment = VerticalAlignment.Center };
-  var currency = new TextBlock { Text = " " + summary.Currency, FontSize = 12, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(3, 0, 0, 3), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) };
+  var headline = new TextBlock { FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Text = summary.SalePrice, VerticalAlignment = VerticalAlignment.Center };
+  var currency = new TextBlock { Text = " " + summary.Currency, FontSize = DesignTokens.TextBodySize, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(3, 0, 0, 3), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) };
   var priceLine = new StackPanel { Orientation = Orientation.Horizontal, Children = { headline, currency } };
   productPriceSummaryPanel.Children.Add(priceLine);
   var marginBrush = summary.MarginLevel switch
@@ -142,10 +142,10 @@ public partial class MainWindow {
    _ => new SolidColorBrush(Color.FromRgb(87, 112, 125)),
   };
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Kâr (yaklaşık): {summary.Margin}", Foreground = marginBrush, FontWeight = FontWeights.SemiBold });
-  productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Son hesaplama: {summary.Calculated}", FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Son hesaplama: {summary.Calculated}", FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
   foreach (var warning in summary.Warnings)
    productPriceSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
-  productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = 10, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)), Margin = new Thickness(0, 4, 0, 0) });
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)), Margin = new Thickness(0, 4, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productPriceSummaryPanel, $"{summary.SalePrice} {summary.Currency}, kâr {summary.Margin}");
  }
  // Product card stock composition (#799). The available figure comes from CatalogStore.PreviewStock -- the owner
@@ -167,7 +167,7 @@ public partial class MainWindow {
   var summary = ProductStockSummary.Build(product, policy, projected, DateTime.UtcNow);
   productStockSummaryPanel.Children.Add(new TextBlock { Text = $"{summary.Glyph} {summary.Label}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
   productStockSummaryPanel.Children.Add(new TextBlock { Text = $"Elde: {summary.OnHand} · Kanala açık: {summary.Available} · Tutulan: {summary.Withheld}", TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
-  productStockSummaryPanel.Children.Add(new TextBlock { Text = $"Güvenlik payı: {summary.SafetyBuffer} · Üst sınır: {summary.MaximumCap} · Güncelleme: {summary.Updated}", FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+  productStockSummaryPanel.Children.Add(new TextBlock { Text = $"Güvenlik payı: {summary.SafetyBuffer} · Üst sınır: {summary.MaximumCap} · Güncelleme: {summary.Updated}", FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
   foreach (var warning in summary.Warnings)
    productStockSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productStockSummaryPanel, $"{summary.Label}, elde {summary.OnHand}, kanala açık {summary.Available}");
@@ -245,9 +245,9 @@ public partial class MainWindow {
   {
    var rows = actionable.Where(f => f.Section == section.Key).ToList();
    if (rows.Count == 0) continue;
-   productValidationPanel.Children.Add(new TextBlock { Text = section.Label, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 4, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+   productValidationPanel.Children.Add(new TextBlock { Text = section.Label, FontSize = DesignTokens.TextCaptionSize, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 4, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
    foreach (var finding in rows)
-    productValidationPanel.Children.Add(new TextBlock { Text = SeverityStyle.For(SeverityStyle.FromValidation(finding.Severity), highContrast).Badge + " · " + finding.Message, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = SeverityStyle.AccentBrush(SeverityStyle.FromValidation(finding.Severity), highContrast) });
+    productValidationPanel.Children.Add(new TextBlock { Text = SeverityStyle.For(SeverityStyle.FromValidation(finding.Severity), highContrast).Badge + " · " + finding.Message, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = SeverityStyle.AccentBrush(SeverityStyle.FromValidation(finding.Severity), highContrast) });
   }
   System.Windows.Automation.AutomationProperties.SetName(productValidationPanel, result.Summary);
  }
@@ -313,7 +313,7 @@ public partial class MainWindow {
   productProvenanceExpander.Header = $"Köken · {view.Headline}";
   productProvenanceBody.Children.Add(new TextBlock { Text = view.SourceSummary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
   foreach (var row in view.Rows)
-   productProvenanceBody.Children.Add(new TextBlock { Text = $"{row.Field}: {row.Origin} — {row.Detail}", TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 2, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+   productProvenanceBody.Children.Add(new TextBlock { Text = $"{row.Field}: {row.Origin} — {row.Detail}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(0, 2, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
   foreach (var warning in view.Warnings)
    productProvenanceBody.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 4, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productProvenanceExpander, "Alan kökenleri: " + view.Headline);

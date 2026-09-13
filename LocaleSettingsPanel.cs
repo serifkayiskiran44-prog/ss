@@ -11,7 +11,7 @@ public static class LocaleSettingsPanel
     public static FrameworkElement Create(string? directory = null, SettingsEditState? editState = null)
     {
         var store = new LocaleSettingsStore(directory); var root = new DockPanel { Margin = new Thickness(12) }; var top = new StackPanel(); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
-        top.Children.Add(Text("Döviz, vergi ve yerel ayarlar", 22)); top.Children.Add(Text("Mağaza bazında hedef para birimi, sayı/tarih kültürü ve KDV metadata'sını tek yerde tutun. Bu merkez muhasebe/hakediş hesaplaması yapmaz; yalnız ürün, XML, Excel ve fiyat preview doğrulamasına kaynak olur."));
+        top.Children.Add(Text("Döviz, vergi ve yerel ayarlar", TextRole.SectionTitle)); top.Children.Add(Text("Mağaza bazında hedef para birimi, sayı/tarih kültürü ve KDV metadata'sını tek yerde tutun. Bu merkez muhasebe/hakediş hesaplaması yapmaz; yalnız ürün, XML, Excel ve fiyat preview doğrulamasına kaynak olur."));
         var form = new WrapPanel(); top.Children.Add(form); var channel = new TextBox { Text = "etsy", Width = 110 }; var shop = new TextBox { Text = "default", Width = 130 }; var currency = new ComboBox { ItemsSource = LocaleSettings.SupportedCurrencies.ToArray(), SelectedItem = "TRY", Width = 80 }; var culture = new ComboBox { ItemsSource = LocaleSettings.SupportedCultures.ToArray(), SelectedItem = "tr-TR", Width = 90 }; var vat = new TextBox { Text = "20", Width = 60 }; var date = new TextBox { Text = "dd.MM.yyyy", Width = 110 };
         foreach (var pair in new[] { ("Kanal", (Control)channel), ("Mağaza", shop), ("Döviz", currency), ("Kültür", culture), ("KDV %", vat), ("Tarih", date) }) { form.Children.Add(new TextBlock { Text = pair.Item1, Margin = new Thickness(4, 7, 2, 0) }); form.Children.Add(pair.Item2); }
         var status = Text(""); status.Tag = "locale-status";
@@ -45,5 +45,5 @@ public static class LocaleSettingsPanel
         var copy = new WrapPanel(); copy.Children.Add(new TextBlock { Text = "Kaynak", Margin = new Thickness(4, 7, 2, 0) }); copy.Children.Add(copyChannel); copy.Children.Add(copyShop); copy.Children.Add(new TextBlock { Text = "Hedef", Margin = new Thickness(10, 7, 2, 0) }); copy.Children.Add(copyToChannel); copy.Children.Add(copyToShop); top.Children.Add(copy); top.Children.Add(status);
         void Reload() => grid.ItemsSource = store.List(); Reload(); tracker?.Snapshot(); return root;
     }
-    static TextBlock Text(string value, int size = 12) => new() { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 7), Foreground = Brushes.DarkSlateGray };
+    static TextBlock Text(string value, TextRole role = TextRole.Body) => TextStyles.Apply(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 7), Foreground = Brushes.DarkSlateGray }, role);
 }

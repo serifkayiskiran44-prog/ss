@@ -86,11 +86,11 @@ public static class FormField
         AutomationProperties.SetLabeledBy(input, label);
         AutomationProperties.SetName(input, AccessibleName(spec));
         root.Children.Add(input);
-        var help = new TextBlock { Text = SafeHelp(spec.Help), TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = HelpBrush, Margin = new Thickness(0, HelpGap, 0, 0) };
+        var help = new TextBlock { Text = SafeHelp(spec.Help), TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = HelpBrush, Margin = new Thickness(0, HelpGap, 0, 0) };
         help.Visibility = help.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         if (help.Text.Length > 0) AutomationProperties.SetHelpText(input, help.Text);
         root.Children.Add(help);
-        var validation = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, HelpGap, 0, 0), Visibility = Visibility.Collapsed };
+        var validation = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(0, HelpGap, 0, 0), Visibility = Visibility.Collapsed };
         AutomationProperties.SetLiveSetting(validation, AutomationLiveSetting.Polite);
         root.Children.Add(validation);
         return new FormFieldControl { Root = root, LabelText = label, Input = input, HelpText = help, ValidationText = validation };

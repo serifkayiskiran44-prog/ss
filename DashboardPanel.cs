@@ -15,7 +15,7 @@ public static class DashboardPanel
         var panel = new StackPanel();
         root.Content = panel;
         var toolbar = new DockPanel { LastChildFill = true, Margin = new Thickness(4, 4, 4, 12) };
-        var title = new TextBlock { Text = "Genel bakış", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = Brushes.DarkSlateGray, VerticalAlignment = VerticalAlignment.Center };
+        var title = new TextBlock { Text = "Genel bakış", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Foreground = Brushes.DarkSlateGray, VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(title, Dock.Left);
         toolbar.Children.Add(title);
         // #809: store filter, persisted per data directory and resolved against the offered list.
@@ -184,8 +184,8 @@ public static class DashboardPanel
             var style = SeverityStyle.For(SeverityStyle.FromAnomaly(card.Severity), SeverityStyle.IsHighContrast);
             var body = new StackPanel();
             body.Children.Add(new TextBlock { Text = $"{style.Glyph} {card.Title} · {card.Count:N0}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = SeverityStyle.AccentBrush(style.Level, SeverityStyle.IsHighContrast) });
-            body.Children.Add(new TextBlock { Text = card.Impact, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
-            body.Children.Add(new TextBlock { Text = $"{card.Age} · kapsam: {card.Scope}", TextWrapping = TextWrapping.Wrap, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+            body.Children.Add(new TextBlock { Text = card.Impact, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
+            body.Children.Add(new TextBlock { Text = $"{card.Age} · kapsam: {card.Scope}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
             var go = new Button { Content = card.NextAction, Tag = card.Route, Margin = new Thickness(0, 4, 0, 0), Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left };
             var drilled = card;
             go.Click += (_, _) => open(drilled);
@@ -234,12 +234,12 @@ public static class DashboardPanel
 
     static void AddCard(Panel parent, string label, string value, string route, Action<string> navigate, DashboardKpiFreshnessInfo? freshness = null)
     {
-        var content = new StackPanel { Children = { new TextBlock { Text = label, FontSize = 12 }, new TextBlock { Text = value, FontSize = 25, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 6, 0, 0) } } };
+        var content = new StackPanel { Children = { new TextBlock { Text = label, FontSize = DesignTokens.TextCaptionSize }, new TextBlock { Text = value, FontSize = DesignTokens.TextKpiSize, FontWeight = DesignTokens.FontWeightKpi, Margin = new Thickness(0, 6, 0, 0) } } };
         if (freshness is not null)
         {
             // Words, not just colour: a stale card must read as stale on a monochrome or high-contrast display.
-            content.Children.Add(new TextBlock { Text = (freshness.IsStale ? "⚠ " : "") + freshness.Label, FontSize = 10, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Foreground = new SolidColorBrush(freshness.IsStale ? Color.FromRgb(160, 82, 22) : Color.FromRgb(87, 112, 125)) });
-            content.Children.Add(new TextBlock { Text = "Kapsam: " + freshness.Scope, FontSize = 10, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+            content.Children.Add(new TextBlock { Text = (freshness.IsStale ? "⚠ " : "") + freshness.Label, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Foreground = new SolidColorBrush(freshness.IsStale ? Color.FromRgb(160, 82, 22) : Color.FromRgb(87, 112, 125)) });
+            content.Children.Add(new TextBlock { Text = "Kapsam: " + freshness.Scope, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
         }
         var button = new Button { Content = content, Focusable = true, HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.White, Foreground = Brushes.DarkSlateGray, BorderBrush = new SolidColorBrush(freshness?.IsStale == true ? Color.FromRgb(196, 132, 22) : Color.FromRgb(220, 227, 234)), MinHeight = 85, Margin = new Thickness(4) };
         button.SetValue(AutomationProperties.NameProperty, freshness is null ? label : $"{label}: {value}, {freshness.Label}, kapsam {freshness.Scope}");

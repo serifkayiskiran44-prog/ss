@@ -10,7 +10,7 @@ public static class AmazonPanel
     {
         var store = new AmazonSettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "amazon.bin"));
         var root = new StackPanel { Margin = new Thickness(18), MaxWidth = 820 };
-        root.Children.Add(new TextBlock { Text = "Amazon SP-API bağlantısı", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10) });
+        root.Children.Add(new TextBlock { Text = "Amazon SP-API bağlantısı", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(0, 0, 0, 10) });
         root.Children.Add(new TextBlock { Text = "Kimlik bilgileri Windows kullanıcı profiline DPAPI ile şifrelenir. Resmi bölge sözleşmesi doğrulanmadan canlı HTTP isteği yapılmaz.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 0, 0, 12) });
         var seller = Field(root, "Seller ID"); var client = Field(root, "LWA Client ID"); var secret = Password(root, "LWA Client Secret"); var refresh = Password(root, "Refresh Token");
         var region = new ComboBox { ItemsSource = new[] { "NA", "EU", "FE" }, SelectedIndex = 1, Width = 150 }; AddLabel(root, "SP-API bölgesi", region);

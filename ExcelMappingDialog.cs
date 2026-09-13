@@ -54,9 +54,9 @@ public static class ExcelMappingDialog
             var labels = new StackPanel { Margin = new Thickness(0, 0, 10, 0) };
             labels.Children.Add(new TextBlock { Text = label, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, MaxWidth = 220 });
             var required = ImportMappingTable.RequiredLabel(key);
-            labels.Children.Add(new TextBlock { Text = (required.Length > 0 ? required : "isteğe bağlı") + " · " + ImportMappingTable.TypeLabel(key), FontSize = 11, Opacity = 0.85, TextWrapping = TextWrapping.Wrap, MaxWidth = 220 });
+            labels.Children.Add(new TextBlock { Text = (required.Length > 0 ? required : "isteğe bağlı") + " · " + ImportMappingTable.TypeLabel(key), FontSize = DesignTokens.TextCaptionSize, Opacity = 0.85, TextWrapping = TextWrapping.Wrap, MaxWidth = 220 });
             head.Children.Add(combo); head.Children.Add(labels);
-            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 3, 0, 0) };
+            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Margin = new Thickness(0, 3, 0, 0) };
             var body = new StackPanel(); body.Children.Add(head); body.Children.Add(status); row.Child = body;
             content.Children.Add(row); combos[key] = combo; statuses[key] = (row, status);
         }

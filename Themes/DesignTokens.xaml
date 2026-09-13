@@ -33,4 +33,25 @@
     <sys:Double x:Key="BorderEmphasis">2</sys:Double>
     <CornerRadius x:Key="CardRadius">6</CornerRadius>
     <CornerRadius x:Key="ShellRadius">7</CornerRadius>
+
+    <!-- Typography scale (#858): one face for text, one for code and diagnostics; the roles' sizes and weights. -->
+    <FontFamily x:Key="FontFamilyBody">Segoe UI</FontFamily>
+    <FontFamily x:Key="FontFamilyMono">Consolas, Courier New</FontFamily>
+    <FontWeight x:Key="FontWeightTitle">SemiBold</FontWeight>
+    <FontWeight x:Key="FontWeightKpi">Bold</FontWeight>
+    <sys:Double x:Key="TextPageTitleSize">25</sys:Double>
+    <sys:Double x:Key="TextSectionTitleSize">20</sys:Double>
+    <sys:Double x:Key="TextSubsectionTitleSize">16</sys:Double>
+    <sys:Double x:Key="TextBodySize">13</sys:Double>
+    <sys:Double x:Key="TextCaptionSize">11</sys:Double>
+    <sys:Double x:Key="TextKpiSize">25</sys:Double>
+    <sys:Double x:Key="TextMonoSize">13</sys:Double>
+
+    <!-- Shared text styles: the roles as styles for XAML; TextStyles.cs applies the same roles in code. -->
+    <Style x:Key="PageTitleText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextPageTitleSize}"/><Setter Property="FontWeight" Value="{StaticResource FontWeightTitle}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style x:Key="SectionTitleText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextSectionTitleSize}"/><Setter Property="FontWeight" Value="{StaticResource FontWeightTitle}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style x:Key="SubsectionTitleText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextSubsectionTitleSize}"/><Setter Property="FontWeight" Value="{StaticResource FontWeightTitle}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style x:Key="BodyText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextBodySize}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style x:Key="CaptionText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextCaptionSize}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style x:Key="KpiText" TargetType="TextBlock"><Setter Property="FontSize" Value="{StaticResource TextKpiSize}"/><Setter Property="FontWeight" Value="{StaticResource FontWeightKpi}"/></Style>
 </ResourceDictionary>

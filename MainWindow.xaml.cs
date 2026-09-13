@@ -52,7 +52,7 @@ public partial class MainWindow : Window
  {
   http=httpClient??new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(60)};
   dataDirectory=directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");startupRecovery=new StartupRecovery(dataDirectory);store=new CatalogStore(dataDirectory);new SyncStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromHours(1));new XmlRunStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromMinutes(10));globalSearchIndex=new GlobalSearchIndexService(dataDirectory);logPath=Path.Combine(dataDirectory,"operations.log");
-  InitializeComponent();uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
+  InitializeComponent();FontFamily=DesignTokens.FontFamilyBody;FontSize=DesignTokens.TextBodySize;uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
   GlobalSearchBox.TextChanged += GlobalSearchBox_TextChanged;
@@ -70,8 +70,8 @@ public partial class MainWindow : Window
   globalSearchTimer.Stop();
   if (GlobalSearchBox.Text.Trim().Length >= 2) globalSearchTimer.Start();
  }
- static TextBlock Hint(string text)=>new(){Text=text,TextWrapping=TextWrapping.Wrap,Foreground=new SolidColorBrush(Color.FromRgb(87,112,125)),Margin=new Thickness(4,8,4,8)};
- static TextBlock Heading(string text)=>new(){Text=text,FontSize=20,FontWeight=FontWeights.SemiBold,Margin=new Thickness(4,8,4,12)};
+ static TextBlock Hint(string text)=>TextStyles.Apply(new TextBlock{Text=text,Margin=new Thickness(4,8,4,8)},TextRole.Hint);
+ static TextBlock Heading(string text)=>TextStyles.Apply(new TextBlock{Text=text,Margin=new Thickness(4,8,4,12)},TextRole.SectionTitle);
  Button Button(string text,Action action){var b=new Button{Content=text};b.Click+=(_,_)=>{try{action();}catch(Exception e){Log(Safe(e), NotificationSeverity.Error);}};return b;}
  Button AsyncButton(string text,Func<Task> action)=>Button(text,()=>_=RunAsync(action));
  static void Label(Panel panel,string text,UIElement control){panel.Children.Add(new TextBlock{Text=text,Margin=new Thickness(4,7,4,0)});panel.Children.Add(control);}
@@ -285,7 +285,7 @@ public partial class MainWindow : Window
   foreach(var stage in snapshot){
    var row=new DockPanel{Margin=new Thickness(0,1,0,1)};var glyph=stage.Status switch{ImportProgressStatus.Done=>"✔",ImportProgressStatus.Running=>"⟳",ImportProgressStatus.Failed=>"✖",ImportProgressStatus.Cancelled=>"⏹",_=>"○"};
    var label=new TextBlock{Text=$"{glyph} {stage.Label}",Width=150,VerticalAlignment=VerticalAlignment.Center};DockPanel.SetDock(label,System.Windows.Controls.Dock.Left);row.Children.Add(label);
-   var counter=new TextBlock{Text=(stage.Counter.Length>0?stage.Counter+" · ":"")+ImportProgressState.StatusWord(stage.Status)+(stage.Elapsed>TimeSpan.Zero?$" · {stage.Elapsed.TotalSeconds:0.#} sn":"")+(stage.Note.Length>0?" · "+stage.Note:""),Width=260,TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center,FontSize=11};DockPanel.SetDock(counter,System.Windows.Controls.Dock.Right);row.Children.Add(counter);
+   var counter=new TextBlock{Text=(stage.Counter.Length>0?stage.Counter+" · ":"")+ImportProgressState.StatusWord(stage.Status)+(stage.Elapsed>TimeSpan.Zero?$" · {stage.Elapsed.TotalSeconds:0.#} sn":"")+(stage.Note.Length>0?" · "+stage.Note:""),Width=260,TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center,FontSize=DesignTokens.TextCaptionSize};DockPanel.SetDock(counter,System.Windows.Controls.Dock.Right);row.Children.Add(counter);
    var bar=new ProgressBar{Height=10,Margin=new Thickness(6,0,6,0),Minimum=0,Maximum=100,IsIndeterminate=stage.IsIndeterminate,Value=stage.Percent??(stage.Status==ImportProgressStatus.Done?100:0),Tag=stage.Stage};
    System.Windows.Automation.AutomationProperties.SetName(bar,$"{stage.Label}: {ImportProgressState.StatusWord(stage.Status)}"+(stage.Percent is {} pc?$", yüzde {pc:0}":stage.Counter.Length>0?", "+stage.Counter:""));
    row.Children.Add(bar);importProgressPanel.Children.Add(row);}
@@ -304,7 +304,7 @@ public partial class MainWindow : Window
   var body=new StackPanel();
   body.Children.Add(new TextBlock{Text=$"{style.Glyph} {c.Headline}",FontWeight=FontWeights.SemiBold,Foreground=accent,TextWrapping=TextWrapping.Wrap});
   body.Children.Add(new TextBlock{Text=c.CountsLine,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,0)});
-  body.Children.Add(new TextBlock{Text=c.DurationLine+" · "+c.Revision,TextWrapping=TextWrapping.Wrap,FontSize=11,Opacity=0.85});
+  body.Children.Add(new TextBlock{Text=c.DurationLine+" · "+c.Revision,TextWrapping=TextWrapping.Wrap,FontSize=DesignTokens.TextCaptionSize,Opacity=0.85});
   body.Children.Add(new TextBlock{Text=c.Detail,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,0)});
   var actions=new WrapPanel{Margin=new Thickness(0,6,0,0)};
   foreach(var action in c.NextActions){var b=new Button{Content=action.Label,Padding=new Thickness(8,2,8,2),Margin=new Thickness(0,0,6,0),Tag=action.Kind};b.Click+=(_,_)=>RunImportNextAction((ImportNextActionKind)b.Tag);actions.Children.Add(b);}
@@ -350,7 +350,7 @@ public partial class MainWindow : Window
   xmlSourceHealthHeadline.Text=$"{style.Glyph} Kaynak sağlığı: {m.Headline}";xmlSourceHealthHeadline.Foreground=accent;xmlSourceHealthPanel.BorderBrush=accent;xmlSourceHealthPanel.BorderThickness=new Thickness(style.BorderWeight);
   xmlSourceHealthLines.Children.Clear();
   foreach(var line in m.Lines){var lineStyle=SeverityStyle.For(line.Level,SeverityStyle.IsHighContrast);var row=new DockPanel{Margin=new Thickness(0,1,0,1)};var label=new TextBlock{Text=line.Label,Width=120,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Top};DockPanel.SetDock(label,System.Windows.Controls.Dock.Left);row.Children.Add(label);
-   var body=new StackPanel();body.Children.Add(new TextBlock{Text=$"{lineStyle.Glyph} {line.Value}",TextWrapping=TextWrapping.Wrap,Foreground=SeverityStyle.AccentBrush(line.Level,SeverityStyle.IsHighContrast)});if(line.Detail.Length>0)body.Children.Add(new TextBlock{Text=line.Detail,TextWrapping=TextWrapping.Wrap,FontSize=11,Opacity=0.85});row.Children.Add(body);
+   var body=new StackPanel();body.Children.Add(new TextBlock{Text=$"{lineStyle.Glyph} {line.Value}",TextWrapping=TextWrapping.Wrap,Foreground=SeverityStyle.AccentBrush(line.Level,SeverityStyle.IsHighContrast)});if(line.Detail.Length>0)body.Children.Add(new TextBlock{Text=line.Detail,TextWrapping=TextWrapping.Wrap,FontSize=DesignTokens.TextCaptionSize,Opacity=0.85});row.Children.Add(body);
    System.Windows.Automation.AutomationProperties.SetName(row,$"{line.Label}: {line.Value}"+(line.Detail.Length>0?". "+line.Detail:""));xmlSourceHealthLines.Children.Add(row);}
   xmlSourceHealthActions.Children.Clear();
   foreach(var action in m.Actions){var b=new Button{Content=action.Label,Padding=new Thickness(8,2,8,2),Margin=new Thickness(0,0,6,0),Tag=action.Kind};b.Click+=(_,_)=>RunSourceHealthAction((SourceHealthActionKind)b.Tag);xmlSourceHealthActions.Children.Add(b);}
@@ -456,7 +456,7 @@ public partial class MainWindow : Window
   mode.SetBinding(ComboBox.SelectedValueProperty,new Binding("PriceMode"){Mode=BindingMode.TwoWay});Label(sourceRules,"Fiyatlandırma modeli",mode);
   var shared=new System.Windows.Controls.Primitives.UniformGrid{Columns=3};foreach(var f in new[]{("Alış dövizi (formülde TRY)","CostCurrency"),("Hedef satış dövizi (USD / EUR…)","Currency"),("Minimum satış (hedef döviz)","MinimumPrice")}){var p=new StackPanel();Field(p,f.Item1,f.Item2);shared.Children.Add(p);}sourceRules.Children.Add(shared);
   var formulaPanel=new StackPanel();formulaPanel.Children.Add(Hint("x = XML'deki TL alış fiyatı. Önce formül TL satış fiyatını üretir; sonra 1 dövizin TL karşılığına bölünür. Basit modeldeki kâr/sabit tutar ayrıca eklenmez."));
-  var box=Field(formulaPanel,"Satış fiyatı formülü (CASE WHEN veya x * 1.40 + 100)","Formula",135);box.FontFamily=new FontFamily("Consolas");box.FontSize=13;
+  var box=Field(formulaPanel,"Satış fiyatı formülü (CASE WHEN veya x * 1.40 + 100)","Formula",135);TextStyles.ApplyMono(box);
   formulaPanel.Children.Add(Button("Gönderdiğim CASE WHEN formülünü yükle",()=>{if(source==null)return;source.Formula=PriceFormula.Example;BindSource();previewRevision="";}));
   var auto=new CheckBox{Content="TCMB kurunu otomatik al (önizleme ve zamanlı XML güncellemesinde)"};auto.SetBinding(CheckBox.IsCheckedProperty,new Binding("AutoFx"){Mode=BindingMode.TwoWay});formulaPanel.Children.Add(auto);
   var fxGrid=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};var ratePanel=new StackPanel();var rateBox=Field(ratePanel,"1 hedef döviz kaç TL? (otomatik veya manuel)","TryPerTargetUnit");rateBox.SetBinding(TextBox.IsReadOnlyProperty,new Binding("IsChecked"){Source=auto});fxGrid.Children.Add(ratePanel);

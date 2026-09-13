@@ -27,7 +27,7 @@ public partial class MainWindow
 
  void BuildNavigation()
  {
-  void Group(string title) => NavigationList.Items.Add(new ListBoxItem { Content=title, IsEnabled=false, Focusable=false, FontSize=10, FontWeight=FontWeights.Bold, Foreground=new SolidColorBrush(Color.FromRgb(130,161,177)), Padding=new Thickness(14,12,4,2) });
+  void Group(string title) => NavigationList.Items.Add(new ListBoxItem { Content=title, IsEnabled=false, Focusable=false, FontSize=DesignTokens.TextCaptionSize, FontWeight=FontWeights.Bold, Foreground=new SolidColorBrush(Color.FromRgb(130,161,177)), Padding=new Thickness(14,12,4,2) });
   void Page(string key,string title,string description,UIElement content,string? label=null)
   {
    var page=new TabItem{Tag=key,Header=title,Content=content};routes.Add(key,page);routeTitles[key]=title;routeDescriptions[key]=description;ModuleTabs.Items.Add(page);

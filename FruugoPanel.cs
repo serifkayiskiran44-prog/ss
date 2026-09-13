@@ -10,7 +10,7 @@ public static class FruugoPanel
     {
         var store = new FruugoSettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "fruugo.bin"));
         var root = new StackPanel { Margin = new Thickness(18), MaxWidth = 820 };
-        root.Children.Add(new TextBlock { Text = "Fruugo bağlantısı", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10) });
+        root.Children.Add(new TextBlock { Text = "Fruugo bağlantısı", FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Margin = new Thickness(0, 0, 0, 10) });
         root.Children.Add(new TextBlock { Text = "Retailer/API bilgileri DPAPI ile şifrelenir. Ürün sözleşmesi doğrulanmadan canlı veri değiştirilmez.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 0, 0, 12) });
         var retailer = Field(root, "Retailer ID"); var username = Field(root, "API kullanıcı adı"); var password = Password(root, "API şifresi");
         var state = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 8, 0, 8) }; root.Children.Add(state);

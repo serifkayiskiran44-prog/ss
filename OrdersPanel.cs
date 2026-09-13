@@ -12,7 +12,7 @@ public static class OrdersPanel
  public static FrameworkElement Create(string? directory=null,Func<Task<EtsyCredentials>>? authorize=null,Action? catalogChanged=null,Action<Func<string,string,string,bool>>? exposeReveal=null)
  {
   var store=new OrdersStore(directory);var catalog=new CatalogStore(directory);var root=new DockPanel{Margin=new Thickness(12)};var top=new StackPanel();DockPanel.SetDock(top,Dock.Top);root.Children.Add(top);
-  top.Children.Add(Text("Siparişler ve kargo takibi",22));
+  top.Children.Add(Text("Siparişler ve kargo takibi",TextRole.SectionTitle));
   top.Children.Add(Text("Etsy siparişleri salt okunur alınır. Yolda / teslim edildi gözlemleri yerel olarak kaydedilir. Ozon ve Navlungo otomatik takip bağlantısı henüz yok."));
   var bar=new WrapPanel();top.Children.Add(bar);var search=new TextBox{Width=220,ToolTip="Sipariş, mağaza, ürün, SKU veya takip numarası ara"};bar.Children.Add(search);
   var filter=new ComboBox{Width=170,ItemsSource=new[]{"Tümü"}.Concat(OrdersRules.States.Select(OrdersRules.Label)).ToArray(),SelectedIndex=0};bar.Children.Add(filter);
@@ -49,8 +49,8 @@ public static class OrdersPanel
   // #837: the detail's header is docked above the scrolling body, so id / store / status / payment / SLA / exceptions stay in view however far the body scrolls.
   var detailHeader=new Border{Tag="order-detail-header",Padding=new Thickness(10,6,10,6),Margin=new Thickness(12,0,0,4),Visibility=Visibility.Collapsed};var detailHost=new DockPanel{Tag="order-detail-host",LastChildFill=true};DockPanel.SetDock(detailHeader,Dock.Top);detailHost.Children.Add(detailHeader);detailHost.Children.Add(scroll);layout.Children.Add(splitter);layout.Children.Add(detailHost);
   void RenderDetailHeader(OrderDetailHeaderModel? m){if(m==null){detailHeader.Visibility=Visibility.Collapsed;detailHeader.Child=null;return;}var hc=SeverityStyle.IsHighContrast;var accent=SeverityStyle.AccentBrush(m.Level,hc);var body=new StackPanel();
-   var title=new TextBlock{Text=$"{m.Glyph} {m.Title}",FontSize=18,FontWeight=FontWeights.SemiBold,TextTrimming=TextTrimming.CharacterEllipsis,ToolTip="Sipariş "+m.FullId,Foreground=accent};body.Children.Add(title);
-   body.Children.Add(new TextBlock{Text=m.Secondary,FontSize=13,TextWrapping=TextWrapping.Wrap});body.Children.Add(new TextBlock{Text=m.Tertiary,FontSize=11,Opacity=0.85,TextWrapping=TextWrapping.Wrap});
+   var title=new TextBlock{Text=$"{m.Glyph} {m.Title}",FontSize=DesignTokens.TextSubsectionTitleSize,FontWeight=DesignTokens.FontWeightTitle,TextTrimming=TextTrimming.CharacterEllipsis,ToolTip="Sipariş "+m.FullId,Foreground=accent};body.Children.Add(title);
+   body.Children.Add(new TextBlock{Text=m.Secondary,FontSize=13,TextWrapping=TextWrapping.Wrap});body.Children.Add(new TextBlock{Text=m.Tertiary,FontSize=DesignTokens.TextCaptionSize,Opacity=0.85,TextWrapping=TextWrapping.Wrap});
    detailHeader.Child=body;detailHeader.BorderBrush=accent;detailHeader.BorderThickness=new Thickness(0,0,0,SeverityStyle.For(m.Level,hc).BorderWeight);detailHeader.Visibility=Visibility.Visible;System.Windows.Automation.AutomationProperties.SetName(detailHeader,m.AutomationText);}
   void ApplyWorkspaceMode(double width){var mode=OrderWorkspaceLayout.Mode(width);if(mode==workspaceMode&&layout.ColumnDefinitions.Count+layout.RowDefinitions.Count>0)return;workspaceMode=mode;layout.ColumnDefinitions.Clear();layout.RowDefinitions.Clear();
    if(mode==OrderWorkspaceMode.SideBySide){layout.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star),MinWidth=OrderWorkspaceLayout.MinListWidth});layout.ColumnDefinitions.Add(new(){Width=GridLength.Auto});layout.ColumnDefinitions.Add(new(){Width=new GridLength(OrderWorkspaceLayout.ClampDetailWidth(detailWidth,width)),MinWidth=OrderWorkspaceLayout.MinDetailWidth});splitter.Width=6;splitter.Height=double.NaN;splitter.ResizeDirection=GridResizeDirection.Columns;Grid.SetRow(grid,0);Grid.SetRow(splitter,0);Grid.SetRow(detailHost,0);Grid.SetColumn(grid,0);Grid.SetColumn(splitter,1);Grid.SetColumn(detailHost,2);}
@@ -80,7 +80,7 @@ public static class OrdersPanel
    var editors=new Dictionary<string,TextBox>();
    foreach(var (field,masked) in PiiReveal.Masked(customer)){
     if(granted==null){var t=new TextBlock{Tag="order-customer-field",Text=$"{field}: {masked}",TextWrapping=TextWrapping.Wrap};System.Windows.Automation.AutomationProperties.SetName(t,$"{field}: maskeli");if(!customer.IsEmpty)body.Children.Add(t);}
-    else{var value=field switch{"Ad"=>customer.Name,"E-posta"=>customer.Email,"Telefon"=>customer.Phone,_=>customer.Address};var tb=new TextBox{Tag="order-customer-edit",Text=value,MaxLength=500};System.Windows.Automation.AutomationProperties.SetName(tb,field);body.Children.Add(new TextBlock{Text=field,FontSize=11,Opacity=0.85});body.Children.Add(tb);editors[field]=tb;}}
+    else{var value=field switch{"Ad"=>customer.Name,"E-posta"=>customer.Email,"Telefon"=>customer.Phone,_=>customer.Address};var tb=new TextBox{Tag="order-customer-edit",Text=value,MaxLength=500};System.Windows.Automation.AutomationProperties.SetName(tb,field);body.Children.Add(new TextBlock{Text=field,FontSize=DesignTokens.TextCaptionSize,Opacity=0.85});body.Children.Add(tb);editors[field]=tb;}}
    var actions=new WrapPanel{Margin=new Thickness(0,4,0,0)};
    if(granted==null){
     var reason=new TextBox{Tag="order-customer-reason",Width=260,ToolTip="Gösterim gerekçesi (denetim günlüğüne yazılır)"};System.Windows.Automation.AutomationProperties.SetName(reason,"Gösterim gerekçesi");
@@ -97,17 +97,17 @@ public static class OrdersPanel
     var due=granted.RemaskAtUtc??DateTime.UtcNow;var wait=due-DateTime.UtcNow;if(wait<TimeSpan.FromMilliseconds(50))wait=TimeSpan.FromMilliseconds(50);
     remaskTimer=new System.Windows.Threading.DispatcherTimer{Interval=wait};remaskTimer.Tick+=(_,_)=>{remaskTimer?.Stop();if(customerBox!=null&&detail.Children.Contains(customerBox)){status.Text="Müşteri verisi otomatik olarak maskelendi.";RenderCustomerSection(o);}};remaskTimer.Start();}
    body.Children.Add(actions);
-   if(statusLine!=null)body.Children.Add(new TextBlock{Tag="order-customer-status",Text=statusLine,TextWrapping=TextWrapping.Wrap,FontSize=11,Foreground=SeverityStyle.AccentBrush(SeverityLevel.Warning,hc)});
+   if(statusLine!=null)body.Children.Add(new TextBlock{Tag="order-customer-status",Text=statusLine,TextWrapping=TextWrapping.Wrap,FontSize=DesignTokens.TextCaptionSize,Foreground=SeverityStyle.AccentBrush(SeverityLevel.Warning,hc)});
    System.Windows.Automation.AutomationProperties.SetName(box,granted==null?"Müşteri verisi maskeli":"Müşteri verisi açık");
    if(customerBox!=null&&detail.Children.Contains(customerBox)){var at=detail.Children.IndexOf(customerBox);detail.Children.RemoveAt(at);detail.Children.Insert(at,box);}else detail.Children.Add(box);customerBox=box;}
   void Edit(OrderSnapshot order,bool isNew=false)
   {
-   editing=order.Copy();var o=editing;Action captureShipment=()=>{};timelineCts?.Cancel();timelineLoadMore=null;detail.Children.Clear();RenderDetailHeader(isNew?null:OrderDetailHeader.Compose(o,pendingByOrder.TryGetValue((o.Marketplace,o.ShopId,o.OrderId),out var pendingCount)?pendingCount:0,DateTimeOffset.UtcNow));detail.Children.Add(Text(isNew?"Yeni yerel sipariş":"Sipariş ayrıntısı",18));
+   editing=order.Copy();var o=editing;Action captureShipment=()=>{};timelineCts?.Cancel();timelineLoadMore=null;detail.Children.Clear();RenderDetailHeader(isNew?null:OrderDetailHeader.Compose(o,pendingByOrder.TryGetValue((o.Marketplace,o.ShopId,o.OrderId),out var pendingCount)?pendingCount:0,DateTimeOffset.UtcNow));detail.Children.Add(Text(isNew?"Yeni yerel sipariş":"Sipariş ayrıntısı",TextRole.SubsectionTitle));
    var marketplace=Field(detail,"Pazaryeri",o.Marketplace,!isNew);var shop=Field(detail,"Mağaza kimliği",o.ShopId,!isNew);var id=Field(detail,"Sipariş numarası",o.OrderId,!isNew);
    bool api=o.Source=="Etsy API";var raw=Field(detail,"Sipariş durumu (ham değer)",o.RawStatus,api);var payment=Field(detail,"Ödeme durumu",o.PaymentStatus,api);
    detail.Children.Add(Text($"Kaynak: {o.Source}\nSon API alımı: {o.SyncLabel}"));
    // #841: the customer section -- masked by default; a reveal needs the policy and a reason, is audited (fields and reason, never a value) and re-masks itself; edits are possible only after a granted reveal.
-   if(!isNew)RenderCustomerSection(o);detail.Children.Add(Text("Ürünler",16));
+   if(!isNew)RenderCustomerSection(o);detail.Children.Add(Text("Ürünler",TextRole.SubsectionTitle));
    // #838: the lines as a reconciliation -- ordered / shipped (what the stock receipt deducted) / returned (the ledger) / cancelled -- with the difference as a state, not a colour.
    if(isNew){foreach(var i in o.Items)detail.Children.Add(Text($"{i.Quantity} × {i.Title} · SKU: {i.Sku}"));}
    else{IReadOnlyDictionary<string,int> returnedBySku;try{returnedBySku=catalog.OrderReturnsApplied(o.Marketplace,o.ShopId,o.OrderId);}catch(Exception){returnedBySku=new Dictionary<string,int>();}
@@ -126,13 +126,13 @@ public static class OrdersPanel
     returnsBody.Children.Add(new TextBlock{Text=$"{SeverityStyle.For(returns.Level,returnsHc).Glyph} İadeler · {returns.Headline}",FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap,Foreground=SeverityStyle.AccentBrush(returns.Level,returnsHc)});
     foreach(var req in returns.Requests){var r=new Border{Tag="order-return-request",Padding=new Thickness(6,2,6,2),Margin=new Thickness(0,2,0,0),BorderBrush=SeverityStyle.AccentBrush(req.Level,returnsHc),BorderThickness=new Thickness(SeverityStyle.For(req.Level,returnsHc).BorderWeight,0,0,0),Focusable=true,Child=new TextBlock{Text=req.Line,TextWrapping=TextWrapping.Wrap}};System.Windows.Input.KeyboardNavigation.SetIsTabStop(r,true);System.Windows.Automation.AutomationProperties.SetName(r,req.Line);returnsBody.Children.Add(r);}
     foreach(var line in returns.Lines){var t=new TextBlock{Tag="order-return-line",Text=line.Line,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,2,0,0),Foreground=SeverityStyle.AccentBrush(line.Level,returnsHc)};System.Windows.Automation.AutomationProperties.SetName(t,line.Line);returnsBody.Children.Add(t);}
-    if(returns.Timeline.Count>0){returnsBody.Children.Add(new TextBlock{Text="Kayıtlı iadeler (eskiden yeniye)",FontSize=11,Opacity=0.85,Margin=new Thickness(0,4,0,0)});foreach(var ev in returns.Timeline)returnsBody.Children.Add(new TextBlock{Tag="order-return-event",Text=ev.Line,TextWrapping=TextWrapping.Wrap,FontSize=11});}
+    if(returns.Timeline.Count>0){returnsBody.Children.Add(new TextBlock{Text="Kayıtlı iadeler (eskiden yeniye)",FontSize=DesignTokens.TextCaptionSize,Opacity=0.85,Margin=new Thickness(0,4,0,0)});foreach(var ev in returns.Timeline)returnsBody.Children.Add(new TextBlock{Tag="order-return-event",Text=ev.Line,TextWrapping=TextWrapping.Wrap,FontSize=DesignTokens.TextCaptionSize});}
     var refund=new TextBlock{Tag="order-return-refund",Text=returns.RefundLine,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,0),FontWeight=FontWeights.SemiBold,Foreground=SeverityStyle.AccentBrush(returns.RefundLevel,returnsHc)};System.Windows.Automation.AutomationProperties.SetName(refund,returns.RefundLine);returnsBody.Children.Add(refund);
-    foreach(var note in returns.Notes){var n=Text(note);n.FontSize=11;returnsBody.Children.Add(n);}
+    foreach(var note in returns.Notes){var n=Text(note);n.FontSize=DesignTokens.TextCaptionSize;returnsBody.Children.Add(n);}
     System.Windows.Automation.AutomationProperties.SetName(returnsBox,"İadeler: "+returns.Headline+". "+returns.RefundLine);detail.Children.Add(returnsBox);}
    if(!api){var product=Field(detail,"Ürün adı (ekle)","");var sku=Field(detail,"SKU","");var qty=Field(detail,"Adet","1");var itemAdd=Button(detail,"Ürünü ekle");itemAdd.Click+=(_,_)=>{if(string.IsNullOrWhiteSpace(product.Text)||!int.TryParse(qty.Text,out int n)||n<=0){status.Text="Ürün adı ve pozitif tam adet girin.";return;}Capture();captureShipment();o.Items.Add(new(){Title=product.Text.Trim(),Sku=sku.Text.Trim(),Quantity=n});Edit(o,isNew);};}
    if(!isNew){
-    detail.Children.Add(Text("Merkezi stok işlemi",16));
+    detail.Children.Add(Text("Merkezi stok işlemi",TextRole.SubsectionTitle));
     var receipt=catalog.GetOrderStockStatus(o.Marketplace,o.ShopId,o.OrderId);
     if(receipt!=null){detail.Children.Add(Text($"Stok işlendi: {receipt.AppliedUtc.ToLocalTime():g}"));foreach(var movement in receipt.Movements)detail.Children.Add(Text($"{movement.Sku}: {movement.StockBefore} → {movement.StockAfter} (−{movement.Quantity})"));}
     else detail.Children.Add(Text("Bu sipariş için stok düşümü kaydı yok. Stoğunu daha önce elle düşürdüğünüz siparişlerde çalıştırmayın."));
@@ -153,7 +153,7 @@ public static class OrdersPanel
      catalogChanged?.Invoke();Edit(saved);status.Text=result.AlreadyApplied?"Bu sipariş zaten işlendi; stok tekrar düşmedi.":"Sipariş stoğu tek işlemde düşüldü. Düşüm yerel ve geçicidir (XML stok kilidi etkinleştirilmedi); dış pazaryerlerine gönderim yapılmadı.";
     }catch(InvalidOperationException ex){status.Text=ex.Message;}catch(ArgumentException ex){status.Text=ex.Message;}catch{status.Text="Stok işlemi tamamlanamadı; kayıtlar korunur. Yenileyip tekrar deneyin.";}};
    }
-   detail.Children.Add(Text("Paketler / gözlem geçmişi",16));
+   detail.Children.Add(Text("Paketler / gözlem geçmişi",TextRole.SubsectionTitle));
    var shipments=new ComboBox{ItemsSource=o.Shipments,DisplayMemberPath="Label",MinWidth=260};
    // #839: the shipping overview -- how many packages, what state and SLA each is in, and the flags (duplicate tracking here or in another order, no tracking); tracking masked here, full in the editor below.
    var shippingSection=OrderShippingSection.Compose(o,trackingSeenElsewhere,DateTimeOffset.UtcNow);var shippingHc=SeverityStyle.IsHighContrast;var shippingBox=new Border{Tag="order-shipping-section",Padding=new Thickness(8,6,8,6),Margin=new Thickness(3,0,3,6),BorderBrush=SeverityStyle.AccentBrush(shippingSection.Level,shippingHc),BorderThickness=new Thickness(SeverityStyle.For(shippingSection.Level,shippingHc).BorderWeight,0,0,0)};var shippingBody=new StackPanel();shippingBox.Child=shippingBody;
@@ -161,7 +161,7 @@ public static class OrdersPanel
    foreach(var row in shippingSection.Rows){var rowStyle=SeverityStyle.For(row.Level,shippingHc);var b=new Button{Tag=row.Id,HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Left,Padding=new Thickness(6,3,6,3),Margin=new Thickness(0,2,0,0),BorderBrush=SeverityStyle.AccentBrush(row.Level,shippingHc),BorderThickness=new Thickness(rowStyle.BorderWeight,0.5,0.5,0.5),Content=new TextBlock{Text=row.Line,TextWrapping=TextWrapping.Wrap},ToolTip=$"{row.StateLabel} · {row.EventCount} gözlem"+(row.HasTrackingUrl?" · takip bağlantısı var":"")};
     System.Windows.Automation.AutomationProperties.SetName(b,$"Paket {row.Id}: {row.Word}, {row.Carrier}, takip {row.TrackingMasked}, {row.SlaLabel}"+(row.Flags.Count>0?". "+string.Join(". ",row.Flags):"")+". Seçmek için etkinleştirin.");
     b.Click+=(_,_)=>{var target=o.Shipments.FirstOrDefault(x=>x.Id==(string)b.Tag);if(target!=null)shipments.SelectedItem=target;};shippingBody.Children.Add(b);}
-   foreach(var note in shippingSection.Notes){var n=Text(note);n.FontSize=11;shippingBody.Children.Add(n);}
+   foreach(var note in shippingSection.Notes){var n=Text(note);n.FontSize=DesignTokens.TextCaptionSize;shippingBody.Children.Add(n);}
    detail.Children.Add(shippingBox);detail.Children.Add(shipments);var shippingArea=new StackPanel();detail.Children.Add(shippingArea);
    void ShipmentEditor(OrderShipment s)
    {
@@ -201,7 +201,7 @@ public static class OrdersPanel
   ReloadViews();Load();detail.Children.Add(Text("Ayrıntıları ve paket geçmişini görmek için listeden bir sipariş seçin. İlk kaydı eklemek için + Yerel sipariş düğmesini kullanın."));return root;
  }
  sealed record StateChoice(string Value,string Label);
- static TextBlock Text(string text,int size=12)=>new(){Text=text,FontSize=size,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(3,4,3,7),Foreground=Brushes.DarkSlateGray};
+ static TextBlock Text(string text,TextRole role=TextRole.Body)=>TextStyles.Apply(new TextBlock{Text=text,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(3,4,3,7),Foreground=Brushes.DarkSlateGray},role);
  static TextBox Field(Panel parent,string label,string value,bool readOnly=false){parent.Children.Add(Text(label));var box=new TextBox{Text=value,IsReadOnly=readOnly};parent.Children.Add(box);return box;}
  static Button Button(Panel parent,string text){var button=new Button{Content=text,Margin=new Thickness(3,5,3,5)};parent.Children.Add(button);return button;}
 }

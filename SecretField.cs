@@ -51,7 +51,7 @@ public static class SecretField
     {
         var box = new PasswordBox { MaxLength = MaxLength };
         var field = FormField.Build(new FormFieldSpec(label, required, help), box);
-        var presence = new TextBlock { Tag = "secret-presence", TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.85, Margin = new Thickness(0, FormField.HelpGap, 0, 0) };
+        var presence = new TextBlock { Tag = "secret-presence", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Opacity = 0.85, Margin = new Thickness(0, FormField.HelpGap, 0, 0) };
         field.Root.Children.Insert(field.Root.Children.IndexOf(field.HelpText) + 1, presence);
         // Copy and cut are refused outright; a PasswordBox has no reveal, so the value leaves only through Resolve.
         CommandManager.AddPreviewCanExecuteHandler(box, (_, e) => { if (e.Command == ApplicationCommands.Copy || e.Command == ApplicationCommands.Cut) { e.CanExecute = false; e.ContinueRouting = false; e.Handled = true; } });

@@ -23,6 +23,9 @@ public static class DesignTokens
         ("CardPadding", typeof(Thickness)), ("HeaderPadding", typeof(Thickness)), ("TabPadding", typeof(Thickness)), ("NavigationItemPadding", typeof(Thickness)), ("NavigationItemMargin", typeof(Thickness)),
         ("ControlMinHeight", typeof(double)), ("RowHeight", typeof(double)),
         ("BorderHairline", typeof(double)), ("BorderEmphasis", typeof(double)), ("CardRadius", typeof(CornerRadius)), ("ShellRadius", typeof(CornerRadius)),
+        // #858: typography
+        ("FontFamilyBody", typeof(System.Windows.Media.FontFamily)), ("FontFamilyMono", typeof(System.Windows.Media.FontFamily)), ("FontWeightTitle", typeof(FontWeight)), ("FontWeightKpi", typeof(FontWeight)),
+        ("TextPageTitleSize", typeof(double)), ("TextSectionTitleSize", typeof(double)), ("TextSubsectionTitleSize", typeof(double)), ("TextBodySize", typeof(double)), ("TextCaptionSize", typeof(double)), ("TextKpiSize", typeof(double)), ("TextMonoSize", typeof(double)),
     };
 
     static ResourceDictionary? component;
@@ -77,4 +80,17 @@ public static class DesignTokens
     public static double BorderEmphasis => D("BorderEmphasis");
     public static CornerRadius CardRadius => R("CardRadius");
     public static CornerRadius ShellRadius => R("ShellRadius");
+
+    // #858: typography
+    public static System.Windows.Media.FontFamily FontFamilyBody => (System.Windows.Media.FontFamily)Resources["FontFamilyBody"];
+    public static System.Windows.Media.FontFamily FontFamilyMono => (System.Windows.Media.FontFamily)Resources["FontFamilyMono"];
+    public static FontWeight FontWeightTitle => (FontWeight)Resources["FontWeightTitle"];
+    public static FontWeight FontWeightKpi => (FontWeight)Resources["FontWeightKpi"];
+    public static double TextPageTitleSize => D("TextPageTitleSize");
+    public static double TextSectionTitleSize => D("TextSectionTitleSize");
+    public static double TextSubsectionTitleSize => D("TextSubsectionTitleSize");
+    public static double TextBodySize => D("TextBodySize");
+    public static double TextCaptionSize => D("TextCaptionSize");
+    public static double TextKpiSize => D("TextKpiSize");
+    public static double TextMonoSize => D("TextMonoSize");
 }
