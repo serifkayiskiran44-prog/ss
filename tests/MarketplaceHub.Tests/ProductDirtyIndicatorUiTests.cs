@@ -87,7 +87,7 @@ public sealed class ProductDirtyIndicatorUiTests
             Window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
             {
                 var dialog = Window.OwnedWindows.Cast<Window>().SingleOrDefault();
-                if (dialog?.Content is StackPanel panel)
+                if (dialog?.Content is Panel panel)
                     panel.Children.OfType<Panel>().SelectMany(x => x.Children.OfType<Button>()).FirstOrDefault(x => (string)x.Content == "Vazgeç")?.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             }));
             Window.Close();

@@ -207,7 +207,8 @@ public sealed class ProductCardDirtyDraftTests
                 var dialog = Window.OwnedWindows.Cast<Window>().SingleOrDefault();
                 if (dialog == null) return;
                 Prompts++;
-                var panel = (StackPanel)dialog.Content;
+                // #818: the prompt is the standard dialog shell (a DockPanel with a button bar), so walk any panel root.
+                var panel = (Panel)dialog.Content;
                 var buttons = panel.Children.OfType<Panel>().SelectMany(x => x.Children.OfType<Button>());
                 buttons.Single(x => (string)x.Content == choice).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }));

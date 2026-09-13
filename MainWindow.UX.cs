@@ -67,8 +67,8 @@ public partial class MainWindow
 
     void ShowGlobalResults(string query, IReadOnlyList<GlobalSearchHit> hits)
     {
-        var window = new Window { Owner = this, Title = $"Arama · {query}", Width = 720, Height = 560, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.CanResize };
-        var root = new DockPanel { Margin = new Thickness(14) };
+        Window window = null!;
+        var root = new DockPanel { Margin = new Thickness(0) };
         var header = new TextBlock { Text = hits.Count == 0 ? "Eşleşme bulunamadı." : $"{hits.Count} eşleşme · bir sonuca tıklayarak ilgili ekrana git", Margin = new Thickness(3, 3, 3, 10), Foreground = System.Windows.Media.Brushes.DarkSlateGray };
         DockPanel.SetDock(header, System.Windows.Controls.Dock.Top); root.Children.Add(header);
         var list = new ListBox { BorderThickness = new Thickness(0) };
@@ -86,6 +86,9 @@ public partial class MainWindow
             };
             list.Items.Add(button);
         }
-        root.Children.Add(list); window.Content = root; window.ShowDialog();
+        root.Children.Add(list);
+        // #818: the standard dialog shell -- fitted to the work area, resizable, body scrolls, Kapat on Escape.
+        window = DialogShell.Create(this, $"Arama · {query}", root, new DialogShell.Action[] { new("Kapat", IsCancel: true) }, 720, 560);
+        window.ShowDialog();
     }
 }

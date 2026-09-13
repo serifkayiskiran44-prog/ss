@@ -55,19 +55,13 @@ public partial class MainWindow
             Text = $"{edit?.Sku}: Kaydedilmemiş değişiklikler var.\nKaydetmeden çıkmak istiyor musun?",
             TextWrapping = TextWrapping.Wrap, MaxWidth = 400, Margin = new Thickness(0, 0, 0, 16)
         });
-        var actions = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
-        var dialog = new Window {
-            Owner = this, Title = "Kaydedilmemiş değişiklikler", Content = body,
-            SizeToContent = SizeToContent.WidthAndHeight, ResizeMode = ResizeMode.NoResize,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false
-        };
-        foreach (var label in new[] { "Kaydet", "Vazgeç", "İptal" })
+        // #818: the standard shell; discarding is destructive, so Enter stays on İptal as before.
+        var dialog = DialogShell.Create(this, "Kaydedilmemiş değişiklikler", body, new DialogShell.Action[]
         {
-            var button = new Button { Content = label, MinWidth = 85, Margin = new Thickness(4), IsCancel = label == "İptal", IsDefault = label == "İptal" };
-            button.Click += (_, _) => { decision = label; dialog.Close(); };
-            actions.Children.Add(button);
-        }
-        body.Children.Add(actions);
+            new("İptal", IsCancel: true, OnClick: () => { decision = "İptal"; return true; }),
+            new("Vazgeç", OnClick: () => { decision = "Vazgeç"; return true; }),
+            new("Kaydet", IsPrimary: true, OnClick: () => { decision = "Kaydet"; return true; }),
+        }, 460, 240, destructive: true);
         dialog.ShowDialog();
         return decision;
     }

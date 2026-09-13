@@ -169,7 +169,10 @@ public sealed class MarketplaceConnectionStore
         reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetInt32(4) == 1,
         reader.GetString(5), reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), reader.GetString(7));
 
-    internal static string Redact(string value)
+    // #818: the 500-character cap is right for a stored LastError and wrong for text a person must read in full;
+    // RedactSecrets is the same masking without the cap, and Redact keeps its old contract on top of it.
+    internal static string Redact(string value) { var safe = RedactSecrets(value); return safe.Length > 500 ? safe[..500] : safe; }
+    internal static string RedactSecrets(string value)
     {
         var safe = Regex.Replace(value ?? "", "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
         safe = Regex.Replace(safe, "(?i)([?&](?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|token)=)[^&#\\s]+", "$1[redacted]");
@@ -181,6 +184,6 @@ public sealed class MarketplaceConnectionStore
             .Replace("secret", "[redacted]", StringComparison.OrdinalIgnoreCase)
             .Replace("token", "[redacted]", StringComparison.OrdinalIgnoreCase)
             .Trim();
-        return safe.Length > 500 ? safe[..500] : safe;
+        return safe;
     }
 }

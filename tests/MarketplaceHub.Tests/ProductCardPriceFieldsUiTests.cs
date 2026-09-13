@@ -96,7 +96,7 @@ public sealed class ProductCardPriceFieldsUiTests
             {
                 var dialog = Window.OwnedWindows.Cast<Window>().SingleOrDefault();
                 if (dialog == null) return;
-                var panel = (StackPanel)dialog.Content;
+                var panel = (Panel)dialog.Content;
                 var buttons = panel.Children.OfType<Panel>().SelectMany(x => x.Children.OfType<Button>());
                 buttons.SingleOrDefault(x => (string)x.Content == "Vazgeç")?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }));

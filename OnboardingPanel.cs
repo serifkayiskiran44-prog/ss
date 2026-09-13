@@ -9,7 +9,9 @@ public static class OnboardingPanel
 {
     public static void ShowWizard(Window owner, string? directory, Action<string> navigate)
     {
-        var window = new Window { Owner = owner, Title = "MonoBridge ilk kurulum", Width = 980, Height = 720, MinWidth = 820, MinHeight = 600, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.CanResize }; var close = new Action(() => window.Close()); window.Content = Create(directory, navigate, close); window.ShowDialog();
+        // #818: the wizard is sized by the shared rule, so a 1024x768 or 200%-DPI screen gets a wizard that fits.
+        var fit = DialogLayout.Fit(980, 720, SystemParameters.WorkArea.Width, SystemParameters.WorkArea.Height);
+        var window = new Window { Owner = owner, Title = "MonoBridge ilk kurulum", Width = fit.Width, Height = fit.Height, MinWidth = fit.MinWidth, MinHeight = fit.MinHeight, MaxWidth = fit.MaxWidth, MaxHeight = fit.MaxHeight, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.CanResize }; var close = new Action(() => window.Close()); window.Content = Create(directory, navigate, close); window.ShowDialog();
     }
 
     public static FrameworkElement Create(string? directory, Action<string>? navigate = null, Action? close = null)

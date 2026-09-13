@@ -51,7 +51,13 @@ public sealed class AuditStore
     }
     static AuditEvent Read(SqliteDataReader reader) => new() { Id = reader.GetString(0), AtUtc = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), Module = reader.GetString(2), Action = reader.GetString(3), ProductId = reader.GetString(4), OrderId = reader.GetString(5), Marketplace = reader.GetString(6), ShopId = reader.GetString(7), Outcome = reader.GetString(8), Detail = reader.GetString(9) };
     static string Clean(string value, int max) { var clean = Sanitize(value); return clean.Length > max ? clean[..max] : clean; }
-    public static string Sanitize(string? value)
+    /// <summary>Audit-row sanitizer: every redaction below, then the caps a stored row needs.</summary>
+    public static string Sanitize(string? value) => Redact(value, bounded: true);
+
+    /// <summary>The same redaction with no length cap (#818): for text a person must read in full -- a modal, a validation message.</summary>
+    public static string Redact(string? value) => Redact(value, bounded: false);
+
+    static string Redact(string? value, bool bounded)
     {
         var safe = value ?? "";
         // Normalize transport credentials before the generic key/value pass so
@@ -59,7 +65,7 @@ public sealed class AuditStore
         safe = Regex.Replace(safe, "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
         safe = Regex.Replace(safe, "(?i)([?&](?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|token)=)[^&#\\s]+", "$1[redacted]");
         safe = Regex.Replace(safe, "(?i)(password|passwd|token|secret|api[_-]?key|client[_-]?secret)\\s*[:=]\\s*[\\\"']?[^\\\"'\\s,;&}]+", "$1=[redacted]");
-        safe = MarketplaceConnectionStore.Redact(safe);
+        safe = bounded ? MarketplaceConnectionStore.Redact(safe) : MarketplaceConnectionStore.RedactSecrets(safe);
         // Redact only the username segment of a local user-profile path (Windows %USERPROFILE% or a Unix/macOS
         // home directory) so the rest of the path -- still useful for diagnostics -- survives; a path with no
         // such segment (a relative path, a path under Program Files, etc.) is left completely untouched.
@@ -68,7 +74,7 @@ public sealed class AuditStore
         safe = Regex.Replace(safe, "(?i)\\b[\\w.%+-]+@[\\w.-]+\\.[a-z]{2,}\\b", "[pii-email]");
         safe = Regex.Replace(safe, "(?<!\\d)(?:\\+?90[ .-]?)?0?5\\d{2}[ .-]?\\d{3}[ .-]?\\d{2}[ .-]?\\d{2}(?!\\d)", "[pii-phone]");
         safe = Regex.Replace(safe, "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
-        return safe.Length > 2000 ? safe[..2000] : safe;
+        return bounded && safe.Length > 2000 ? safe[..2000] : safe;
     }
 }
 

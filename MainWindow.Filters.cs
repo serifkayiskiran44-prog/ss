@@ -216,10 +216,8 @@ public partial class MainWindow {
    body.Children.Add(new TextBlock { Text = "Önce: " + row.Before, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
    body.Children.Add(new TextBlock { Text = "Sonra: " + row.After, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(46, 90, 46)) });
   }
-  var close = new Button { Content = "Kapat", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(12, 3, 12, 3) };
-  body.Children.Add(close);
-  var dialog = new Window { Owner = this, Title = "İçerik değişiklik önizlemesi", Width = 620, Height = 480, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
-  close.Click += (_, _) => dialog.DialogResult = true;
+  // #818: the standard dialog shell -- fitted to the work area, resizable, scrolling body, Kapat on Escape.
+  var dialog = DialogShell.Create(this, "İçerik değişiklik önizlemesi", body, new DialogShell.Action[] { new("Kapat", IsCancel: true) }, 620, 480);
   dialog.ShowDialog();
  }
  // Validation summary panel (#803). Blocking / warning / info from the same evaluator the store refuses saves
@@ -437,10 +435,8 @@ public partial class MainWindow {
   var fields = (StackPanel)list.Content;
   foreach (var check in checks) fields.Children.Add(check);
   panel.Children.Add(list);
-  var save = new Button { Content = "Kaydet", HorizontalAlignment = HorizontalAlignment.Right };
-  panel.Children.Add(save);
-  var dialog = new Window { Owner = this, Title = "Ürün kolonları", Width = 360, Height = 500, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
-  save.Click += (_, _) => { var hidden = products.Columns.Zip(checks).Where(x => x.Second.IsChecked != true).Select(x => x.First.Header?.ToString() ?? ""); uiPreferences.Set("columns:products", string.Join('\u001f', hidden)); ApplyProductColumnPreferences(); SaveProductLayout(); dialog.DialogResult = true; };
+  // #818: the standard dialog shell; Kaydet is Enter, Vazgeç is Escape, the checklist scrolls.
+  var dialog = DialogShell.Create(this, "Ürün kolonları", panel, new DialogShell.Action[] { new("Vazgeç", IsCancel: true), new("Kaydet", IsPrimary: true, OnClick: () => { var hidden = products.Columns.Zip(checks).Where(x => x.Second.IsChecked != true).Select(x => x.First.Header?.ToString() ?? ""); uiPreferences.Set("columns:products", string.Join('\u001f', hidden)); ApplyProductColumnPreferences(); SaveProductLayout(); return true; }) }, 360, 500);
   dialog.ShowDialog();
  }
 }
