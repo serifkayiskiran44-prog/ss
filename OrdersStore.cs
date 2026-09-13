@@ -57,4 +57,12 @@ public sealed class OrdersStore
   tx.Commit();
  }
  static void Key(SqliteCommand cmd,OrderSnapshot o){cmd.Parameters.AddWithValue("$m",o.Marketplace);cmd.Parameters.AddWithValue("$s",o.ShopId);cmd.Parameters.AddWithValue("$i",o.OrderId);}
+
+ // #841: customer contact data lives in its own table, never in the snapshot payload -- so ReadAll, exports,
+ // transfers and logs that serialise orders carry none of it. Read and written only by the customer section.
+ void EnsureCustomers(SqliteConnection c){using var cmd=c.CreateCommand();cmd.CommandText="CREATE TABLE IF NOT EXISTS order_customers(marketplace TEXT NOT NULL,shop TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(marketplace,shop,id))";cmd.ExecuteNonQuery();}
+ public OrderCustomer? ReadCustomer(string marketplace,string shopId,string orderId){using var c=Open();EnsureCustomers(c);using var cmd=c.CreateCommand();cmd.CommandText="SELECT payload FROM order_customers WHERE marketplace=$m COLLATE NOCASE AND shop=$s AND id=$o";cmd.Parameters.AddWithValue("$m",marketplace??"");cmd.Parameters.AddWithValue("$s",shopId??"");cmd.Parameters.AddWithValue("$o",orderId??"");if(cmd.ExecuteScalar() is not string json)return null;try{return JsonSerializer.Deserialize<OrderCustomer>(json);}catch(JsonException){return null;}}
+ public void SaveCustomer(OrderCustomer customer){ArgumentNullException.ThrowIfNull(customer);if(string.IsNullOrWhiteSpace(customer.Marketplace)||string.IsNullOrWhiteSpace(customer.ShopId)||string.IsNullOrWhiteSpace(customer.OrderId))throw new ArgumentException("Pazaryeri, mağaza ve sipariş numarası zorunlu.");using var c=Open();EnsureCustomers(c);using var cmd=c.CreateCommand();
+  if(customer.IsEmpty){cmd.CommandText="DELETE FROM order_customers WHERE marketplace=$m COLLATE NOCASE AND shop=$s AND id=$o";}else{cmd.CommandText="INSERT INTO order_customers(marketplace,shop,id,payload) VALUES($m,$s,$o,$p) ON CONFLICT(marketplace,shop,id) DO UPDATE SET payload=excluded.payload";cmd.Parameters.AddWithValue("$p",JsonSerializer.Serialize(customer));}
+  cmd.Parameters.AddWithValue("$m",customer.Marketplace.Trim());cmd.Parameters.AddWithValue("$s",customer.ShopId.Trim());cmd.Parameters.AddWithValue("$o",customer.OrderId.Trim());cmd.ExecuteNonQuery();}
 }

@@ -70,12 +70,44 @@ public static class OrdersPanel
   void Load(){all=store.ReadAll();try{trackingSeenElsewhere=OrderAnomalyDetector.FindDuplicateTracking(all).ToDictionary(a=>a.Key,a=>a.OrderIds,StringComparer.OrdinalIgnoreCase);}catch(Exception){trackingSeenElsewhere=new(StringComparer.OrdinalIgnoreCase);}foreach(var order in all)order.StockDecisionLabel=catalog.GetOrderStockStatus(order.Marketplace,order.ShopId,order.OrderId)==null?"Stok bekliyor":"Stok düşüldü";
    var knownSkus=catalog.Products().Where(p=>!string.IsNullOrWhiteSpace(p.Sku)).Select(p=>p.Sku.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);try{pendingByOrder=new OrderExceptionStore(directory).List(status:"Pending").GroupBy(x=>(x.Marketplace,x.ShopId,x.OrderId)).ToDictionary(g=>g.Key,g=>g.Count());}catch(Exception){pendingByOrder=new();}var pending=pendingByOrder;
    var nowUtc=DateTimeOffset.UtcNow;foreach(var order in all){var urgency=OrderUrgencyScorer.Score(OrderUrgencyScorer.InputFor(order,knownSkus,pending.TryGetValue((order.Marketplace,order.ShopId,order.OrderId),out var n)?n:0,nowUtc));order.UrgencyScore=urgency.Score;order.UrgencyLabel=urgency.Label;}marketplaceFilter.ItemsSource=new[]{"Tümü"}.Concat(all.Select(o=>o.Marketplace).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x)).ToArray();shopFilter.ItemsSource=new[]{"Tümü"}.Concat(all.Select(o=>o.ShopId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x)).ToArray();Filter();status.Text=$"{all.Count} kayıt · Liste son yükleme: {DateTime.Now:g}. Boş liste varsa Etsy'den yenileyin veya yerel sipariş ekleyin.";}
+  System.Windows.Threading.DispatcherTimer? remaskTimer=null;Border? customerBox=null;
+  void RenderCustomerSection(OrderSnapshot o,PiiRevealDecision? granted=null,string? statusLine=null){
+   remaskTimer?.Stop();remaskTimer=null;
+   var customer=store.ReadCustomer(o.Marketplace,o.ShopId,o.OrderId)??new OrderCustomer(o.Marketplace,o.ShopId,o.OrderId,"","","","");var policy=catalog.GetPiiRevealPolicy();var hc=SeverityStyle.IsHighContrast;
+   var box=new Border{Tag="order-customer-section",Padding=new Thickness(8,6,8,6),Margin=new Thickness(3,4,3,6),BorderBrush=SeverityStyle.AccentBrush(granted==null?SeverityLevel.Info:SeverityLevel.Warning,hc),BorderThickness=new Thickness(SeverityStyle.For(granted==null?SeverityLevel.Info:SeverityLevel.Warning,hc).BorderWeight,0,0,0),Focusable=true};System.Windows.Input.KeyboardNavigation.SetIsTabStop(box,true);var body=new StackPanel();box.Child=body;
+   body.Children.Add(new TextBlock{Text=granted==null?"Müşteri · maskeli":"Müşteri · AÇIK (otomatik maskelenecek)",FontWeight=FontWeights.SemiBold});
+   if(customer.IsEmpty&&granted==null)body.Children.Add(new TextBlock{Tag="order-customer-empty",Text="Kayıtlı müşteri iletişim verisi yok.",TextWrapping=TextWrapping.Wrap});
+   var editors=new Dictionary<string,TextBox>();
+   foreach(var (field,masked) in PiiReveal.Masked(customer)){
+    if(granted==null){var t=new TextBlock{Tag="order-customer-field",Text=$"{field}: {masked}",TextWrapping=TextWrapping.Wrap};System.Windows.Automation.AutomationProperties.SetName(t,$"{field}: maskeli");if(!customer.IsEmpty)body.Children.Add(t);}
+    else{var value=field switch{"Ad"=>customer.Name,"E-posta"=>customer.Email,"Telefon"=>customer.Phone,_=>customer.Address};var tb=new TextBox{Tag="order-customer-edit",Text=value,MaxLength=500};System.Windows.Automation.AutomationProperties.SetName(tb,field);body.Children.Add(new TextBlock{Text=field,FontSize=11,Opacity=0.85});body.Children.Add(tb);editors[field]=tb;}}
+   var actions=new WrapPanel{Margin=new Thickness(0,4,0,0)};
+   if(granted==null){
+    var reason=new TextBox{Tag="order-customer-reason",Width=260,ToolTip="Gösterim gerekçesi (denetim günlüğüne yazılır)"};System.Windows.Automation.AutomationProperties.SetName(reason,"Gösterim gerekçesi");
+    var reveal=new Button{Tag="order-customer-reveal",Content="Göster (gerekçeli)",Padding=new Thickness(8,2,8,2),Margin=new Thickness(6,0,0,0)};
+    reveal.Click+=(_,_)=>{var decision=PiiReveal.Request(policy,reason.Text,DateTime.UtcNow);try{new AuditStore(directory).Append(PiiReveal.AuditFor(customer,decision,DateTime.UtcNow));}catch(Exception){}
+     if(!decision.Allowed){status.Text="Gösterim reddedildi: "+decision.DeniedBecause;RenderCustomerSection(o,null,decision.DeniedBecause);return;}
+     status.Text=$"Müşteri verisi açıldı; {policy.Normalized().RevealSeconds} sn sonra otomatik maskelenir.";RenderCustomerSection(o,decision);};
+    actions.Children.Add(reason);actions.Children.Add(reveal);}
+   else{
+    var save=new Button{Tag="order-customer-save",Content="Müşteri verisini kaydet",Padding=new Thickness(8,2,8,2)};
+    save.Click+=(_,_)=>{try{store.SaveCustomer(new OrderCustomer(o.Marketplace,o.ShopId,o.OrderId,editors["Ad"].Text.Trim(),editors["E-posta"].Text.Trim(),editors["Telefon"].Text.Trim(),editors["Adres"].Text.Trim()));status.Text="Müşteri verisi yerel olarak kaydedildi; pazaryerine gönderilmedi.";}catch(Exception e){status.Text="Müşteri verisi kaydedilemedi: "+MarketplaceConnectionStore.Redact(e.Message);}RenderCustomerSection(o);};
+    var mask=new Button{Tag="order-customer-mask",Content="Maskele",Padding=new Thickness(8,2,8,2),Margin=new Thickness(6,0,0,0)};mask.Click+=(_,_)=>RenderCustomerSection(o);
+    actions.Children.Add(save);actions.Children.Add(mask);
+    var due=granted.RemaskAtUtc??DateTime.UtcNow;var wait=due-DateTime.UtcNow;if(wait<TimeSpan.FromMilliseconds(50))wait=TimeSpan.FromMilliseconds(50);
+    remaskTimer=new System.Windows.Threading.DispatcherTimer{Interval=wait};remaskTimer.Tick+=(_,_)=>{remaskTimer?.Stop();if(customerBox!=null&&detail.Children.Contains(customerBox)){status.Text="Müşteri verisi otomatik olarak maskelendi.";RenderCustomerSection(o);}};remaskTimer.Start();}
+   body.Children.Add(actions);
+   if(statusLine!=null)body.Children.Add(new TextBlock{Tag="order-customer-status",Text=statusLine,TextWrapping=TextWrapping.Wrap,FontSize=11,Foreground=SeverityStyle.AccentBrush(SeverityLevel.Warning,hc)});
+   System.Windows.Automation.AutomationProperties.SetName(box,granted==null?"Müşteri verisi maskeli":"Müşteri verisi açık");
+   if(customerBox!=null&&detail.Children.Contains(customerBox)){var at=detail.Children.IndexOf(customerBox);detail.Children.RemoveAt(at);detail.Children.Insert(at,box);}else detail.Children.Add(box);customerBox=box;}
   void Edit(OrderSnapshot order,bool isNew=false)
   {
    editing=order.Copy();var o=editing;Action captureShipment=()=>{};timelineCts?.Cancel();timelineLoadMore=null;detail.Children.Clear();RenderDetailHeader(isNew?null:OrderDetailHeader.Compose(o,pendingByOrder.TryGetValue((o.Marketplace,o.ShopId,o.OrderId),out var pendingCount)?pendingCount:0,DateTimeOffset.UtcNow));detail.Children.Add(Text(isNew?"Yeni yerel sipariş":"Sipariş ayrıntısı",18));
    var marketplace=Field(detail,"Pazaryeri",o.Marketplace,!isNew);var shop=Field(detail,"Mağaza kimliği",o.ShopId,!isNew);var id=Field(detail,"Sipariş numarası",o.OrderId,!isNew);
    bool api=o.Source=="Etsy API";var raw=Field(detail,"Sipariş durumu (ham değer)",o.RawStatus,api);var payment=Field(detail,"Ödeme durumu",o.PaymentStatus,api);
-   detail.Children.Add(Text($"Kaynak: {o.Source}\nSon API alımı: {o.SyncLabel}"));detail.Children.Add(Text("Ürünler",16));
+   detail.Children.Add(Text($"Kaynak: {o.Source}\nSon API alımı: {o.SyncLabel}"));
+   // #841: the customer section -- masked by default; a reveal needs the policy and a reason, is audited (fields and reason, never a value) and re-masks itself; edits are possible only after a granted reveal.
+   if(!isNew)RenderCustomerSection(o);detail.Children.Add(Text("Ürünler",16));
    // #838: the lines as a reconciliation -- ordered / shipped (what the stock receipt deducted) / returned (the ledger) / cancelled -- with the difference as a state, not a colour.
    if(isNew){foreach(var i in o.Items)detail.Children.Add(Text($"{i.Quantity} × {i.Title} · SKU: {i.Sku}"));}
    else{IReadOnlyDictionary<string,int> returnedBySku;try{returnedBySku=catalog.OrderReturnsApplied(o.Marketplace,o.ShopId,o.OrderId);}catch(Exception){returnedBySku=new Dictionary<string,int>();}
