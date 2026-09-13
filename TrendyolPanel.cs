@@ -25,8 +25,8 @@ public static class TrendyolPanel
         secret.Box.PasswordChanged += (_, _) => tracker?.Recompute();
         TrendyolSettings Read() => new(supplier.Text.Trim(), key.Text.Trim(), secret.Resolve(saved?.ApiSecret), agent.Text.Trim());
         // Errors land in the status line (redacted), never in a modal; a validation failure keeps what was typed.
-        Button Button(string text, Action action) { var b = new Button { Content = text, Margin = new Thickness(3), Padding = new Thickness(10, 5, 10, 5) }; b.Click += (_, _) => { try { action(); } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); } }; return b; }
-        Button AsyncButton(string text, Func<Task> action) { var b = new Button { Content = text, Margin = new Thickness(3), Padding = new Thickness(10, 5, 10, 5) }; b.Click += async (_, _) => { try { b.IsEnabled = false; await action(); } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); } finally { b.IsEnabled = true; } }; return b; }
+        Button Button(string text, Action action) { var b = new Button { Content = text, Margin = new Thickness(3), Padding = DesignTokens.CompactButtonPadding }; b.Click += (_, _) => { try { action(); } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); } }; return b; }
+        Button AsyncButton(string text, Func<Task> action) { var b = new Button { Content = text, Margin = new Thickness(3), Padding = DesignTokens.CompactButtonPadding }; b.Click += async (_, _) => { try { b.IsEnabled = false; await action(); } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); } finally { b.IsEnabled = true; } }; return b; }
         root.Children.Add(Button("Şifreli kaydet", () =>
         {
             var settings = Read();

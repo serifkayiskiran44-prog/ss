@@ -19,7 +19,7 @@ public static class MediaPanel
         var media = new MediaStore(directory);
         var validation = new MediaValidationService();
         var previewHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1300 };
+        var panel = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1300 };
         panel.Children.Add(Heading("Ürün görsel ve medya merkezi"));
         panel.Children.Add(Hint("Görseller ürün ve kaynak bazında saklanır. URL duplicate'leri engellenir; doğrulama yalnız dosyayı okur ve marketplace'e yazmaz. XML/Excel ImageUrls alanları ilk açılışta içeri alınır."));
 

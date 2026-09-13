@@ -9,7 +9,7 @@ public static class ChannelListingMatrixPanel
     /// <param name="allowedStoreKeys">#842: the stores the shell offers (dashboard store keys); a store outside it gets no column and no cells. Null offers every store the service built.</param>
     public static FrameworkElement Create(string? directory, Action<string>? navigate = null, Func<IReadOnlyCollection<string>>? allowedStoreKeys = null)
     {
-        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1450 };
+        var panel = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1450 };
         panel.Children.Add(Heading("Kanal yayın durumu ve ürün matrisi"));
         panel.Children.Add(Hint("Ürün × kanal × mağaza görünümünde yerel plan, mapping, sync ve bağlantı durumunu karşılaştırın. Bu ekran yalnızca yerel plan/önizleme okur; canlı ürün, stok veya fiyat yazmaz."));
         // #816: one error surface for this workspace; failures land here with retry / go-to-source / diagnostics

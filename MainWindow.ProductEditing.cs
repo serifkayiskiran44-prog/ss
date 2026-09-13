@@ -95,7 +95,7 @@ public partial class MainWindow
     string AskProductEditDecision()
     {
         var decision = "İptal";
-        var body = new StackPanel { Margin = new Thickness(20) };
+        var body = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage) };
         body.Children.Add(new TextBlock {
             Text = $"{edit?.Sku}: Kaydedilmemiş değişiklikler var.\nKaydetmeden çıkmak istiyor musun?",
             TextWrapping = TextWrapping.Wrap, MaxWidth = 400, Margin = new Thickness(0, 0, 0, 16)

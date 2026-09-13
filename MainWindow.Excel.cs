@@ -15,7 +15,7 @@ public partial class MainWindow
     Button? excelCancelButton;
     FrameworkElement BuildExcel()
     {
-        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1150 };
+        var panel = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1150 };
         panel.Children.Add(Heading("Excel şablon ve aktarım merkezi"));
         panel.Children.Add(Hint("Profil; kolon eşlemelerini, başlık alias'larını, sayı/tarih kültürünü, varsayılanları ve dışa aktarım alanlarını saklar. Her dosya önce create/update/skip/error önizlemesine girer; önizleme olmadan katalog yazılmaz."));
         var profileStore = new ExcelProfileStore(dataDirectory);

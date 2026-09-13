@@ -40,7 +40,7 @@ public partial class MainWindow
         var form = new WrapPanel();
         foreach (var pair in new[] { ("Şablon", (Control)template), ("Tür", (Control)kind), ("Kanal", channel), ("Mağaza", shop), ("Dakika", interval), ("Takvim", schedule), ("Saat", runAt), ("Gün", days), ("Pencere baş", windowStart), ("Pencere son", windowEnd), ("Retry", retryLimit), ("Backoff", retryBackoff) }) { form.Children.Add(new TextBlock { Text = pair.Item1, Margin = new Thickness(4, 7, 2, 0) }); form.Children.Add(pair.Item2); }
         form.Children.Add(enabled); form.Children.Add(save); form.Children.Add(toggle); form.Children.Add(run);
-        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1200 };
+        var panel = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1200 };
         panel.Children.Add(Heading("Otomasyon takvimi ve şablonları")); panel.Children.Add(Hint("Günlük/haftalık saat ve isteğe bağlı çalışma penceresi kullanın. Uygulama kapalıyken arka plan servisi varmış gibi davranılmaz; açılışta due işler lease ile tek kez kuyruğa alınır. Retry backoff ve son hata kayıtlıdır.")); panel.Children.Add(form); panel.Children.Add(jobs); panel.Children.Add(status); Refresh(); return Scroll(panel);
     }
 

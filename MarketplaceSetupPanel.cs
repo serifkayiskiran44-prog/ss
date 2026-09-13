@@ -10,7 +10,7 @@ public static class MarketplaceSetupPanel
 {
     public static FrameworkElement Create()
     {
-        var content = new StackPanel { Margin = new Thickness(20), MaxWidth = 1050, HorizontalAlignment = HorizontalAlignment.Left };
+        var content = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1050, HorizontalAlignment = HorizontalAlignment.Left };
         content.Children.Add(Text("Pazaryeri bağlantı hazırlığı", 25));
         content.Children.Add(Text("eBay OAuth ve Ozon Seller API için salt okunur bağlantı doğrulaması; diğer kanallar için hesap ve API başvuru adımları. Ürün, stok ve sipariş aktarımı etkin değil."));
         content.Children.Add(Text("Ürünler mevcut ortak havuzda kalır. Hesap açılışı tamamlandıktan sonra API yetkilendirmesi ve gerçek bağlantı testi gerekir."));

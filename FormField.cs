@@ -42,8 +42,9 @@ public sealed class FormFieldControl
 /// </summary>
 public static class FormField
 {
-    public const double LabelGap = 2;
-    public const double RowGap = 8;
+    // #857: the row's rhythm comes from the shared tokens; the help gap stays the row's own 3-DIP breath.
+    public static double LabelGap => DesignTokens.SpaceHairline;
+    public static double RowGap => DesignTokens.SpaceControl;
     public const double HelpGap = 3;
     public const string RequiredMarker = "*";
     public const string RequiredWord = "zorunlu";

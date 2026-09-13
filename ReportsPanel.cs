@@ -22,7 +22,7 @@ public static class ReportsPanel
     /// <param name="choosePath">Where a runnable report's file goes; null asks with the standard save dialog.</param>
     public static FrameworkElement Create(string? directory, Action<string>? navigate = null, Func<IReadOnlyCollection<string>>? allowedStoreKeys = null, Func<ReportDefinition, string?>? choosePath = null)
     {
-        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1450 };
+        var panel = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1450 };
         panel.Children.Add(Heading("Rapor kataloğu"));
         panel.Children.Add(Hint("Bu yapının gerçekten ürettiği raporlar: amacı, okuduğu yerel veri, son çalıştırması, kayıtlı filtreleri ve çıktı türü. Kartı seçince sağda çalıştırma ayarları açılır; hiçbir rapor pazaryerine yazmaz."));
         var errorHost = new StackPanel { Visibility = Visibility.Collapsed }; var errors = new ErrorSurface(errorHost, navigate); panel.Children.Add(errorHost);

@@ -61,7 +61,7 @@ public static class EtsyReadinessPanel
 {
     public static FrameworkElement Create(string? directory, Action<string>? navigate = null)
     {
-        var root = new StackPanel { Margin = new Thickness(20), MaxWidth = 1350 };
+        var root = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1350 };
         var service = new EtsyReadinessService(directory);
         var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 8, 4, 10) };
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, MinHeight = 240 };

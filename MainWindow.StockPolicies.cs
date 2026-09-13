@@ -4,7 +4,7 @@ using TrMarketplaceHubDesktop.Catalog;
 namespace TrMarketplaceHubDesktop;
 public partial class MainWindow {
  FrameworkElement BuildStockPolicies(){
-  var panel=new StackPanel{Margin=new Thickness(20),MaxWidth=750,HorizontalAlignment=HorizontalAlignment.Left};
+  var panel=new StackPanel{Margin=new Thickness(DesignTokens.SpacePage),MaxWidth=750,HorizontalAlignment=HorizontalAlignment.Left};
   panel.Children.Add(Heading("Mağaza stok ayarları"));panel.Children.Add(Hint("Yerel katalog stoğundan mağaza güvenlik payını çıkarır ve üst sınırı uygular. Ürün stoğu değişmez, pazaryerine gönderim yapılmaz. Depo/rezervasyon motoru henüz bağlı değildir."));
   var channel=new TextBox{Text="etsy"};var shop=new TextBox();var safety=new TextBox{Text="0"};var maximum=new TextBox();var result=Hint("");StockPolicy? loaded=null;
   Label(panel,"Pazaryeri anahtarı (etsy, ebay, ozon…)",channel);Label(panel,"Mağaza anahtarı",shop);Label(panel,"Ek güvenlik stoğu",safety);Label(panel,"Maksimum gösterilecek stok (boş: sınırsız)",maximum);

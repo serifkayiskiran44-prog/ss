@@ -21,7 +21,12 @@ public partial class App : Application
         DispatcherUnhandledException += (_, args) => LogCrash(args.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, args) => { if (args.ExceptionObject is Exception ex) LogCrash(ex); };
         TaskScheduler.UnobservedTaskException += (_, args) => { LogCrash(args.Exception); args.SetObserved(); };
+        // #857: a missing or mistyped design token is a startup failure that names the key -- never a control quietly
+        // falling back to a default. The handlers above are already in place, so the crash log carries the reason.
+        VerifyDesignTokens(Resources);
     }
+
+    internal static void VerifyDesignTokens(ResourceDictionary resources) => DesignTokens.Verify(resources);
 
     internal static void LogCrash(Exception exception)
     {

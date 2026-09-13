@@ -9,7 +9,7 @@ public partial class MainWindow
     FrameworkElement BuildTaxonomy()
     {
         var taxonomy = new TaxonomyStore(dataDirectory);
-        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1200 };
+        var panel = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1200 };
         panel.Children.Add(Heading("Kategori, marka ve özellik merkezi"));
         panel.Children.Add(Hint("Yerel sözlük, kanal/mağaza eşlemeleri ve eksik/stale durumları tek ekranda izlenir. Öneriler yalnız isim normalizasyonuna dayanır; canlı marketplace yazımı yapılmaz."));
         var kind = new ComboBox { ItemsSource = Enum.GetValues<TaxonomyKind>(), SelectedItem = TaxonomyKind.Category, Width = 180 };

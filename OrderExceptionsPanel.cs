@@ -10,7 +10,7 @@ public static class OrderExceptionsPanel
     public static FrameworkElement Create(string? directory, Action<string>? navigate = null)
     {
         var exceptions = new OrderExceptionStore(directory); var orders = new OrdersStore(directory); var catalog = new CatalogStore(directory);
-        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1350 };
+        var panel = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1350 };
         panel.Children.Add(Heading("Sipariş istisna ve karar merkezi"));
         panel.Children.Add(Hint("Eksik SKU, belirsiz eşleme, iptal/iade ve stok uyuşmazlıklarını tek kuyruğa alın. İptal/iade stok geri koyma yalnız somut önizleme ve açık onayla çalışır; aynı sipariş için ikinci geri koyma idempotent olarak reddedilir."));
         var query = new TextBox { Width = 230, ToolTip = "Sipariş, SKU veya hata ara" };

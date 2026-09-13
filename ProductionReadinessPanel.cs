@@ -8,7 +8,7 @@ public static class ProductionReadinessPanel
 {
     public static FrameworkElement Create(string? directory)
     {
-        var root = new StackPanel { Margin = new Thickness(20), MaxWidth = 1350 };
+        var root = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1350 };
         var service = new ProductionReadinessService(directory);
         var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 8, 4, 10) };
         var checks = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, MinHeight = 280, EnableRowVirtualization = true };

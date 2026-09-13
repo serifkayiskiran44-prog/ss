@@ -26,7 +26,7 @@ public static class SettingsPanel
     {
         ArgumentNullException.ThrowIfNull(context);
         var categories = SettingsTaxonomy.Visible(context.RouteExists);
-        var root = new DockPanel { Margin = new Thickness(20), LastChildFill = true };
+        var root = new DockPanel { Margin = new Thickness(DesignTokens.SpacePage), LastChildFill = true };
         var top = new StackPanel(); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         top.Children.Add(new TextBlock { Text = "Ayarlar", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 8, 4, 6) });
         top.Children.Add(Hint("Var olan ayarlar tek ağaçta: her giriş, ayarı sahiplenen ekranı açar. Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindeki maskeli alanlarda düzenlenir; bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
