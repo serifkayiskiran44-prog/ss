@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
@@ -25,8 +26,52 @@ public partial class MainWindow
     {
         ValidBindings(productEditor);
         if (edit == null) return;
+        // #820: evaluate the whole record first; write each finding under its input, show the summary at the top,
+        // focus the first blocker and refuse -- the store would refuse the same record, but without telling the
+        // operator where.
+        var view = FormValidationSummary.Compose(ProductValidation.Evaluate(edit), FormValidationSummary.ProductPropertyByField, EnteredProductValues());
+        ApplyFormValidation(productEditor, view);
+        ShowProductValidation(edit);
+        if (!view.CanSave)
+        {
+            if (view.FirstBlocking is { CanFocus: true } first) FocusField(productEditor, first.Property, first.Section);
+            throw new InvalidOperationException(view.Aggregate.Headline);
+        }
         store.SaveProduct(edit); // Validation, optimistic version check and local transaction.
         productEditBaseline = JsonSerializer.Serialize(edit);
+        ApplyFormValidation(productEditor, view with { Links = Array.Empty<FormValidationLink>() });
+    }
+
+    Dictionary<string, string> EnteredProductValues() => edit is null ? new() : new()
+    {
+        ["Name"] = edit.Name ?? "", ["Sku"] = edit.Sku ?? "", ["Barcode"] = edit.Barcode ?? "", ["Currency"] = edit.Currency ?? "",
+        ["Description"] = edit.Description ?? "", ["Brand"] = edit.Brand ?? "", ["Category"] = edit.Category ?? "",
+    };
+
+    // Writes each link's message under its input (blocking or warning style) and clears the rows no finding names.
+    void ApplyFormValidation(Panel form, FormValidationView view)
+    {
+        foreach (var row in formRows.Where(r => r.Key.Form == form)) row.Value.SetValidation("");
+        foreach (var link in view.Links.Where(l => l.CanFocus))
+            if (formRows.TryGetValue((form, link.Property), out var row)) row.SetValidation(link.Message, link.Level);
+    }
+
+    // Brings the section into view when the form has sections, then puts keyboard focus on the input.
+    void FocusField(Panel form, string property, string? section)
+    {
+        if (!formRows.TryGetValue((form, property), out var row)) return;
+        // Select the section that actually holds the input: walk the *logical* tree up to its TabItem (a tab's
+        // content is presented by the TabControl's ContentPresenter, so the visual chain skips the TabItem and
+        // would land on the outer route page). The finding's section name is only the fallback.
+        DependencyObject? node = row.Root; TabItem? owner = null;
+        while (node is not null && owner is null) { node = LogicalTreeHelper.GetParent(node) ?? (node is System.Windows.Media.Visual ? System.Windows.Media.VisualTreeHelper.GetParent(node) : null); owner = node as TabItem; }
+        if (owner?.Tag is string key) SelectProductSection(key);
+        else if (!string.IsNullOrEmpty(section) && form == productEditor) SelectProductSection(section);
+        row.Input.BringIntoView();
+        // A section switch realizes its content on the next layout pass; focus asked for before that is refused,
+        // so try now and again once the tree is loaded.
+        if (!Keyboard.Focus(row.Input)?.Equals(row.Input) ?? true)
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() => { row.Input.BringIntoView(); Keyboard.Focus(row.Input); }));
     }
 
     bool ResolveProductEdit()

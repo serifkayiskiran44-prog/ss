@@ -238,7 +238,9 @@ public partial class MainWindow {
   if (result.FirstBlocking is { } first)
   {
    var jump = new Button { Content = aggregate.CallToAction, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(6, 0, 0, 0), Tag = first.Section };
-   jump.Click += (_, _) => SelectProductSection((string)jump.Tag);
+   // #820: the call to action lands on the input that fixes the first blocker, not only on its section.
+   var firstLink = FormValidationSummary.Compose(result, FormValidationSummary.ProductPropertyByField).FirstBlocking;
+   jump.Click += (_, _) => { if (firstLink is { CanFocus: true }) FocusField(productEditor, firstLink.Property, firstLink.Section); else SelectProductSection((string)jump.Tag); };
    DockPanel.SetDock(jump, System.Windows.Controls.Dock.Right); header.Children.Add(jump);
   }
   header.Children.Add(new TextBlock { Text = aggregate.Headline, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Foreground = SeverityStyle.AccentBrush(aggregate.Highest, highContrast) });
