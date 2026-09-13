@@ -178,6 +178,8 @@ public partial class MainWindow
   var open = drillStack.Open(target, request.AllowedStoreKeys);
   if (!open.Allowed) { Log(open.Notice); return; }
   SelectRoute(target.Route, false);
+  // #813/#891: a drill that names a record lands on that record, the same way a workspace link does; a record that is gone keeps the screen and says so.
+  if (target.EntityId.Length > 0 && !RevealEntity(target)) Log($"{DrillThroughStack.SafeLabel(target)} kaydı bulunamadı; {(routeTitles.TryGetValue(target.Route, out var t) ? t : target.Route)} ekranı açıldı.");
  }
  void SwitchDashboardStore(string storeKey)
  {

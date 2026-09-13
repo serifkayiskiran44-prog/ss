@@ -20,7 +20,7 @@ public static class ChannelListingMatrixPanel
         var query = new TextBox { Width = 240, ToolTip = "SKU, ürün, kanal, ilan veya hata ara" };
         var channel = new TextBox { Width = 130, ToolTip = "Kanal filtresi (etsy, ebay...)" };
         var shop = new TextBox { Width = 140, ToolTip = "Mağaza filtresi" };
-        var statusFilter = new ComboBox { Width = 145, ItemsSource = new[] { "Tümü", "MISSING", "ERROR", "STALE", "AUTH_ERROR", "PENDING", "SYNCED", "DRAFT" }, SelectedIndex = 0 };
+        var statusFilter = new ComboBox { Width = 145, ItemsSource = new[] { "Tümü", "MISSING", "ERROR", "STALE", "AUTH_ERROR", "PENDING", "SYNCED", "DRAFT" }, SelectedIndex = 0 }; System.Windows.Automation.AutomationProperties.SetName(statusFilter, "Durum filtresi");
         var status = Hint("");
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, Height = 560, EnableRowVirtualization = true, EnableColumnVirtualization = false, SelectionMode = DataGridSelectionMode.Single };
         // #842: the product × store pivot with sticky axes -- the two product columns frozen, the store headers in the

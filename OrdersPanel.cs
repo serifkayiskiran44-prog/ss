@@ -206,7 +206,7 @@ public static class OrdersPanel
  }
  sealed record StateChoice(string Value,string Label);
  static TextBlock Text(string text,TextRole role=TextRole.Body)=>TextStyles.Apply(new TextBlock{Text=text,TextWrapping=TextWrapping.Wrap,Margin=Spacing.BodyBlock,Foreground=Brushes.DarkSlateGray},role);
- static TextBox Field(Panel parent,string label,string value,bool readOnly=false){parent.Children.Add(Text(label));var box=new TextBox{Text=value,IsReadOnly=readOnly};parent.Children.Add(box);return box;}
+ static TextBox Field(Panel parent,string label,string value,bool readOnly=false){var caption=Text(label);parent.Children.Add(caption);var box=new TextBox{Text=value,IsReadOnly=readOnly};parent.Children.Add(box);FormField.Labelled(caption,box);return box;}
  static Button Button(Panel parent,string text){var button=new Button{Content=text,Margin=new Thickness(3,5,3,5)};parent.Children.Add(button);return button;}
 }
 
