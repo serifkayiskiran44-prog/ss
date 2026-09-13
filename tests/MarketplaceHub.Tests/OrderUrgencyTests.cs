@@ -42,6 +42,21 @@ public sealed class OrderUrgencyTests
     }
 
     [TestMethod]
+    public void BandLabelsAreFixedTurkishCapitalsWhateverTheRunningCulture()
+    {
+        // The CI runner is en-US: capitalising "iptal" with the running culture there gives "Iptal", and a filter the page offers as "İptal" then matches nothing.
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+            CollectionAssert.AreEqual(new[] { "Acil", "Yüksek", "Normal", "Düşük", "İptal" }, OrderUrgencyScorer.BandOptions.Select(b => b.Label).ToArray());
+            CollectionAssert.AreEqual(OrderUrgencyScorer.Bands.ToArray(), OrderUrgencyScorer.BandOptions.Select(b => b.Key).ToArray(), "One option per band, in band order.");
+            Assert.AreEqual("Iptal", char.ToUpper('i', System.Globalization.CultureInfo.CurrentCulture) + "ptal", "…which is exactly why the labels are not derived at runtime.");
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
+    }
+
+    [TestMethod]
     public void TiesSortByKeyAndAMissingTimestampEarnsNothingButIsNamed()
     {
         var items = new[] { ("etsy/S2/e", 45), ("etsy/S1/a", 45), ("etsy/S1/z", 70), ("etsy/S2/c", 0) };

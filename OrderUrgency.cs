@@ -23,6 +23,8 @@ public static class OrderUrgencyScorer
     public const string CancelledBand = "iptal";
     static readonly CultureInfo Turkish = CultureInfo.GetCultureInfo("tr-TR");
     public static readonly IReadOnlyList<string> Bands = new[] { "acil", "yüksek", "normal", "düşük", CancelledBand };
+    /// <summary>The bands as the UI names them -- fixed Turkish capitals, never derived with the running culture ("iptal" capitalised under en-US is "Iptal", not "İptal").</summary>
+    public static readonly IReadOnlyList<(string Key, string Label)> BandOptions = new[] { ("acil", "Acil"), ("yüksek", "Yüksek"), ("normal", "Normal"), ("düşük", "Düşük"), (CancelledBand, "İptal") };
 
     public static OrderUrgency Score(OrderUrgencyInput i)
     {
