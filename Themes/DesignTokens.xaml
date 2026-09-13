@@ -78,6 +78,32 @@
         </Setter>
     </Style>
 
+    <!-- Semantic colours (#862): the audited pairs. Text on its surface reaches 4.5:1, a border or an icon 3:1; the ContrastAudit test keeps it so. -->
+    <Color x:Key="TextPrimaryColor">#173646</Color>
+    <Color x:Key="TextMutedColor">#57707D</Color>
+    <Color x:Key="TextSecondaryColor">#627986</Color>
+    <Color x:Key="WarningTextColor">#A05216</Color>
+    <Color x:Key="AccentColor">#176B73</Color>
+    <Color x:Key="AccentForegroundColor">#FFFFFF</Color>
+    <Color x:Key="PageBackgroundColor">#F3F5F9</Color>
+    <Color x:Key="SurfaceColor">#FFFFFF</Color>
+    <Color x:Key="RailBackgroundColor">#142D3A</Color>
+    <Color x:Key="RailForegroundColor">#CEDCE5</Color>
+    <Color x:Key="RailSelectedColor">#285662</Color>
+    <Color x:Key="RailSubtitleColor">#92AFBC</Color>
+    <Color x:Key="SelectedRowColor">#1B4F72</Color>
+    <Color x:Key="SelectedRowForegroundColor">#FFFFFF</Color>
+    <Color x:Key="SelectedRowInactiveColor">#D6E2EB</Color>
+    <sys:Double x:Key="SelectedRowRuleThickness">3</sys:Double>
+    <Thickness x:Key="SelectedRowRule">3,0,0,0</Thickness>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
+    <SolidColorBrush x:Key="WarningTextBrush" Color="{StaticResource WarningTextColor}"/>
+    <SolidColorBrush x:Key="SelectedRowBrush" Color="{StaticResource SelectedRowColor}"/>
+    <SolidColorBrush x:Key="SelectedRowForegroundBrush" Color="{StaticResource SelectedRowForegroundColor}"/>
+    <SolidColorBrush x:Key="SelectedRowInactiveBrush" Color="{StaticResource SelectedRowInactiveColor}"/>
+
     <!-- Typography scale (#858): one face for text, one for code and diagnostics; the roles' sizes and weights. -->
     <FontFamily x:Key="FontFamilyBody">Segoe UI</FontFamily>
     <FontFamily x:Key="FontFamilyMono">Consolas, Courier New</FontFamily>

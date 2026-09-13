@@ -98,12 +98,12 @@ public static class ProductRowState
         }
         var colour = key switch
         {
-            Disabled => Color.FromRgb(120, 128, 134),
+            Disabled => Color.FromRgb(98, 108, 116),
             // #817: error and warning accents are the shared severity table's, so the row and the panel cannot drift.
             Error => SeverityStyle.For(SeverityLevel.Blocking, false).Accent,
             Warning => SeverityStyle.For(SeverityLevel.Warning, false).Accent,
             Pending => Color.FromRgb(52, 108, 190),
-            Stale => Color.FromRgb(140, 120, 168),
+            Stale => Color.FromRgb(109, 86, 140),
             _ => Colors.Transparent,
         };
         var solid = new SolidColorBrush(colour); solid.Freeze(); return solid;

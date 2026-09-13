@@ -23,6 +23,11 @@ public static class DesignTokens
         ("CardPadding", typeof(Thickness)), ("HeaderPadding", typeof(Thickness)), ("TabPadding", typeof(Thickness)), ("NavigationItemPadding", typeof(Thickness)), ("NavigationItemMargin", typeof(Thickness)),
         ("ControlMinHeight", typeof(double)), ("RowHeight", typeof(double)),
         ("BorderHairline", typeof(double)), ("BorderEmphasis", typeof(double)), ("CardRadius", typeof(CornerRadius)), ("ShellRadius", typeof(CornerRadius)),
+        // #862: semantic colours
+        ("TextPrimaryColor", typeof(System.Windows.Media.Color)), ("TextMutedColor", typeof(System.Windows.Media.Color)), ("TextSecondaryColor", typeof(System.Windows.Media.Color)), ("WarningTextColor", typeof(System.Windows.Media.Color)),
+        ("AccentColor", typeof(System.Windows.Media.Color)), ("AccentForegroundColor", typeof(System.Windows.Media.Color)), ("PageBackgroundColor", typeof(System.Windows.Media.Color)), ("SurfaceColor", typeof(System.Windows.Media.Color)),
+        ("RailBackgroundColor", typeof(System.Windows.Media.Color)), ("RailForegroundColor", typeof(System.Windows.Media.Color)), ("RailSelectedColor", typeof(System.Windows.Media.Color)), ("RailSubtitleColor", typeof(System.Windows.Media.Color)),
+        ("SelectedRowColor", typeof(System.Windows.Media.Color)), ("SelectedRowForegroundColor", typeof(System.Windows.Media.Color)), ("SelectedRowInactiveColor", typeof(System.Windows.Media.Color)), ("SelectedRowRuleThickness", typeof(double)), ("SelectedRowRule", typeof(Thickness)),
         // #861: focus
         ("FocusRingColor", typeof(System.Windows.Media.Color)), ("FocusRingInnerColor", typeof(System.Windows.Media.Color)), ("FocusRingThickness", typeof(double)), ("FocusRingInnerThickness", typeof(double)), ("FocusRingMargin", typeof(Thickness)),
         // #860: icons
@@ -86,6 +91,26 @@ public static class DesignTokens
     public static double BorderEmphasis => D("BorderEmphasis");
     public static CornerRadius CardRadius => R("CardRadius");
     public static CornerRadius ShellRadius => R("ShellRadius");
+
+    // #862: semantic colours
+    static System.Windows.Media.Color C(string key) => (System.Windows.Media.Color)Resources[key];
+    public static System.Windows.Media.Color TextPrimaryColor => C("TextPrimaryColor");
+    public static System.Windows.Media.Color TextMutedColor => C("TextMutedColor");
+    public static System.Windows.Media.Color TextSecondaryColor => C("TextSecondaryColor");
+    public static System.Windows.Media.Color WarningTextColor => C("WarningTextColor");
+    public static System.Windows.Media.Color AccentColor => C("AccentColor");
+    public static System.Windows.Media.Color AccentForegroundColor => C("AccentForegroundColor");
+    public static System.Windows.Media.Color PageBackgroundColor => C("PageBackgroundColor");
+    public static System.Windows.Media.Color SurfaceColor => C("SurfaceColor");
+    public static System.Windows.Media.Color RailBackgroundColor => C("RailBackgroundColor");
+    public static System.Windows.Media.Color RailForegroundColor => C("RailForegroundColor");
+    public static System.Windows.Media.Color RailSelectedColor => C("RailSelectedColor");
+    public static System.Windows.Media.Color RailSubtitleColor => C("RailSubtitleColor");
+    public static System.Windows.Media.Color SelectedRowColor => C("SelectedRowColor");
+    public static System.Windows.Media.Color SelectedRowForegroundColor => C("SelectedRowForegroundColor");
+    public static System.Windows.Media.Color SelectedRowInactiveColor => C("SelectedRowInactiveColor");
+    public static double SelectedRowRuleThickness => D("SelectedRowRuleThickness");
+    public static Thickness SelectedRowRule => T("SelectedRowRule");
 
     // #861: focus
     public static System.Windows.Media.Color FocusRingColor => (System.Windows.Media.Color)Resources["FocusRingColor"];

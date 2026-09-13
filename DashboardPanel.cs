@@ -43,7 +43,7 @@ public static class DashboardPanel
         rowTooltip.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new System.Windows.Data.Binding("Tooltip")));
         rowTooltip.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty, true));
         rowTooltip.Setters.Add(new Setter(AutomationProperties.HelpTextProperty, new System.Windows.Data.Binding("Tooltip")));
-        channels.RowStyle = FocusStyles.AddTo(rowTooltip);
+        channels.RowStyle = RowSelection.AddToRowStyle(FocusStyles.AddTo(rowTooltip));
         AddColumn(channels, "Kanal", "Channel", 100); AddColumn(channels, "Mağaza", "ShopId", 120); AddColumn(channels, "Durum", "Status", 170); AddColumn(channels, "Son test", "LastTestLabel", 150); AddColumn(channels, "Hata", "LastError", 300);
         channelGroup.Content = channels;
         panel.Children.Add(channelGroup);
@@ -185,7 +185,7 @@ public static class DashboardPanel
             var body = new StackPanel();
             body.Children.Add(new TextBlock { Text = $"{style.Glyph} {card.Title} · {card.Count:N0}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = SeverityStyle.AccentBrush(style.Level, SeverityStyle.IsHighContrast) });
             body.Children.Add(new TextBlock { Text = card.Impact, TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
-            body.Children.Add(new TextBlock { Text = $"{card.Age} · kapsam: {card.Scope}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+            body.Children.Add(new TextBlock { Text = $"{card.Age} · kapsam: {card.Scope}", TextWrapping = TextWrapping.Wrap, FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(DesignTokens.TextMutedColor) });
             var go = new Button { Content = card.NextAction, Tag = card.Route, Margin = Spacing.AboveInline, Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left };
             var drilled = card;
             go.Click += (_, _) => open(drilled);
@@ -225,7 +225,7 @@ public static class DashboardPanel
             go.Click += (_, _) => navigate((string)go.Tag);
             body.Children.Add(go);
         }
-        var border = new Border { BorderBrush = new SolidColorBrush(Color.FromRgb(196, 132, 22)), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(253, 248, 238)), Padding = Spacing.Section, Child = body };
+        var border = new Border { BorderBrush = new SolidColorBrush(SeverityStyle.For(SeverityLevel.Warning, false).Accent), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(253, 248, 238)), Padding = Spacing.Section, Child = body };
         AutomationProperties.SetName(border, $"{state.Title}. {state.Detail}");
         parent.Children.Add(border);
     }
@@ -239,9 +239,9 @@ public static class DashboardPanel
         {
             // Words, not just colour: a stale card must read as stale on a monochrome or high-contrast display.
             content.Children.Add(new TextBlock { Text = (freshness.IsStale ? "⚠ " : "") + freshness.Label, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Foreground = new SolidColorBrush(freshness.IsStale ? Color.FromRgb(160, 82, 22) : Color.FromRgb(87, 112, 125)) });
-            content.Children.Add(new TextBlock { Text = "Kapsam: " + freshness.Scope, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+            content.Children.Add(new TextBlock { Text = "Kapsam: " + freshness.Scope, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(DesignTokens.TextMutedColor) });
         }
-        var button = new Button { Content = content, Focusable = true, HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.White, Foreground = Brushes.DarkSlateGray, BorderBrush = new SolidColorBrush(freshness?.IsStale == true ? Color.FromRgb(196, 132, 22) : Color.FromRgb(220, 227, 234)), MinHeight = 85, Margin = Spacing.Inline };
+        var button = new Button { Content = content, Focusable = true, HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.White, Foreground = Brushes.DarkSlateGray, BorderBrush = new SolidColorBrush(freshness?.IsStale == true ? SeverityStyle.For(SeverityLevel.Warning, false).Accent : Color.FromRgb(220, 227, 234)), MinHeight = 85, Margin = Spacing.Inline };
         button.SetValue(AutomationProperties.NameProperty, freshness is null ? label : $"{label}: {value}, {freshness.Label}, kapsam {freshness.Scope}");
         if (route != "dashboard") button.Click += (_, _) => navigate(route);
         parent.Children.Add(button);

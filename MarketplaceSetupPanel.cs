@@ -20,7 +20,7 @@ public static class MarketplaceSetupPanel
             var body = new StackPanel();
             if (channel.Id == "ebay") body.Children.Add(EbayPanel.Create());
             else if (channel.Id == "ozon") body.Children.Add(OzonPanel.Create());
-            else body.Children.Add(Text(channel.Status, 15, Brushes.DarkOrange));
+            else body.Children.Add(Text(channel.Status, 15, new SolidColorBrush(DesignTokens.WarningTextColor)));
             body.Children.Add(Text(channel.Prerequisites));
             var result = Text("");
             var actions = new WrapPanel();
@@ -41,7 +41,7 @@ public static class MarketplaceSetupPanel
         content.Children.Add(Text(channel.Name+" bağlantısı",22));
         if(id=="ebay")content.Children.Add(EbayPanel.Create(directory,editState));
         else if(id=="ozon")content.Children.Add(OzonPanel.Create(directory,editState));
-        else content.Children.Add(Text(id=="joom"?"Satıcı kaydı / kabulü bekleniyor. API bağlantısı kurulmadı.":channel.Status,15,Brushes.DarkOrange));
+        else content.Children.Add(Text(id=="joom"?"Satıcı kaydı / kabulü bekleniyor. API bağlantısı kurulmadı.":channel.Status,15,new SolidColorBrush(DesignTokens.WarningTextColor)));
         content.Children.Add(Text(channel.Prerequisites));
         var result=Text("");var actions=new WrapPanel();
         actions.Children.Add(Link("Satıcı hesabı / başvuru",channel.RegistrationUrl,result));

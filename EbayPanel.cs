@@ -37,7 +37,7 @@ public static class EbayPanel
         var complete = new Button { Content = "Dönüşü doğrula ve token al", HorizontalAlignment = HorizontalAlignment.Left };
         panel.Children.Add(complete);
         var status = Text("Bağlı değil — geliştirici anahtarları ve OAuth onayı gerekiyor.");
-        status.Foreground = Brushes.DarkOrange; status.Tag = "ebay-status";
+        status.Foreground = new SolidColorBrush(DesignTokens.WarningTextColor); status.Tag = "ebay-status";
         panel.Children.Add(status);
         var store = new EbaySettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "ebay.bin"));
         var api = new EbayConnection(Http);

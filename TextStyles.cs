@@ -16,8 +16,10 @@ public enum TextRole { PageTitle, SectionTitle, SubsectionTitle, Body, Hint, Cap
 /// </summary>
 public static class TextStyles
 {
-    public static readonly Color MutedColor = Color.FromRgb(87, 112, 125);
-    static readonly Brush Muted = Frozen(MutedColor);
+    // #862: the muted colour is a token the contrast audit checks (4.5:1 on white); a frozen brush is safe on every thread.
+    public static Color MutedColor => DesignTokens.TextMutedColor;
+    static Brush? muted;
+    static Brush Muted => muted ??= Frozen(MutedColor);
     static Brush Frozen(Color color) { var brush = new SolidColorBrush(color); brush.Freeze(); return brush; }
 
     public static double Size(TextRole role) => role switch

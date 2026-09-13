@@ -426,7 +426,7 @@ public partial class MainWindow : Window
   mapping.Columns.Add(new DataGridTemplateColumn{Header="XML alanını seç",CellTemplate=new DataTemplate{VisualTree=selector},Width=new DataGridLength(1,DataGridLengthUnitType.Star)});
   mapping.Columns.Add(new DataGridTextColumn{Header="Örnek (ilk kayıt)",Binding=new Binding("Sample"),IsReadOnly=true,Width=180});
   mapping.Columns.Add(new DataGridTextColumn{Header="Durum",Binding=new Binding("StatusLabel"),IsReadOnly=true,Width=150});
-  var mappingRowStyle=FocusStyles.AddTo(new Style(typeof(DataGridRow)));mappingRowStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty,new Binding("Reason")));mappingRowStyle.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty,true));mapping.RowStyle=mappingRowStyle;
+  var mappingRowStyle=RowSelection.AddToRowStyle(FocusStyles.AddTo(new Style(typeof(DataGridRow))));mappingRowStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty,new Binding("Reason")));mappingRowStyle.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty,true));mapping.RowStyle=mappingRowStyle;
   mapping.CellEditEnding+=(_,_)=>Dispatcher.BeginInvoke(new Action(RefreshMappingTable),System.Windows.Threading.DispatcherPriority.Background);
   
   BuildPricingEditor();

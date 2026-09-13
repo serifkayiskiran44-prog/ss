@@ -51,7 +51,8 @@ public static class FormField
     public const string OptionalWord = "isteğe bağlı";
 
     static readonly Brush LabelBrush = Frozen(Color.FromRgb(74, 96, 108));
-    static readonly Brush HelpBrush = Frozen(Color.FromRgb(126, 146, 158));
+    // #862: help text reads at 4.5:1 on white -- the muted token, not the lighter grey it used to be.
+    static readonly Brush HelpBrush = Frozen(DesignTokens.TextMutedColor);
     static readonly Brush RequiredBrush = Frozen(Color.FromRgb(190, 52, 52));
     static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
 

@@ -118,7 +118,7 @@ public partial class MainWindow {
   var cell = new Style(typeof(DataGridCell));
   cell.Setters.Add(new Setter(PaddingProperty, metrics.CellPadding));
   cell.Setters.Add(new Setter(VerticalContentAlignmentProperty, VerticalAlignment.Center));
-  products.CellStyle = FocusStyles.AddTo(cell);
+  products.CellStyle = RowSelection.AddToCellStyle(FocusStyles.AddTo(cell));
  }
  // Product card pricing summary (#798). One ranked block -- price, then approximate margin, then when it was
  // last calculated -- above the editable price fields, so the card leads with the number that matters instead
@@ -137,7 +137,7 @@ public partial class MainWindow {
   var marginBrush = summary.MarginLevel switch
   {
    ProductPriceSummary.Negative => new SolidColorBrush(Color.FromRgb(190, 52, 52)),
-   ProductPriceSummary.Thin => new SolidColorBrush(Color.FromRgb(196, 132, 22)),
+   ProductPriceSummary.Thin => new SolidColorBrush(SeverityStyle.For(SeverityLevel.Warning, false).Accent),
    ProductPriceSummary.Healthy => new SolidColorBrush(Color.FromRgb(46, 125, 80)),
    _ => new SolidColorBrush(Color.FromRgb(87, 112, 125)),
   };
@@ -145,7 +145,7 @@ public partial class MainWindow {
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Son hesaplama: {summary.Calculated}", FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
   foreach (var warning in summary.Warnings)
    productPriceSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
-  productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)), Margin = Spacing.AboveInline });
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = summary.MarginCaveat, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(DesignTokens.TextMutedColor), Margin = Spacing.AboveInline });
   System.Windows.Automation.AutomationProperties.SetName(productPriceSummaryPanel, $"{summary.SalePrice} {summary.Currency}, kâr {summary.Margin}");
  }
  // Product card stock composition (#799). The available figure comes from CatalogStore.PreviewStock -- the owner
@@ -167,7 +167,7 @@ public partial class MainWindow {
   var summary = ProductStockSummary.Build(product, policy, projected, DateTime.UtcNow);
   productStockSummaryPanel.Children.Add(new TextBlock { Text = $"{summary.Glyph} {summary.Label}", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
   productStockSummaryPanel.Children.Add(new TextBlock { Text = $"Elde: {summary.OnHand} · Kanala açık: {summary.Available} · Tutulan: {summary.Withheld}", TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
-  productStockSummaryPanel.Children.Add(new TextBlock { Text = $"Güvenlik payı: {summary.SafetyBuffer} · Üst sınır: {summary.MaximumCap} · Güncelleme: {summary.Updated}", FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
+  productStockSummaryPanel.Children.Add(new TextBlock { Text = $"Güvenlik payı: {summary.SafetyBuffer} · Üst sınır: {summary.MaximumCap} · Güncelleme: {summary.Updated}", FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(DesignTokens.TextMutedColor) });
   foreach (var warning in summary.Warnings)
    productStockSummaryPanel.Children.Add(new TextBlock { Text = "⚠ " + warning, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)), Margin = new Thickness(0, 3, 0, 0) });
   System.Windows.Automation.AutomationProperties.SetName(productStockSummaryPanel, $"{summary.Label}, elde {summary.OnHand}, kanala açık {summary.Available}");
@@ -178,7 +178,7 @@ public partial class MainWindow {
  void ShowProductAuditTimeline(CatalogProduct? product)
  {
   productAuditTimelinePanel.Children.Clear();
-  if (product is null) { productAuditTimelinePanel.Children.Add(new TextBlock { Text = "Ürün seçince değişiklik geçmişi burada görünür.", TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) }); return; }
+  if (product is null) { productAuditTimelinePanel.Children.Add(new TextBlock { Text = "Ürün seçince değişiklik geçmişi burada görünür.", TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(DesignTokens.TextMutedColor) }); return; }
   ProductAuditTimelineView view;
   try { view = ProductAuditTimeline.Build(new AuditStore(dataDirectory).List(AuditStore.RetentionLimit), product.Id, DateTime.UtcNow); }
   catch (Exception e) { Log(Safe(e), NotificationSeverity.Error); productAuditTimelinePanel.Children.Add(new TextBlock { Text = "Denetim geçmişi okunamadı.", Foreground = new SolidColorBrush(Color.FromRgb(160, 82, 22)) }); return; }

@@ -58,7 +58,7 @@ public static class MediaPanel
         // #797: the image and its placeholder live in one fixed box, so loading -> ready -> broken never resizes
         // anything. The placeholder is the shared ProductMediaPresentation description (glyph, word, hint).
         var preview = new System.Windows.Controls.Image { Stretch = System.Windows.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        var previewGlyph = new TextBlock { FontSize = 30, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(140, 158, 171)) };
+        var previewGlyph = new TextBlock { FontSize = 30, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(109, 128, 140)) };
         var previewLabel = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Margin = new Thickness(8, 6, 8, 0), Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(87, 112, 125)) };
         var previewPlaceholder = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Children = { previewGlyph, previewLabel } };
         var previewBox = new Border

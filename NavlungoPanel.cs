@@ -18,7 +18,7 @@ public static class NavlungoPanel
         NavlungoSettings? saved = null;
         string? loadError = null;
         try { saved = store.Load(); } catch { loadError = "Kayıtlı Navlungo ayarları okunamadı. Yeniden girip kaydedin."; }
-        var status = new TextBlock { Text = loadError ?? NavlungoConnection.Describe(saved), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 20), Foreground = Brushes.DarkOrange };
+        var status = new TextBlock { Text = loadError ?? NavlungoConnection.Describe(saved), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 20), Foreground = new SolidColorBrush(DesignTokens.WarningTextColor) };
         panel.Children.Add(status);
         Text("Navlungo uygulama kimliği (client_id)");
         var clientId = new TextBox { Text = saved?.ClientId ?? "", MinWidth = 450, Margin = Spacing.BelowSection };
