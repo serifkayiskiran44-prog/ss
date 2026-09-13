@@ -4,10 +4,10 @@ using System.Text.Json;
 namespace TrMarketplaceHubDesktop;
 public sealed class ChannelProductsStore
 {
- readonly string connectionString;
+ readonly string connectionString; readonly string directory; // #918: the snapshot store lives beside the catalogue
  public ChannelProductsStore(string? directory=null)
  {
-  directory??=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");Directory.CreateDirectory(directory);
+  directory??=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");Directory.CreateDirectory(directory);this.directory=directory;
   connectionString=new SqliteConnectionStringBuilder{DataSource=Path.Combine(directory,"channel_products.db")}.ToString();
   using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="CREATE TABLE IF NOT EXISTS ChannelPlans(ChannelId TEXT NOT NULL,ShopId TEXT NOT NULL,ProductId TEXT NOT NULL,Json TEXT NOT NULL,PRIMARY KEY(ChannelId,ShopId,ProductId))";cmd.ExecuteNonQuery();
  }
@@ -28,6 +28,8 @@ public sealed class ChannelProductsStore
   if(plan.Currency is null||plan.Currency.Length!=3||!plan.Currency.All(c=>c>='A'&&c<='Z'))throw new ArgumentException("Para birimini üç büyük harfle girin (USD, EUR, RUB, TRY).");
   if(!string.IsNullOrEmpty(plan.ListingUrl)&&(!Uri.TryCreate(plan.ListingUrl,UriKind.Absolute,out var uri)||(uri.Scheme!="https"&&uri.Scheme!="http")||!string.IsNullOrEmpty(uri.UserInfo)))throw new ArgumentException("İlan bağlantısı geçerli bir HTTP/HTTPS adresi olmalı.");
   plan.ChannelId=plan.ChannelId.Trim().ToLowerInvariant();plan.ShopId=plan.ShopId.Trim();plan.UpdatedUtc=DateTime.UtcNow;
+  // #918: the plan is validated against the channel scope's current taxonomy snapshot and says so; a snapshot that cannot be taken leaves the stamp as it was.
+  var snapshotScope=Catalog.TaxonomySnapshotStore.ChannelScope(plan.ChannelId,plan.ShopId);try{plan.TaxonomySnapshotVersion=new Catalog.TaxonomySnapshotStore(directory).Refresh(snapshotScope,DateTime.UtcNow).Version;plan.TaxonomySnapshotScope=snapshotScope;}catch(Exception){}
   using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="INSERT INTO ChannelPlans(ChannelId,ShopId,ProductId,Json) VALUES($channel,$shop,$product,$json) ON CONFLICT(ChannelId,ShopId,ProductId) DO UPDATE SET Json=excluded.Json";cmd.Parameters.AddWithValue("$channel",plan.ChannelId);cmd.Parameters.AddWithValue("$shop",plan.ShopId);cmd.Parameters.AddWithValue("$product",plan.ProductId);cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan));cmd.ExecuteNonQuery();
  }
 }

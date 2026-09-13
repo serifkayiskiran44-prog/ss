@@ -12,5 +12,7 @@ public sealed class ChannelProductPlan
  public int PlannedStock {get;set;}
  public string Notes {get;set;}="";
  public DateTime UpdatedUtc {get;set;}
+ // #918: the taxonomy snapshot (scope and version) this plan was validated with on its last save; 0 when never stamped.
+ public long TaxonomySnapshotVersion {get;set;} public string TaxonomySnapshotScope {get;set;}="";
  public string Provenance => "Yerel taslak";
 }
