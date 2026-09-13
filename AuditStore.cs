@@ -89,7 +89,8 @@ public sealed class AuditStore
         safe = Regex.Replace(safe, "(?i)([A-Za-z]:\\\\Users\\\\)[^\\\\\\s]+", "$1[user]");
         safe = Regex.Replace(safe, "(?i)(/(?:home|Users)/)[^/\\s]+", "$1[user]");
         safe = Regex.Replace(safe, "(?i)\\b[\\w.%+-]+@[\\w.-]+\\.[a-z]{2,}\\b", "[pii-email]");
-        safe = Regex.Replace(safe, "(?<!\\d)(?:\\+?90[ .-]?)?0?5\\d{2}[ .-]?\\d{3}[ .-]?\\d{2}[ .-]?\\d{2}(?!\\d)", "[pii-phone]");
+        // A phone number stands on its own: a digit run inside a hex or alphanumeric token (a GUID id, a hash, a SKU) is not one, so the boundary is "no letter or digit", not "no digit".
+        safe = Regex.Replace(safe, "(?<![\\p{L}\\d])(?:\\+?90[ .-]?)?0?5\\d{2}[ .-]?\\d{3}[ .-]?\\d{2}[ .-]?\\d{2}(?![\\p{L}\\d])", "[pii-phone]");
         safe = Regex.Replace(safe, "(?i)\\bAuthorization\\s*:\\s*(?:Bearer|Basic)\\s+[^\\s,;&]+", "Authorization: [redacted]");
         return bounded && safe.Length > 2000 ? safe[..2000] : safe;
     }
