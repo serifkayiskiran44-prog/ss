@@ -44,7 +44,7 @@ public sealed class OrderColumnPresetsUiTests
             CollectionAssert.AreEqual(new[] { "OrderId", "ShopId", "DeliveryLabel", "Carriers", "TrackingNumbers", "SyncLabel" }, Visible(grid2), "The custom layout: the shipping columns minus the one the user hid.");
 
             combo2.SelectedItem = "Operasyon"; Drain();
-            CollectionAssert.AreEqual(new[] { "Marketplace", "ShopId", "OrderId", "RawStatus", "PaymentStatus", "StockDecisionLabel", "DeliveryLabel", "SlaLabel" }, Visible(grid2));
+            CollectionAssert.AreEqual(new[] { "Marketplace", "ShopId", "OrderId", "RawStatus", "PaymentStatus", "StockDecisionLabel", "DeliveryLabel", "SlaLabel", "UrgencyLabel" }, Visible(grid2));
             Assert.AreEqual(custom, prefs.Get(OrderColumnPresets.CustomLayoutPreferenceKey), "Choosing a preset leaves the custom layout byte-for-byte as it was.");
 
             var (panel3, grid3, combo3) = Build(root);

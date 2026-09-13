@@ -16,6 +16,9 @@ public sealed class OrderSnapshot
  public DateTimeOffset SourceUpdatedAt {get;set;}
  public DateTimeOffset LastSync {get;set;}
  [JsonIgnore] public string StockDecisionLabel {get;set;}="Bilinmiyor";
+ // #835: computed by the list from recorded states (never serialized -- it is time-dependent and derived).
+ [JsonIgnore] public int UrgencyScore {get;set;}
+ [JsonIgnore] public string UrgencyLabel {get;set;}="";
  public List<OrderItem> Items {get;set;}=[];
  public List<OrderShipment> Shipments {get;set;}=[];
  public string DeliveryLabel=>Shipments.Count==0?"Bilinmiyor":string.Join(", ",Shipments.Select(s=>OrdersRules.Label(s.State)).Distinct());

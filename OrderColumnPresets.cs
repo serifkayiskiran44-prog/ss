@@ -21,7 +21,7 @@ public static class OrderColumnPresets
 
     public static readonly IReadOnlyList<OrderColumnPreset> Presets = new[]
     {
-        new OrderColumnPreset("operations", "Operasyon", new[] { "Marketplace", "ShopId", "OrderId", "RawStatus", "PaymentStatus", "StockDecisionLabel", "DeliveryLabel", "SlaLabel" }),
+        new OrderColumnPreset("operations", "Operasyon", new[] { "Marketplace", "ShopId", "OrderId", "RawStatus", "PaymentStatus", "StockDecisionLabel", "DeliveryLabel", "SlaLabel", "UrgencyLabel" }),
         new OrderColumnPreset("shipping", "Kargo", new[] { "OrderId", "ShopId", "DeliveryLabel", "SlaLabel", "Carriers", "TrackingNumbers", "SyncLabel" }),
         new OrderColumnPreset("finance", "Finans (salt okunur)", new[] { "Marketplace", "ShopId", "OrderId", "PaymentStatus", "TotalLabel", "Source", "SyncLabel" }),
     };

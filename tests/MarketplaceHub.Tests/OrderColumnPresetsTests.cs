@@ -10,7 +10,7 @@ using TrMarketplaceHubDesktop;
 [TestClass]
 public sealed class OrderColumnPresetsTests
 {
-    static readonly string[] Live = { "Marketplace", "ShopId", "OrderId", "RawStatus", "PaymentStatus", "StockDecisionLabel", "DeliveryLabel", "SlaLabel", "Carriers", "TrackingNumbers", "TotalLabel", "Source", "SyncLabel" };
+    static readonly string[] Live = { "Marketplace", "ShopId", "OrderId", "RawStatus", "PaymentStatus", "StockDecisionLabel", "DeliveryLabel", "SlaLabel", "Carriers", "TrackingNumbers", "TotalLabel", "Source", "SyncLabel", "UrgencyLabel" };
 
     [TestMethod]
     public void PresetsUseOnlyLiveColumnsNeverPiiAndResolveToVisibilityAndOrder()
