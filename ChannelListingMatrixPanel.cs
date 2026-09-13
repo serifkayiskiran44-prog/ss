@@ -29,13 +29,27 @@ public static class ChannelListingMatrixPanel
         VirtualizingPanel.SetIsVirtualizing(matrix, true); VirtualizingPanel.SetVirtualizationMode(matrix, VirtualizationMode.Recycling);
         var view = new ComboBox { Width = 110, ItemsSource = new[] { "Matris", "Liste" }, SelectedIndex = 0, ToolTip = "Görünüm: ürün × mağaza matrisi veya düz liste" }; System.Windows.Automation.AutomationProperties.SetName(view, "Görünüm");
         ChannelMatrix current = new(Array.Empty<ChannelMatrixColumn>(), Array.Empty<ChannelMatrixRow>());
+        // #843: the legend explains only the states on screen, with their counts; each chip is a focusable tab stop whose tooltip opens from the keyboard.
+        var legend = new WrapPanel { Tag = "channel-matrix-legend", Margin = new Thickness(4, 2, 4, 4) };
+        void RenderLegend()
+        {
+            legend.Children.Clear(); var hc = SeverityStyle.IsHighContrast;
+            foreach (var (entry, count) in ChannelMatrixLegend.Counts(current))
+            {
+                var chip = new Border { Tag = entry.Key, Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 6, 2), BorderBrush = SeverityStyle.AccentBrush(entry.Level, hc), BorderThickness = new Thickness(SeverityStyle.For(entry.Level, hc).BorderWeight), Focusable = true, ToolTip = entry.Description, Child = new TextBlock { Text = $"{entry.Badge} ({count:N0})", Foreground = SeverityStyle.AccentBrush(entry.Level, hc) } };
+                System.Windows.Input.KeyboardNavigation.SetIsTabStop(chip, true); ToolTipService.SetShowsToolTipOnKeyboardFocus(chip, true);
+                System.Windows.Automation.AutomationProperties.SetName(chip, $"{entry.Word}: {count:N0} hücre"); System.Windows.Automation.AutomationProperties.SetHelpText(chip, entry.Description);
+                legend.Children.Add(chip);
+            }
+            if (legend.Children.Count == 0) legend.Children.Add(new TextBlock { Text = "Gösterilecek hücre yok.", Opacity = 0.8 });
+        }
         void Column(string header, string path, double width) => grid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new Binding(path), Width = new DataGridLength(width, DataGridLengthUnitType.Star) });
         Column("Ürün / SKU", "ProductName", 2); Column("Kanal", "ChannelName", 1); Column("Mağaza", "ShopId", 1); Column("Mapping", "MappingStatus", .8); Column("İlan ID", "ListingId", 1); Column("Sync", "SyncStatus", .8); Column("Bağlantı", "AuthStatus", 1); Column("Yetenekler", "Capabilities", 2); Column("Son hata", "LastError", 2);
         IReadOnlyList<ChannelListingMatrixRow> all = [];
         void RefreshGrid()
         {
             var filtered = ChannelListingMatrixService.Filter(all, query.Text, statusFilter.SelectedItem?.ToString() ?? "Tümü", channel.Text, shop.Text); grid.ItemsSource = filtered;
-            current = ChannelMatrixPivot.Build(filtered, allowedStoreKeys?.Invoke()); RenderMatrix(matrix, current);
+            current = ChannelMatrixPivot.Build(filtered, allowedStoreKeys?.Invoke()); RenderMatrix(matrix, current); RenderLegend();
             var isMatrix = view.SelectedIndex == 0; matrix.Visibility = isMatrix ? Visibility.Visible : Visibility.Collapsed; grid.Visibility = isMatrix ? Visibility.Collapsed : Visibility.Visible;
             status.Text = $"{filtered.Count:N0} satır · {current.Rows.Count:N0} ürün × {current.Columns.Count:N0} mağaza · {filtered.Count(x => x.MappingStatus == "MISSING")} mapping eksik · {filtered.Count(x => x.MappingStatus == "ERROR")} sync hatası · {filtered.Count(x => x.AuthStatus == "AUTH_ERROR")} bağlantı uyarısı";
         }
@@ -47,7 +61,7 @@ public static class ChannelListingMatrixPanel
             if (view.SelectedIndex == 0) { var cell = matrix.CurrentCell; if (!cell.IsValid || cell.Column is null || cell.Column.DisplayIndex < 2 || cell.Column.DisplayIndex - 2 >= current.Columns.Count) throw new InvalidOperationException("Önce matristen bir mağaza hücresi seçin."); navigate?.Invoke(current.Columns[cell.Column.DisplayIndex - 2].Channel); return; }
             if (grid.SelectedItem is not ChannelListingMatrixRow row) throw new InvalidOperationException("Önce matristen satır seçin."); navigate?.Invoke(row.Channel);
         });
-        var bar = new WrapPanel(); bar.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(query); bar.Children.Add(new TextBlock { Text = "Kanal", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(channel); bar.Children.Add(new TextBlock { Text = "Mağaza", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(shop); bar.Children.Add(statusFilter); bar.Children.Add(view); bar.Children.Add(refresh); bar.Children.Add(product); bar.Children.Add(channelOpen); panel.Children.Add(bar); panel.Children.Add(matrix); panel.Children.Add(grid); panel.Children.Add(status);
+        var bar = new WrapPanel(); bar.Children.Add(new TextBlock { Text = "Ara", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(query); bar.Children.Add(new TextBlock { Text = "Kanal", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(channel); bar.Children.Add(new TextBlock { Text = "Mağaza", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); bar.Children.Add(shop); bar.Children.Add(statusFilter); bar.Children.Add(view); bar.Children.Add(refresh); bar.Children.Add(product); bar.Children.Add(channelOpen); panel.Children.Add(bar); panel.Children.Add(legend); panel.Children.Add(matrix); panel.Children.Add(grid); panel.Children.Add(status);
         query.TextChanged += (_, _) => RefreshGrid(); channel.TextChanged += (_, _) => RefreshGrid(); shop.TextChanged += (_, _) => RefreshGrid(); statusFilter.SelectionChanged += (_, _) => RefreshGrid(); view.SelectionChanged += (_, _) => RefreshGrid(); _ = RefreshAsync();
         return Scroll(panel);
     }
@@ -61,7 +75,8 @@ public static class ChannelListingMatrixPanel
         for (var i = 0; i < matrix.Columns.Count; i++)
         {
             var column = matrix.Columns[i];
-            target.Columns.Add(new DataGridTextColumn { Header = column.Header, Binding = new Binding($"Labels[{i}]"), Width = new DataGridLength(120), MinWidth = 90 });
+            var cellStyle = new Style(typeof(DataGridCell)); cellStyle.Setters.Add(new Setter(ToolTipService.ShowsToolTipOnKeyboardFocusProperty, true)); cellStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding($"Descriptions[{i}]")));
+            target.Columns.Add(new DataGridTextColumn { Header = column.Header, Binding = new Binding($"Labels[{i}]"), Width = new DataGridLength(120), MinWidth = 90, CellStyle = cellStyle });
         }
         target.FrozenColumnCount = Math.Min(2, target.Columns.Count);
         target.LoadingRow -= MatrixRowLoaded; target.LoadingRow += MatrixRowLoaded;

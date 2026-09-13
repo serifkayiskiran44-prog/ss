@@ -7,12 +7,14 @@ public sealed record ChannelMatrixColumn(string Key, string Channel, string Chan
 }
 
 /// <summary>One cell: the listing state of one product in one store, with a marker and a word that read without colour.</summary>
-public sealed record ChannelMatrixCell(string MappingStatus, string AuthStatus, string ListingId, string SyncStatus, string LastError)
+public sealed record ChannelMatrixCell(string MappingStatus, string AuthStatus, string ListingId, string SyncStatus, string LastError, bool LocalOnly = false)
 {
-    public string Marker => AuthStatus == "AUTH_ERROR" ? "⚠" : MappingStatus switch { "SYNCED" => "✔", "ERROR" => "✖", "MISSING" => "○", "STALE" => "◔", "PENDING" => "⏳", "DRAFT" => "✎", _ => "·" };
-    public string Word => AuthStatus == "AUTH_ERROR" ? "bağlantı" : MappingStatus switch { "SYNCED" => "yayında", "ERROR" => "hata", "MISSING" => "eşleme yok", "STALE" => "bayat", "PENDING" => "bekliyor", "DRAFT" => "taslak", _ => MappingStatus.ToLowerInvariant() };
-    public string Label => $"{Marker} {Word}";
-    public SeverityLevel Level => AuthStatus == "AUTH_ERROR" || MappingStatus == "ERROR" ? SeverityLevel.Blocking : MappingStatus is "STALE" or "MISSING" ? SeverityLevel.Warning : MappingStatus == "SYNCED" ? SeverityLevel.Success : SeverityLevel.Info;
+    // #843: marker, word and level come from the shared legend, so a cell and the legend can never disagree.
+    public ChannelMatrixLegendEntry Legend => ChannelMatrixLegend.For(MappingStatus, AuthStatus, LocalOnly);
+    public string Marker => Legend.Glyph;
+    public string Word => Legend.Word;
+    public string Label => Legend.Badge;
+    public SeverityLevel Level => Legend.Level;
 }
 
 /// <summary>One product row: identity first, then one cell per column in column order (an empty cell where the product has no entry for that store).</summary>
@@ -21,6 +23,8 @@ public sealed record ChannelMatrixRow(string ProductId, string Sku, string Produ
     public static readonly ChannelMatrixCell Empty = new("NONE", "", "", "None", "");
     /// <summary>Bound by index from the grid's generated columns.</summary>
     public IReadOnlyList<string> Labels => Cells.Select(c => (c ?? Empty).Label).ToList();
+    /// <summary>Bound as each cell's tooltip: what its marker means, from the legend.</summary>
+    public IReadOnlyList<string> Descriptions => Cells.Select(c => (c ?? Empty).Legend.Description).ToList();
     public int Problems => Cells.Count(c => c is not null && c.Level >= SeverityLevel.Warning);
 }
 
@@ -51,7 +55,7 @@ public static class ChannelMatrixPivot
         var products = list.GroupBy(r => r.ProductId, StringComparer.Ordinal).Select(g =>
         {
             var first = g.First(); var cells = new ChannelMatrixCell?[columns.Count];
-            foreach (var r in g) if (index.TryGetValue(DashboardStoreFilter.KeyFor(r.Channel, r.ShopId), out var i)) cells[i] = new(r.MappingStatus, r.AuthStatus, r.ListingId, r.SyncStatus, r.LastError);
+            foreach (var r in g) if (index.TryGetValue(DashboardStoreFilter.KeyFor(r.Channel, r.ShopId), out var i)) cells[i] = new(r.MappingStatus, r.AuthStatus, r.ListingId, r.SyncStatus, r.LastError, ChannelListingMatrixService.IsLocalOnly(r.Capabilities));
             return new ChannelMatrixRow(g.Key, first.Sku, first.ProductName, cells);
         }).OrderBy(r => r.ProductName, StringComparer.CurrentCultureIgnoreCase).ThenBy(r => r.Sku, StringComparer.Ordinal).ToList();
         return new(columns, products);

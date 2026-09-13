@@ -27,12 +27,16 @@ public sealed class ChannelListingMatrixService
                 var latest = sync.Where(x => x.Channel.Equals(connection.Channel, StringComparison.OrdinalIgnoreCase) && (x.EntityId == product.Id || (plan is not null && x.EntityId == plan.ListingId))).OrderByDescending(x => x.UpdatedUtc).FirstOrDefault();
                 var status = string.IsNullOrWhiteSpace(plan?.ListingId) ? "MISSING" : plan.UpdatedUtc < now.AddDays(-180) ? "STALE" : latest?.Status == Catalog.SyncStatus.Failed ? "ERROR" : latest?.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running ? "PENDING" : latest?.Status == Catalog.SyncStatus.Succeeded ? "SYNCED" : "DRAFT";
                 var auth = connection.Status is "FAILED" or "LIVE_API_BLOCKED" or "NOT_CONFIGURED" ? "AUTH_ERROR" : connection.Status;
-                var capabilities = definition.Capabilities.Enabled.Count == 0 ? "Yerel plan" : string.Join(", ", definition.Capabilities.Enabled.Select(x => x.ToString()));
+                var capabilities = definition.Capabilities.Enabled.Count == 0 ? LocalOnlyCapabilities : string.Join(", ", definition.Capabilities.Enabled.Select(x => x.ToString()));
                 result.Add(new(product.Id, product.Sku, product.Name, connection.Channel, definition.Name, connection.ShopId, status, plan?.ListingId ?? "", latest?.Status.ToString() ?? "None", latest?.LastError ?? "", latest?.UpdatedUtc, auth, capabilities));
             }
         }
         return result;
     }
+
+    /// <summary>#843: the capabilities text a row carries when its channel has no live operation in this build -- the one real "unsupported" fact the matrix can state.</summary>
+    public const string LocalOnlyCapabilities = "Yerel plan";
+    public static bool IsLocalOnly(string? capabilities) => string.Equals((capabilities ?? "").Trim(), LocalOnlyCapabilities, StringComparison.Ordinal);
 
     public static IReadOnlyList<ChannelListingMatrixRow> Filter(IEnumerable<ChannelListingMatrixRow> rows, string query, string status, string channel, string shop)
     {

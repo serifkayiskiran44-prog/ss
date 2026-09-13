@@ -21,7 +21,7 @@ using TrMarketplaceHubDesktop.Catalog;
 public sealed class ChannelMatrixUiTests
 {
     static ChannelListingMatrixRow Row(string productId, string name, string channel, string channelName, string shop, string mapping) =>
-        new(productId, "SKU-" + productId, name, channel, channelName, shop, mapping, "", "None", "", null, "CONNECTED", "Yerel plan");
+        new(productId, "SKU-" + productId, name, channel, channelName, shop, mapping, "", "None", "", null, "CONNECTED", "ProductsRead");
 
     [TestMethod]
     public void AThousandByTwentyMatrixKeepsItsAxesWhileScrollingAndStaysVirtualizedAndKeyboardSelectable()

@@ -11,7 +11,7 @@ using TrMarketplaceHubDesktop;
 public sealed class ChannelMatrixPivotTests
 {
     static ChannelListingMatrixRow Row(string productId, string name, string channel, string channelName, string shop, string mapping, string auth = "CONNECTED") =>
-        new(productId, "SKU-" + productId, name, channel, channelName, shop, mapping, mapping == "MISSING" ? "" : "L-" + productId, "None", "", null, auth, "Yerel plan");
+        new(productId, "SKU-" + productId, name, channel, channelName, shop, mapping, mapping == "MISSING" ? "" : "L-" + productId, "None", "", null, auth, "ProductsRead");
 
     [TestMethod]
     public void RowsAndColumnsPivotInAFixedOrderAndAnUnofferedStoreHasNoColumn()
@@ -30,7 +30,7 @@ public sealed class ChannelMatrixPivotTests
         CollectionAssert.AreEqual(new[] { "✖ hata", "○ eşleme yok", "◔ bayat" }, kupa.Labels.ToArray());
         Assert.AreEqual(3, kupa.Problems);
         var tabak = all.Rows[1];
-        Assert.AreEqual("⚠ bağlantı", tabak.Labels[0], "A connection problem outranks the mapping state."); Assert.AreEqual("✔ yayında", tabak.Labels[1]); Assert.AreEqual("· none", tabak.Labels[2], "No entry for that store: an empty cell, not a missing column.");
+        Assert.AreEqual("⚠ bağlantı", tabak.Labels[0], "A connection problem outranks the mapping state."); Assert.AreEqual("✔ yayında", tabak.Labels[1]); Assert.AreEqual("· kayıt yok", tabak.Labels[2], "No entry for that store: an empty cell, not a missing column.");
         Assert.IsNull(tabak.Cells[2]);
         Assert.AreEqual("Etsy\nS1", all.Columns[1].Header);
 
