@@ -95,6 +95,10 @@ public sealed class ReportCatalogTests
             Assert.ThrowsException<ArgumentException>(() => store.Record("", DateTime.UtcNow, ReportRunState.Succeeded, 0));
             Assert.ThrowsException<ArgumentException>(() => store.Record("x", DateTime.UtcNow, ReportRunState.Never, 0));
             Assert.AreEqual("", ReportRunStore.SafeNote("   ")); Assert.AreEqual("rapor.csv", ReportRunStore.SafeNote("/tmp/out/rapor.csv"));
+            Assert.AreEqual("x.csv", ReportRunStore.SafeNote(@"out\x.csv")); Assert.AreEqual("x.csv", ReportRunStore.SafeNote(@"\\server\share\x.csv")); Assert.AreEqual("urunler.xlsx", ReportRunStore.SafeNote(@"C:\Users\ali can\Desktop\urunler.xlsx"));
+            // A slash inside a date or a sentence is not a path (the en-US short date "8/14/2026" chopped a whole note once -- CI caught it).
+            Assert.AreEqual("Mağaza: etsy · S1 · 8/14/2026–9/13/2026 · Durum: tümü", ReportRunStore.SafeNote("Mağaza: etsy · S1 · 8/14/2026–9/13/2026 · Durum: tümü"));
+            Assert.AreEqual("12 / 40 satır yazıldı", ReportRunStore.SafeNote("12 / 40 satır yazıldı"));
         }
         finally
         {

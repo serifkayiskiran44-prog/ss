@@ -147,12 +147,13 @@ public sealed class ReportRunStore
 
     static ReportRun Read(SqliteDataReader r) => new(r.GetString(0), r.GetString(1), DateTime.Parse(r.GetString(2), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), DateTime.Parse(r.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), Enum.TryParse<ReportRunState>(r.GetString(4), out var state) ? state : ReportRunState.Failed, r.GetInt32(5), r.GetString(6));
 
-    /// <summary>A note keeps words, never a location: anything with a path separator is reduced to its file name before the usual redaction.</summary>
+    /// <summary>A note keeps words, never a location: text that is a path (a drive, a UNC root, a rooted or relative path) is reduced to its file name before the usual redaction; a slash inside a date or a sentence is left alone (an en-US short date is "8/14/2026").</summary>
     public static string SafeNote(string? note)
     {
         var text = (note ?? "").Trim();
         if (text.Length == 0) return "";
-        if (text.Contains('\\') || text.Contains('/')) text = Path.GetFileName(text.TrimEnd('\\', '/'));
+        if (LooksLikePath(text)) text = Path.GetFileName(text.TrimEnd('\\', '/'));
         return AuditStore.Sanitize(text.Length > 200 ? text[..200] : text);
     }
+    static bool LooksLikePath(string text) => System.Text.RegularExpressions.Regex.IsMatch(text, @"^(?:[A-Za-z]:[\\/]|\\\\|/|~[\\/]|\.{1,2}[\\/])") || (text.Contains('\\') && !text.Contains(' '));
 }
