@@ -35,8 +35,14 @@ public static class OrderWorkspaceLayout
     public static string Serialize(double detailWidth) => detailWidth.ToString("0.##", CultureInfo.InvariantCulture);
 
     /// <summary>A remembered width; anything untrusted (empty, not a number, absurd) reads as the default.</summary>
-    public static double Deserialize(string? value)
-        => double.TryParse((value ?? "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var width) && double.IsFinite(width) && width >= MinDetailWidth && width <= 4000 ? width : DefaultDetailWidth;
+    public static double Deserialize(string? value) => TryDeserialize(value, out var width) ? width : DefaultDetailWidth;
+
+    /// <summary>The Try form of <see cref="Deserialize"/>: a finite number inside the usable band, nothing else.</summary>
+    public static bool TryDeserialize(string? value, out double width)
+    {
+        if (double.TryParse((value ?? "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out width) && double.IsFinite(width) && width >= MinDetailWidth && width <= 4000) return true;
+        width = DefaultDetailWidth; return false;
+    }
 
     public static string SelectionKey(OrderSnapshot order)
     {

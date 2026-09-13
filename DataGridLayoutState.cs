@@ -22,6 +22,13 @@ public static class DataGridLayoutCodec
         return JsonSerializer.Serialize(state with { Version = CurrentVersion, SortBy = state.SortBy ?? "" });
     }
 
+    /// <summary>The Try form of <see cref="Deserialize"/> for the preference schema's typed read: false for anything that cannot be trusted.</summary>
+    public static bool TryDeserialize(string? json, out DataGridLayoutState state)
+    {
+        state = Deserialize(json)!;
+        return state is not null;
+    }
+
     public static DataGridLayoutState? Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;

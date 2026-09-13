@@ -90,6 +90,7 @@ public sealed class DiagnosticsService
         Directory.CreateDirectory(directory); var checks = new List<DiagnosticCheck>(); foreach (var file in new[] { "catalog.db", "orders.db", "media.db", "audit.db", "excel-profiles.db" }) { var path = Path.Combine(directory, file); checks.Add(new(file, File.Exists(path) ? "OK" : "EMPTY", File.Exists(path) ? $"{new FileInfo(path).Length:N0} byte" : "Henüz oluşturulmadı")); }
         IReadOnlyList<Catalog.SyncJob> sync = []; try { sync = new Catalog.SyncStore(directory).List(); checks.Add(new("Sync kuyruğu", "OK", $"{sync.Count:N0} iş")); } catch (Exception error) { checks.Add(new("Sync kuyruğu", "ERROR", AuditStore.Sanitize(error.Message))); }
         try { _ = new Catalog.CatalogStore(directory).Products(); checks.Add(new("Katalog DB", "OK", "Okunabildi")); } catch (Exception error) { checks.Add(new("Katalog DB", "ERROR", AuditStore.Sanitize(error.Message))); }
+        var fallbacks = PreferenceSchema.Diagnostics; checks.Add(new(PreferenceSchema.DiagnosticName, fallbacks.Count == 0 ? "OK" : "WARN", AuditStore.Sanitize(fallbacks.Count == 0 ? "Tüm tercih kayıtları okundu" : $"{fallbacks.Count} kayıt varsayılana döndü: {string.Join(" | ", fallbacks)}")));
         var failed = sync.Count(x => x.Status == Catalog.SyncStatus.Failed); var pending = sync.Count(x => x.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running); var last = new AuditStore(directory).LastFailure(); return new(DateTime.UtcNow, directory, AppVersion.Display, checks, pending, failed, last?.Detail ?? "");
     }
 }

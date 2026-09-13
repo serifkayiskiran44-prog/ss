@@ -21,6 +21,13 @@ public static class ProductListDensity
         _ => Comfortable,
     };
 
+    /// <summary>A stored mode is understood only as one of the two words in either language; anything else is not a density.</summary>
+    public static bool TryNormalize(string? mode, out string normalized)
+    {
+        normalized = Normalize(mode);
+        return (mode ?? "").Trim().ToLowerInvariant() is Compact or "sık" or "sik" or Comfortable or "rahat";
+    }
+
     public static ProductListDensityMetrics Metrics(string? mode) => Normalize(mode) == Compact
         ? new(RowHeight: 28, FontSize: 12, ThumbnailSize: 24, CellPadding: new Thickness(6, 1, 6, 1))
         : new(RowHeight: 40, FontSize: 14, ThumbnailSize: 32, CellPadding: new Thickness(10, 5, 10, 5));

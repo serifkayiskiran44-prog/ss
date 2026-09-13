@@ -57,7 +57,7 @@ public static class DashboardPanel
         trendGroup.Content = trends; panel.Children.Add(trendGroup);
 
         var service = new DashboardDataService(directory);
-        var preferences = new UiPreferenceStore(directory);
+        var preferences = PreferenceSchema.OpenStore(directory);
         var alerts = new NotificationStore(directory); var snoozes = new AlertSnoozeStore(directory);
         void RenderAlerts() => RenderAlertsFrom(alerts.List(), snoozes.Active(DateTime.UtcNow));
         // #874: an acknowledgement or a snooze shows at once (the list re-rendered with the change applied locally), the store is asked to

@@ -95,7 +95,7 @@ public static class ReportCatalog
     public static ReportCatalogView Load(string? directory, IReadOnlyCollection<string>? allowedStoreKeys, string? query, DateTime nowUtc)
     {
         var runs = new ReportRunStore(directory).Latest();
-        var preferences = new UiPreferenceStore(directory);
+        var preferences = PreferenceSchema.OpenStore(directory);
         var filters = Definitions.ToDictionary(d => d.Key, d => preferences.ListViews(FilterModulePrefix + d.Key).Count, StringComparer.OrdinalIgnoreCase);
         return Build(Definitions, runs, filters, allowedStoreKeys, query, nowUtc);
     }

@@ -1,3 +1,6 @@
+using Microsoft.Data.Sqlite;
+using System.Globalization;
+using System.IO;
 using System.Text.Json;
 
 namespace TrMarketplaceHubDesktop;
@@ -10,20 +13,34 @@ public sealed record PreferenceRead(PreferenceReadOutcome Outcome, string? Paylo
 /// <summary>One family of persisted UI preferences: its key prefix, its current schema version, and how an older payload is brought forward (null when it cannot be).</summary>
 public sealed record PreferenceFamily(string Name, string KeyPrefix, int CurrentVersion, Func<int, string, string?> Migrate);
 
+/// <summary>A consumer's decoder: true with the value when the payload is one it understands, false otherwise (never an exception for bad input).</summary>
+public delegate bool PreferenceDecoder<T>(string payload, out T value);
+
 /// <summary>
-/// View preference schema versioning (#875). Every persisted UI preference — a grid layout, a density, hidden
-/// columns, the last route, the sidebar, the recent source, the dashboard's store filter, the orders split and
-/// presets, the report columns — is written inside an envelope that names its schema version. A record written
-/// before the envelope existed is version 0 and is brought forward by its family's migration and re-saved; a record
-/// from a future version or a corrupt envelope falls back to the defaults with a diagnostic that names the key and
-/// the reason, never the payload; a payload that carries personal data or a secret is refused before it is written.
-/// The store keys keep their store scope; the schema is per family, not per store.
+/// View preference schema versioning (#875) and corrupt preference recovery (#876). Every persisted UI preference — a
+/// grid layout, a density, hidden columns, the last route, the sidebar, the recent source, the dashboard's store
+/// filter, the orders split and presets, the report columns — is written inside an envelope that names its schema
+/// version. A record written before the envelope existed is version 0 and is brought forward by its family's
+/// migration and re-saved; a record from a future version or a corrupt envelope falls back to the defaults with a
+/// diagnostic that names the key and the reason, never the payload; a payload the consumer cannot understand
+/// (malformed JSON, a value nobody knows) is the same fallback with the same kind of diagnostic; a payload that
+/// carries personal data or a secret is refused before it is written, and a write the store cannot take is a
+/// diagnostic rather than an exception out of the caller. A store file that is not a database is set aside with its
+/// journal and recreated empty so the application starts; a reset removes every preference record (the saved views
+/// stay) and clears the diagnostics. The store keys keep their store scope; the schema is per family, not per store.
 /// </summary>
 public static class PreferenceSchema
 {
     public const string SchemaField = "schema";
     public const string PayloadField = "payload";
     public const string PiiRefused = "Tercih kaydına kişisel veri veya gizli değer yazılmaz.";
+    public const string NotUnderstood = "içerik anlaşılamadı; varsayılan uygulandı";
+    public const string StoreFileName = "ui-preferences.db";
+    public const string DiagnosticName = "UI tercihleri";
+    public const string ResetTitle = "Görünüm tercihlerini sıfırla";
+    public const string ResetLabel = "Sıfırla";
+    public const string ResetMessage = "Kayıtlı grid düzenleri, satır yoğunluğu, kenar çubuğu, son açılan sayfa ve filtre tercihleri silinir. Kayıtlı görünümler, mağaza bağlantıları ve ürün verisi korunur. Varsayılanlar bir sonraki açılışta uygulanır.";
+    const int DiagnosticLimit = 50;
 
     static string? Identity(int from, string payload) => payload; // version 0 (a bare value) carries the same payload as version 1
 
@@ -60,9 +77,39 @@ public static class PreferenceSchema
         lock (gate) return families.Where(f => key.StartsWith(f.KeyPrefix, StringComparison.Ordinal)).OrderByDescending(f => f.KeyPrefix.Length).FirstOrDefault() ?? new PreferenceFamily("unregistered", key, 1, Identity);
     }
 
-    /// <summary>Fallbacks since start-up, as "key: reason" — the key and the reason only, never a payload.</summary>
+    /// <summary>Fallbacks since start-up (or the last reset), as distinct "key: reason" lines — the key and the reason only, never a payload.</summary>
     public static IReadOnlyList<string> Diagnostics { get { lock (gate) return diagnostics.ToList(); } }
     public static void ClearDiagnostics() { lock (gate) diagnostics.Clear(); }
+
+    /// <summary>
+    /// The preference store for a data directory, opened so that the application always starts: a store file that is
+    /// not a database (or is damaged beyond opening) is moved aside with its journal files under a dated
+    /// "ui-preferences.corrupt-…" name and an empty store is created in its place, with a diagnostic that names the
+    /// file set aside and the store's reason — a second failure is the directory's problem and propagates.
+    /// </summary>
+    public static UiPreferenceStore OpenStore(string? directory = null)
+    {
+        directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
+        try { return new UiPreferenceStore(directory); }
+        catch (SqliteException unreadable)
+        {
+            var quarantine = Quarantine(directory);
+            Record(StoreFileName, $"tercih deposu açılamadı ({AuditStore.Redact(unreadable.Message)}); dosya {quarantine} olarak kenara alındı ve boş depo oluşturuldu");
+            return new UiPreferenceStore(directory);
+        }
+    }
+
+    static string Quarantine(string directory)
+    {
+        SqliteConnection.ClearAllPools();
+        var target = $"ui-preferences.corrupt-{DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)}.db";
+        foreach (var suffix in new[] { "", "-wal", "-shm", "-journal" })
+        {
+            var source = Path.Combine(directory, StoreFileName + suffix);
+            if (File.Exists(source)) File.Move(source, Path.Combine(directory, target + suffix), overwrite: true);
+        }
+        return target;
+    }
 
     public static string Wrap(int version, string payload) => JsonSerializer.Serialize(new Envelope(version, payload ?? ""));
 
@@ -110,18 +157,57 @@ public static class PreferenceSchema
     /// <summary>The payload for a key, brought forward when older; null when nothing is stored or the record fell back to the defaults.</summary>
     public static string? Read(UiPreferenceStore store, string key) => Inspect(store, key).Payload;
 
-    /// <summary>Writes a payload inside the family's current envelope; a payload that carries personal data or a secret is refused.</summary>
+    /// <summary>
+    /// The payload for a key through the consumer's own decoder: true with the value when a record exists and is
+    /// understood; false — the caller keeps its default — when nothing is stored, when the record fell back at the
+    /// schema level, or when the decoder does not understand the payload (recorded as a diagnostic naming the key,
+    /// never the payload). A decoder that throws on bad input counts as not understanding it.
+    /// </summary>
+    public static bool TryDecode<T>(UiPreferenceStore store, string key, PreferenceDecoder<T> decoder, out T value)
+    {
+        ArgumentNullException.ThrowIfNull(decoder);
+        var read = Inspect(store, key);
+        value = default!;
+        if (string.IsNullOrWhiteSpace(read.Payload)) return false;
+        bool understood;
+        try { understood = decoder(read.Payload, out value); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { understood = false; }
+        if (understood) return true;
+        value = default!; Record(key, NotUnderstood); return false;
+    }
+
+    /// <summary>Writes a payload inside the family's current envelope; a payload that carries personal data or a secret is refused; a store that cannot take the write is a diagnostic, not an exception out of the caller.</summary>
     public static void Write(UiPreferenceStore store, string key, string payload)
     {
         ArgumentNullException.ThrowIfNull(store); ArgumentNullException.ThrowIfNull(key); ArgumentNullException.ThrowIfNull(payload);
         if (!string.Equals(AuditStore.Redact(payload), payload, StringComparison.Ordinal)) throw new InvalidOperationException(PiiRefused);
-        store.Set(key, Wrap(FamilyFor(key).CurrentVersion, payload));
+        try { store.Set(key, Wrap(FamilyFor(key).CurrentVersion, payload)); }
+        catch (Exception ex) when (ex is not ArgumentException) { Record(key, "yazılamadı: " + AuditStore.Redact(ex.Message)); }
+    }
+
+    /// <summary>Removes every preference record (the saved views stay) and clears the diagnostics they produced; returns how many records went.</summary>
+    public static int Reset(UiPreferenceStore store)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        var removed = store.Clear();
+        ClearDiagnostics();
+        return removed;
     }
 
     static PreferenceRead Fallback(string key, string reason)
     {
-        lock (gate) { diagnostics.Add($"{key}: {reason}"); if (diagnostics.Count > 50) diagnostics.RemoveAt(0); }
+        Record(key, reason);
         return new PreferenceRead(PreferenceReadOutcome.Fallback, null, -1, reason);
+    }
+
+    static void Record(string key, string reason)
+    {
+        var line = $"{key}: {reason}";
+        lock (gate)
+        {
+            if (diagnostics.Contains(line)) return;
+            diagnostics.Add(line); if (diagnostics.Count > DiagnosticLimit) diagnostics.RemoveAt(0);
+        }
     }
 
     sealed record Envelope(int schema, string payload);

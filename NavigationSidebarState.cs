@@ -25,20 +25,24 @@ public static class NavigationSidebar
     public static readonly NavigationSidebarState Default = new(false, 214);
     static readonly CultureInfo Turkish = CultureInfo.GetCultureInfo("tr-TR");
 
-    public static NavigationSidebarState Parse(string? saved)
+    public static NavigationSidebarState Parse(string? saved) => TryParse(saved, out var state) ? state : Default;
+
+    /// <summary>A saved record is understood when it is a JSON object: a missing or unusable field takes its default (partial fields keep what is valid); anything else is not a sidebar record.</summary>
+    public static bool TryParse(string? saved, out NavigationSidebarState state)
     {
-        if (string.IsNullOrWhiteSpace(saved)) return Default;
+        state = Default;
+        if (string.IsNullOrWhiteSpace(saved)) return false;
         try
         {
             using var document = JsonDocument.Parse(saved);
-            if (document.RootElement.ValueKind != JsonValueKind.Object) return Default;
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
             var collapsed = document.RootElement.TryGetProperty("Collapsed", out var c) && c.ValueKind == JsonValueKind.True;
             var width = document.RootElement.TryGetProperty("ExpandedWidth", out var w) && w.ValueKind == JsonValueKind.Number && w.TryGetDouble(out var value) ? value : double.NaN;
             // A width outside the usable band was never a choice the sidebar could have produced: replace, don't clamp.
             if (double.IsNaN(width) || double.IsInfinity(width) || width < MinExpandedWidth || width > MaxExpandedWidth) width = Default.ExpandedWidth;
-            return new(collapsed, width);
+            state = new(collapsed, width); return true;
         }
-        catch (JsonException) { return Default; }
+        catch (JsonException) { return false; }
     }
 
     public static string Serialize(NavigationSidebarState state)

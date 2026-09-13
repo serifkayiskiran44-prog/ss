@@ -91,9 +91,8 @@ public partial class MainWindow
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var readiness=PreflightCenter.FromEtsy(new EtsyReadinessService().Build()); Log($"Yayın öncesi preflight: {readiness.Status}; engel={readiness.BlockingItems.Count}");
-  var initial = PreferenceSchema.Read(uiPreferences, "last-route");
-  Navigate(routes.ContainsKey(initial ?? "") ? initial! : "dashboard", false);
-  sidebarState = NavigationSidebar.Parse(PreferenceSchema.Read(uiPreferences, NavigationSidebar.PreferenceKey));
+  Navigate(PreferenceSchema.TryDecode(uiPreferences, "last-route", (string saved, out string route) => { route = saved; return routes.ContainsKey(saved); }, out var lastRoute) ? lastRoute : "dashboard", false);
+  sidebarState = PreferenceSchema.TryDecode<NavigationSidebarState>(uiPreferences, NavigationSidebar.PreferenceKey, NavigationSidebar.TryParse, out var savedSidebar) ? savedSidebar : NavigationSidebar.Default;
   ApplySidebarState();
  }
  // #812: one place turns the state into the shell -- column width, brand, search box, group headers and every

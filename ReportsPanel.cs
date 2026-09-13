@@ -32,7 +32,7 @@ public static class ReportsPanel
         var cards = new WrapPanel { Tag = "report-cards", Margin = new Thickness(0, 6, 0, 6) };
         // #847: the setup of the selected report lives beside the grid, rebuilt per selection, kept across card refreshes.
         var setupHost = new Border { Tag = "report-setup-host", Visibility = Visibility.Collapsed, Width = SetupWidth, BorderThickness = new Thickness(1, 0, 0, 0), BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(214, 222, 228)), Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Top };
-        var preferences = new UiPreferenceStore(directory);
+        var preferences = PreferenceSchema.OpenStore(directory);
         // #848: a retry re-runs into the file the operator already chose for that report.
         var lastPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         // #849: classified result columns follow the PII reveal policy (#841); an unreadable policy allows nothing.

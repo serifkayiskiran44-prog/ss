@@ -56,7 +56,7 @@ public partial class MainWindow {
  static string ColumnKey(DataGridColumn column) => column is DataGridBoundColumn { Binding: System.Windows.Data.Binding binding } ? binding.Path.Path : column.Header?.ToString() ?? "";
  void InitializeProductLayout()
  {
-  ApplyProductLayout(DataGridLayoutCodec.Deserialize(PreferenceSchema.Read(uiPreferences, ProductLayoutKey)));
+  ApplyProductLayout(PreferenceSchema.TryDecode<DataGridLayoutState>(uiPreferences, ProductLayoutKey, DataGridLayoutCodec.TryDeserialize, out var savedLayout) ? savedLayout : null);
   products.ColumnDisplayIndexChanged += (_, _) => SaveProductLayout(); products.ColumnReordered += (_, _) => SaveProductLayout();
   var width = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(DataGridColumn.WidthProperty, typeof(DataGridColumn));
   var visibility = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(DataGridColumn.VisibilityProperty, typeof(DataGridColumn));
@@ -100,7 +100,7 @@ public partial class MainWindow {
   var modes = new[] { ProductListDensity.Comfortable, ProductListDensity.Compact };
   var box = new ComboBox { Name = "ProductDensityBox", Width = 95, ItemsSource = modes.Select(ProductListDensity.Label).ToArray(), ToolTip = "Satır yoğunluğu" };
   productDensityBox = box;
-  var stored = ProductListDensity.Normalize(PreferenceSchema.Read(uiPreferences, ProductDensityKey));
+  var stored = PreferenceSchema.TryDecode<string>(uiPreferences, ProductDensityKey, ProductListDensity.TryNormalize, out var savedDensity) ? savedDensity : ProductListDensity.Comfortable;
   box.SelectedIndex = Array.IndexOf(modes, stored);
   ApplyProductDensity(stored);
   box.SelectionChanged += (_, _) =>

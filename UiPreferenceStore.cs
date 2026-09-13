@@ -30,6 +30,16 @@ public sealed class UiPreferenceStore
         if (value.Length > 20000) throw new ArgumentException("Tercih değeri çok uzun.", nameof(value));
         using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "INSERT INTO UiPreferences([Key],Value) VALUES($key,$value) ON CONFLICT([Key]) DO UPDATE SET Value=excluded.Value"; command.Parameters.AddWithValue("$key", key); command.Parameters.AddWithValue("$value", value); command.ExecuteNonQuery();
     }
+    /// <summary>Every preference key, ordered.</summary>
+    public IReadOnlyList<string> Keys()
+    {
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT [Key] FROM UiPreferences ORDER BY [Key]"; using var reader = command.ExecuteReader(); var keys = new List<string>(); while (reader.Read()) keys.Add(reader.GetString(0)); return keys;
+    }
+    /// <summary>Removes every preference record and returns how many went; the saved views stay.</summary>
+    public int Clear()
+    {
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "DELETE FROM UiPreferences"; return command.ExecuteNonQuery();
+    }
     public void SaveView(string module, string name, string payload)
     {
         module = Normalize(module, 80); name = Normalize(name, 100);
