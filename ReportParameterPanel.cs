@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Data;
 
 namespace TrMarketplaceHubDesktop;
 
@@ -15,19 +16,30 @@ public sealed record ReportStateOption(string Key, string Label);
 /// "Ekranda aç" for a report another screen owns. Every control is a labelled tab stop; Enter runs.
 /// The run view (#848): the run's stages -- query, generate, export -- as real progress rows (count and an
 /// indeterminate bar while the total is unknown, a percentage once it is), a cancel that stops the run at its
-/// stage, terminal diagnostics that are sanitized and lead to the diagnostics screen, and a retry that re-runs the
-/// same parameters into the same file.
+/// stage, terminal diagnostics that are sanitized and lead to the diagnostics screen, and a retry that repeats the
+/// last action. The result (#849): the rows in a grid whose columns are the report's schema as the operator
+/// arranged them -- order, visibility and DIP widths persisted per report, the classified column hidden until the
+/// PII policy allows and masked even then -- a chooser to arrange them, and "CSV'ye aktar" that writes exactly the
+/// visible columns in their order.
 /// </summary>
 public static class ReportParameterPanel
 {
-    /// <param name="Run">Runs the report with the validated parameters, reporting stage events and honouring the token; <c>retry</c> re-runs into the previous file. Returns the outcome text, or null when the operator picked no file. Null when the report is not runnable here.</param>
-    public sealed record Context(ReportDefinition Definition, Func<IReadOnlyCollection<string>?> AllowedStoreKeys, UiPreferenceStore Preferences, Action<string>? Navigate, Func<ReportParameterSet, IProgress<ReportRunProgressEvent>, CancellationToken, bool, Task<string?>>? Run, DateTime? NowUtc = null);
+    /// <param name="Query">Runs the report's query with the validated parameters, reporting stage events and honouring the token; null when the report is not runnable here.</param>
+    /// <param name="Export">Writes the given columns of a result; <c>retry</c> re-writes into the previous file. Returns the outcome text, or null when the operator picked no file.</param>
+    /// <param name="ClassifiedAllowed">Whether the PII policy currently allows classified columns to be shown (masked).</param>
+    public sealed record Context(ReportDefinition Definition, Func<IReadOnlyCollection<string>?> AllowedStoreKeys, UiPreferenceStore Preferences, Action<string>? Navigate,
+        Func<ReportParameterSet, IProgress<ReportRunProgressEvent>, CancellationToken, Task<ReportQueryOutcome>>? Query,
+        Func<ReportResult, IReadOnlyList<string>, IProgress<ReportRunProgressEvent>, CancellationToken, bool, Task<string?>>? Export,
+        Func<bool>? ClassifiedAllowed = null, DateTime? NowUtc = null);
 
     public const string RunLabel = "Çalıştır";
     public const string OpenLabel = "Ekranda aç";
     public const string CancelLabel = "İptal";
     public const string RetryLabel = "Yeniden dene";
+    public const string ExportLabel = "CSV'ye aktar";
+    public const string ColumnsLabel = "Kolonlar";
     public const string NoParametersText = "Bu raporun parametresi yok.";
+    public const double ResultGridHeight = 260;
 
     public static FrameworkElement Build(Context context)
     {
@@ -65,7 +77,7 @@ public static class ReportParameterPanel
 
         var status = new TextBlock { Tag = "report-param-status", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) }; AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         var actions = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
-        var runnable = context.Run is not null && ReportRunner.CanRun(definition);
+        var runnable = context.Query is not null && ReportRunner.CanRun(definition);
         var run = new Button { Tag = "report-param-run", Content = RunLabel, Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(0, 0, 8, 0), Visibility = runnable ? Visibility.Visible : Visibility.Collapsed, IsDefault = runnable };
         var open = new Button { Tag = "report-param-open", Content = OpenLabel, Padding = new Thickness(12, 3, 12, 3), Visibility = definition.Route == "reports" || context.Navigate is null ? Visibility.Collapsed : Visibility.Visible, IsDefault = !runnable };
         actions.Children.Add(run); actions.Children.Add(open); root.Children.Add(actions);
@@ -82,9 +94,26 @@ public static class ReportParameterPanel
         runActions.Children.Add(cancel); runActions.Children.Add(retry); runActions.Children.Add(openDiagnostics);
         progressHost.Children.Add(progressHeadline); progressHost.Children.Add(progressRows); progressHost.Children.Add(diagnostics); progressHost.Children.Add(runActions);
         if (runnable) root.Children.Add(progressHost);
+
+        // #849: the result -- summary, the column chooser, the export, the grid.
+        var resultHost = new StackPanel { Tag = "report-result", Visibility = Visibility.Collapsed, Margin = new Thickness(0, 10, 0, 0) };
+        var resultSummary = new TextBlock { Tag = "report-result-summary", FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) }; AutomationProperties.SetLiveSetting(resultSummary, AutomationLiveSetting.Polite);
+        var resultBar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
+        var columnsButton = new Button { Tag = "report-result-columns", Content = ColumnsLabel + "…", Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 8, 0) }; AutomationProperties.SetName(columnsButton, "Sonuç kolonlarını düzenle");
+        var exportButton = new Button { Tag = "report-result-export", Content = ExportLabel, Padding = new Thickness(10, 2, 10, 2), Visibility = context.Export is null ? Visibility.Collapsed : Visibility.Visible };
+        resultBar.Children.Add(columnsButton); resultBar.Children.Add(exportButton);
+        var grid = new DataGrid { Tag = "report-result-grid", AutoGenerateColumns = false, IsReadOnly = true, Height = ResultGridHeight, EnableRowVirtualization = true, EnableColumnVirtualization = true, CanUserReorderColumns = true, CanUserResizeColumns = true, CanUserSortColumns = true, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column };
+        AutomationProperties.SetName(grid, "Rapor sonucu");
+        resultHost.Children.Add(resultSummary); resultHost.Children.Add(resultBar); resultHost.Children.Add(grid);
+        if (runnable) root.Children.Add(resultHost);
         root.Children.Add(status);
 
-        var applying = false; var running = false; var progress = new ReportRunProgressState(); CancellationTokenSource? runCts = null;
+        var applying = false; var running = false; var buildingGrid = false; var lastAction = "query";
+        var progress = new ReportRunProgressState(); CancellationTokenSource? runCts = null; ReportResult? result = null;
+        var columnSchema = ReportColumns.SchemaFor(definition);
+        bool ClassifiedAllowed() { try { return context.ClassifiedAllowed?.Invoke() ?? false; } catch (Exception) { return false; } }
+        var layout = ReportColumns.Resolve(columnSchema, SafeGet(context.Preferences, ReportColumns.PreferenceKey(definition.Key)), ClassifiedAllowed());
+
         ReportParameterSet Current() => new(definition.Key,
             schema.Store ? (store.SelectedItem as ReportStoreOption)?.Key ?? "" : "",
             schema.DateRange ? AsUtcDay(from.SelectedDate) : null, schema.DateRange ? AsUtcDay(to.SelectedDate) : null,
@@ -103,6 +132,7 @@ public static class ReportParameterPanel
             var blocking = findings.Where(f => f.Level == SeverityLevel.Blocking).ToList(); var glyph = SeverityStyle.For(SeverityLevel.Blocking, SeverityStyle.IsHighContrast).Glyph;
             validation.Text = blocking.Count == 0 ? "" : string.Join(Environment.NewLine, blocking.Select(f => $"{glyph} {f.Message}")); validation.Visibility = blocking.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             run.IsEnabled = blocking.Count == 0 && !running;
+            exportButton.IsEnabled = !running && result is not null;
             return findings;
         }
         void RenderProgress()
@@ -125,6 +155,38 @@ public static class ReportParameterPanel
             diagnostics.Foreground = SeverityStyle.AccentBrush(failed ? SeverityLevel.Blocking : SeverityLevel.Warning, hc);
             openDiagnostics.Visibility = failed && context.Navigate is not null ? Visibility.Visible : Visibility.Collapsed;
         }
+        void CaptureWidths()
+        {
+            foreach (var column in grid.Columns) if (ColumnKey(column) is { } key && column.ActualWidth > 0) layout = ReportColumns.Resize(layout, key, column.ActualWidth);
+        }
+        void SaveLayout()
+        {
+            try { context.Preferences.Set(ReportColumns.PreferenceKey(definition.Key), ReportColumns.Persist(layout)); }
+            catch (Exception error) { status.Text = "Kolon düzeni kaydedilemedi: " + AuditStore.Sanitize(error.Message); }
+        }
+        void RenderResult()
+        {
+            if (result is null) { resultHost.Visibility = Visibility.Collapsed; return; }
+            buildingGrid = true;
+            try
+            {
+                grid.ItemsSource = null; grid.Columns.Clear();
+                foreach (var choice in layout.Columns.Where(c => c.Visible))
+                    grid.Columns.Add(new DataGridTextColumn { Header = choice.Column.Label, SortMemberPath = $"[{choice.Column.Key}]", Binding = new Binding($"[{choice.Column.Key}]"), Width = new DataGridLength(choice.Width), MinWidth = ReportColumns.MinWidth });
+                grid.ItemsSource = result.Rows;
+            }
+            finally { buildingGrid = false; }
+            resultSummary.Text = $"{result.Rows.Count:N0} satır · {ReportColumns.Summary(layout, ClassifiedAllowed())}";
+            resultHost.Visibility = Visibility.Visible;
+            exportButton.IsEnabled = !running;
+        }
+        void PersistGridOrder()
+        {
+            if (buildingGrid) return;
+            var order = grid.Columns.OrderBy(c => c.DisplayIndex).Select(ColumnKey).Where(k => k is not null).Select(k => k!).ToList();
+            layout = ReportColumns.Reorder(layout, order); CaptureWidths(); SaveLayout();
+            if (result is not null) resultSummary.Text = $"{result.Rows.Count:N0} satır · {ReportColumns.Summary(layout, ClassifiedAllowed())}";
+        }
         void Apply(ReportParameterSet p)
         {
             applying = true;
@@ -143,27 +205,43 @@ public static class ReportParameterPanel
             var views = context.Preferences.ListViews(module); saved.ItemsSource = views; saved.SelectedItem = select is null ? null : views.FirstOrDefault(v => v.Name == select);
             load.IsEnabled = views.Count > 0; delete.IsEnabled = views.Count > 0;
         }
-        async Task StartRun(bool isRetry)
+        void BeginRun() { runCts?.Dispose(); runCts = new CancellationTokenSource(); running = true; run.IsEnabled = false; exportButton.IsEnabled = false; cancel.IsEnabled = true; progressHost.Visibility = Visibility.Visible; RenderProgress(); }
+        void EndRun() { running = false; if (progress.Running is not null) progress.Cancel(DateTime.UtcNow); RenderProgress(); Revalidate(); }
+        async Task StartQuery()
         {
-            if (running || context.Run is null) return;
+            if (running || context.Query is null) return;
             var findings = Revalidate(); if (!ReportParameters.IsValid(findings)) { status.Text = "Önce parametre hatalarını düzeltin."; return; }
-            progress = new ReportRunProgressState(); runCts?.Dispose(); runCts = new CancellationTokenSource();
-            running = true; run.IsEnabled = false; progressHost.Visibility = Visibility.Visible; status.Text = "Çalıştırılıyor…"; RenderProgress();
+            lastAction = "query"; progress = new ReportRunProgressState(); BeginRun(); status.Text = "Sorgu çalıştırılıyor…";
             var reporter = new Progress<ReportRunProgressEvent>(e => { progress.Apply(e); RenderProgress(); });
             try
             {
-                var message = await context.Run(Current(), reporter, runCts.Token, isRetry);
-                if (message is null) { status.Text = "Çalıştırma vazgeçildi; dosya seçilmedi."; progressHost.Visibility = Visibility.Collapsed; }
-                else status.Text = message;
+                var outcome = await context.Query(Current(), reporter, runCts!.Token);
+                status.Text = outcome.Message;
+                if (outcome.State == ReportRunState.Succeeded && outcome.Result is not null)
+                {
+                    result = outcome.Result; layout = ReportColumns.Resolve(columnSchema, SafeGet(context.Preferences, ReportColumns.PreferenceKey(definition.Key)), ClassifiedAllowed()); RenderResult();
+                }
             }
-            catch (OperationCanceledException) { status.Text = "Rapor iptal edildi; dosya yazılmadı."; }
+            catch (OperationCanceledException) { status.Text = "Sorgu iptal edildi."; }
             catch (Exception error) { var safe = AuditStore.Sanitize(error.Message); status.Text = "Çalıştırılamadı: " + safe; progress.Apply(new(progress.Running ?? ReportRunStage.Query, ReportRunStageStatus.Failed, Note: safe)); }
-            finally
+            finally { EndRun(); }
+        }
+        async Task StartExport(bool isRetry)
+        {
+            if (running || context.Export is null) return;
+            if (result is null) { status.Text = "Önce raporu çalıştırın; dışa aktarılacak sonuç yok."; return; }
+            lastAction = "export"; CaptureWidths(); var columns = layout.VisibleKeys;
+            if (columns.Count == 0) { status.Text = "Dışa aktarılacak kolon seçin."; return; }
+            progress.Apply(new(ReportRunStage.Export, ReportRunStageStatus.Pending)); BeginRun(); status.Text = "Dışa aktarılıyor…";
+            var reporter = new Progress<ReportRunProgressEvent>(e => { progress.Apply(e); RenderProgress(); });
+            try
             {
-                running = false;
-                if (progress.Running is not null) progress.Cancel(DateTime.UtcNow);
-                RenderProgress(); Revalidate();
+                var message = await context.Export(result, columns, reporter, runCts!.Token, isRetry);
+                status.Text = message ?? "Dışa aktarma vazgeçildi; dosya seçilmedi.";
             }
+            catch (OperationCanceledException) { status.Text = "Dışa aktarma iptal edildi; dosya yazılmadı."; }
+            catch (Exception error) { var safe = AuditStore.Sanitize(error.Message); status.Text = "Dışa aktarılamadı: " + safe; progress.Apply(new(ReportRunStage.Export, ReportRunStageStatus.Failed, Note: safe)); }
+            finally { EndRun(); }
         }
         store.SelectionChanged += (_, _) => { if (!applying) Revalidate(); };
         from.SelectedDateChanged += (_, _) => { if (!applying) Revalidate(); };
@@ -190,14 +268,26 @@ public static class ReportParameterPanel
             context.Preferences.DeleteView(module, view.Name); RefreshSaved(); status.Text = $"'{view.Name}' silindi.";
         };
         open.Click += (_, _) => context.Navigate?.Invoke(definition.Route);
-        run.Click += async (_, _) => await StartRun(isRetry: false);
-        retry.Click += async (_, _) => await StartRun(isRetry: true);
+        run.Click += async (_, _) => await StartQuery();
+        exportButton.Click += async (_, _) => await StartExport(isRetry: false);
+        retry.Click += async (_, _) => { if (lastAction == "export") await StartExport(isRetry: true); else await StartQuery(); };
         cancel.Click += (_, _) => { if (!running) return; runCts?.Cancel(); status.Text = "İptal istendi; sürmekte olan aşama durduruluyor."; cancel.IsEnabled = false; };
         openDiagnostics.Click += (_, _) => context.Navigate?.Invoke("diagnostics");
+        columnsButton.Click += (_, _) =>
+        {
+            CaptureWidths();
+            var dialog = ReportColumnChooserDialog.Build(Window.GetWindow(root), layout, ClassifiedAllowed(), chosen => { layout = chosen; SaveLayout(); RenderResult(); status.Text = "Kolon düzeni kaydedildi."; });
+            dialog.ShowDialog();
+        };
+        grid.ColumnDisplayIndexChanged += (_, _) => PersistGridOrder();
+        grid.ColumnReordered += (_, _) => PersistGridOrder();
         Apply(ReportParameters.Defaults(definition, allowed, context.NowUtc ?? DateTime.UtcNow)); RefreshSaved();
         return root;
     }
 
+    /// <summary>A result column carries its schema key as its sort path ("[OrderId]"); the header is a label and may change.</summary>
+    public static string? ColumnKey(DataGridColumn column) => column?.SortMemberPath is { Length: > 2 } path && path[0] == '[' && path[^1] == ']' ? path[1..^1] : null;
+    static string? SafeGet(UiPreferenceStore preferences, string key) { try { return preferences.Get(key); } catch (Exception) { return null; } }
     static DateTime? AsUtcDay(DateTime? picked) => picked is null ? null : DateTime.SpecifyKind(picked.Value.Date, DateTimeKind.Utc);
     static DateTime? AsPickerDay(DateTime? day) => day is null ? null : DateTime.SpecifyKind(day.Value.Date, DateTimeKind.Unspecified);
 }

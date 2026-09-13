@@ -35,6 +35,9 @@ public static class ReportsPanel
         var preferences = new UiPreferenceStore(directory);
         // #848: a retry re-runs into the file the operator already chose for that report.
         var lastPaths = new Dictionary<string, string>(StringComparer.Ordinal);
+        // #849: classified result columns follow the PII reveal policy (#841); an unreadable policy allows nothing.
+        var catalogStore = new Catalog.CatalogStore(directory);
+        bool ClassifiedAllowed() { try { return catalogStore.GetPiiRevealPolicy().Allowed; } catch (Exception) { return false; } }
         void Refresh()
         {
             var view = ReportCatalog.Load(directory, allowedStoreKeys?.Invoke(), search.Text, DateTime.UtcNow);
@@ -46,16 +49,24 @@ public static class ReportsPanel
         void Select(ReportCard card)
         {
             var definition = ReportCatalog.Find(card.Key); if (definition is null) return;
-            Func<ReportParameterSet, IProgress<ReportRunProgressEvent>, CancellationToken, bool, Task<string?>>? run = ReportRunner.CanRun(definition) ? async (parameters, progress, token, retry) =>
+            var runnable = ReportRunner.CanRun(definition);
+            // #849: the query lists on screen; the export writes the visible columns into the file the operator picks (a retry reuses it).
+            Func<ReportParameterSet, IProgress<ReportRunProgressEvent>, CancellationToken, Task<ReportQueryOutcome>>? query = runnable ? async (parameters, progress, token) =>
+            {
+                var outcome = await ReportRunner.QueryAsync(directory, definition, parameters, allowedStoreKeys?.Invoke(), token, progress);
+                Refresh();
+                return outcome;
+            } : null;
+            Func<ReportResult, IReadOnlyList<string>, IProgress<ReportRunProgressEvent>, CancellationToken, bool, Task<string?>>? export = runnable ? async (result, columns, progress, token, retry) =>
             {
                 var path = retry && lastPaths.TryGetValue(definition.Key, out var last) ? last : choosePath is not null ? choosePath(definition) : AskPath(panel, definition);
                 if (string.IsNullOrWhiteSpace(path)) return null;
                 lastPaths[definition.Key] = path;
-                var outcome = await ReportRunner.RunAsync(directory, definition, parameters, path, allowedStoreKeys?.Invoke(), token, progress);
+                var outcome = await ReportRunner.ExportAsync(directory, result, columns, path, token, progress);
                 Refresh();
                 return outcome.Message;
             } : null;
-            setupHost.Child = ReportParameterPanel.Build(new ReportParameterPanel.Context(definition, () => allowedStoreKeys?.Invoke(), preferences, navigate, run));
+            setupHost.Child = ReportParameterPanel.Build(new ReportParameterPanel.Context(definition, () => allowedStoreKeys?.Invoke(), preferences, navigate, query, export, ClassifiedAllowed));
             setupHost.Visibility = Visibility.Visible;
         }
         var refresh = Button(errors, "Yenile", Refresh);

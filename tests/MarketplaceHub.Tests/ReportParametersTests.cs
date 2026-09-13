@@ -12,8 +12,9 @@ using TrMarketplaceHubDesktop;
 // #847 (DESIGN: Report parameter panel). Schemas follow the report; defaults are the first offered store, the last 30
 // days and every state; validation names the field: no store, a store not offered, an inverted or over-long
 // range, an unknown state, an over-long query, a future end date only warns. Saved filters round-trip their
-// fields and nothing else; garbage loads as null and hostile values as empty. The orders CSV runner writes only
-// the store, range and state asked for, records every outcome, and refuses wrong-store, invalid or foreign work.
+// fields and nothing else; garbage loads as null and hostile values as empty. The orders runner queries only the
+// store, range and state asked for, exports the chosen columns, records every outcome, and refuses wrong-store,
+// invalid or foreign work.
 [TestClass]
 public sealed class ReportParametersTests
 {
@@ -65,12 +66,13 @@ public sealed class ReportParametersTests
         Assert.IsNotNull(hostile); Assert.AreEqual("etsy|S1", hostile!.StoreKey); Assert.IsNull(hostile.FromUtc); Assert.IsNull(hostile.ToUtc); Assert.AreEqual("", hostile.DeliveryState); Assert.AreEqual("", hostile.Query);
         var expected = $"Mağaza: etsy · S1 · {p.FromUtc!.Value.ToString("d", CultureInfo.CurrentCulture)}–{p.ToUtc!.Value.ToString("d", CultureInfo.CurrentCulture)} · Durum: Yolda · Arama: kupa";
         Assert.AreEqual(expected, ReportParameters.Summary(p, ReportParameters.SchemaFor(Def("orders-csv"))));
+        StringAssert.EndsWith(ReportParameters.Summary(p, ReportParameters.SchemaFor(Def("orders-csv")), includeQuery: false), "Durum: Yolda · Arama: var");
         Assert.AreEqual("", ReportParameters.Summary(new("support-package"), ReportParameters.SchemaFor(Def("support-package"))));
         Assert.AreEqual("Mağaza: seçilmedi · Durum: tümü", ReportParameters.Summary(new("orders-csv"), ReportParameters.SchemaFor(Def("orders-csv"))));
     }
 
     [TestMethod]
-    public async Task TheOrdersCsvRunnerWritesOnlyTheStoreRangeAndStateAndRecordsEveryOutcome()
+    public async Task TheOrdersRunnerQueriesOnlyTheStoreRangeAndStateExportsTheChosenColumnsAndRecordsEveryOutcome()
     {
         var root = Path.Combine(Path.GetTempPath(), "report-runner-" + Guid.NewGuid().ToString("N"));
         try
@@ -81,7 +83,7 @@ public sealed class ReportParametersTests
             {
                 Marketplace = marketplace, ShopId = shop, OrderId = id, UpdatedAt = updated, Total = total, Currency = "USD",
                 Items = [new() { Sku = "A", Title = "Kupa", Quantity = 1 }],
-                Shipments = state is null ? [] : [new() { Id = "P-" + id, Carrier = "Aras", TrackingNumber = "TR" + id, State = state }],
+                Shipments = state is null ? [] : [new() { Id = "P-" + id, Carrier = "Aras", TrackingNumber = "TRK0000000" + id, State = state }],
             };
             orders.SaveManual(Order("etsy", "S1", "1001", now.AddDays(-2), "InTransit", 12.5m));
             orders.SaveManual(Order("etsy", "S1", "1002", now.AddDays(-5), "Delivered", 7m));
@@ -91,45 +93,62 @@ public sealed class ReportParametersTests
             var def = Def("orders-csv"); var allowed = new[] { "etsy|S1", "ebay|E1" };
             var p = ReportParameters.Defaults(def, allowed, DateTime.UtcNow);
             var path = Path.Combine(root, "out", "orders.csv"); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var defaultColumns = ReportColumns.Default(ReportColumns.OrdersSchema).VisibleKeys;
 
-            var outcome = await ReportRunner.RunAsync(root, def, p, path, allowed);
-            Assert.AreEqual(ReportRunState.Succeeded, outcome.State); Assert.AreEqual(3, outcome.Rows, "Two shipped orders and the one without a package, all in the last 30 days of this store.");
+            var query = await ReportRunner.QueryAsync(root, def, p, allowed);
+            Assert.AreEqual(ReportRunState.Succeeded, query.State); Assert.AreEqual(3, query.Result!.Rows.Count, "Two shipped orders and the one without a package, all in the last 30 days of this store.");
+            Assert.IsTrue(query.Result.Rows.All(r => r["ShopId"] is "S1" && ((string)r["OrderId"]!).StartsWith("100", StringComparison.Ordinal))); Assert.IsFalse(query.Result.Rows.Any(r => r["OrderId"] is "1003"), "Not the order outside the range.");
+            var row1001 = query.Result.Rows.Single(r => r["OrderId"] is "1001");
+            Assert.AreEqual("Yolda", row1001["Status"]); Assert.AreEqual(12.5m, row1001["Price"]); Assert.AreEqual("TR••••••1001", row1001["Tracking"], "The tracking column is masked in the rows themselves.");
+            Assert.AreEqual("", query.Result.Rows.Single(r => r["OrderId"] is "1004")["Tracking"], "No package, no tracking.");
+
+            var export = await ReportRunner.ExportAsync(root, query.Result, defaultColumns, path);
+            Assert.AreEqual(ReportRunState.Succeeded, export.State); Assert.AreEqual(3, export.Rows);
             var lines = File.ReadAllLines(path);
             Assert.AreEqual("OrderId;ShopId;Status;Price;Currency;UpdatedUtc", lines[0]); Assert.AreEqual(4, lines.Length);
-            Assert.IsTrue(lines.Skip(1).All(l => l.StartsWith("100", StringComparison.Ordinal))); Assert.IsFalse(lines.Any(l => l.Contains("2001") || l.Contains("1003")), "Neither the other store nor the order outside the range.");
-            StringAssert.Contains(lines.Single(l => l.StartsWith("1001", StringComparison.Ordinal)), ";Yolda;12.5;USD;");
+            StringAssert.Contains(lines.Single(l => l.StartsWith("1001", StringComparison.Ordinal)), ";Yolda;12.5;USD;"); Assert.IsFalse(File.ReadAllText(path).Contains("TRK0000000"), "The default export carries no tracking.");
             Assert.IsFalse(Directory.GetFiles(Path.GetDirectoryName(path)!).Any(f => f.Contains(".tmp-", StringComparison.Ordinal)), "No temp file is left behind.");
+            var chosen = await ReportRunner.ExportAsync(root, query.Result, new[] { "Tracking", "OrderId" }, path);
+            Assert.AreEqual(3, chosen.Rows); Assert.AreEqual("Tracking;OrderId", File.ReadAllLines(path)[0]); StringAssert.Contains(File.ReadAllText(path), "TR••••••1001;1001");
 
-            Assert.AreEqual(1, (await ReportRunner.RunAsync(root, def, p with { DeliveryState = "InTransit" }, path, allowed)).Rows);
-            Assert.AreEqual(1, (await ReportRunner.RunAsync(root, def, p with { DeliveryState = "Unknown" }, path, allowed)).Rows, "'Unknown' also means an order without a package.");
-            Assert.AreEqual(1, (await ReportRunner.RunAsync(root, def, p with { Query = "1002" }, path, allowed)).Rows);
-            var empty = await ReportRunner.RunAsync(root, def, p with { FromUtc = DateTime.UtcNow.Date.AddDays(-300), ToUtc = DateTime.UtcNow.Date.AddDays(-200) }, path, allowed);
-            Assert.AreEqual(0, empty.Rows); StringAssert.Contains(empty.Message, "yalnız başlık"); Assert.AreEqual(1, File.ReadAllLines(path).Length);
+            Assert.AreEqual(1, (await ReportRunner.QueryAsync(root, def, p with { DeliveryState = "InTransit" }, allowed)).Result!.Rows.Count);
+            Assert.AreEqual(1, (await ReportRunner.QueryAsync(root, def, p with { DeliveryState = "Unknown" }, allowed)).Result!.Rows.Count, "'Unknown' also means an order without a package.");
+            Assert.AreEqual(1, (await ReportRunner.QueryAsync(root, def, p with { Query = "1002" }, allowed)).Result!.Rows.Count);
+            var empty = await ReportRunner.QueryAsync(root, def, p with { FromUtc = DateTime.UtcNow.Date.AddDays(-300), ToUtc = DateTime.UtcNow.Date.AddDays(-200) }, allowed);
+            Assert.AreEqual(0, empty.Result!.Rows.Count); StringAssert.Contains(empty.Message, "sipariş yok");
+            var emptyExport = await ReportRunner.ExportAsync(root, empty.Result, defaultColumns, path);
+            StringAssert.Contains(emptyExport.Message, "yalnız başlık"); Assert.AreEqual(1, File.ReadAllLines(path).Length);
 
             var runs = new ReportRunStore(root).Recent("orders-csv");
-            Assert.AreEqual(5, runs.Count); Assert.IsTrue(runs.All(r => r.State == ReportRunState.Succeeded && r.StoreKey == "etsy|S1")); StringAssert.Contains(runs[0].Note, "Mağaza: etsy · S1");
+            Assert.AreEqual(8, runs.Count, "Five queries and three exports."); Assert.IsTrue(runs.All(r => r.State == ReportRunState.Succeeded && r.StoreKey == "etsy|S1"));
+            StringAssert.Contains(runs[0].Note, "Mağaza: etsy · S1"); StringAssert.Contains(runs[0].Note, "CSV: 6 kolon"); Assert.IsTrue(runs.Any(r => !r.Note.Contains("CSV")), "A query run has no export note.");
 
-            // Guards: a store not offered, an inverted range, a report the workspace does not run, a non-CSV path -- none records a run.
-            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => ReportRunner.RunAsync(root, def, p with { StoreKey = "ebay|E1" }, path, new[] { "etsy|S1" }));
-            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => ReportRunner.RunAsync(root, def, p with { FromUtc = DateTime.UtcNow.Date, ToUtc = DateTime.UtcNow.Date.AddDays(-1) }, path, allowed));
-            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => ReportRunner.RunAsync(root, Def("orders"), p, path, allowed));
-            await Assert.ThrowsExceptionAsync<ArgumentException>(() => ReportRunner.RunAsync(root, def, p, Path.Combine(root, "x.txt"), allowed));
-            Assert.AreEqual(5, new ReportRunStore(root).Recent("orders-csv").Count);
+            // Guards: a store not offered, an inverted range, a report the workspace does not run, a non-CSV path, a foreign column, no column -- none records a run.
+            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => ReportRunner.QueryAsync(root, def, p with { StoreKey = "ebay|E1" }, new[] { "etsy|S1" }));
+            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => ReportRunner.QueryAsync(root, def, p with { FromUtc = DateTime.UtcNow.Date, ToUtc = DateTime.UtcNow.Date.AddDays(-1) }, allowed));
+            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => ReportRunner.QueryAsync(root, Def("orders"), p, allowed));
+            await Assert.ThrowsExceptionAsync<ArgumentException>(() => ReportRunner.ExportAsync(root, query.Result, defaultColumns, Path.Combine(root, "x.txt")));
+            await Assert.ThrowsExceptionAsync<ArgumentException>(() => ReportRunner.ExportAsync(root, query.Result, new[] { "OrderId", "CustomerName" }, path));
+            await Assert.ThrowsExceptionAsync<ArgumentException>(() => ReportRunner.ExportAsync(root, query.Result, Array.Empty<string>(), path));
+            Assert.AreEqual(8, new ReportRunStore(root).Recent("orders-csv").Count);
 
-            // Cancelled before reading: nothing written, the run says so.
-            using var cts = new CancellationTokenSource(); cts.Cancel(); var other = Path.Combine(root, "out", "cancelled.csv");
-            var cancelled = await ReportRunner.RunAsync(root, def, p, other, allowed, cts.Token);
-            Assert.AreEqual(ReportRunState.Cancelled, cancelled.State); Assert.IsFalse(File.Exists(other)); Assert.AreEqual(ReportRunState.Cancelled, new ReportRunStore(root).Latest()["orders-csv"].State);
+            // Cancelled before the query: no result, the run says so; cancelled before the export: nothing written.
+            using var cts = new CancellationTokenSource(); cts.Cancel();
+            var cancelledQuery = await ReportRunner.QueryAsync(root, def, p, allowed, cts.Token);
+            Assert.AreEqual(ReportRunState.Cancelled, cancelledQuery.State); Assert.IsNull(cancelledQuery.Result);
+            var other = Path.Combine(root, "out", "cancelled.csv");
+            var cancelledExport = await ReportRunner.ExportAsync(root, query.Result, defaultColumns, other, cts.Token);
+            Assert.AreEqual(ReportRunState.Cancelled, cancelledExport.State); Assert.IsFalse(File.Exists(other)); Assert.AreEqual(ReportRunState.Cancelled, new ReportRunStore(root).Latest()["orders-csv"].State);
 
             // A write that cannot land (the target is a directory) is a Failed run with a sentence, and no temp file stays.
             var blocked = Path.Combine(root, "out", "dir.csv"); Directory.CreateDirectory(blocked);
-            var failed = await ReportRunner.RunAsync(root, def, p, blocked, allowed);
+            var failed = await ReportRunner.ExportAsync(root, query.Result, defaultColumns, blocked);
             Assert.AreEqual(ReportRunState.Failed, failed.State); StringAssert.StartsWith(failed.Message, "Rapor yazılamadı"); Assert.AreEqual(ReportRunState.Failed, new ReportRunStore(root).Latest()["orders-csv"].State);
             Assert.IsFalse(Directory.GetFiles(Path.Combine(root, "out")).Any(f => f.Contains(".tmp-", StringComparison.Ordinal)));
 
-            // The renderer's allow-list keeps customer fields out of any report template.
+            // The renderer's allow-list keeps customer fields out of any report template; the tracking column is the masked one.
             Assert.ThrowsException<InvalidOperationException>(() => ReportTemplateRenderer.Render(new ReportTemplate("orders", new[] { "OrderId", "CustomerName" }), Array.Empty<IReadOnlyDictionary<string, object?>>()));
-            Assert.IsTrue(ReportRunner.OrdersCsvColumns.All(c => !c.Contains("Customer", StringComparison.OrdinalIgnoreCase)));
+            Assert.IsTrue(ReportTemplateRenderer.IsAllowed("Tracking") && !ReportTemplateRenderer.IsAllowed("CustomerName") && !ReportTemplateRenderer.IsAllowed("Email"));
         }
         finally
         {

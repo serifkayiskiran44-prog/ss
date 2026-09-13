@@ -11,8 +11,8 @@ using TrMarketplaceHubDesktop;
 // #848 (DESIGN: Report run progress surface). The stage model: an unknown total is a count with an indeterminate
 // bar, never a percentage; a known total is a percentage; cancellation lands on the running stage; a failure keeps
 // its redacted note as the diagnostics; the headline follows. The runner emits real events -- query (total
-// unknown until the first page, then page by page), generate, export -- and on cancel or failure marks the stage it
-// was in. Neither the run note nor the audit detail ever carries the query text.
+// unknown until the first page, then page by page) and generate on a query, export on an export -- and on cancel
+// or failure marks the stage it was in. Neither the run note nor the audit detail ever carries the query text.
 [TestClass]
 public sealed class ReportRunProgressTests
 {
@@ -38,8 +38,11 @@ public sealed class ReportRunProgressTests
         Assert.AreEqual(ReportRunStageStatus.Pending, state[ReportRunStage.Export].Status, "Later stages stay pending."); Assert.AreEqual(ReportRunStageStatus.Done, state[ReportRunStage.Query].Status, "Earlier stages keep what they did.");
         Assert.AreEqual("Üretim iptal", state.Headline(t0.AddSeconds(9))); Assert.AreEqual("İptal edildi; dosya yazılmadı.", state.Diagnostics);
 
-        var failed = new ReportRunProgressState();
-        failed.Apply(new(ReportRunStage.Query, ReportRunStageStatus.Running, AtUtc: t0)); failed.Apply(new(ReportRunStage.Query, ReportRunStageStatus.Done, 3, 3, t0)); failed.Apply(new(ReportRunStage.Generate, ReportRunStageStatus.Running, AtUtc: t0)); failed.Apply(new(ReportRunStage.Generate, ReportRunStageStatus.Done, AtUtc: t0));
+        var listed = new ReportRunProgressState();
+        listed.Apply(new(ReportRunStage.Query, ReportRunStageStatus.Running, AtUtc: t0)); listed.Apply(new(ReportRunStage.Query, ReportRunStageStatus.Done, 3, 3, t0)); listed.Apply(new(ReportRunStage.Generate, ReportRunStageStatus.Running, AtUtc: t0)); listed.Apply(new(ReportRunStage.Generate, ReportRunStageStatus.Done, 3, 3, t0));
+        Assert.IsFalse(listed.IsTerminal); StringAssert.StartsWith(listed.Headline(t0), "Sonuç hazır", "A listed result with the export still optional (#849).");
+
+        var failed = listed;
         failed.Apply(new(ReportRunStage.Export, ReportRunStageStatus.Running, AtUtc: t0));
         failed.Apply(new(ReportRunStage.Export, ReportRunStageStatus.Failed, AtUtc: t0.AddSeconds(1), Note: "Disk dolu; token=abc123 gizli"));
         Assert.AreEqual(ReportRunStage.Export, failed.Failed); Assert.IsFalse(failed.Diagnostics.Contains("abc123")); StringAssert.StartsWith(failed.Diagnostics, "Disk dolu"); StringAssert.StartsWith(failed.Headline(t0), "Dışa aktarma başarısız: Disk dolu");
@@ -60,39 +63,44 @@ public sealed class ReportRunProgressTests
             Directory.CreateDirectory(root);
             var orders = new OrdersStore(root); var now = DateTimeOffset.UtcNow;
             for (var i = 0; i < 3; i++) orders.SaveManual(new() { Marketplace = "etsy", ShopId = "S1", OrderId = $"10{i}", UpdatedAt = now.AddDays(-i), Total = 5m, Currency = "USD", Items = [new() { Sku = "A", Title = "Kupa", Quantity = 1 }], Shipments = [new() { Id = "P" + i, Carrier = "Aras", TrackingNumber = "T" + i, State = "InTransit" }] });
-            var def = ReportCatalog.Find("orders-csv")!; var allowed = new[] { "etsy|S1" };
+            var def = ReportCatalog.Find("orders-csv")!; var allowed = new[] { "etsy|S1" }; var columns = ReportColumns.Default(ReportColumns.OrdersSchema).VisibleKeys;
             var p = ReportParameters.Defaults(def, allowed, DateTime.UtcNow) with { Query = "musteri@example.com" };
             var path = Path.Combine(root, "orders.csv"); var sink = new Sink();
 
-            var outcome = await ReportRunner.RunAsync(root, def, p, path, allowed, CancellationToken.None, sink);
-            Assert.AreEqual(ReportRunState.Succeeded, outcome.State); Assert.AreEqual(0, outcome.Rows, "The query text matches no order, so the file has only its header.");
+            var outcome = await ReportRunner.QueryAsync(root, def, p, allowed, CancellationToken.None, sink);
+            Assert.AreEqual(ReportRunState.Succeeded, outcome.State); Assert.AreEqual(0, outcome.Result!.Rows.Count, "The query text matches no order.");
             var events = sink.Events;
             Assert.AreEqual((ReportRunStage.Query, ReportRunStageStatus.Running, (long?)null), (events[0].Stage, events[0].Status, events[0].Total), "The first query event knows no total.");
             Assert.IsTrue(events.Any(e => e.Stage == ReportRunStage.Query && e.Status == ReportRunStageStatus.Running && e.Total is not null), "Page by page the total becomes known.");
-            CollectionAssert.AreEqual(new[] { ReportRunStage.Query, ReportRunStage.Generate, ReportRunStage.Generate, ReportRunStage.Export, ReportRunStage.Export }, events.Where(e => e.Status == ReportRunStageStatus.Done || e.Stage != ReportRunStage.Query).Select(e => e.Stage).ToArray());
-            Assert.AreEqual(ReportRunStageStatus.Done, events.Last().Status); Assert.AreEqual(ReportRunStage.Export, events.Last().Stage);
-            var replay = new ReportRunProgressState(); foreach (var e in events) replay.Apply(e); Assert.IsTrue(replay.IsComplete);
+            CollectionAssert.AreEqual(new[] { ReportRunStage.Query, ReportRunStage.Generate, ReportRunStage.Generate }, events.Where(e => e.Status == ReportRunStageStatus.Done || e.Stage != ReportRunStage.Query).Select(e => e.Stage).ToArray());
+            Assert.AreEqual((ReportRunStage.Generate, ReportRunStageStatus.Done), (events.Last().Stage, events.Last().Status));
+            var replay = new ReportRunProgressState(); foreach (var e in events) replay.Apply(e); StringAssert.StartsWith(replay.Headline(DateTime.UtcNow), "Sonuç hazır");
 
             var run = new ReportRunStore(root).Latest()["orders-csv"];
             Assert.IsFalse(run.Note.Contains("example.com"), run.Note); StringAssert.Contains(run.Note, "Arama: var");
             var audit = new AuditStore(root).List(10).Single(a => a.Module == "reports");
             Assert.AreEqual("run:orders-csv", audit.Action); Assert.AreEqual("Succeeded", audit.Outcome); Assert.AreEqual("etsy", audit.Marketplace); Assert.AreEqual("S1", audit.ShopId);
-            Assert.IsFalse(audit.Detail.Contains("example.com"), audit.Detail); StringAssert.Contains(audit.Detail, "yalnız başlık");
+            Assert.IsFalse(audit.Detail.Contains("example.com"), audit.Detail); StringAssert.Contains(audit.Detail, "sipariş yok");
 
-            // The rows themselves: three orders, the query lifted.
-            var full = new Sink(); var withRows = await ReportRunner.RunAsync(root, def, p with { Query = "" }, path, allowed, CancellationToken.None, full);
-            Assert.AreEqual(3, withRows.Rows); Assert.AreEqual(3, full.Events.Single(e => e.Stage == ReportRunStage.Query && e.Status == ReportRunStageStatus.Done).Total);
+            // The export stage, on the rows the query lifted the search from.
+            var full = new Sink(); var withRows = await ReportRunner.QueryAsync(root, def, p with { Query = "" }, allowed, CancellationToken.None, full);
+            Assert.AreEqual(3, withRows.Result!.Rows.Count); Assert.AreEqual(3, full.Events.Single(e => e.Stage == ReportRunStage.Query && e.Status == ReportRunStageStatus.Done).Total);
             Assert.AreEqual(3, full.Events.Single(e => e.Stage == ReportRunStage.Query && e.Status == ReportRunStageStatus.Running && e.Total is not null).Total);
+            var exportSink = new Sink(); var exported = await ReportRunner.ExportAsync(root, withRows.Result, columns, path, CancellationToken.None, exportSink);
+            Assert.AreEqual(ReportRunState.Succeeded, exported.State);
+            CollectionAssert.AreEqual(new[] { ReportRunStageStatus.Running, ReportRunStageStatus.Done }, exportSink.Events.Select(e => e.Status).ToArray()); Assert.IsTrue(exportSink.Events.All(e => e.Stage == ReportRunStage.Export));
+            foreach (var e in exportSink.Events) replay.Apply(e);
+            Assert.IsTrue(replay.IsComplete, "A query's events followed by an export's events compose one complete run, as the setup shows them."); Assert.AreEqual("Tamamlandı", replay.Headline(DateTime.UtcNow));
 
             // Cancelled before the query: the query stage is the one marked cancelled.
             using var cts = new CancellationTokenSource(); cts.Cancel(); var cancelledSink = new Sink();
-            var cancelled = await ReportRunner.RunAsync(root, def, p, Path.Combine(root, "c.csv"), allowed, cts.Token, cancelledSink);
+            var cancelled = await ReportRunner.QueryAsync(root, def, p, allowed, cts.Token, cancelledSink);
             Assert.AreEqual(ReportRunState.Cancelled, cancelled.State); Assert.AreEqual((ReportRunStage.Query, ReportRunStageStatus.Cancelled), (cancelledSink.Events.Last().Stage, cancelledSink.Events.Last().Status));
             Assert.AreEqual("Cancelled", new AuditStore(root).List(10).First(a => a.Module == "reports").Outcome);
 
             // A failed export marks the export stage with a sanitized note.
             var blocked = Path.Combine(root, "dir.csv"); Directory.CreateDirectory(blocked); var failedSink = new Sink();
-            var failed = await ReportRunner.RunAsync(root, def, p, blocked, allowed, CancellationToken.None, failedSink);
+            var failed = await ReportRunner.ExportAsync(root, withRows.Result, columns, blocked, CancellationToken.None, failedSink);
             Assert.AreEqual(ReportRunState.Failed, failed.State); var last = failedSink.Events.Last();
             Assert.AreEqual((ReportRunStage.Export, ReportRunStageStatus.Failed), (last.Stage, last.Status)); Assert.IsTrue(last.Note.Length > 0); Assert.IsFalse(last.Note.Contains(root), "The note never carries the path.");
         }

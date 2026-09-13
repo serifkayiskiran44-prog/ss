@@ -94,9 +94,12 @@ public sealed class ReportParameterPanelUiTests
                     saved.SelectedItem = saved.Items.OfType<SavedUiView>().Single(v => v.Name == "Yolda"); Click(Setup<Button>("report-param-load"));
                     Assert.AreEqual("InTransit", ((ReportStateOption)state.SelectedItem!).Key);
 
-                    // Run: the CSV lands where the panel was told, the card shows the run, the setup stays.
+                    // Run: the result lists on screen (#849), the export lands where the panel was told, the card shows the run, the setup stays.
                     Click(Setup<Button>("report-param-run"));
-                    WaitUntil(window, () => Setup<TextBlock>("report-param-status").Text.Contains("sipariş yazıldı"), "the run to finish");
+                    WaitUntil(window, () => Setup<TextBlock>("report-param-status").Text.Contains("sipariş listelendi"), "the query to finish");
+                    Assert.AreEqual(1, Setup<DataGrid>("report-result-grid").Items.Count, "The InTransit filter leaves one order on screen.");
+                    Click(Setup<Button>("report-result-export"));
+                    WaitUntil(window, () => Setup<TextBlock>("report-param-status").Text.Contains("sipariş yazıldı"), "the export to finish");
                     var lines = File.ReadAllLines(csvPath);
                     Assert.AreEqual(2, lines.Length); StringAssert.StartsWith(lines[1], "1001;S1;Yolda;12.5;USD;");
                     StringAssert.Contains(RunText(Card("orders-csv")), "başarılı · 1 satır"); Assert.AreEqual(Visibility.Visible, setupHost.Visibility);
@@ -110,7 +113,7 @@ public sealed class ReportParameterPanelUiTests
                     Assert.IsTrue(Descendants(setupHost).OfType<TextBlock>().Any(t => (string?)t.Tag == "report-setup-none"), "The support package says it has no parameters.");
 
                     // Without an offered store the setup itself blocks: the store combo is off with the reason, the run disabled.
-                    var alone = ReportParameterPanel.Build(new ReportParameterPanel.Context(ReportCatalog.Find("orders-csv")!, () => Array.Empty<string>(), new UiPreferenceStore(root), navigated.Add, (_, _, _, _) => Task.FromResult<string?>("ran")));
+                    var alone = ReportParameterPanel.Build(new ReportParameterPanel.Context(ReportCatalog.Find("orders-csv")!, () => Array.Empty<string>(), new UiPreferenceStore(root), navigated.Add, (p, _, _) => Task.FromResult(new ReportQueryOutcome(ReportRunState.Succeeded, null, "ran")), null));
                     setupHost.Child = alone; Drain(window);
                     var storeAlone = Setup<ComboBox>("report-param-store");
                     Assert.IsFalse(storeAlone.IsEnabled); Assert.IsFalse(Setup<Button>("report-param-run").IsEnabled); StringAssert.Contains(Setup<TextBlock>("report-param-validation").Text, "Mağaza seçin");

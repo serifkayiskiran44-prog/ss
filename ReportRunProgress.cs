@@ -66,6 +66,8 @@ public sealed class ReportRunProgressState
         if (IsComplete) return "Tamamlandı";
         if (Failed is { } f) { var stage = stages[f]; return $"{stage.Label} {StatusWord(stage.Status)}" + (stage.Status == ReportRunStageStatus.Failed && stage.Note.Length > 0 ? ": " + stage.Note : ""); }
         if (Running is { } r) { var stage = WithElapsed(stages[r], nowUtc); return $"{stage.Label} sürüyor" + (stage.Counter.Length > 0 ? " · " + stage.Counter : "") + (stage.Percent is { } p ? $" (%{p:0})" : ""); }
+        // #849: the query and the generation are done, the export not asked for yet -- the result is on screen.
+        if (stages[ReportRunStage.Generate].Status == ReportRunStageStatus.Done && stages[ReportRunStage.Export].Status == ReportRunStageStatus.Pending) return "Sonuç hazır; dışa aktarma isteğe bağlı";
         return "Bekliyor";
     }
 

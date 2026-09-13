@@ -7,7 +7,9 @@ public sealed record ReportTemplate(string Module, IReadOnlyList<string> Columns
 
 public static class ReportTemplateRenderer
 {
-    static readonly IReadOnlySet<string> Allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Id", "Sku", "Name", "Status", "ShopId", "OrderId", "Price", "Currency", "UpdatedUtc" };
+    // "Tracking" (#849) is the masked tracking column the report runner builds; a raw tracking number never enters a row.
+    static readonly IReadOnlySet<string> Allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Id", "Sku", "Name", "Status", "ShopId", "OrderId", "Price", "Currency", "UpdatedUtc", "Tracking" };
+    public static bool IsAllowed(string column) => Allowed.Contains(column ?? "");
     public static string Render(ReportTemplate template, IEnumerable<IReadOnlyDictionary<string, object?>> rows)
     {
         ArgumentNullException.ThrowIfNull(template); ArgumentNullException.ThrowIfNull(rows);
