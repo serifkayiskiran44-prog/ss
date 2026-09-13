@@ -8,21 +8,35 @@ public partial class MainWindow
 {
     void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.K)
-        {
-            GlobalSearchBox.Focus(); GlobalSearchBox.SelectAll(); e.Handled = true; return;
-        }
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.D1 or Key.NumPad1) { Navigate("dashboard"); e.Handled = true; return; }
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.D2 or Key.NumPad2) { Navigate("products"); e.Handled = true; return; }
-        // #814: Escape closes the newest toast when the keyboard is in the toast host; elsewhere Escape keeps
-        // its owner (the product inspect drawer binds it itself).
-        if (e.Key == Key.Escape && ToastHost.IsKeyboardFocusWithin) { DismissTopToast(); e.Handled = true; return; }
-        // #812: the sidebar collapses from the keyboard too.
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.B) { ToggleSidebar(); e.Handled = true; return; }
-        // #810: the drill-through trail is walkable from the keyboard, not only from the "‹ Geri" button.
-        if (Keyboard.Modifiers == ModifierKeys.Alt && e.SystemKey == Key.Left && BackButton.IsEnabled) { Back_Click(BackButton, e); e.Handled = true; return; }
-        if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None) { RefreshProducts(); e.Handled = true; }
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (HandleShortcut(key, Keyboard.Modifiers)) e.Handled = true;
     }
+
+    /// <summary>
+    /// #869: the shell's shortcuts come from the one catalogue the reference and the tooltips read. Returns whether
+    /// the press did something; a disabled command (Back with no trail, Escape away from a toast) is not handled,
+    /// so the key keeps its ordinary meaning.
+    /// </summary>
+    internal bool HandleShortcut(Key key, ModifierKeys modifiers)
+    {
+        switch (KeyboardShortcuts.Match(key, modifiers, ShortcutScope.Shell)?.CommandKey)
+        {
+            case "global-search": GlobalSearchBox.Focus(); GlobalSearchBox.SelectAll(); return true;
+            case "navigate-dashboard": Navigate("dashboard"); return true;
+            case "navigate-products": Navigate("products"); return true;
+            // #814: Escape closes the newest toast when the keyboard is in the toast host; elsewhere Escape keeps its owner.
+            case "dismiss-toast": if (!ToastHost.IsKeyboardFocusWithin) return false; DismissTopToast(); return true;
+            // #812: the sidebar collapses from the keyboard too.
+            case "toggle-sidebar": ToggleSidebar(); return true;
+            // #810: the drill-through trail is walkable from the keyboard, not only from the "‹ Geri" button.
+            case "back": if (!BackButton.IsEnabled) return false; Back_Click(BackButton, new RoutedEventArgs()); return true;
+            case "refresh-products": RefreshProducts(); return true;
+            case "shortcut-reference": KeyboardShortcutReference.Show(this); return true;
+            default: return false;
+        }
+    }
+
+    void ShortcutsButton_Click(object sender, RoutedEventArgs e) => KeyboardShortcutReference.Show(this);
 
     void GlobalSearchBox_KeyDown(object sender, KeyEventArgs e)
     {

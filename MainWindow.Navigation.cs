@@ -109,7 +109,7 @@ public partial class MainWindow
   SidebarFooter.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
   NavigationSearchBox.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
   SidebarToggle.Content = collapsed ? "»" : "«";
-  SidebarToggle.ToolTip = collapsed ? "Menüyü genişlet (Ctrl+B)" : "Menüyü daralt (Ctrl+B)";
+  SidebarToggle.ToolTip = KeyboardShortcuts.Hint(collapsed ? "Menüyü genişlet" : "Menüyü daralt", "toggle-sidebar");
   foreach (var item in NavigationList.Items.OfType<ListBoxItem>())
   {
    if (item.Tag is not string key) { item.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible; continue; }

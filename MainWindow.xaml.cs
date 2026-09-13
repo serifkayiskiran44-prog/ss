@@ -52,7 +52,7 @@ public partial class MainWindow : Window
  {
   http=httpClient??new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(60)};
   dataDirectory=directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");startupRecovery=new StartupRecovery(dataDirectory);store=new CatalogStore(dataDirectory);new SyncStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromHours(1));new XmlRunStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.FromMinutes(10));globalSearchIndex=new GlobalSearchIndexService(dataDirectory);logPath=Path.Combine(dataDirectory,"operations.log");
-  InitializeComponent();FontFamily=DesignTokens.FontFamilyBody;FontSize=DesignTokens.TextBodySize;IconStyles.ApplyIconButton(BackButton,IconRole.Inline);uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
+  InitializeComponent();FontFamily=DesignTokens.FontFamilyBody;FontSize=DesignTokens.TextBodySize;IconStyles.ApplyIconButton(BackButton,IconRole.Inline);BackButton.ToolTip = KeyboardShortcuts.Hint("Geri", "back"); GlobalSearchBox.ToolTip = KeyboardShortcuts.Hint("Genel arama", "global-search"); ShortcutsButton.ToolTip = KeyboardShortcuts.Hint("Klavye kısayolları", "shortcut-reference"); IconStyles.ApplyIconButton(ShortcutsButton, IconRole.Inline);uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
   GlobalSearchBox.TextChanged += GlobalSearchBox_TextChanged;

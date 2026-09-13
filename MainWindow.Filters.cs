@@ -344,9 +344,9 @@ public partial class MainWindow {
   host.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
   Grid.SetColumn(list, 0); host.Children.Add(list);
   Grid.SetColumn(productInspectDrawer, 1); host.Children.Add(productInspectDrawer);
-  products.InputBindings.Add(new KeyBinding(new SimpleCommand(OpenProductInspect), Key.I, ModifierKeys.Control));
-  products.InputBindings.Add(new KeyBinding(new SimpleCommand(CloseProductInspect), Key.Escape, ModifierKeys.None));
-  productInspectDrawer.InputBindings.Add(new KeyBinding(new SimpleCommand(CloseProductInspect), Key.Escape, ModifierKeys.None));
+  products.InputBindings.Add(KeyboardShortcuts.Binding("product-inspect", new SimpleCommand(OpenProductInspect)));
+  products.InputBindings.Add(KeyboardShortcuts.Binding("close-inspect", new SimpleCommand(CloseProductInspect)));
+  productInspectDrawer.InputBindings.Add(KeyboardShortcuts.Binding("close-inspect", new SimpleCommand(CloseProductInspect)));
   return host;
  }
  internal void OpenProductInspect()
