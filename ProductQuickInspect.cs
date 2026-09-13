@@ -30,6 +30,7 @@ public static class ProductQuickInspect
 
         Add("Kimlik", "SKU", product.Sku);
         Add("Kimlik", "Barkod", product.Barcode);
+        Add("Kimlik", "GTIN", string.IsNullOrWhiteSpace(product.Gtin) ? null : product.Gtin + " · " + GtinCode.Inspect(product.Gtin).Words); // #906
         Add("Kimlik", "Ürün adı", product.Name);
         Add("Kimlik", "Marka / kategori", Join(product.Brand, product.Category));
 

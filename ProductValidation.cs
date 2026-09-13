@@ -55,6 +55,9 @@ public static class ProductValidation
         if (TitleNormalizer.OverLimit(product.Name) is { } overLimit) Add(Blocking, "content", "Başlık", overLimit);
         Length("identity", "SKU", product.Sku, 128);
         Length("identity", "Barkod", product.Barcode, 64);
+        // #906: a GTIN must be a GTIN (8/12/13/14 digits, correct check digit); an invalid one is refused, never corrected. A barcode may be any code, but one that looks like a GTIN with a wrong check digit is flagged.
+        if (!string.IsNullOrWhiteSpace(product.Gtin) && GtinCode.Inspect(product.Gtin) is { Kind: BarcodeKind.InvalidGtin or BarcodeKind.Custom } badGtin) Add(Blocking, "identity", "GTIN", "GTIN geçersiz: " + badGtin.Words);
+        if (GtinCode.Inspect(product.Barcode) is { Kind: BarcodeKind.InvalidGtin } badBarcode) Add(Warning, "identity", "Barkod", "Barkod GTIN gibi görünüyor ama " + badBarcode.Words);
         Length("content", "Marka", product.Brand, 200);
         Length("content", "Kategori", product.Category, 200);
         Length("content", "Açıklama", product.Description, 20000);

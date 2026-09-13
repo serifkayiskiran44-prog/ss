@@ -36,7 +36,7 @@ public static class ProductIdentity
     {
         new ProductKeyContract(ProductKeyRole.Canonical, "CatalogProduct.Id", "the one identity every module joins on (channel plans, sightings, field origins, stock, history); minted once, never reused, never derived from a code", true),
         new ProductKeyContract(ProductKeyRole.Sku, "CatalogProduct.Sku", "the operator's and the feeds' product code; matches a feed row or an order line to a product; may be missing on a barcode-only row; must name one product when used as a key", false),
-        new ProductKeyContract(ProductKeyRole.Barcode, "CatalogProduct.Barcode", "GTIN/EAN as the second match key; may be missing; a barcode naming a different product than the SKU is a conflict, never a tie-break", false),
+        new ProductKeyContract(ProductKeyRole.Barcode, "CatalogProduct.Barcode", "GTIN/EAN as the second match key; may be missing; a barcode naming a different product than the SKU is a conflict, never a tie-break; a value of 8/12/13/14 digits with a correct check digit is a GTIN (GtinCode), anything else a custom code", false),
         new ProductKeyContract(ProductKeyRole.SourceRecord, "CatalogProduct.SourceId + the feed row's keys", "which feed carried the product (home source, sightings per source); a remap changes the home, never the canonical id", false),
         new ProductKeyContract(ProductKeyRole.ChannelListing, "ChannelProductPlan.ListingId / CatalogProduct.EtsyListingId", "a marketplace's own id for the listing, kept beside the canonical id and the channel; never a join key inside the catalogue", false),
     };
