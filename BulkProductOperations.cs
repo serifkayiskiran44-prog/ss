@@ -56,6 +56,8 @@ public sealed class BulkProductOperations
             var status = beforeValue == afterValue ? "SKIP" : "READY"; var error = "";
             if (request.Kind == BulkProductOperationKind.SetName && string.IsNullOrWhiteSpace(clone.Name)) { status = "ERROR"; error = "Ürün adı boş olamaz."; }
             if (request.Kind == BulkProductOperationKind.SetDescription && product.LockDescription) { status = "SKIP"; error = "Açıklama kilidi etkin; toplu değişiklik uygulanmadı."; }
+            // #904: the title lock is a lock too.
+            if (request.Kind == BulkProductOperationKind.SetName && product.LockName) { status = "SKIP"; error = "Başlık kilidi etkin; toplu değişiklik uygulanmadı."; }
             rows.Add(new() { ProductId = product.Id, Sku = product.Sku, Name = product.Name, Operation = request.Kind.ToString(), Before = beforeValue, After = afterValue, Status = status, Error = error, ExpectedUpdatedUtc = product.UpdatedUtc, BeforeSnapshot = product, AfterSnapshot = clone });
         }
         return new(Guid.NewGuid(), request, rows, DateTime.UtcNow);

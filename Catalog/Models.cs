@@ -64,6 +64,8 @@ public class CatalogProduct {
  public List<CatalogPriceField> PriceFields {get;set;}=new();
  // #895: where each written field came from (source, source revision, import run, moment; or the operator). Null on records written before this existed.
  public Dictionary<string,FieldOrigin>? FieldOrigins {get;set;}
+ // #904: why and since when each locked field is locked, keyed by field -- null on records written before this.
+ public Dictionary<string,LockNote>? LockReasons {get;set;}
 }
 public sealed record CatalogPriceField(string Name, decimal Value, string Currency);
 public record XmlScan(string ItemPath,IReadOnlyList<string> Paths,Dictionary<string,string> SuggestedFields);

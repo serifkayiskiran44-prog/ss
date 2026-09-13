@@ -22,6 +22,8 @@ public partial class MainWindow
         return JsonSerializer.Serialize(edit) != productEditBaseline;
     }
 
+    // #904: the operator's reason for the locks switched on in this save; capped and redacted by the owner.
+    readonly TextBox productLockReason = new() { MaxLength = ProductLocks.ReasonLimit, ToolTip = "Bu kayıtta kilitlenen alanlar için gerekçe; denetim izine yazılır." };
     void SaveProductEdit()
     {
         ValidBindings(productEditor);
@@ -36,6 +38,22 @@ public partial class MainWindow
         {
             if (view.FirstBlocking is { CanFocus: true } first) FocusField(productEditor, first.Property, first.Section);
             throw new InvalidOperationException(view.Aggregate.Headline);
+        }
+        // #904: a lock turned on carries the operator's reason; a lock turned off is previewed -- what the next import would do -- and confirmed; a cancel saves nothing.
+        var persistedForLocks = store.FindProduct(edit.Id);
+        if (persistedForLocks is not null)
+        {
+            var lockChanges = ProductLocks.Diff(persistedForLocks, edit);
+            var reason = ProductLocks.SafeReason(productLockReason.Text);
+            foreach (var change in lockChanges.Where(c => c.Locked)) { edit.LockReasons ??= new Dictionary<string, LockNote>(StringComparer.Ordinal); edit.LockReasons[change.Field] = new LockNote { Reason = reason }; }
+            var releases = lockChanges.Where(c => !c.Locked).ToList();
+            if (releases.Count > 0)
+            {
+                var sources = store.Sources();
+                var previews = releases.Select(r => ProductLocks.PreviewUnlock(persistedForLocks, r.Field, id => sources.FirstOrDefault(s => s.Id == id), DateTime.UtcNow)).ToList();
+                var body = string.Join(Environment.NewLine + Environment.NewLine, previews.Select(p => p.Headline + Environment.NewLine + string.Join(Environment.NewLine, p.Lines)));
+                if (!DialogShell.Confirm(this, "Kilit açma", body, "Kilidi aç", destructive: false)) { Log("Kilit açılmadı; ürün kaydedilmedi."); return; }
+            }
         }
         store.SaveProduct(edit); // Validation, optimistic version check and local transaction.
         productEditBaseline = JsonSerializer.Serialize(edit);
