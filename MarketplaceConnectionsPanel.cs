@@ -138,7 +138,7 @@ public static class MarketplaceConnectionsPanel
         }
     }
 
-    static void AddLabel(Panel panel, string label, UIElement control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(4, 7, 4, 0) }); panel.Children.Add(control); }
+    static void AddLabel(Panel panel, string label, UIElement control) { var text = new TextBlock { Text = label, Margin = new Thickness(4, 7, 4, 0) }; panel.Children.Add(text); panel.Children.Add(control); FormField.Labelled(text, control); }
     static Button Button(string text, Action action) { var button = new Button { Content = text, Margin = Spacing.Control }; button.Click += (_, _) => { try { action(); } catch (Exception e) { MessageBox.Show(MarketplaceConnectionStore.Redact(e.Message), "Bağlantı yönetimi", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
     static Button AsyncButton(string text, Func<Task> action) { var button = new Button { Content = text, Margin = Spacing.Control }; button.Click += async (_, _) => { try { button.IsEnabled = false; await action(); } catch (Exception e) { MessageBox.Show(MarketplaceConnectionStore.Redact(e.Message), "Bağlantı yönetimi", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { button.IsEnabled = true; } }; return button; }
 }

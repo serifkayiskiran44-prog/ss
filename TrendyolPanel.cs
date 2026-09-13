@@ -41,5 +41,5 @@ public static class TrendyolPanel
         return new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
     static TextBox Field(Panel panel, string label) { var box = new TextBox { Width = 420 }; AddLabel(panel, label, box); return box; }
-    static void AddLabel(Panel panel, string label, UIElement control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 7, 0, 2) }); panel.Children.Add(control); }
+    static void AddLabel(Panel panel, string label, UIElement control) { var text = new TextBlock { Text = label, Margin = new Thickness(0, 7, 0, 2) }; panel.Children.Add(text); panel.Children.Add(control); FormField.Labelled(text, control); }
 }

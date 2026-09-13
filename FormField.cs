@@ -42,6 +42,14 @@ public sealed class FormFieldControl
 /// </summary>
 public static class FormField
 {
+    /// <summary>Ties a control to the text block that labels it (#888): assistive technology then announces the label as the control's name; a name already set stays.</summary>
+    public static void Labelled(TextBlock label, DependencyObject control)
+    {
+        ArgumentNullException.ThrowIfNull(label); ArgumentNullException.ThrowIfNull(control);
+        AutomationProperties.SetLabeledBy(control, label);
+        if (string.IsNullOrWhiteSpace(AutomationProperties.GetName(control))) AutomationProperties.SetName(control, label.Text);
+    }
+
     // #857: the row's rhythm comes from the shared tokens; the help gap stays the row's own 3-DIP breath.
     public static double LabelGap => DesignTokens.SpaceHairline;
     public static double RowGap => DesignTokens.SpaceControl;

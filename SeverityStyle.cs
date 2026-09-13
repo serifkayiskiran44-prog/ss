@@ -31,7 +31,9 @@ public sealed record SeverityAggregate(SeverityLevel Highest, int BlockingCount,
 /// </summary>
 public static class SeverityStyle
 {
-    public static bool IsHighContrast => SystemParameters.HighContrast;
+    /// <summary>The desktop's high-contrast state; a test may pin it (#888) to render the high-contrast variants without changing the desktop.</summary>
+    public static bool IsHighContrast => HighContrastOverride ?? SystemParameters.HighContrast;
+    internal static bool? HighContrastOverride { get; set; }
 
     public static SeverityPresentation For(SeverityLevel level, bool highContrast)
     {

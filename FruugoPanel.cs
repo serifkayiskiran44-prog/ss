@@ -22,7 +22,7 @@ public static class FruugoPanel
     }
     static TextBox Field(Panel panel, string label) { var box = new TextBox { Width = 420 }; AddLabel(panel, label, box); return box; }
     static PasswordBox Password(Panel panel, string label) { var box = new PasswordBox { Width = 420 }; AddLabel(panel, label, box); return box; }
-    static void AddLabel(Panel panel, string label, UIElement control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 7, 0, 2) }); panel.Children.Add(control); }
+    static void AddLabel(Panel panel, string label, UIElement control) { var text = new TextBlock { Text = label, Margin = new Thickness(0, 7, 0, 2) }; panel.Children.Add(text); panel.Children.Add(control); FormField.Labelled(text, control); }
     static Button Button(string text, Action action) { var b = new Button { Content = text, Margin = Spacing.Control, Padding = DesignTokens.CompactButtonPadding }; b.Click += (_, _) => { try { action(); } catch (Exception e) { MessageBox.Show(MarketplaceConnectionStore.Redact(e.Message), "Fruugo", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return b; }
     static Button AsyncButton(string text, Func<Task> action) { var b = new Button { Content = text, Margin = Spacing.Control, Padding = DesignTokens.CompactButtonPadding }; b.Click += async (_, _) => { try { b.IsEnabled = false; await action(); } catch (Exception e) { MessageBox.Show(MarketplaceConnectionStore.Redact(e.Message), "Fruugo", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { b.IsEnabled = true; } }; return b; }
 }
