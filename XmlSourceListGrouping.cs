@@ -114,7 +114,7 @@ public static class XmlSourceListGrouping
         if (filter.Band is { } band && entry.Band != band) return false;
         var text = (filter.Text ?? "").Trim();
         if (text.Length == 0) return true;
-        return entry.Row.Title.Contains(text, StringComparison.CurrentCultureIgnoreCase) || entry.Row.MaskedLocation.Contains(text, StringComparison.OrdinalIgnoreCase);
+        return entry.Row.Title.ContainsFolded(text) || entry.Row.MaskedLocation.Contains(text, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Bands in order, empty bands dropped; within a band the last-used first, then by title.</summary>

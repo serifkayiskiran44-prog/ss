@@ -108,7 +108,7 @@ public static class SettingsTaxonomy
     public static IReadOnlyList<(SettingsCategory Category, SettingsEntry Entry)> Search(string? query, Func<string, bool>? routeExists = null)
     {
         var q = (query ?? "").Trim(); if (q.Length == 0) return Array.Empty<(SettingsCategory, SettingsEntry)>();
-        return Visible(routeExists ?? (_ => true)).SelectMany(c => c.Entries.Select(e => (c, e))).Where(x => $"{x.c.Label} {x.e.Label} {x.e.Description}".Contains(q, StringComparison.CurrentCultureIgnoreCase)).ToList();
+        return Visible(routeExists ?? (_ => true)).SelectMany(c => c.Entries.Select(e => (c, e))).Where(x => $"{x.c.Label} {x.e.Label} {x.e.Description}".ContainsFolded(q)).ToList();
     }
 
     /// <summary>A label fit for a narrow tree: whole when short, otherwise trimmed with an ellipsis (the full label stays in the tooltip and the accessible name).</summary>

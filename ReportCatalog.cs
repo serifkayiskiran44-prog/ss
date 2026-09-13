@@ -85,7 +85,7 @@ public static class ReportCatalog
             var count = savedFilters is not null && savedFilters.TryGetValue(definition.Key, out var n) ? n : 0;
             var card = Describe(definition, latest, count, allowedStoreKeys, nowUtc);
             if (!card.Visible) { hidden++; continue; }
-            if (q.Length > 0 && !$"{card.Title} {card.Purpose} {definition.Sources}".Contains(q, StringComparison.CurrentCultureIgnoreCase)) continue;
+            if (q.Length > 0 && !$"{card.Title} {card.Purpose} {definition.Sources}".ContainsFolded(q)) continue;
             cards.Add(card);
         }
         return new(cards, hidden, total);

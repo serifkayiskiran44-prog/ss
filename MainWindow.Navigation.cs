@@ -252,7 +252,7 @@ public partial class MainWindow
    // glyph that icons-only mode prints in Content.
    if (item.Tag is not string key) { item.Visibility = sidebarState.Collapsed ? Visibility.Collapsed : Visibility.Visible; continue; }
    var label = navLabels.TryGetValue(key, out var l) ? l : item.Content?.ToString() ?? "";
-   item.Visibility = query.Length == 0 || label.Contains(query, StringComparison.CurrentCultureIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+   item.Visibility = query.Length == 0 || label.ContainsFolded(query) ? Visibility.Visible : Visibility.Collapsed;
   }
  }
  void Back_Click(object sender, RoutedEventArgs e)

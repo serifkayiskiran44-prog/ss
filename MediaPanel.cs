@@ -95,7 +95,7 @@ public static class MediaPanel
         void RefreshProducts()
         {
             var q = search.Text.Trim();
-            var products = catalog.Products().Where(p => q.Length == 0 || $"{p.Sku} {p.Barcode} {p.Name}".Contains(q, StringComparison.CurrentCultureIgnoreCase)).OrderBy(p => p.Name).ToList();
+            var products = catalog.Products().Where(p => q.Length == 0 || $"{p.Sku} {p.Barcode} {p.Name}".ContainsFolded(q)).OrderBy(p => p.Name).ToList();
             choices = products.Select(p => new ProductChoice(p.Id, $"{p.Sku} · {p.Name}")).ToList();
             var current = productPicker.SelectedItem is ProductChoice item ? item.Id : null;
             productPicker.ItemsSource = choices;

@@ -40,6 +40,6 @@ public sealed class ChannelListingMatrixService
 
     public static IReadOnlyList<ChannelListingMatrixRow> Filter(IEnumerable<ChannelListingMatrixRow> rows, string query, string status, string channel, string shop)
     {
-        return rows.Where(x => string.IsNullOrWhiteSpace(query) || x.SearchText.Contains(query.Trim(), StringComparison.CurrentCultureIgnoreCase)).Where(x => status == "Tümü" || (status == "AUTH_ERROR" ? x.AuthStatus == "AUTH_ERROR" : x.MappingStatus.Equals(status, StringComparison.OrdinalIgnoreCase))).Where(x => string.IsNullOrWhiteSpace(channel) || x.Channel.Contains(channel.Trim(), StringComparison.OrdinalIgnoreCase) || x.ChannelName.Contains(channel.Trim(), StringComparison.CurrentCultureIgnoreCase)).Where(x => string.IsNullOrWhiteSpace(shop) || x.ShopId.Contains(shop.Trim(), StringComparison.CurrentCultureIgnoreCase)).OrderBy(x => x.ProductName).ThenBy(x => x.ChannelName).ThenBy(x => x.ShopId).ToList();
+        return rows.Where(x => string.IsNullOrWhiteSpace(query) || x.SearchText.ContainsFolded(query.Trim())).Where(x => status == "Tümü" || (status == "AUTH_ERROR" ? x.AuthStatus == "AUTH_ERROR" : x.MappingStatus.Equals(status, StringComparison.OrdinalIgnoreCase))).Where(x => string.IsNullOrWhiteSpace(channel) || x.Channel.Contains(channel.Trim(), StringComparison.OrdinalIgnoreCase) || x.ChannelName.ContainsFolded(channel.Trim())).Where(x => string.IsNullOrWhiteSpace(shop) || x.ShopId.ContainsFolded(shop.Trim())).OrderBy(x => x.ProductName).ThenBy(x => x.ChannelName).ThenBy(x => x.ShopId).ToList();
     }
 }

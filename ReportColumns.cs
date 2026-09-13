@@ -119,7 +119,7 @@ public static class ReportColumns
     {
         ArgumentNullException.ThrowIfNull(layout);
         var q = (query ?? "").Trim();
-        var items = layout.Columns.Where(c => q.Length == 0 || $"{c.Column.Label} {c.Column.Key} {c.Column.Group}".Contains(q, StringComparison.CurrentCultureIgnoreCase)).ToList();
+        var items = layout.Columns.Where(c => q.Length == 0 || $"{c.Column.Label} {c.Column.Key} {c.Column.Group}".ContainsFolded(q)).ToList();
         return items.GroupBy(c => c.Column.Group).Select(g => new ReportColumnGroup(g.Key, g.ToList())).ToList();
     }
 
