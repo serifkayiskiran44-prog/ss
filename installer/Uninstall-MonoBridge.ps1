@@ -1,6 +1,12 @@
-param([string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'Programs\MonoBridgeDesktop'))
+param(
+    [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'Programs\MarketplaceHub'),
+    [switch]$SkipShortcut
+)
+
 $ErrorActionPreference = 'Stop'
-$shortcut = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs\MonoBridge Desktop.lnk'
-if (Test-Path $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
+if (-not $SkipShortcut) {
+    $shortcut = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs\MarketplaceHub.lnk'
+    if (Test-Path $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
+}
 if (Test-Path $InstallDirectory) { Remove-Item -LiteralPath $InstallDirectory -Recurse -Force }
-Write-Output 'Uygulama dosyaları kaldırıldı. LocalAppData\MonoBridgeDesktop kullanıcı verileri korunmuştur.'
+Write-Output 'MarketplaceHub uygulama dosyaları kaldırıldı. LocalAppData\MonoBridgeDesktop kullanıcı verileri korunmuştur.'
