@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using TrMarketplaceHubDesktop.Catalog;
@@ -50,7 +51,25 @@ public partial class MainWindow
         var choose = Button("Excel seç ve önizle", () => { var dialog = new OpenFileDialog { Filter = "Excel dosyası (*.xlsx)|*.xlsx" }; if (dialog.ShowDialog(this) != true) return; selectedPath = dialog.FileName; manualMapping = null; RenderPreview(); });
         var map = Button("Kolonları elle eşle", () => { if (selectedPath is null) { status.Text = "Önce Excel dosyasını seçin."; return; } var headers = CatalogExcel.Headers(selectedPath); var result = ShowMappingDialog(headers, manualMapping); if (result is null) return; manualMapping = result; profile.ColumnMappings = result.Columns.ToDictionary(x => x.Key, x => headers[x.Value - 1], StringComparer.OrdinalIgnoreCase); RenderPreview(); });
         var export = Button("Filtreli ürünleri dışa aktar", () => { ApplyProfileText(); var query = new TextBox { Width = 380, Text = "", ToolTip = "SKU/ürün/marka/kategori filtre metni" }; var dialog = new Window { Title = "Dışa aktarım filtresi", Width = 480, Height = 180, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }; var ok = new Button { Content = "Excel'e aktar", Margin = new Thickness(3) }; var box = new StackPanel { Margin = new Thickness(14) }; box.Children.Add(new TextBlock { Text = "Filtre (boş: tüm ürünler)" }); box.Children.Add(query); box.Children.Add(ok); dialog.Content = box; ok.Click += (_, _) => dialog.DialogResult = true; if (dialog.ShowDialog() != true) return; var products = store.Products().Where(p => string.IsNullOrWhiteSpace(query.Text) || $"{p.Sku} {p.Barcode} {p.Name} {p.Brand} {p.Category}".Contains(query.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)).ToList(); var save = new SaveFileDialog { Filter = "Excel dosyası (*.xlsx)|*.xlsx", FileName = "urunler.xlsx" }; if (save.ShowDialog(this) != true) return; CatalogExcel.Export(save.FileName, products, profile.VisibleFields); status.Text = $"{products.Count} ürün ve seçili alanlar dışa aktarıldı."; });
-        var errors = Button("Hataları Excel'e aktar", () => { if (preview is null || preview.Errors.Count == 0) { status.Text = "Dışa aktarılacak önizleme hatası yok."; return; } var dialog = new SaveFileDialog { Filter = "Excel dosyası (*.xlsx)|*.xlsx", FileName = "excel-hatalari.xlsx" }; if (dialog.ShowDialog(this) != true) return; CatalogExcel.ExportErrors(dialog.FileName, preview); status.Text = $"{preview.Errors.Count} hata dışa aktarıldı."; });
+        // #826: only the refused rows, stable schema, cancellable while it writes, disk errors reported as a sentence.
+        CancellationTokenSource? rejectedExportCts = null;
+        var cancelRejectedExport = new Button { Content = "Dışa aktarımı iptal et", Margin = new Thickness(3), Visibility = Visibility.Collapsed };
+        cancelRejectedExport.Click += (_, _) => rejectedExportCts?.Cancel();
+        Button errors = null!; errors = Button("Reddedilen satırları dışa aktar", () => { if (preview is null || preview.Errors.Count == 0) { status.Text = "Dışa aktarılacak reddedilen satır yok."; return; } var dialog = new SaveFileDialog { Filter = "Excel dosyası (*.xlsx)|*.xlsx|CSV (*.csv)|*.csv", FileName = "reddedilen-satirlar.xlsx" }; if (dialog.ShowDialog(this) != true) return; _ = ExportRejectedAsync(dialog.FileName, preview); });
+        async Task ExportRejectedAsync(string path, ExcelPreview current)
+        {
+            rejectedExportCts?.Cancel(); rejectedExportCts = new CancellationTokenSource(); var token = rejectedExportCts.Token;
+            cancelRejectedExport.Visibility = Visibility.Visible; errors.IsEnabled = false; status.Text = $"{current.Errors.Count:N0} reddedilen satır yazılıyor…";
+            try
+            {
+                var result = await Task.Run(() => path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) ? RejectedRowsExport.WriteCsv(path, RejectedRowsExport.Build(current.Errors), token) : CatalogExcel.ExportErrors(path, current, token), token);
+                if (result.Success) status.Text = $"{result.Written:N0} reddedilen satır dışa aktarıldı (şema v{RejectedRowsExport.SchemaVersion}).";
+                else if (result.Cancelled) status.Text = result.Error;
+                else Log(result.Error, NotificationSeverity.Error);
+            }
+            catch (OperationCanceledException) { status.Text = RejectedRowsExportResult.WasCancelled.Error; }
+            finally { cancelRejectedExport.Visibility = Visibility.Collapsed; errors.IsEnabled = true; }
+        }
         async Task ApplyExcelAsync()
         {
             if (decisions is null || selectedPath is null || decisions.Preview is null) throw new InvalidOperationException("Önce Excel profiliyle önizleme yapın.");
@@ -72,7 +91,7 @@ public partial class MainWindow
         var rollback = Button("Son Excel uygulamasını geri al", () => { if (undo is null) { status.Text = "Geri alınacak Excel işlemi yok."; return; } store.Undo(undo); undo = null; status.Text = "Son Excel uygulaması geri alındı."; RefreshProducts(); });
         var profileRow = new WrapPanel(); profileRow.Children.Add(new TextBlock { Text = "Profil", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(profileBox); profileRow.Children.Add(new TextBlock { Text = "Ad", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(profileName); profileRow.Children.Add(new TextBlock { Text = "Kültür", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); profileRow.Children.Add(culture); profileRow.Children.Add(saveProfile); profileRow.Children.Add(newProfile); panel.Children.Add(profileRow);
         var details = new StackPanel(); Label(details, "Başlık alias'ları", aliases); Label(details, "Varsayılan alanlar", defaults); Label(details, "Dışa aktarım görünür alanları", visibleFields); panel.Children.Add(details);
-        var bar = new WrapPanel(); bar.Children.Add(export); bar.Children.Add(choose); bar.Children.Add(map); bar.Children.Add(errors); bar.Children.Add(excelApplyButton); bar.Children.Add(excelCancelButton); bar.Children.Add(rollback); panel.Children.Add(bar); panel.Children.Add(grid); panel.Children.Add(status); LoadProfiles(); return Scroll(panel);
+        var bar = new WrapPanel(); bar.Children.Add(export); bar.Children.Add(choose); bar.Children.Add(map); bar.Children.Add(errors); bar.Children.Add(cancelRejectedExport); bar.Children.Add(excelApplyButton); bar.Children.Add(excelCancelButton); bar.Children.Add(rollback); panel.Children.Add(bar); panel.Children.Add(grid); panel.Children.Add(status); LoadProfiles(); return Scroll(panel);
     }
 
     static Dictionary<string, string> ParsePairs(string text) => text.Split(['\r', '\n'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(x => x.Split('=', 2)).Where(x => x.Length == 2 && x[0].Trim().Length > 0).ToDictionary(x => x[0].Trim(), x => x[1].Trim(), StringComparer.OrdinalIgnoreCase);
