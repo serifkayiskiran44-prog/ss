@@ -55,6 +55,28 @@ jobs:
           }
           Write-Output "manifest verified: $($manifest.files.Count) files"
 
+      - name: Installer install/uninstall smoke
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP 'MarketplaceHub-install-smoke'
+          $dataDir = Join-Path $env:LOCALAPPDATA 'MonoBridgeDesktop'
+          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+          $sentinel = Join-Path $dataDir 'ci-user-data-preservation.txt'
+          Set-Content -LiteralPath $sentinel -Value 'preserve-me' -Encoding utf8
+          try {
+            ./installer/Install-MonoBridge.ps1 -PackageDirectory ./Windows-Current -InstallDirectory $installDir -SkipShortcut
+            if (-not (Test-Path (Join-Path $installDir 'TrMarketplaceHubDesktop.exe'))) { throw 'Installed EXE missing.' }
+            if (-not (Test-Path (Join-Path $installDir 'publish-manifest.json'))) { throw 'Installed publish manifest missing.' }
+            ./installer/Uninstall-MonoBridge.ps1 -InstallDirectory $installDir -SkipShortcut
+            if (Test-Path $installDir) { throw 'Install directory still exists after uninstall.' }
+            if (-not (Test-Path $sentinel)) { throw 'User data was removed by uninstall.' }
+          }
+          finally {
+            if (Test-Path $installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force }
+            if (Test-Path $sentinel) { Remove-Item -LiteralPath $sentinel -Force }
+          }
+          Write-Output 'install/uninstall smoke: PASS'
+
       - name: Upload MarketplaceHub release artifact
         uses: actions/upload-artifact@v4
         with:
