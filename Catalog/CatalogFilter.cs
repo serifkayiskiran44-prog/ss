@@ -16,4 +16,6 @@ public sealed record CatalogFilter {
  public bool? SourceMissing {get;init;}
  public string SortBy {get;init;}="Name";
  public bool SortDescending {get;init;}
+ /// <summary>#886: no criterion set -- the list shows the whole pool.</summary>
+ public bool IsDefault=>Active is null&&Brands.Length==0&&Categories.Length==0&&Skus.Length==0&&SourceIds.Length==0&&DescriptionPresent is null&&ImagePresent is null&&MinPrice is null&&MaxPrice is null&&MinCost is null&&MaxCost is null&&MinStock is null&&MaxStock is null&&SourceMissing is null;
 }

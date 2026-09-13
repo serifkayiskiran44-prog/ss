@@ -6,6 +6,7 @@ using TrMarketplaceHubDesktop.Catalog;
 namespace TrMarketplaceHubDesktop;
 public partial class MainWindow {
  CatalogFilter productFilter=new();
+ readonly StackPanel productEmptyHost=new(){Visibility=Visibility.Collapsed}; // #886
  void AddProductFilters(Panel host){
   var panel=new WrapPanel();
   var status=new ComboBox{ItemsSource=new[]{"Tümü","Aktif","Pasif"},SelectedIndex=0,Width=100};
@@ -54,6 +55,12 @@ public partial class MainWindow {
  const string ProductLayoutKey = "layout:products";
  Action<string, bool>? applyProductSort; Func<(string SortBy, bool Descending)>? captureProductSort; bool applyingProductLayout;
  static string ColumnKey(DataGridColumn column) => column is DataGridBoundColumn { Binding: System.Windows.Data.Binding binding } ? binding.Path.Path : column.Header?.ToString() ?? "";
+ // #886: the shared empty state above the grid -- a true empty points at the XML screen, a filtered empty clears the search and the filters.
+ void RenderProductEmptyState(int total)
+ {
+  var filtered = search.Text.Trim().Length > 0 || !productFilter.IsDefault;
+  EmptyStatePanel.Render(productEmptyHost, total > 0 ? null : EmptyState.Products(filtered, routes.ContainsKey), key => Navigate(key), _ => { search.Text = ""; productFilter = new CatalogFilter(); productOffset = 0; RefreshProducts(); });
+ }
  void InitializeProductLayout()
  {
   ApplyProductLayout(PreferenceSchema.TryDecode<DataGridLayoutState>(uiPreferences, ProductLayoutKey, DataGridLayoutCodec.TryDeserialize, out var savedLayout) ? savedLayout : null);

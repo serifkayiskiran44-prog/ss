@@ -80,13 +80,13 @@ public partial class MainWindow
   Page("policy-center","Stok / fiyat politika merkezi","Kanal + mağaza politikaları, kopyalama ve ürün preview'i",PolicyCenterPanel.Create(dataDirectory));
   Page("locale-settings","Döviz / vergi / yerel ayarlar","Para birimi, KDV, sayı-tarih kültürü ve mağaza kopyalama",LocaleSettingsPanel.Create(dataDirectory,settingsEditState));
   Page("data-quality","Veri kalite merkezi","Duplicate, zorunlu alan, fiyat/stok/döviz, URL ve kaynak hataları",DataQualityPanel.Create(dataDirectory,key=>Navigate(key)));
-  Page("orders","Sipariş ve kargo","Sipariş kayıtları, paket ve kargo takibi",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts,reveal=>ordersReveal=reveal));
+  Page("orders","Sipariş ve kargo","Sipariş kayıtları, paket ve kargo takibi",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts,reveal=>ordersReveal=reveal,key=>Navigate(key),routes.ContainsKey));
   Page("order-exceptions","Sipariş istisnaları","Eksik SKU, iptal/iade ve stok kararlarını önizleme/onay ile yönetin.",OrderExceptionsPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("messages","Mesaj merkezi","Müşteri mesajları, sistem bildirimleri ve yerel yanıt şablonları",MessagePanel.Create(dataDirectory,key=>Navigate(key)));
   Page("shipping","Navlungo","Kargo bağlantısı ve mevcut hizmet işlemleri",NavlungoPanel.Create(),"Kargo bağlantısı");
   Group("YÖNETİM");
   Page("readiness","Üretim hazırlığı","Yerel veri, secret güvenliği, connector capability ve API sağlık geçidi",ProductionReadinessPanel.Create(dataDirectory));
-  Page("reports","Raporlar","Rapor kataloğu: amaç, veri kapsamı, son çalıştırma, kayıtlı filtre ve çıktı türü",ReportsPanel.Create(dataDirectory,key=>Navigate(key),()=>AllowedStoreKeys()));
+  Page("reports","Raporlar","Rapor kataloğu: amaç, veri kapsamı, son çalıştırma, kayıtlı filtre ve çıktı türü",ReportsPanel.Create(dataDirectory,key=>Navigate(key),()=>AllowedStoreKeys(),routeExists:routes.ContainsKey));
   Page("diagnostics","Tanılama / audit","Güvenli sistem sağlık özeti, audit trail ve destek paketi",DiagnosticsPanel.Create(dataDirectory,key=>Navigate(key),reveal=>diagnosticsReveal=reveal,AllowedStoreKeys,target=>OpenWorkspaceLink(target)));
   // #853: one taxonomy over the settings that exist -- links to the owning screens, inline only for what the shell owns; a channel's credentials open on its own connection tab.
   Page("settings","Ayarlar","Genel, mağaza, bağlantı, içe aktarma, fiyat, bildirim ve tanılama ayarları tek ağaçta",SettingsPanel.Create(new SettingsPanel.Context(dataDirectory,key=>Navigate(key),key=>routes.ContainsKey(key),(route,section)=>{Navigate(route);if(section=="connection"&&routes.TryGetValue(route,out var page)&&page.Content is TabControl tabs)tabs.SelectedIndex=tabs.Items.Count-1;},settingsEditState,()=>SettingsValidation.Collect(dataDirectory,settingsEditState,DateTime.UtcNow)),select=>settingsSelect=select));

@@ -230,19 +230,7 @@ public static class DashboardPanel
             ScopeLabel = scope,
         }, routeExists);
         if (!state.IsEmpty) { parent.Visibility = Visibility.Collapsed; return; }
-        parent.Visibility = Visibility.Visible;
-        var body = new StackPanel();
-        body.Children.Add(new TextBlock { Text = state.Title, FontWeight = FontWeights.SemiBold, FontSize = 14, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) });
-        body.Children.Add(new TextBlock { Text = state.Detail, TextWrapping = TextWrapping.Wrap, Margin = Spacing.AboveInline, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
-        if (state.HasAction)
-        {
-            var go = new Button { Content = state.ActionLabel, Tag = state.Route, Margin = Spacing.AboveControl, Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left };
-            go.Click += (_, _) => navigate((string)go.Tag);
-            body.Children.Add(go);
-        }
-        var border = new Border { BorderBrush = new SolidColorBrush(SeverityStyle.For(SeverityLevel.Warning, false).Accent), BorderThickness = new Thickness(1), Background = new SolidColorBrush(Color.FromRgb(253, 248, 238)), Padding = Spacing.Section, Child = body };
-        AutomationProperties.SetName(border, $"{state.Title}. {state.Detail}");
-        parent.Children.Add(border);
+        EmptyStatePanel.Render(parent, EmptyState.Dashboard(state), navigate); // #886: the ladder in the shared shape
     }
 
     static void AddColumn(DataGrid grid, string header, string path, double width) => grid.Columns.Add(GridColumns.Text(header, path, width));

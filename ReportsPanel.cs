@@ -20,7 +20,7 @@ public static class ReportsPanel
     public const double SetupWidth = 380;
 
     /// <param name="choosePath">Where a runnable report's file goes; null asks with the standard save dialog.</param>
-    public static FrameworkElement Create(string? directory, Action<string>? navigate = null, Func<IReadOnlyCollection<string>>? allowedStoreKeys = null, Func<ReportDefinition, string?>? choosePath = null)
+    public static FrameworkElement Create(string? directory, Action<string>? navigate = null, Func<IReadOnlyCollection<string>>? allowedStoreKeys = null, Func<ReportDefinition, string?>? choosePath = null, Func<string, bool>? routeExists = null)
     {
         var panel = new StackPanel { Margin = new Thickness(DesignTokens.SpacePage), MaxWidth = 1450 };
         panel.Children.Add(Heading("Rapor kataloğu"));
@@ -28,7 +28,7 @@ public static class ReportsPanel
         var errorHost = new StackPanel { Visibility = Visibility.Collapsed }; var errors = new ErrorSurface(errorHost, navigate); panel.Children.Add(errorHost);
         var search = new TextBox { Tag = "report-search", Width = 260, ToolTip = "Rapor adı, amaç veya veri kaynağı ara" }; AutomationProperties.SetName(search, "Rapor ara");
         var count = Hint(""); count.Tag = "report-count";
-        var empty = new TextBlock { Tag = "report-empty", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 6, 4, 6), Visibility = Visibility.Collapsed };
+        var empty = new StackPanel { Tag = "report-empty", Visibility = Visibility.Collapsed }; // #886: the shared empty state
         var cards = new WrapPanel { Tag = "report-cards", Margin = new Thickness(0, 6, 0, 6) };
         // #847: the setup of the selected report lives beside the grid, rebuilt per selection, kept across card refreshes.
         var setupHost = new Border { Tag = "report-setup-host", Visibility = Visibility.Collapsed, Width = SetupWidth, BorderThickness = new Thickness(1, 0, 0, 0), BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(214, 222, 228)), Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Top };
@@ -42,7 +42,7 @@ public static class ReportsPanel
         {
             var view = ReportCatalog.Load(directory, allowedStoreKeys?.Invoke(), search.Text, DateTime.UtcNow);
             Render(cards, view, Select);
-            empty.Text = view.EmptyText; empty.Visibility = view.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
+            EmptyStatePanel.Render(empty, view.IsEmpty ? EmptyState.Reports(view, search.Text.Trim().Length > 0, routeExists ?? (_ => false)) : null, navigate, _ => search.Text = "");
             var unmatched = view.Total - view.Hidden - view.Cards.Count;
             count.Text = $"{view.Cards.Count:N0} rapor" + (view.Hidden > 0 ? $" · {view.Hidden:N0} mağaza kapsamlı rapor gizli (sunulan mağaza yok)" : "") + (unmatched > 0 ? $" · {unmatched:N0} aramaya uymadı" : "");
         }

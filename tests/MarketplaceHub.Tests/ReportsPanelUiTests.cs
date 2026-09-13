@@ -41,7 +41,7 @@ public sealed class ReportsPanelUiTests
                     window.Show(); Drain(window);
                     var host = Descendants(panel).OfType<WrapPanel>().Single(w => (string?)w.Tag == "report-cards");
                     var count = Descendants(panel).OfType<TextBlock>().Single(t => (string?)t.Tag == "report-count");
-                    var empty = Descendants(panel).OfType<TextBlock>().Single(t => (string?)t.Tag == "report-empty");
+                    var empty = Descendants(panel).OfType<StackPanel>().Single(t => (string?)t.Tag == "report-empty");
                     var search = Descendants(panel).OfType<TextBox>().Single(t => (string?)t.Tag == "report-search");
                     var refresh = Descendants(panel).OfType<Button>().Single(b => b.Content as string == "Yenile");
                     List<Button> Cards() => host.Children.OfType<Button>().ToList();
@@ -71,7 +71,7 @@ public sealed class ReportsPanelUiTests
                     search.Text = "destek"; Drain(window);
                     Assert.AreEqual(1, Cards().Count); Assert.AreEqual("support-package", ((ReportCard)Cards()[0].Tag).Key); StringAssert.Contains(count.Text, "aramaya uymadı");
                     search.Text = "böyle-bir-rapor-yok"; Drain(window);
-                    Assert.AreEqual(0, Cards().Count); Assert.AreEqual(Visibility.Visible, empty.Visibility); StringAssert.Contains(empty.Text, "Aramaya uyan rapor yok");
+                    Assert.AreEqual(0, Cards().Count); Assert.AreEqual(Visibility.Visible, empty.Visibility); StringAssert.Contains(Descendants(empty).OfType<TextBlock>().Single(t => (string?)t.Tag == EmptyState.TitleTag).Text, "Aramaya uyan rapor yok");
                     search.Text = ""; Drain(window);
                     Assert.AreEqual(ReportCatalog.Definitions.Count, Cards().Count); Assert.AreEqual(Visibility.Collapsed, empty.Visibility);
 
