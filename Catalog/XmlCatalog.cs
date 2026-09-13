@@ -85,7 +85,9 @@ public static class XmlCatalog
   if(!string.IsNullOrWhiteSpace(s.Location)&&Uri.TryCreate(s.Location.Trim(),UriKind.Absolute,out var uri)&&uri.Scheme is not ("http" or "https" or "file"))throw new InvalidOperationException("XML kaynağı yalnızca http/https veya yerel file adresi olabilir.");
   CatalogPricing.ValidateSettings(s);
  }
- public static List<CatalogProduct> Preview(string xml,XmlSource source)
+ public static List<CatalogProduct> Preview(string xml,XmlSource source)=>Preview(xml,source,null);
+ // #827: an optional progress sink; the item count is not known until the enumeration ends, so the running events carry a count and no total.
+ public static List<CatalogProduct> Preview(string xml,XmlSource source,IProgress<ImportProgressEvent>? progress)
  {
   Validate(source);var calculate=CatalogPricing.Create(source);bool Has(string key)=>source.Fields.TryGetValue(key,out var p)&&!string.IsNullOrWhiteSpace(p);
   if(string.IsNullOrWhiteSpace(source.ItemPath)||!Has("Name")||!Has("Cost")||!Has("Stock")||!(Has("Sku")||Has("Barcode")))throw new InvalidOperationException("Ürün yolu, ad, fiyat, stok ve SKU veya barkod eşleştirmesi gerekli.");
@@ -93,7 +95,7 @@ public static class XmlCatalog
   IEnumerable<string> Paths(string key)=>IsImage(key)?source.Fields[key].Split('|',StringSplitOptions.TrimEntries):new[]{source.Fields[key]};
   foreach(var p in source.Fields.Keys.Where(Has).SelectMany(Paths))if(!Regex.IsMatch(p,@"^@?[\w-]+(?:/(?:@?[\w-]+))*$"))throw new InvalidOperationException("Alanlar göreli XML yolları olmalı.");
   var result=new List<CatalogProduct>();var seenSku=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var seenBar=new HashSet<string>(StringComparer.OrdinalIgnoreCase);int count=0;
-  foreach(var item in Document(xml).XPathSelectElements(source.ItemPath)) {if(++count>100000)throw new InvalidOperationException("100.000 ürün sınırı aşıldı.");string Field(string key){if(!Has(key))return "";return string.Join(" | ",Paths(key).SelectMany(path=>((IEnumerable)item.XPathEvaluate(path)).Cast<object>()).Select(x=>x is XElement e?e.Value:((XAttribute)x).Value).Where(v=>!string.IsNullOrWhiteSpace(v))).Trim();}
+  foreach(var item in Document(xml).XPathSelectElements(source.ItemPath)) {if(++count>100000)throw new InvalidOperationException("100.000 ürün sınırı aşıldı.");if(progress!=null&&count%500==0)progress.Report(new(ImportProgressStage.Preview,ImportProgressStatus.Running,count));string Field(string key){if(!Has(key))return "";return string.Join(" | ",Paths(key).SelectMany(path=>((IEnumerable)item.XPathEvaluate(path)).Cast<object>()).Select(x=>x is XElement e?e.Value:((XAttribute)x).Value).Where(v=>!string.IsNullOrWhiteSpace(v))).Trim();}
    decimal Number(string key){var raw=Field(key);var parsed=DeterministicNumberParser.Decimal(raw,source.NumberCultureName,key);if(!parsed.Success)throw new InvalidOperationException($"Satır {count}: {parsed.Message} ({parsed.Code}).");return parsed.Value;}
    var cost=Number("Cost");var stock=Number("Stock");if(stock>int.MaxValue||stock!=decimal.Truncate(stock))throw new InvalidOperationException("Stok tam sayı olmalı.");var p=new CatalogProduct{SourceId=source.Id,SourceKind="xml",PriceSource="xml",StockSource="xml",MediaSource="xml",SourceUpdatedUtc=DateTime.UtcNow,Name=Field("Name"),Sku=Field("Sku"),Barcode=Field("Barcode"),Gtin=Field("Gtin"),Cost=cost,Description=Field("Description"),Brand=Field("Brand"),Category=Field("Category"),Currency=source.Currency,ImageUrls=string.Join(" | ",new[]{Field("ImageUrls"),Field("Image"),Field("Images")}.Where(v=>v!="").SelectMany(v=>v.Split(" | ",StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries)).Distinct(StringComparer.Ordinal))};
    if(p.Name==""||(p.Sku==""&&p.Barcode==""))throw new InvalidOperationException("Ad ve kimlik boş olamaz.");if((p.Sku!=""&&!seenSku.Add(p.Sku))||(p.Barcode!=""&&!seenBar.Add(p.Barcode)))throw new InvalidOperationException("XML içinde yinelenen SKU veya barkod.");
