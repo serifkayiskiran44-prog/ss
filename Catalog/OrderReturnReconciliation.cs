@@ -7,6 +7,9 @@ namespace TrMarketplaceHubDesktop.Catalog;
 /// <summary>One return/refund event for one order line, as reported by a marketplace or entered by the operator.</summary>
 public sealed record OrderReturnEvent(string Marketplace, string ShopId, string OrderId, string EventKey, string Sku, int Quantity, decimal RefundAmount, string Currency, DateTimeOffset AtUtc);
 
+/// <summary>#840: one applied return as the ledger holds it.</summary>
+public sealed record OrderReturnLedgerRow(string EventKey, string Sku, int Quantity, decimal RefundAmount, string Currency, int StockRestored, DateTimeOffset AppliedUtc);
+
 /// <summary>What reconciling one event against the order, its stock receipt and the return ledger yields.</summary>
 public sealed record OrderReturnReconciliation(
     string Status,
@@ -77,6 +80,21 @@ public partial class CatalogStore
     }
 
     static void EnsureReturnLedger(SqliteConnection c, SqliteTransaction tx) { using var cmd = c.CreateCommand(); cmd.Transaction = tx; cmd.CommandText = ReturnLedgerSchema; cmd.ExecuteNonQuery(); }
+
+    /// <summary>#840: every applied return event of one order, oldest first -- the ledger rows themselves, read-only.</summary>
+    public IReadOnlyList<OrderReturnLedgerRow> OrderReturnEvents(string marketplace, string shopId, string orderId)
+    {
+        using var c = Open(); using var tx = c.BeginTransaction(deferred: false);
+        EnsureReturnLedger(c, tx);
+        using var cmd = c.CreateCommand(); cmd.Transaction = tx;
+        cmd.CommandText = "SELECT EventKey,Sku,Quantity,RefundAmount,Currency,StockRestored,AppliedUtc FROM OrderReturnEvents WHERE Marketplace=$marketplace COLLATE NOCASE AND ShopId=$shop AND OrderId=$order ORDER BY AppliedUtc";
+        cmd.Parameters.AddWithValue("$marketplace", marketplace ?? ""); cmd.Parameters.AddWithValue("$shop", shopId ?? ""); cmd.Parameters.AddWithValue("$order", orderId ?? "");
+        var rows = new List<OrderReturnLedgerRow>();
+        using (var reader = cmd.ExecuteReader())
+            while (reader.Read())
+                rows.Add(new(reader.GetString(0), reader.GetString(1), reader.GetInt32(2), decimal.Parse(reader.GetString(3), CultureInfo.InvariantCulture), reader.GetString(4), reader.GetInt32(5), DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)));
+        tx.Commit(); return rows;
+    }
 
     /// <summary>#838: what the ledger says came back per SKU for one order -- the same rows the reconciliation counts, read-only.</summary>
     public IReadOnlyDictionary<string, int> OrderReturnsApplied(string marketplace, string shopId, string orderId)
