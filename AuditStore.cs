@@ -92,6 +92,7 @@ public sealed class DiagnosticsService
         try { _ = new Catalog.CatalogStore(directory).Products(); checks.Add(new("Katalog DB", "OK", "Okunabildi")); } catch (Exception error) { checks.Add(new("Katalog DB", "ERROR", AuditStore.Sanitize(error.Message))); }
         var fallbacks = PreferenceSchema.Diagnostics; checks.Add(new(PreferenceSchema.DiagnosticName, fallbacks.Count == 0 ? "OK" : "WARN", AuditStore.Sanitize(fallbacks.Count == 0 ? "Tüm tercih kayıtları okundu" : $"{fallbacks.Count} kayıt varsayılana döndü: {string.Join(" | ", fallbacks)}")));
         try { checks.Add(UiLatency.Check(new LatencyStore(directory).Summary())); } catch (Exception error) { checks.Add(new(UiLatency.DiagnosticName, "ERROR", AuditStore.Sanitize(error.Message))); }
+        checks.Add(UiFreezeWatchdog.Check(UiFreezeWatchdog.Current?.Events, UiFreezeWatchdog.Current?.ThresholdMs ?? UiFreezeWatchdog.DefaultThresholdMs));
         var failed = sync.Count(x => x.Status == Catalog.SyncStatus.Failed); var pending = sync.Count(x => x.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running); var last = new AuditStore(directory).LastFailure(); return new(DateTime.UtcNow, directory, AppVersion.Display, checks, pending, failed, last?.Detail ?? "");
     }
 }

@@ -19,7 +19,10 @@ public partial class MainWindow
     /// </summary>
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
-        switch (KeyboardShortcuts.Match(key, modifiers, ShortcutScope.Shell)?.CommandKey)
+        var command = KeyboardShortcuts.Match(key, modifiers, ShortcutScope.Shell)?.CommandKey;
+        if (command is null) return false;
+        using var activity = UiActivity.Enter(command);
+        switch (command)
         {
             case "global-search": GlobalSearchBox.Focus(); GlobalSearchBox.SelectAll(); return true;
             case "navigate-dashboard": Navigate("dashboard"); return true;

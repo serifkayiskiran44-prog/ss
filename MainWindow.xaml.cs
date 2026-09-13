@@ -538,7 +538,7 @@ public partial class MainWindow : Window
  }
  /// <summary>#870: the source list's row menu; both actions are the page's own buttons, so they carry the same guards.</summary>
  IReadOnlyList<RowAction> SourceRowActions(){var none=sources.SelectedItem is XmlSource?null:"Önce kaynak seçin.";return new RowAction[]{new("source-inspect","XML'i oku / alanları bul",()=>RunGuarded(InspectAsync),none),new("source-health","Kaynak sağlığını kontrol et (tam okuma)",()=>RunGuarded(CheckXmlSourceAsync),none)};}
- async void RunGuarded(Func<Task> work){try{await work();}catch(Exception ex){Log("İşlem başarısız: "+AuditStore.Redact(ex.Message));}}
+ async void RunGuarded(Func<Task> work){try{using var activity=UiActivity.Enter(UiActivity.NameOf(work));await work();}catch(Exception ex){Log("İşlem başarısız: "+AuditStore.Redact(ex.Message));}}
  async Task CheckXmlSourceAsync()
  {
   if(source==null)throw new InvalidOperationException("Önce XML kaynağı seçin.");
@@ -611,7 +611,7 @@ public partial class MainWindow : Window
    Log("Otomatik kontrol bitti. Güncel listeyi görmek için Havuzu yenile düğmesini kullan.");
   }catch(Exception e){Log(Safe(e), NotificationSeverity.Error);}finally{ModuleTabs.IsEnabled=true;gate.Release();}
  }
- async Task RunAsync(Func<Task> action){if(!await gate.WaitAsync(0)){Log("Önceki işlem sürüyor.");return;}ModuleTabs.IsEnabled=false;try{await action();}catch(Exception e){Log(Safe(e), NotificationSeverity.Error);apiStatus.Text=Safe(e);}finally{ModuleTabs.IsEnabled=true;gate.Release();}}
+ async Task RunAsync(Func<Task> action){if(!await gate.WaitAsync(0)){Log("Önceki işlem sürüyor.");return;}ModuleTabs.IsEnabled=false;try{using var activity=UiActivity.Enter(UiActivity.NameOf(action));await action();}catch(Exception e){Log(Safe(e), NotificationSeverity.Error);apiStatus.Text=Safe(e);}finally{ModuleTabs.IsEnabled=true;gate.Release();}}
  static string Safe(Exception e)=>SqliteBusyDiagnostics.IsBusyOrLocked(e)?SqliteBusyDiagnostics.Describe(e):e is InvalidOperationException or ArgumentException?e.Message:"İşlem tamamlanamadı. Dosya biçimini, erişim izinlerini ve bağlantıyı kontrol et.";
  void Log(string text){StatusText.Text=text;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);new AuditStore(dataDirectory).Append(new(){Module="UI",Action="log",Outcome="Info",Detail=text});}catch(IOException){}catch(Exception){ } }
  protected override void OnClosing(System.ComponentModel.CancelEventArgs e){if(!ResolveProductEdit()){e.Cancel=true;base.OnClosing(e);return;}base.OnClosing(e);if(e.Cancel)return;WindowGeometry.Save(this, uiPreferences);lifetime.Cancel();globalSearchCts?.Cancel();excelCts?.Cancel();}

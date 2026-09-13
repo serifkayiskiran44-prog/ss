@@ -65,10 +65,10 @@ public static class UiLatency
 /// <summary>One measurement in flight: its own clock and correlation id, so views measured in parallel never share a verdict; the first verdict wins.</summary>
 public sealed class LatencyScope
 {
-    readonly LatencyStore store; readonly string view; readonly LatencyPhase phase; readonly string scope; readonly Stopwatch clock = Stopwatch.StartNew(); readonly DateTime startedUtc = DateTime.UtcNow;
+    readonly LatencyStore store; readonly string view; readonly LatencyPhase phase; readonly string scope; readonly Stopwatch clock = Stopwatch.StartNew(); readonly DateTime startedUtc = DateTime.UtcNow; readonly IDisposable activity;
     LatencyMetric? verdict;
 
-    internal LatencyScope(LatencyStore store, string view, LatencyPhase phase, string scope) { this.store = store; this.view = view; this.phase = phase; this.scope = scope; Correlation = Guid.NewGuid().ToString("N")[..12]; }
+    internal LatencyScope(LatencyStore store, string view, LatencyPhase phase, string scope) { this.store = store; this.view = view; this.phase = phase; this.scope = scope; Correlation = Guid.NewGuid().ToString("N")[..12]; activity = UiActivity.Enter($"{view}-{phase.ToString().ToLowerInvariant()}", Correlation); }
 
     public string Correlation { get; }
 
@@ -80,7 +80,7 @@ public sealed class LatencyScope
     LatencyMetric Settle(LatencyOutcome outcome, int count)
     {
         if (verdict is not null) return verdict;
-        clock.Stop();
+        clock.Stop(); activity.Dispose();
         var warm = store.MarkSeen(view);
         verdict = new LatencyMetric(startedUtc, view, phase, outcome, clock.ElapsedMilliseconds, Math.Max(0, count), scope, warm, Correlation);
         try { store.Record(verdict); }
