@@ -21,7 +21,7 @@ public static class DesignTokens
         ("SpaceHairline", typeof(double)), ("SpaceInline", typeof(double)), ("SpaceControl", typeof(double)), ("SpaceSection", typeof(double)), ("SpacePage", typeof(double)),
         ("ControlMargin", typeof(Thickness)), ("InputPadding", typeof(Thickness)), ("ButtonPadding", typeof(Thickness)), ("CompactButtonPadding", typeof(Thickness)),
         ("CardPadding", typeof(Thickness)), ("HeaderPadding", typeof(Thickness)), ("TabPadding", typeof(Thickness)), ("NavigationItemPadding", typeof(Thickness)), ("NavigationItemMargin", typeof(Thickness)),
-        ("ControlMinHeight", typeof(double)), ("RowHeight", typeof(double)),
+        ("ControlMinHeight", typeof(double)), ("RowHeight", typeof(double)), ("HitTargetMinSize", typeof(double)),
         ("BorderHairline", typeof(double)), ("BorderEmphasis", typeof(double)), ("CardRadius", typeof(CornerRadius)), ("ShellRadius", typeof(CornerRadius)),
         // #862: semantic colours
         ("TextPrimaryColor", typeof(System.Windows.Media.Color)), ("TextMutedColor", typeof(System.Windows.Media.Color)), ("TextSecondaryColor", typeof(System.Windows.Media.Color)), ("WarningTextColor", typeof(System.Windows.Media.Color)),
@@ -87,6 +87,7 @@ public static class DesignTokens
     public static Thickness NavigationItemMargin => T("NavigationItemMargin");
     public static double ControlMinHeight => D("ControlMinHeight");
     public static double RowHeight => D("RowHeight");
+    public static double HitTargetMinSize => D("HitTargetMinSize");
     public static double BorderHairline => D("BorderHairline");
     public static double BorderEmphasis => D("BorderEmphasis");
     public static CornerRadius CardRadius => R("CardRadius");

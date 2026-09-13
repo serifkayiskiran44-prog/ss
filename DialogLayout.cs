@@ -60,6 +60,8 @@ public static class DialogShell
             ResizeMode = ResizeMode.CanResize, SizeToContent = SizeToContent.Manual, ShowInTaskbar = false,
             WindowStartupLocation = owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner,
         };
+        // #863: a dialog resolves the same tokens and control styles as the main window, with or without an Application.
+        window.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = DesignTokens.Source });
         var root = new DockPanel { Margin = new Thickness(14), LastChildFill = true };
         var bar = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
         DockPanel.SetDock(bar, Dock.Bottom);

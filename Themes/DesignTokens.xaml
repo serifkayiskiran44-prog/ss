@@ -36,6 +36,7 @@
     <!-- Control heights -->
     <sys:Double x:Key="ControlMinHeight">30</sys:Double>
     <sys:Double x:Key="RowHeight">36</sys:Double>
+    <sys:Double x:Key="HitTargetMinSize">24</sys:Double>
 
     <!-- Icons (#860): the app draws icons as text glyphs; a size per role and the square minimum of an icon button. -->
     <sys:Double x:Key="IconSizeInline">13</sys:Double>
@@ -96,6 +97,8 @@
     <Color x:Key="SelectedRowInactiveColor">#D6E2EB</Color>
     <sys:Double x:Key="SelectedRowRuleThickness">3</sys:Double>
     <Thickness x:Key="SelectedRowRule">3,0,0,0</Thickness>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForegroundColor}"/>
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
     <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}"/>
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
@@ -128,4 +131,18 @@
     <!-- Shared layout styles (#859): a page root and a section root for XAML; Spacing.cs applies the same rhythm in code. -->
     <Style x:Key="PageRoot" TargetType="Panel"><Setter Property="Margin" Value="{StaticResource PageMargin}"/></Style>
     <Style x:Key="SectionRoot" TargetType="Panel"><Setter Property="Margin" Value="{StaticResource SectionMargin}"/></Style>
+
+    <!-- Shared control styles (#863): one standard for every window and dialog. An input stands at the control height with the input padding; a button and a check box are at least the hit target; every control carries the keyboard ring; a grid row and a cell carry the selection highlight and rule. -->
+    <Style TargetType="Button"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Setter Property="MinHeight" Value="{StaticResource HitTargetMinSize}"/><Setter Property="MinWidth" Value="{StaticResource HitTargetMinSize}"/><Setter Property="Padding" Value="{StaticResource ButtonPadding}"/><Setter Property="Margin" Value="{StaticResource ControlMargin}"/><Setter Property="Background" Value="{StaticResource AccentBrush}"/><Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/></Style>
+    <Style TargetType="TextBox"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Setter Property="Padding" Value="{StaticResource InputPadding}"/><Setter Property="Margin" Value="{StaticResource ControlMargin}"/><Setter Property="MinHeight" Value="{StaticResource ControlMinHeight}"/><Setter Property="BorderBrush" Value="#D7DFE7"/></Style>
+    <Style TargetType="PasswordBox"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Setter Property="Padding" Value="{StaticResource InputPadding}"/><Setter Property="Margin" Value="{StaticResource ControlMargin}"/><Setter Property="MinHeight" Value="{StaticResource ControlMinHeight}"/></Style>
+    <Style TargetType="ComboBox"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Setter Property="Padding" Value="{StaticResource InputPadding}"/><Setter Property="Margin" Value="{StaticResource ControlMargin}"/><Setter Property="MinHeight" Value="{StaticResource ControlMinHeight}"/></Style>
+    <Style TargetType="DatePicker"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Setter Property="Padding" Value="{StaticResource InputPadding}"/><Setter Property="Margin" Value="{StaticResource ControlMargin}"/><Setter Property="MinHeight" Value="{StaticResource ControlMinHeight}"/></Style>
+    <Style TargetType="CheckBox"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Setter Property="Margin" Value="5,7"/><Setter Property="MinHeight" Value="{StaticResource HitTargetMinSize}"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
+    <Style TargetType="DataGrid"><Setter Property="AutoGenerateColumns" Value="False"/><Setter Property="CanUserAddRows" Value="False"/><Setter Property="IsReadOnly" Value="True"/><Setter Property="AlternatingRowBackground" Value="#F6F9FB"/><Setter Property="RowHeight" Value="{StaticResource RowHeight}"/><Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="HorizontalGridLinesBrush" Value="#E8EDF2"/><Setter Property="EnableRowVirtualization" Value="True"/><Setter Property="EnableColumnVirtualization" Value="False"/><Setter Property="BorderBrush" Value="#DCE3EA"/><Setter Property="HeadersVisibility" Value="Column"/></Style>
+    <Style TargetType="DataGridColumnHeader"><Setter Property="Padding" Value="{StaticResource HeaderPadding}"/><Setter Property="Background" Value="#EAF0F4"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="BorderThickness" Value="0"/></Style>
+    <Style TargetType="GroupBox"><Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="{StaticResource CardPadding}"/><Setter Property="BorderBrush" Value="#DCE3EA"/></Style>
+    <Style TargetType="TabItem"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Setter Property="Padding" Value="{StaticResource TabPadding}"/></Style>
+    <Style TargetType="DataGridRow"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="BorderBrush" Value="{StaticResource SelectedRowBrush}"/><Setter Property="BorderThickness" Value="{StaticResource SelectedRowRule}"/></Trigger></Style.Triggers></Style>
+    <Style TargetType="DataGridCell"><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{StaticResource SelectedRowBrush}"/><Setter Property="Foreground" Value="{StaticResource SelectedRowForegroundBrush}"/><Setter Property="BorderBrush" Value="{StaticResource SelectedRowBrush}"/></Trigger><MultiTrigger><MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="Selector.IsSelectionActive" Value="False"/></MultiTrigger.Conditions><Setter Property="Background" Value="{StaticResource SelectedRowInactiveBrush}"/><Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/></MultiTrigger></Style.Triggers></Style>
 </ResourceDictionary>
