@@ -76,7 +76,15 @@ public static class OrdersPanel
    var marketplace=Field(detail,"Pazaryeri",o.Marketplace,!isNew);var shop=Field(detail,"Mağaza kimliği",o.ShopId,!isNew);var id=Field(detail,"Sipariş numarası",o.OrderId,!isNew);
    bool api=o.Source=="Etsy API";var raw=Field(detail,"Sipariş durumu (ham değer)",o.RawStatus,api);var payment=Field(detail,"Ödeme durumu",o.PaymentStatus,api);
    detail.Children.Add(Text($"Kaynak: {o.Source}\nSon API alımı: {o.SyncLabel}"));detail.Children.Add(Text("Ürünler",16));
-   foreach(var i in o.Items)detail.Children.Add(Text($"{i.Quantity} × {i.Title} · SKU: {i.Sku}"));
+   // #838: the lines as a reconciliation -- ordered / shipped (what the stock receipt deducted) / returned (the ledger) / cancelled -- with the difference as a state, not a colour.
+   if(isNew){foreach(var i in o.Items)detail.Children.Add(Text($"{i.Quantity} × {i.Title} · SKU: {i.Sku}"));}
+   else{IReadOnlyDictionary<string,int> returnedBySku;try{returnedBySku=catalog.OrderReturnsApplied(o.Marketplace,o.ShopId,o.OrderId);}catch(Exception){returnedBySku=new Dictionary<string,int>();}
+    var lines=OrderLineReconciliation.Build(o,catalog.GetOrderStockStatus(o.Marketplace,o.ShopId,o.OrderId),returnedBySku);var hc=SeverityStyle.IsHighContrast;
+    var linesGrid=new DataGrid{Tag="order-lines",IsReadOnly=true,AutoGenerateColumns=false,HeadersVisibility=DataGridHeadersVisibility.Column,CanUserAddRows=false,SelectionMode=DataGridSelectionMode.Single,Margin=new Thickness(3,0,3,4),ItemsSource=lines};
+    foreach(var (label,path,width) in new[]{("SKU","Sku",90),("Ürün","Title",170),("Sipariş","Ordered",60),("Sevk","Shipped",55),("İade","Returned",55),("İptal","Cancelled",55),("Açık","Outstanding",50),("Durum","StateLabel",200)})linesGrid.Columns.Add(new DataGridTextColumn{Header=label,Binding=new Binding(path),Width=width});
+    linesGrid.LoadingRow+=(_,e)=>{if(e.Row.Item is OrderLineView line){var style=SeverityStyle.For(line.Level,hc);e.Row.BorderBrush=SeverityStyle.AccentBrush(line.Level,hc);e.Row.BorderThickness=new Thickness(style.BorderWeight,0,0,0);e.Row.ToolTip=line.StateLabel;System.Windows.Automation.AutomationProperties.SetName(e.Row,$"{line.Sku}: sipariş {line.Ordered}, sevk {line.Shipped}, iade {line.Returned}, iptal {line.Cancelled}. {line.StateLabel}");}};
+    var linesSummary=Text(OrderLineReconciliation.Summary(lines));linesSummary.FontWeight=FontWeights.SemiBold;var worst=lines.Count==0?SeverityLevel.Info:lines.Max(l=>l.Level);linesSummary.Foreground=SeverityStyle.AccentBrush(worst,hc);System.Windows.Automation.AutomationProperties.SetName(linesSummary,"Satır mutabakatı: "+linesSummary.Text);
+    detail.Children.Add(linesSummary);detail.Children.Add(linesGrid);}
    if(!api){var product=Field(detail,"Ürün adı (ekle)","");var sku=Field(detail,"SKU","");var qty=Field(detail,"Adet","1");var itemAdd=Button(detail,"Ürünü ekle");itemAdd.Click+=(_,_)=>{if(string.IsNullOrWhiteSpace(product.Text)||!int.TryParse(qty.Text,out int n)||n<=0){status.Text="Ürün adı ve pozitif tam adet girin.";return;}Capture();captureShipment();o.Items.Add(new(){Title=product.Text.Trim(),Sku=sku.Text.Trim(),Quantity=n});Edit(o,isNew);};}
    if(!isNew){
     detail.Children.Add(Text("Merkezi stok işlemi",16));

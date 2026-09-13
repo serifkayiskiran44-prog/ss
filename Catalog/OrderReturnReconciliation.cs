@@ -78,6 +78,19 @@ public partial class CatalogStore
 
     static void EnsureReturnLedger(SqliteConnection c, SqliteTransaction tx) { using var cmd = c.CreateCommand(); cmd.Transaction = tx; cmd.CommandText = ReturnLedgerSchema; cmd.ExecuteNonQuery(); }
 
+    /// <summary>#838: what the ledger says came back per SKU for one order -- the same rows the reconciliation counts, read-only.</summary>
+    public IReadOnlyDictionary<string, int> OrderReturnsApplied(string marketplace, string shopId, string orderId)
+    {
+        using var c = Open(); using var tx = c.BeginTransaction(deferred: false);
+        EnsureReturnLedger(c, tx);
+        using var cmd = c.CreateCommand(); cmd.Transaction = tx;
+        cmd.CommandText = "SELECT Sku,SUM(Quantity) FROM OrderReturnEvents WHERE Marketplace=$marketplace COLLATE NOCASE AND ShopId=$shop AND OrderId=$order GROUP BY Sku";
+        cmd.Parameters.AddWithValue("$marketplace", marketplace ?? ""); cmd.Parameters.AddWithValue("$shop", shopId ?? ""); cmd.Parameters.AddWithValue("$order", orderId ?? "");
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        using (var reader = cmd.ExecuteReader()) while (reader.Read()) result[reader.GetString(0)] = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
+        tx.Commit(); return result;
+    }
+
     static OrderReturnReconciliation ReconcileReturn(SqliteConnection c, SqliteTransaction tx, OrderSnapshot order, OrderReturnEvent e)
     {
         var reasons = new List<string>();
