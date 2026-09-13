@@ -124,7 +124,7 @@ public partial class MainWindow : Window
   Field(productEditor,"Üretici parça kodu / MPN","Mpn").MaxLength=128;
   Field(productEditor,"Faturada kullanılacak ürün adı","InvoiceName").MaxLength=300;
   Field(productEditor,"Alt başlık","Subtitle").MaxLength=300;
-  Field(productEditor,"Raf / konum","Shelf").MaxLength=100;
+  Field(productEditor,"Raf / konum","Shelf").MaxLength=100;Field(productEditor,"Ağırlık (birimli, örn. 1,5 kg)","WeightText").MaxLength=40;Field(productEditor,"Boyut (U x G x Y, birimli)","DimensionsText").MaxLength=60; // #907
   var expires=new DatePicker();expires.SetBinding(DatePicker.SelectedDateProperty,new Binding("ExpiresOn"){Mode=BindingMode.TwoWay,ValidatesOnExceptions=true});Label(productEditor,"Son kullanma tarihi (isteğe bağlı)",expires);
   productEditor.Children.Add(Button("Tarihi temizle",()=>expires.SelectedDate=null));
   productEditor.Children.Add(Hint("Operasyon bilgileri XML yenilemesinde korunur. Fatura adı yerel kayıttır; fatura entegrasyonuna otomatik gönderilmez."));
@@ -527,7 +527,7 @@ public partial class MainWindow : Window
  void SetSource(XmlSource s)
  {
    source=s;BindSource();RefreshImportStepper();if(store.Sources().Any(x=>x.Id==s.Id)){try{PreferenceSchema.Write(uiPreferences, ImportSourceCatalog.RecentPreferenceKey,s.Id);}catch(Exception e){Log("Son kaynak kaydedilemedi: "+Safe(e));}}fxStatus.Text=RateDescription(s);calculationStatus.Text="Alış fiyatını girip hesaplamayı test edebilirsin.";itemPath.Text=s.ItemPath;decimalSeparator.SelectedItem=s.DecimalSeparator;previewMappingShapeFingerprint=""; _ = RefreshXmlSourceHealthAsync(s);
-  var names=new[]{("Sku","SKU / stok kodu"),("Barcode","Barkod"),("Gtin","GTIN / EAN / UPC"),("Name","Ürün adı"),("Description","Açıklama"),("Cost","Alış fiyatı"),("Stock","Stok"),("Brand","Marka"),("Category","Kategori"),("ImageUrls","Görseller")};
+  var names=new[]{("Sku","SKU / stok kodu"),("Barcode","Barkod"),("Gtin","GTIN / EAN / UPC"),("Name","Ürün adı"),("Description","Açıklama"),("Cost","Alış fiyatı"),("Stock","Stok"),("Brand","Marka"),("Category","Kategori"),("ImageUrls","Görseller"),("Weight","Ağırlık (birimli: 1,5 kg / 1500 g)"),("Dimensions","Boyut (U x G x Y, birimli: 20 x 30 x 40 cm)")};
   mappings=names.Select(x=>new MappingEntry{Key=x.Item1,Label=x.Item2,Path=s.Fields.GetValueOrDefault(x.Item1,"")}).ToList();mapping.ItemsSource=mappings;mappingSampleItem=null;RefreshMappingTable();xml="";loadedLocation="";previewRevision="";preview.ItemsSource=null;paths.ItemsSource=null;xmlPaths.Clear();
   try{var auth=XmlAuthStore.Load(s.Id,dataDirectory);xmlUser.Text=auth.User;xmlPassword.Password=auth.Password;}catch(Exception){xmlUser.Clear();xmlPassword.Clear();Log("XML şifresi açılamadı; yeniden kaydet.");}
  }

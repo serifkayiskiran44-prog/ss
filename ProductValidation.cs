@@ -58,6 +58,8 @@ public static class ProductValidation
         // #906: a GTIN must be a GTIN (8/12/13/14 digits, correct check digit); an invalid one is refused, never corrected. A barcode may be any code, but one that looks like a GTIN with a wrong check digit is flagged.
         if (!string.IsNullOrWhiteSpace(product.Gtin) && GtinCode.Inspect(product.Gtin) is { Kind: BarcodeKind.InvalidGtin or BarcodeKind.Custom } badGtin) Add(Blocking, "identity", "GTIN", "GTIN geçersiz: " + badGtin.Words);
         if (GtinCode.Inspect(product.Barcode) is { Kind: BarcodeKind.InvalidGtin } badBarcode) Add(Warning, "identity", "Barkod", "Barkod GTIN gibi görünüyor ama " + badBarcode.Words);
+        // #907: a weight or box text with no canonical value beside it was ambiguous or unreadable when it was written.
+        foreach (var unitFinding in ProductUnits.Findings(product)) Add(unitFinding.Blocking ? Blocking : Warning, "price-stock", unitFinding.Field, unitFinding.Message);
         Length("content", "Marka", product.Brand, 200);
         Length("content", "Kategori", product.Category, 200);
         Length("content", "Açıklama", product.Description, 20000);

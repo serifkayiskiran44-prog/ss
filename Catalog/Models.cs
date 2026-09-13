@@ -59,6 +59,8 @@ public class CatalogProduct {
  public decimal Cost {get;set;} public decimal Price {get;set;} public int Stock {get;set;} public bool LockName {get;set;} public bool LockDescription {get;set;} public bool LockPrice {get;set;} public bool LockStock {get;set;} public bool LockImages {get;set;} public string EtsyListingId {get;set;}=""; public DateTime UpdatedUtc {get;set;}
  // Shipping desi (volumetric/actual weight unit carriers bracket cost by). Null on records written before this field existed; profit calculations must treat null as NEEDS_WEIGHT_DATA, never as 0.
  public decimal? Desi {get;set;}
+ // #907: weight and box as given (the provenance) and as canonical kilograms / centimetres when the text could be read; null when it could not.
+ public string WeightText {get;set;}=""; public decimal? WeightKg {get;set;} public string DimensionsText {get;set;}=""; public decimal? LengthCm {get;set;} public decimal? WidthCm {get;set;} public decimal? HeightCm {get;set;}
  // Independent, named price points (e.g. "Etsy fixed", "Wholesale") a channel can select instead of the formula-based PricePolicy.
  // Absent/empty on records written before this field existed; legacy Price/formula behavior is unchanged when empty.
  public List<CatalogPriceField> PriceFields {get;set;}=new();

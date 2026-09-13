@@ -40,6 +40,9 @@ public static class ProductQuickInspect
 
         Add("Stok", "Stok", product.Stock.ToString("N0", CultureInfo.CurrentCulture));
         Add("Stok", "Kilitler", Join(product.LockPrice ? "fiyat" : "", product.LockStock ? "stok" : "", product.LockName ? "başlık" : "", product.LockImages ? "görsel" : ""));
+        // #907: the canonical weight and box beside the texts as given.
+        Add("Stok", "Ağırlık (kargo)", ProductUnits.DescribeWeight(product));
+        Add("Stok", "Boyut (kargo)", ProductUnits.DescribeDimensions(product));
 
         Add("Kaynak", "Kaynak türü", product.SourceKind);
         Add("Kaynak", "Son kaynak güncellemesi", product.SourceUpdatedUtc is { } touched ? Ago(nowUtc - touched) : null);
