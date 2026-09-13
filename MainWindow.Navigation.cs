@@ -64,7 +64,7 @@ public partial class MainWindow
    Page(id,channel.Name,id=="joom"?"Satıcı kaydı / kabulü bekleniyor • Canlı ürün aktarımı etkin değil.":"Yerel kanal ürün planları • API bağlantı kontrolü ayrı; canlı ürün aktarımı etkin değil.",tabs);
   }
   var amazonTabs=new TabControl();amazonTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("amazon",dataDirectory)});amazonTabs.Items.Add(new TabItem{Header="Bağlantı",Content=AmazonPanel.Create(dataDirectory)});Page("amazon","Amazon","SP-API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",amazonTabs);
-  var trendyolTabs=new TabControl();trendyolTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("trendyol",dataDirectory)});trendyolTabs.Items.Add(new TabItem{Header="Bağlantı",Content=TrendyolPanel.Create(dataDirectory)});Page("trendyol","Trendyol","Satıcı API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",trendyolTabs);
+  var trendyolTabs=new TabControl();trendyolTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("trendyol",dataDirectory)});trendyolTabs.Items.Add(new TabItem{Header="Bağlantı",Content=TrendyolPanel.Create(dataDirectory,settingsEditState)});Page("trendyol","Trendyol","Satıcı API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",trendyolTabs);
   var hepsiTabs=new TabControl();hepsiTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("hepsiburada",dataDirectory)});hepsiTabs.Items.Add(new TabItem{Header="Bağlantı",Content=HepsiburadaPanel.Create(dataDirectory)});Page("hepsiburada","Hepsiburada","Merchant API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",hepsiTabs);
   var fruugoTabs=new TabControl();fruugoTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("fruugo",dataDirectory)});fruugoTabs.Items.Add(new TabItem{Header="Bağlantı",Content=FruugoPanel.Create(dataDirectory)});Page("fruugo","Fruugo","Retailer ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",fruugoTabs);
   var allegroTabs=new TabControl();allegroTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("allegro",dataDirectory)});allegroTabs.Items.Add(new TabItem{Header="Bağlantı",Content=AllegroPanel.Create(dataDirectory)});Page("allegro","Allegro","Public API read-only ürün/sipariş okuma ve yerel ürün planları.",allegroTabs);
@@ -76,7 +76,7 @@ public partial class MainWindow
   Page("price-policies","Mağaza fiyat kuralları","CASE formülü, kur ve güvenli fiyat önizlemesi",BuildPricePolicies());
   Page("stock-policies","Mağaza stok ayarları","Güvenlik stoğu, üst sınır ve yerel önizleme",BuildStockPolicies());
   Page("policy-center","Stok / fiyat politika merkezi","Kanal + mağaza politikaları, kopyalama ve ürün preview'i",PolicyCenterPanel.Create(dataDirectory));
-  Page("locale-settings","Döviz / vergi / yerel ayarlar","Para birimi, KDV, sayı-tarih kültürü ve mağaza kopyalama",LocaleSettingsPanel.Create(dataDirectory));
+  Page("locale-settings","Döviz / vergi / yerel ayarlar","Para birimi, KDV, sayı-tarih kültürü ve mağaza kopyalama",LocaleSettingsPanel.Create(dataDirectory,settingsEditState));
   Page("data-quality","Veri kalite merkezi","Duplicate, zorunlu alan, fiyat/stok/döviz, URL ve kaynak hataları",DataQualityPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("orders","Sipariş ve kargo","Sipariş kayıtları, paket ve kargo takibi",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts,reveal=>ordersReveal=reveal));
   Page("order-exceptions","Sipariş istisnaları","Eksik SKU, iptal/iade ve stok kararlarını önizleme/onay ile yönetin.",OrderExceptionsPanel.Create(dataDirectory,key=>Navigate(key)));
@@ -87,7 +87,7 @@ public partial class MainWindow
   Page("reports","Raporlar","Rapor kataloğu: amaç, veri kapsamı, son çalıştırma, kayıtlı filtre ve çıktı türü",ReportsPanel.Create(dataDirectory,key=>Navigate(key),()=>AllowedStoreKeys()));
   Page("diagnostics","Tanılama / audit","Güvenli sistem sağlık özeti, audit trail ve destek paketi",DiagnosticsPanel.Create(dataDirectory,key=>Navigate(key)));
   // #853: one taxonomy over the settings that exist -- links to the owning screens, inline only for what the shell owns; a channel's credentials open on its own connection tab.
-  Page("settings","Ayarlar","Genel, mağaza, bağlantı, içe aktarma, fiyat, bildirim ve tanılama ayarları tek ağaçta",SettingsPanel.Create(new SettingsPanel.Context(dataDirectory,key=>Navigate(key),key=>routes.ContainsKey(key),(route,section)=>{Navigate(route);if(section=="connection"&&routes.TryGetValue(route,out var page)&&page.Content is TabControl tabs)tabs.SelectedIndex=tabs.Items.Count-1;}),select=>settingsSelect=select));
+  Page("settings","Ayarlar","Genel, mağaza, bağlantı, içe aktarma, fiyat, bildirim ve tanılama ayarları tek ağaçta",SettingsPanel.Create(new SettingsPanel.Context(dataDirectory,key=>Navigate(key),key=>routes.ContainsKey(key),(route,section)=>{Navigate(route);if(section=="connection"&&routes.TryGetValue(route,out var page)&&page.Content is TabControl tabs)tabs.SelectedIndex=tabs.Items.Count-1;},settingsEditState),select=>settingsSelect=select));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var readiness=PreflightCenter.FromEtsy(new EtsyReadinessService().Build()); Log($"Yayın öncesi preflight: {readiness.Status}; engel={readiness.BlockingItems.Count}");
@@ -157,6 +157,8 @@ public partial class MainWindow
  }
  // #853: the settings shell exposes its category selector so a deep link ("settings/pricing") lands on the category.
  Action<string>? settingsSelect;
+ // #854: one edit state for every settings form; the shell's badges read it, the forms write it (labels, never values).
+ readonly SettingsEditState settingsEditState = new();
  void Navigate(string key, bool push = true)
  {
   var category = SettingsTaxonomy.ParseDeepLink(key);

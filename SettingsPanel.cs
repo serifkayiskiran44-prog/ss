@@ -14,10 +14,12 @@ namespace TrMarketplaceHubDesktop;
 public static class SettingsPanel
 {
     /// <param name="OpenSection">Opens a route and selects a section inside it (a channel's connection tab); null falls back to Navigate.</param>
-    public sealed record Context(string? Directory, Action<string>? Navigate, Func<string, bool> RouteExists, Action<string, string>? OpenSection = null);
+    /// <param name="EditState">#854: the app's settings edit state; a category and an entry with unsaved changes carry a badge that names the fields, never a value.</param>
+    public sealed record Context(string? Directory, Action<string>? Navigate, Func<string, bool> RouteExists, Action<string, string>? OpenSection = null, SettingsEditState? EditState = null);
 
     public const double CategoryWidth = 240;
     public const string SecretBadge = "Gizli bilgiler maskeli alanlarda, kendi sayfasında düzenlenir.";
+    public const string DirtyMark = "●";
 
     public static FrameworkElement Create(Context context, Action<Action<string>>? exposeSelect = null)
     {
@@ -53,6 +55,26 @@ public static class SettingsPanel
             if (!any) content.Children.Add(new TextBlock { Tag = "settings-empty", Text = "Bu aramaya uyan ayar yok; arama metnini kısaltın.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) });
         }
         void ShowCategory(SettingsCategory category) => ShowEntries(category.Label, category.Description, category.Entries.Select(e => (category, e)), nameCategory: false);
+        // #854: a category with unsaved changes in any of its entries carries the mark; the tooltip and the accessible name say which fields, by label only.
+        void RefreshBadges()
+        {
+            foreach (var item in list.Items.OfType<ListBoxItem>())
+            {
+                var category = categories.First(c => c.Key == (string)item.Tag);
+                List<DirtySection> dirty = context.EditState is null ? new() : category.Entries.Select(e => context.EditState.Dirty(e.Key)).Where(d => d is not null).Select(d => d!).ToList();
+                ((TextBlock)item.Content).Text = SettingsTaxonomy.ShortLabel(category.Label) + (dirty.Count > 0 ? " " + DirtyMark : "");
+                item.ToolTip = category.Label + Environment.NewLine + category.Description + (dirty.Count > 0 ? Environment.NewLine + string.Join(Environment.NewLine, dirty.Select(d => $"{category.Entries.First(e => e.Key == d.EntryKey).Label}: {d.Summary}")) : "");
+                AutomationProperties.SetName(item, $"{category.Label}: {category.Entries.Count} ayar" + (dirty.Count > 0 ? ", kaydedilmemiş değişiklik" : ""));
+            }
+        }
+        if (context.EditState is { } editState)
+        {
+            editState.Changed += () => list.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                RefreshBadges();
+                if (search.Text.Trim().Length == 0 && list.SelectedItem is ListBoxItem { Tag: string key }) ShowCategory(categories.First(c => c.Key == key));
+            }));
+        }
         list.SelectionChanged += (_, _) => { if (list.SelectedItem is ListBoxItem { Tag: string key } && SettingsTaxonomy.Find(key) is { } category && search.Text.Trim().Length == 0) ShowCategory(category with { Entries = categories.First(c => c.Key == key).Entries }); };
         search.TextChanged += (_, _) =>
         {
@@ -67,6 +89,7 @@ public static class SettingsPanel
             search.Text = ""; list.SelectedItem = item; item.Focus();
         }
         exposeSelect?.Invoke(Select);
+        RefreshBadges();
         if (list.Items.Count > 0) list.SelectedIndex = 0;
         return root;
     }
@@ -74,9 +97,11 @@ public static class SettingsPanel
     static FrameworkElement Row(SettingsCategory category, SettingsEntry entry, Context context, bool nameCategory)
     {
         var body = new StackPanel();
-        var label = new TextBlock { Text = (nameCategory ? category.Label + " › " : "") + entry.Label, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
+        var dirty = context.EditState?.Dirty(entry.Key);
+        var label = new TextBlock { Text = (nameCategory ? category.Label + " › " : "") + entry.Label + (dirty is null ? "" : " " + DirtyMark), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
         body.Children.Add(label);
         body.Children.Add(new TextBlock { Text = entry.Description, TextWrapping = TextWrapping.Wrap, Opacity = 0.9, Margin = new Thickness(0, 2, 0, 4) });
+        if (dirty is not null) body.Children.Add(new TextBlock { Tag = "settings-dirty-badge", Text = $"{DirtyMark} {dirty.Summary}", TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = SeverityStyle.AccentBrush(SeverityLevel.Warning, SeverityStyle.IsHighContrast), Margin = new Thickness(0, 0, 0, 4) });
         if (entry.SecretBearing) body.Children.Add(new TextBlock { Tag = "settings-secret-badge", Text = "🔒 " + SecretBadge, TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.85, Margin = new Thickness(0, 0, 0, 4) });
         if (entry.Inline)
         {
@@ -91,7 +116,7 @@ public static class SettingsPanel
             body.Children.Add(open);
         }
         var border = new Border { Tag = "settings-entry", BorderThickness = new Thickness(0, 0, 0, 1), BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(222, 228, 232)), Padding = new Thickness(0, 8, 0, 8), Child = body };
-        AutomationProperties.SetAutomationId(border, entry.Key); AutomationProperties.SetName(border, entry.Label + (entry.SecretBearing ? ", gizli bilgi içerir" : ""));
+        AutomationProperties.SetAutomationId(border, entry.Key); AutomationProperties.SetName(border, entry.Label + (entry.SecretBearing ? ", gizli bilgi içerir" : "") + (dirty is null ? "" : ", " + dirty.Summary));
         return border;
     }
 

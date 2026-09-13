@@ -6,7 +6,8 @@ namespace TrMarketplaceHubDesktop;
 
 public static class TrendyolPanel
 {
-    public static FrameworkElement Create(string? directory = null)
+    /// <param name="editState">#854: the app's settings edit state; the secret is tracked by presence only.</param>
+    public static FrameworkElement Create(string? directory = null, SettingsEditState? editState = null)
     {
         var store = new TrendyolSettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "trendyol.bin"));
         var root = new StackPanel { Margin = new Thickness(18), MaxWidth = 820 };
@@ -14,10 +15,15 @@ public static class TrendyolPanel
         root.Children.Add(new TextBlock { Text = "API bilgileri DPAPI ile şifrelenir. Resmi sözleşme doğrulanmadan ürün, stok, fiyat veya sipariş isteği oluşturulmaz.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 0, 0, 12) });
         var supplier = Field(root, "Supplier ID"); var key = Field(root, "API key"); var secret = Password(root, "API secret"); var agent = Field(root, "User-Agent");
         var state = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 8, 0, 8) }; root.Children.Add(state);
+        // #854: unsaved fields by label; the secret contributes presence, never its value.
+        var tracker = editState?.Form("trendyol-connection").Track("Supplier ID", () => supplier.Text).Track("API key", () => key.Text).Track("API secret", () => secret.Password, secret: true).Track("User-Agent", () => agent.Text);
+        foreach (var box in new[] { supplier, key, agent }) box.TextChanged += (_, _) => tracker?.Recompute();
+        secret.PasswordChanged += (_, _) => tracker?.Recompute();
         TrendyolSettings Read() => new(supplier.Text.Trim(), key.Text.Trim(), secret.Password, agent.Text.Trim());
-        root.Children.Add(Button("Şifreli kaydet", () => { var settings = Read(); TrendyolConnection.Validate(settings); store.Save(settings); state.Text = "Trendyol ayarları DPAPI ile kaydedildi. Canlı API durumu: LIVE_API_BLOCKED."; }));
+        root.Children.Add(Button("Şifreli kaydet", () => { var settings = Read(); TrendyolConnection.Validate(settings); store.Save(settings); state.Text = "Trendyol ayarları DPAPI ile kaydedildi. Canlı API durumu: LIVE_API_BLOCKED."; tracker?.Snapshot(); }));
         root.Children.Add(AsyncButton("Salt okunur bağlantı testi", async () => await new TrendyolConnection().TestReadOnlyAsync(Read())));
         try { var saved = store.Load(); if (saved is not null) { supplier.Text = saved.SupplierId; key.Text = saved.ApiKey; agent.Text = saved.UserAgent; state.Text = TrendyolConnection.Describe(saved); } else state.Text = "NOT_CONFIGURED: Trendyol ayarı yok."; } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); }
+        tracker?.Snapshot();
         return new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
     static TextBox Field(Panel panel, string label) { var box = new TextBox { Width = 420 }; AddLabel(panel, label, box); return box; }
