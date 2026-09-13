@@ -86,15 +86,8 @@ public partial class MainWindow
   Page("readiness","Üretim hazırlığı","Yerel veri, secret güvenliği, connector capability ve API sağlık geçidi",ProductionReadinessPanel.Create(dataDirectory));
   Page("reports","Raporlar","Rapor kataloğu: amaç, veri kapsamı, son çalıştırma, kayıtlı filtre ve çıktı türü",ReportsPanel.Create(dataDirectory,key=>Navigate(key),()=>AllowedStoreKeys()));
   Page("diagnostics","Tanılama / audit","Güvenli sistem sağlık özeti, audit trail ve destek paketi",DiagnosticsPanel.Create(dataDirectory,key=>Navigate(key)));
-  var settings=new StackPanel{Margin=new Thickness(20)};
-  settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
-  settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
-  foreach(var id in new[]{"etsy","ebay","ozon","joom","amazon","trendyol","hepsiburada","fruugo","allegro","wish"})
-  {var key=id;settings.Children.Add(Button(id=="ebay"?"eBay bağlantı ayarları":char.ToUpper(id[0])+id[1..]+" bağlantı ayarları",()=>{Navigate(key);if(routes[key].Content is TabControl tabs)tabs.SelectedIndex=tabs.Items.Count-1;}));}
-  settings.Children.Add(Heading("Görseller"));settings.Children.Add(MarketplaceImagePanel.Create());
-  settings.Children.Add(Heading("Sürüm, yedek ve taşıma"));settings.Children.Add(DataBackupPanel.Create(dataDirectory));
-  settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML yönetimi / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));
-  Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
+  // #853: one taxonomy over the settings that exist -- links to the owning screens, inline only for what the shell owns; a channel's credentials open on its own connection tab.
+  Page("settings","Ayarlar","Genel, mağaza, bağlantı, içe aktarma, fiyat, bildirim ve tanılama ayarları tek ağaçta",SettingsPanel.Create(new SettingsPanel.Context(dataDirectory,key=>Navigate(key),key=>routes.ContainsKey(key),(route,section)=>{Navigate(route);if(section=="connection"&&routes.TryGetValue(route,out var page)&&page.Content is TabControl tabs)tabs.SelectedIndex=tabs.Items.Count-1;}),select=>settingsSelect=select));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var readiness=PreflightCenter.FromEtsy(new EtsyReadinessService().Build()); Log($"Yayın öncesi preflight: {readiness.Status}; engel={readiness.BlockingItems.Count}");
@@ -162,7 +155,14 @@ public partial class MainWindow
   BreadcrumbText.Text = drillStack.TrailText();
   BackButton.IsEnabled = drillStack.CanGoBack;
  }
- void Navigate(string key, bool push = true) => SelectRoute(key, push);
+ // #853: the settings shell exposes its category selector so a deep link ("settings/pricing") lands on the category.
+ Action<string>? settingsSelect;
+ void Navigate(string key, bool push = true)
+ {
+  var category = SettingsTaxonomy.ParseDeepLink(key);
+  if (category is not null) { SelectRoute("settings", push); settingsSelect?.Invoke(category); return; }
+  SelectRoute(key, push);
+ }
  // #810: a dashboard card drills through with its context; a wrong-store link is refused before anything moves.
  void DrillThrough(DrillRequest request)
  {
