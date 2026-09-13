@@ -32,8 +32,7 @@ public sealed class DataBackupService
         SqliteConnection.ClearAllPools();
         var files = EnumerateDataFiles().Select(path => new DataBackupFile(path, new FileInfo(Path.Combine(DataDirectory, path)).Length, Hash(Path.Combine(DataDirectory, path)))).ToList();
         var manifest = new DataBackupManifest(Format, AppVersion.Current, DateTime.UtcNow, files);
-        var temporary = outputPath + ".tmp-" + Guid.NewGuid().ToString("N");
-        try
+        ExportFiles.Write(outputPath, overwrite, CancellationToken.None, temporary =>
         {
             using (var archive = ZipFile.Open(temporary, ZipArchiveMode.Create))
             {
@@ -48,10 +47,8 @@ public sealed class DataBackupService
                 using var writer = new StreamWriter(manifestEntry.Open());
                 writer.Write(JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
             }
-            ExportFiles.Commit(temporary, outputPath, overwrite);
-            return outputPath;
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        });
+        return outputPath;
     }
 
     public DataBackupManifest Validate(string backupPath)

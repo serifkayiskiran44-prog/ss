@@ -90,9 +90,7 @@ public static class ReportRunner
             progress?.Report(new(ReportRunStage.Export, ReportRunStageStatus.Running, 0, result.Rows.Count));
             var csv = ReportTemplateRenderer.Render(new ReportTemplate("orders", chosen), result.Rows);
             cancellationToken.ThrowIfCancellationRequested();
-            var temp = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", Path.GetFileNameWithoutExtension(path) + ".tmp-" + Guid.NewGuid().ToString("N")[..8] + ".csv");
-            try { File.WriteAllText(temp, csv, new UTF8Encoding(true)); ExportFiles.Commit(temp, path, overwrite); }
-            finally { if (File.Exists(temp)) File.Delete(temp); }
+            ExportFiles.Write(path, overwrite, cancellationToken, temp => File.WriteAllText(temp, csv, new UTF8Encoding(true)));
             progress?.Report(new(ReportRunStage.Export, ReportRunStageStatus.Done, result.Rows.Count, result.Rows.Count));
             var message = result.Rows.Count == 0 ? "Aralıkta sipariş yok; yalnız başlık satırı yazıldı." : $"{result.Rows.Count:N0} sipariş yazıldı.";
             Record(directory, runs, started, ReportRunState.Succeeded, result.Rows.Count, note, result.Parameters.StoreKey, message);

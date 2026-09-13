@@ -78,11 +78,10 @@ public static class RejectedRowsExport
     {
         ArgumentNullException.ThrowIfNull(rows);
         if (string.IsNullOrWhiteSpace(path)) return RejectedRowsExportResult.Failed("Dosya yolu boş.");
-        string temporary;
-        try { Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); temporary = path + ".tmp-" + Guid.NewGuid().ToString("N"); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return RejectedRowsExportResult.Failed("Dosya yazılamadı: " + AuditStore.Redact(error.Message)); }
         try
         {
+            ExportFiles.Write(path, overwrite, cancellationToken, temporary =>
+            {
             using (var writer = new StreamWriter(temporary, false, new UTF8Encoding(true)))
             {
                 writer.WriteLine(string.Join(",", Schema));
@@ -92,12 +91,11 @@ public static class RejectedRowsExport
                     writer.WriteLine(string.Join(",", new[] { row.RowNumber.ToString(CultureInfo.InvariantCulture), row.ReasonCode, row.Field, row.SafeValue, row.Message }.Select(Csv)));
                 }
             }
-            ExportFiles.Commit(temporary, path, overwrite);
+            });
             return RejectedRowsExportResult.Ok(rows.Count);
         }
         catch (OperationCanceledException) { return RejectedRowsExportResult.WasCancelled; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return RejectedRowsExportResult.Failed("Dosya yazılamadı: " + AuditStore.Redact(error.Message)); }
-        finally { try { if (File.Exists(temporary)) File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return RejectedRowsExportResult.Failed("Dosya yazılamadı: " + AuditStore.Redact(error.Message)); }
     }
 
     static string Csv(string value)

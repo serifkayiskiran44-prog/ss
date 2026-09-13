@@ -75,13 +75,100 @@ public static class ExportFileNames
     public static string ExistsMessage(string path) => $"Dosya zaten var; üzerine yazılmadı: {AuditStore.Redact(Path.GetFileName(path))}";
 }
 
-/// <summary>The one way an export lands on its final path: an existing file is replaced only when the caller asked for it (a confirmed save dialog, a retry of the same run) — never silently.</summary>
+/// <summary>
+/// The one way an export lands on its final path (#880, #881). The producer fills a temporary file that lives next
+/// to the target — the same directory, so the same permissions as the final file and never a shared temp folder —
+/// under the target's stem, a marker, a random tag and the target's extension (ClosedXML insists on it); only a
+/// complete, uncancelled temporary is moved onto the target, and an existing target is replaced only when the caller
+/// asked for it (a confirmed save dialog, a retry of the same run) — never silently. A producer that throws (a full
+/// disk), is cancelled before or after it wrote, or produced nothing leaves neither a partial final file nor a
+/// temporary; temporaries of the same target left by a run that crashed before its rename are swept before the next
+/// write once they are older than <see cref="StaleAfter"/>.
+/// </summary>
 public static class ExportFiles
 {
+    public const string TemporaryMarker = ".tmp-";
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(30);
+
     public static void Commit(string temporary, string path, bool overwrite)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(temporary); ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (!overwrite && File.Exists(path)) throw new ExportFileExistsException(path);
         File.Move(temporary, path, overwrite);
+    }
+
+    /// <summary>The temporary for a target: next to it, its stem, the marker, a random tag, its extension.</summary>
+    public static string TemporaryFor(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var full = Path.GetFullPath(path);
+        return Path.Combine(Path.GetDirectoryName(full) ?? ".", Path.GetFileNameWithoutExtension(full) + TemporaryMarker + Guid.NewGuid().ToString("N")[..12] + Path.GetExtension(full));
+    }
+
+    /// <summary>Writes an export atomically: see the type summary. The producer receives the temporary path and must leave the complete file there.</summary>
+    public static void Write(string path, bool overwrite, CancellationToken cancellationToken, Action<string> produce)
+    {
+        ArgumentNullException.ThrowIfNull(produce);
+        var full = Prepare(path);
+        var temporary = TemporaryFor(full);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            produce(temporary);
+            Finish(temporary, full, overwrite, cancellationToken);
+        }
+        finally { TryDelete(temporary); }
+    }
+
+    /// <summary>The asynchronous form of <see cref="Write"/> for a producer that awaits.</summary>
+    public static async Task WriteAsync(string path, bool overwrite, CancellationToken cancellationToken, Func<string, Task> produce)
+    {
+        ArgumentNullException.ThrowIfNull(produce);
+        var full = Prepare(path);
+        var temporary = TemporaryFor(full);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await produce(temporary).ConfigureAwait(false);
+            Finish(temporary, full, overwrite, cancellationToken);
+        }
+        finally { TryDelete(temporary); }
+    }
+
+    /// <summary>Removes temporaries of this target older than the stale window — what a run that crashed before its rename left behind; a younger one may belong to a run in progress and stays.</summary>
+    public static int SweepStale(string path, TimeSpan? olderThan = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var full = Path.GetFullPath(path); var directory = Path.GetDirectoryName(full);
+        if (directory is null || !Directory.Exists(directory)) return 0;
+        var prefix = Path.GetFileNameWithoutExtension(full) + TemporaryMarker; var cutoff = DateTime.UtcNow - (olderThan ?? StaleAfter); var removed = 0;
+        foreach (var file in Directory.EnumerateFiles(directory, prefix + "*"))
+        {
+            try { if (File.GetLastWriteTimeUtc(file) < cutoff) { File.Delete(file); removed++; } }
+            catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+        return removed;
+    }
+
+    static string Prepare(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var full = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        SweepStale(full);
+        return full;
+    }
+
+    static void Finish(string temporary, string full, bool overwrite, CancellationToken cancellationToken)
+    {
+        // A cancellation that arrived while the producer worked discards the complete temporary: the operator asked for no file.
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!File.Exists(temporary)) throw new IOException("Dışa aktarım geçici dosyayı üretmedi; hedef dosya yazılmadı.");
+        Commit(temporary, full, overwrite);
+    }
+
+    static void TryDelete(string file)
+    {
+        try { if (File.Exists(file)) File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 }
