@@ -9,7 +9,7 @@ using System.Windows.Media;
 namespace TrMarketplaceHubDesktop;
 public static class OrdersPanel
 {
- public static FrameworkElement Create(string? directory=null,Func<Task<EtsyCredentials>>? authorize=null,Action? catalogChanged=null)
+ public static FrameworkElement Create(string? directory=null,Func<Task<EtsyCredentials>>? authorize=null,Action? catalogChanged=null,Action<Func<string,string,string,bool>>? exposeReveal=null)
  {
   var store=new OrdersStore(directory);var catalog=new CatalogStore(directory);var root=new DockPanel{Margin=new Thickness(12)};var top=new StackPanel();DockPanel.SetDock(top,Dock.Top);root.Children.Add(top);
   top.Children.Add(Text("Siparişler ve kargo takibi",22));
@@ -99,6 +99,9 @@ public static class OrdersPanel
    catch{status.Text="Siparişler alınamadı. Bağlantı, mağaza ve transactions_r iznini kontrol edin. Önceki kayıtlar korundu.";}
    finally{running=null;refresh.IsEnabled=add.IsEnabled=true;cancel.IsEnabled=false;detail.IsEnabled=true;}
   };
+  // #813: the window reveals an order the same way it reveals a product or a source -- reload, clear the
+  // filters that would hide it, select it (selection opens the detail) and scroll to it. False when it is gone.
+  exposeReveal?.Invoke((marketplace,shop,orderId)=>{Load();var hit=all.FirstOrDefault(o=>string.Equals(o.Marketplace,marketplace,StringComparison.OrdinalIgnoreCase)&&o.ShopId==shop&&o.OrderId==orderId);if(hit==null)return false;search.Text="";filter.SelectedIndex=0;marketplaceFilter.SelectedIndex=0;shopFilter.SelectedIndex=0;stockFilter.SelectedIndex=0;Filter();grid.SelectedItem=hit;grid.ScrollIntoView(hit);return true;});
   ReloadViews();Load();detail.Children.Add(Text("Ayrıntıları ve paket geçmişini görmek için listeden bir sipariş seçin. İlk kaydı eklemek için + Yerel sipariş düğmesini kullanın."));return root;
  }
  sealed record StateChoice(string Value,string Label);

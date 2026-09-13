@@ -78,7 +78,10 @@ public static class DashboardPanel
                     var current = kpi;
                     AddCard(cards, kpi.Title, kpi.Value, RouteFor(kpi.Key), _ => Drill(RouteFor(current.Key), current.Title, "kpi", current.Key, current.Title), kpi.Freshness);
                 }
-                foreach (var quick in new[] { ("Kategoriler / markalar", "taxonomy"), ("Excel işlemleri", "excel"), ("Raporlar", "reports"), ("Mesaj / hata merkezi", "messages"), ("Ayarlar", "settings") }) AddCard(cards, quick.Item1, "Aç", quick.Item2, navigate);
+                // #813: a quick card only for a screen the shell actually registers -- "reports" has no route today,
+                // and a card that navigates nowhere is the same broken promise #811 refuses in the empty state.
+                var known = routeExists ?? (_ => true);
+                foreach (var quick in new[] { ("Kategoriler / markalar", "taxonomy"), ("Excel işlemleri", "excel"), ("Raporlar", "reports"), ("Mesaj / hata merkezi", "messages"), ("Ayarlar", "settings") }.Where(q => known(q.Item2))) AddCard(cards, quick.Item1, "Aç", quick.Item2, navigate);
                 applyingStoreFilter = true;
                 try
                 {

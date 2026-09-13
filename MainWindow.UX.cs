@@ -72,7 +72,15 @@ public partial class MainWindow
         foreach (var hit in hits)
         {
             var button = new Button { HorizontalContentAlignment = HorizontalAlignment.Left, Background = System.Windows.Media.Brushes.White, Foreground = System.Windows.Media.Brushes.DarkSlateGray, Content = new StackPanel { Children = { new TextBlock { Text = $"{hit.Type}  ·  {hit.Title}", FontWeight = FontWeights.SemiBold }, new TextBlock { Text = hit.Detail, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 3, 0, 0) } } } };
-            button.Click += (_, _) => { window.Close(); Navigate(hit.Route); };
+            // #813: a hit that names a workspace entity opens it on the trail (selected, with Back); any other hit
+            // is a plain screen jump, as before.
+            var found = hit;
+            button.Click += (_, _) =>
+            {
+                window.Close();
+                var target = WorkspaceLinks.FromSearchHit(found, route => routeTitles.TryGetValue(route, out var t) ? t : route);
+                if (target is null || !OpenWorkspaceLink(target with { EntityLabel = found.Title })) Navigate(found.Route);
+            };
             list.Items.Add(button);
         }
         root.Children.Add(list); window.Content = root; window.ShowDialog();

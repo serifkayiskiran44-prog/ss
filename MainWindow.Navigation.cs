@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
 
@@ -16,6 +17,9 @@ public partial class MainWindow
  // #810: the trail is a context stack, not a list of route keys -- a crumb remembers the store the board was
  // filtered to and the entity the card was counting, so Back restores the view instead of just the screen.
  readonly DrillThroughStack drillStack = new(new DrillTarget("dashboard", "Genel bakış"));
+ // #813: the orders panel hands back its own reveal so an order crumb selects the order the way a product crumb
+ // selects the product; null until the panel is built.
+ Func<string, string, string, bool>? ordersReveal;
  UiPreferenceStore uiPreferences = null!;
  string? currentRoute;
  bool selectingRoute;
@@ -74,7 +78,7 @@ public partial class MainWindow
   Page("policy-center","Stok / fiyat politika merkezi","Kanal + mağaza politikaları, kopyalama ve ürün preview'i",PolicyCenterPanel.Create(dataDirectory));
   Page("locale-settings","Döviz / vergi / yerel ayarlar","Para birimi, KDV, sayı-tarih kültürü ve mağaza kopyalama",LocaleSettingsPanel.Create(dataDirectory));
   Page("data-quality","Veri kalite merkezi","Duplicate, zorunlu alan, fiyat/stok/döviz, URL ve kaynak hataları",DataQualityPanel.Create(dataDirectory,key=>Navigate(key)));
-  Page("orders","Sipariş ve kargo","Sipariş kayıtları, paket ve kargo takibi",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts));
+  Page("orders","Sipariş ve kargo","Sipariş kayıtları, paket ve kargo takibi",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts,reveal=>ordersReveal=reveal));
   Page("order-exceptions","Sipariş istisnaları","Eksik SKU, iptal/iade ve stok kararlarını önizleme/onay ile yönetin.",OrderExceptionsPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("messages","Mesaj merkezi","Müşteri mesajları, sistem bildirimleri ve yerel yanıt şablonları",MessagePanel.Create(dataDirectory,key=>Navigate(key)));
   Page("shipping","Navlungo","Kargo bağlantısı ve mevcut hizmet işlemleri",NavlungoPanel.Create(),"Kargo bağlantısı");
@@ -179,10 +183,61 @@ public partial class MainWindow
    {
     "product" => new Catalog.CatalogStore(dataDirectory).FindProduct(target.EntityId) is not null,
     "order" => target.EntityId.Split('|') is { Length: 3 } parts && new OrdersStore(dataDirectory).Find(parts[0], parts[1], parts[2]) is not null,
+    "source" => new Catalog.CatalogStore(dataDirectory).Sources().Any(x => x.Id == target.EntityId),
     _ => true,
    };
   }
   catch (Exception error) { Log("Geri dönüş kontrolü yapılamadı: " + error.Message); return true; }
+ }
+ // #813: the stores a link may name are the enabled connections on disk, read when asked; a failure to read
+ // them allows nothing but the all-stores scope, so an unreadable store table cannot widen what a link opens.
+ IReadOnlyList<string> AllowedStoreKeys()
+ {
+  try { return new MarketplaceConnectionStore(dataDirectory).List().Where(c => c.Enabled).Select(c => DashboardStoreFilter.KeyFor(c.Channel, c.ShopId)).ToList(); }
+  catch (Exception error) { Log("Mağaza listesi okunamadı: " + error.Message); return Array.Empty<string>(); }
+ }
+ // One entry point for every workspace entity (#813): the same trail, the same refusal, the same reveal.
+ bool OpenWorkspaceLink(DrillTarget target)
+ {
+  var open = drillStack.Open(target, AllowedStoreKeys());
+  if (!open.Allowed) { Log(open.Notice); return false; }
+  SelectRoute(target.Route, false);
+  if (target.EntityId.Length > 0 && !RevealEntity(target)) Log($"{target.EntityLabel} kaydı bulunamadı; {(routeTitles.TryGetValue(target.Route, out var t) ? t : target.Route)} ekranı açıldı.");
+  return true;
+ }
+ // The landing screen selects what the crumb names. True when there was nothing to select (a screen-level
+ // crumb) or the selection happened; false only when the entity is gone.
+ bool RevealEntity(DrillTarget target)
+ {
+  try
+  {
+   switch (target.EntityKind)
+   {
+    case "product":
+    {
+     var product = store.FindProduct(target.EntityId);
+     if (product is null) return false;
+     if (products.Items.OfType<CatalogProduct>().All(p => p.Id != product.Id)) { search.Text = product.Sku; productOffset = 0; RefreshProducts(); }
+     var row = products.Items.OfType<CatalogProduct>().FirstOrDefault(p => p.Id == product.Id);
+     if (row is null) return false;
+     products.SelectedItem = row; products.ScrollIntoView(row); return true;
+    }
+    case "source":
+    {
+     // Refresh first, then select the instance the list actually holds -- a row from a separate Sources() call
+     // is a different object and the ListBox would not select it.
+     RefreshSources(false);
+     var row = sources.Items.OfType<XmlSource>().FirstOrDefault(x => x.Id == target.EntityId);
+     if (row is null) return false;
+     sources.SelectedItem = row; SetSource(Clone(row)); return true;
+    }
+    case "order":
+     return target.EntityId.Split('|') is { Length: 3 } parts && ordersReveal is { } reveal && reveal(parts[0], parts[1], parts[2]);
+    default:
+     return true;
+   }
+  }
+  catch (Exception error) { Log("Kayıt seçilemedi: " + error.Message); return false; }
  }
  void FilterNavigationItems()
  {
@@ -202,6 +257,8 @@ public partial class MainWindow
   var back = drillStack.Back(DrillEntityAlive);
   if (back.DroppedStaleEntity) Log(back.Notice);
   SelectRoute(back.Target.Route, false);
+  // #813: Back restores the selection the crumb names, not just the screen.
+  if (back.Target.EntityId.Length > 0) RevealEntity(back.Target);
  }
 }
 
