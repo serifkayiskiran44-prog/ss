@@ -5,6 +5,7 @@ using System.Text.Json;
 namespace TrMarketplaceHubDesktop;
 
 public sealed record OzonSettings(string ClientId, string ApiKey);
+public sealed record OzonProductSummary(long ProductId, string OfferId, string Name);
 
 /// <summary>Read-only Seller API probes. POST here queries data; it never publishes products.</summary>
 public sealed class OzonConnection(HttpClient http)
@@ -23,6 +24,22 @@ public sealed class OzonConnection(HttpClient http)
             || !result.TryGetProperty("total", out var total) || total.ValueKind != JsonValueKind.Number || !total.TryGetInt64(out var count) || count < 0)
             throw new InvalidOperationException("Ozon ürün yanıtı beklenen biçimde değil; erişim doğrulanamadı.");
         return count;
+    }
+    public async Task<IReadOnlyList<OzonProductSummary>> ReadProductPageAsync(OzonSettings settings, string lastId = "", int limit = 100, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit), "Ozon ürün sayfası 1–100 arasında olmalı.");
+        using var json = await ReadAsync(settings, "/v3/product/list", JsonSerializer.Serialize(new { filter = new { visibility = "ALL" }, last_id = lastId ?? "", limit }), cancellationToken);
+        if (json.RootElement.ValueKind != JsonValueKind.Object || !json.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object || !result.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Ozon ürün listesi yanıtı beklenen biçimde değil; okuma doğrulanamadı.");
+        var rows = new List<OzonProductSummary>();
+        foreach (var item in items.EnumerateArray())
+        {
+            if (!item.TryGetProperty("product_id", out var id) || !id.TryGetInt64(out var productId) || productId <= 0) throw new InvalidOperationException("Ozon ürün listesinde geçerli product_id yok.");
+            var offer = item.TryGetProperty("offer_id", out var offerValue) && offerValue.ValueKind == JsonValueKind.String ? offerValue.GetString() ?? "" : "";
+            var name = item.TryGetProperty("name", out var nameValue) && nameValue.ValueKind == JsonValueKind.String ? nameValue.GetString() ?? "" : "";
+            rows.Add(new(productId, offer, name));
+        }
+        return rows;
     }
     public async Task<int> ReadWarehouseCountAsync(OzonSettings settings, CancellationToken cancellationToken = default)
     {

@@ -4,6 +4,7 @@ public sealed record CatalogFilter {
  public string[] Brands {get;init;}=[];
  public string[] Categories {get;init;}=[];
  public string[] Skus {get;init;}=[];
+ public string[] SourceIds {get;init;}=[];
  public bool? DescriptionPresent {get;init;}
  public bool? ImagePresent {get;init;}
 }

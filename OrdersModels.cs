@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace TrMarketplaceHubDesktop;
 public sealed class OrderSnapshot
 {
@@ -12,7 +13,9 @@ public sealed class OrderSnapshot
  public string Currency {get;set;}="";
  public string TotalLabel=>Total.HasValue?$"{Total:0.00} {Currency}":"—";
  public DateTimeOffset UpdatedAt {get;set;}=DateTimeOffset.UtcNow;
+ public DateTimeOffset SourceUpdatedAt {get;set;}
  public DateTimeOffset LastSync {get;set;}
+ [JsonIgnore] public string StockDecisionLabel {get;set;}="Bilinmiyor";
  public List<OrderItem> Items {get;set;}=[];
  public List<OrderShipment> Shipments {get;set;}=[];
  public string DeliveryLabel=>Shipments.Count==0?"Bilinmiyor":string.Join(", ",Shipments.Select(s=>OrdersRules.Label(s.State)).Distinct());
@@ -46,4 +49,17 @@ public static class OrdersRules
   if(o.Shipments.Any(s=>s.TrackingUrl.Length>0&&!SafeTrackingUrl(s.TrackingUrl)))throw new ArgumentException("Takip bağlantısı kullanıcı bilgisi içermeyen HTTPS adresi olmalı.");
   if(o.Items.Any(i=>string.IsNullOrWhiteSpace(i.Title)||i.Quantity<=0))throw new ArgumentException("Ürün adı ve pozitif adet zorunlu.");
  }
+}
+public static class OrderNormalizer
+{
+ public static OrderSnapshot Normalize(OrderSnapshot order)
+ {
+  order.Marketplace=Limit(order.Marketplace,80); order.ShopId=Limit(order.ShopId,200); order.OrderId=Limit(order.OrderId,200); order.RawStatus=NormalizeStatus(order.RawStatus); order.PaymentStatus=Limit(order.PaymentStatus,80); order.Currency=order.Currency.Trim().ToUpperInvariant(); if(order.Currency.Length>3)order.Currency=order.Currency[..3];
+  foreach(var item in order.Items){item.Title=Limit(item.Title,500);item.Sku=Limit(item.Sku,200);}
+  foreach(var shipment in order.Shipments){shipment.Id=Limit(shipment.Id,200);shipment.Carrier=Limit(shipment.Carrier,160);shipment.TrackingNumber=Limit(shipment.TrackingNumber,200);shipment.TrackingUrl=Limit(shipment.TrackingUrl,2000);shipment.State=NormalizeState(shipment.State);}
+  if(order.SourceUpdatedAt==default)order.SourceUpdatedAt=order.UpdatedAt; order.UpdatedAt=order.SourceUpdatedAt; return order;
+ }
+ static string NormalizeStatus(string value)=>Limit(value,80).Trim().ToLowerInvariant() switch {"paid" or "completed" or "open"=>"paid", "canceled" or "cancelled" or "refunded"=>"cancelled", "shipped"=>"shipped", _=>Limit(value,80).Trim().ToLowerInvariant()};
+ static string NormalizeState(string value)=>value.Trim().ToLowerInvariant() switch {"shipped"=>"Shipped","in_transit" or "in transit"=>"InTransit","delivered"=>"Delivered","returned" or "return"=>"Returned","cancelled" or "canceled"=>"Exception", _=>"Unknown"};
+ static string Limit(string value,int max){value=(value??"").Trim();return value.Length>max?value[..max]:value;}
 }

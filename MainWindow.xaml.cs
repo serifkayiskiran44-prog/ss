@@ -21,7 +21,11 @@ public partial class MainWindow : Window
  readonly SemaphoreSlim gate=new(1,1);
  readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMinutes(1)};
  readonly DispatcherTimer searchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
+ readonly DispatcherTimer globalSearchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
+ readonly GlobalSearchIndexService globalSearchIndex;
+ CancellationTokenSource? globalSearchCts;
  readonly CancellationTokenSource lifetime=new();
+ readonly StartupRecovery startupRecovery;
  readonly ObservableCollection<string> logs=[];
  readonly string logPath;
  readonly string? dataDirectory;
@@ -31,23 +35,33 @@ public partial class MainWindow : Window
  readonly PasswordBox xmlPassword=new(), apiKey=new(), apiSecret=new(), apiToken=new(), refreshToken=new();
  readonly ComboBox decimalSeparator=new(){ItemsSource=new[]{".",","},SelectedIndex=0}, listingState=new(){ItemsSource=new[]{"active","draft","inactive","sold_out","expired"},SelectedIndex=0,Width=140};
  readonly StackPanel sourceGeneral=new(),sourceRules=new(),productEditor=new(),templateEditor=new();
- readonly TextBlock previewStatus=Hint("XML'i oku → eşleştir → önizle → seçili ürünleri havuza al."), apiStatus=Hint("Bağlantı henüz doğrulanmadı."), draftStatus=Hint("Ürün havuzundan bir ürün seç."),listingStatus=Hint("");
+ readonly TextBlock previewStatus=Hint("XML'i oku → eşleştir → önizle → seçili ürünleri havuza al."), apiStatus=Hint("Bağlantı henüz doğrulanmadı."), draftStatus=Hint("Ürün havuzundan bir ürün seç."),listingStatus=Hint(""), productChannelSummary=Hint("Ürün seçince kanal planları burada görünür."), xmlSourceHealth=Hint("Kaynak seçince sağlık, ürün ve son çalışma özeti görünür.");
  readonly ObservableCollection<string> xmlPaths=new();
  readonly TextBox sampleCost=new(){Text="100",Width=130};
  readonly TextBlock calculationStatus=Hint("Alış fiyatını girip hesaplamayı test edebilirsin."),fxStatus=Hint("Kur henüz alınmadı.");
  XmlSource? source; CatalogProduct? edit; EtsyListingTemplate template=new(); EtsyCredentials credentials=new("","","",""); OAuthAttempt? attempt;
- List<MappingEntry> mappings=[]; string xml="",loadedLocation="",previewRevision=""; int listingOffset,listingTotal,productOffset,productTotal,searchRevision; string loadedListingShop="",loadedListingState="";
+ List<MappingEntry> mappings=[]; string xml="",loadedLocation="",previewRevision=""; int listingOffset,listingTotal,productOffset,productTotal,searchRevision,globalSearchRevision; string loadedListingShop="",loadedListingState="";
  public MainWindow():this(null){}
  public MainWindow(string? directory)
  {
-  dataDirectory=directory;store=new CatalogStore(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
-  InitializeComponent();Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
+  dataDirectory=directory;startupRecovery=new StartupRecovery(directory);store=new CatalogStore(directory);globalSearchIndex=new GlobalSearchIndexService(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
+  InitializeComponent();uiPreferences=new UiPreferenceStore(directory);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
+  PreviewKeyDown += MainWindow_PreviewKeyDown;
+  GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
+  GlobalSearchBox.TextChanged += GlobalSearchBox_TextChanged;
   LogList.ItemsSource=logs;
   try{if(File.Exists(logPath))foreach(var line in File.ReadLines(logPath).TakeLast(100))logs.Insert(0,line);}catch(IOException){}
   BuildProducts();BuildSources();BuildApi();BuildListings();BuildTemplate();BuildNavigation();
+  if (directory is null && new OnboardingStore(dataDirectory).ShouldPrompt()) Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) OnboardingPanel.ShowWizard(this, dataDirectory, key => Navigate(key)); }));
   try{template=TemplateStore.Load(directory);templateEditor.DataContext=template;var saved=directory==null?CredentialStore.Load():null;if(saved!=null)SetCredentials(saved);}catch(Exception e){Log(Safe(e));}
-  RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};
+  RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};globalSearchTimer.Tick+=SearchTimer_Tick;_ = WarmGlobalSearchAsync();
   Log("Global masaüstü hazır. XML otomasyonu yalnız program açıkken çalışır.");
+  if (startupRecovery.State.UncleanExit) Log("Önceki çalışma normal kapanmamış; yerel recovery kontrolleri uygulandı.");
+ }
+ void GlobalSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+ {
+  globalSearchTimer.Stop();
+  if (GlobalSearchBox.Text.Trim().Length >= 2) globalSearchTimer.Start();
  }
  static TextBlock Hint(string text)=>new(){Text=text,TextWrapping=TextWrapping.Wrap,Foreground=new SolidColorBrush(Color.FromRgb(87,112,125)),Margin=new Thickness(4,8,4,8)};
  static TextBlock Heading(string text)=>new(){Text=text,FontSize=20,FontWeight=FontWeights.SemiBold,Margin=new Thickness(4,8,4,12)};
@@ -67,10 +81,12 @@ public partial class MainWindow : Window
  {
   var bar=new WrapPanel();search.ToolTip="SKU, barkod, ürün adı, marka veya kategori";bar.Children.Add(search);bar.Children.Add(Button("Önceki 200",()=>{productOffset=Math.Max(0,productOffset-200);RefreshProducts();}));bar.Children.Add(Button("Sonraki 200",()=>{if(productOffset+200<productTotal)productOffset+=200;RefreshProducts();}));bar.Children.Add(Button("Etsy şablonunu kontrol et",CheckDraft));search.TextChanged+=(_,_)=>{productOffset=0;searchTimer.Stop();searchTimer.Start();};
   AddProductFilters(bar);
-  foreach(var x in new[]{("Durum","StatusLabel",65d),("Stok kodu / SKU","Sku",135d),("Ürün","Name",200d),("Alış fiyatı","Cost",90d),("Alış döviz","CostCurrency",65d),("Satış fiyatı","Price",90d),("Satış döviz","Currency",65d),("Stok","Stock",60d),("Formül TL","FormulaPriceTry",95d),("1 döviz/TL","AppliedTryRate",95d),("Barkod","Barcode",140d),("GTIN","Gtin",140d),("Marka","Brand",120d),("Kategori","Category",150d),("Açıklama","Description",240d),("Etsy ilan ID","EtsyListingId",110d)})Column(products,x.Item1,x.Item2,x.Item3);
-  products.SelectionMode=DataGridSelectionMode.Single;products.SelectionChanged+=(_,_)=>{edit=products.SelectedItem is CatalogProduct p?Clone(p):null;productEditor.DataContext=edit;productEditor.IsEnabled=edit!=null;};
-  bar.Children.Add(Button("Aktife al",()=>SetProductActive(true)));bar.Children.Add(Button("Pasife al",()=>SetProductActive(false)));bar.Children.Add(Button("Ürünü sil",DeleteSelectedProduct));productEditor.Children.Add(Heading("Ürün kartı"));Field(productEditor,"Alış fiyatı","Cost").IsReadOnly=true;Field(productEditor,"Alış para birimi","CostCurrency").IsReadOnly=true;Field(productEditor,"Satış fiyatı","Price");Field(productEditor,"Satış para birimi","Currency").IsReadOnly=true;productEditor.Children.Add(Hint("XML güncellemesinde korunmasını istediğin alanı kilitle."));
+  foreach(var x in new[]{("Durum","StatusLabel",65d),("Stok kodu / SKU","Sku",135d),("Ürün","Name",200d),("Alış fiyatı","Cost",90d),("Alış döviz","CostCurrency",65d),("Satış fiyatı","Price",90d),("Satış döviz","Currency",65d),("KDV %","VatRate",60d),("Stok","Stock",60d),("Formül TL","FormulaPriceTry",95d),("1 döviz/TL","AppliedTryRate",95d),("Barkod","Barcode",140d),("GTIN","Gtin",140d),("Marka","Brand",120d),("Kategori","Category",150d),("Açıklama","Description",240d),("Etsy ilan ID","EtsyListingId",110d),("XML kaynağı","SourceId",125d),("Son güncelleme","UpdatedUtc",155d)})Column(products,x.Item1,x.Item2,x.Item3);
+  Column(products,"Son veri kaynağı","SourceKind",110);Column(products,"Fiyat kaynağı","PriceSource",100);Column(products,"Stok kaynağı","StockSource",100);Column(products,"Medya kaynağı","MediaSource",100);
+  products.SelectionMode=DataGridSelectionMode.Extended;products.EnableRowVirtualization=true;products.EnableColumnVirtualization=false;VirtualizingPanel.SetIsVirtualizing(products,true);VirtualizingPanel.SetVirtualizationMode(products,VirtualizationMode.Recycling);products.SelectionChanged+=(_,_)=>{edit=products.SelectedItem is CatalogProduct p?Clone(p):null;productEditor.DataContext=edit;productEditor.IsEnabled=edit!=null;ShowProductChannelStatus(edit);};
+  bar.Children.Add(Button("Aktife al",()=>SetProductActive(true)));bar.Children.Add(Button("Pasife al",()=>SetProductActive(false)));bar.Children.Add(Button("Ürünü sil",DeleteSelectedProduct));productEditor.Children.Add(Heading("Ürün kartı"));Field(productEditor,"Alış fiyatı","Cost").IsReadOnly=true;Field(productEditor,"Alış para birimi","CostCurrency").IsReadOnly=true;Field(productEditor,"Satış fiyatı","Price");Field(productEditor,"Satış para birimi","Currency").IsReadOnly=true;Field(productEditor,"KDV oranı (%)","VatRate");productEditor.Children.Add(Hint("XML güncellemesinde korunmasını istediğin alanı kilitle."));
   Field(productEditor,"Ürün stok kodu / SKU","Sku").IsReadOnly=true;Field(productEditor,"Barkod","Barcode").IsReadOnly=true;Field(productEditor,"GTIN","Gtin").IsReadOnly=true;Field(productEditor,"Marka","Brand");Field(productEditor,"Kategori","Category");Field(productEditor,"Başlık","Name");Flag(productEditor,"Başlığı kilitle","LockName");Field(productEditor,"Açıklama","Description",90);Flag(productEditor,"Açıklamayı kilitle","LockDescription");Flag(productEditor,"Fiyatı kilitle","LockPrice");Field(productEditor,"Stok","Stock");Flag(productEditor,"Stoğu kilitle","LockStock");Field(productEditor,"Görsel URL'leri","ImageUrls",65);Flag(productEditor,"Görselleri kilitle","LockImages");
+  productEditor.Children.Add(Heading("Kanal durumları / yerel planlar"));productEditor.Children.Add(productChannelSummary);productEditor.Children.Add(Hint("Buradaki planlar yerel eşleme ve son durum bilgisidir; canlı marketplace yazımı yalnız açık önizleme/onay akışlarından yapılır."));
   productEditor.Children.Add(Heading("Operasyon bilgileri"));
   Field(productEditor,"Üretici parça kodu / MPN","Mpn").MaxLength=128;
   Field(productEditor,"Faturada kullanılacak ürün adı","InvoiceName").MaxLength=300;
@@ -80,16 +96,31 @@ public partial class MainWindow : Window
   productEditor.Children.Add(Button("Tarihi temizle",()=>expires.SelectedDate=null));
   productEditor.Children.Add(Hint("Operasyon bilgileri XML yenilemesinde korunur. Fatura adı yerel kayıttır; fatura entegrasyonuna otomatik gönderilmez."));
   productEditor.Children.Add(Button("Ürünü ve kilitleri kaydet",()=>{ValidBindings(productEditor);if(edit==null)return;store.SaveProduct(edit);RefreshProducts();Log("Ürün ve alan kilitleri kaydedildi.");}));productEditor.IsEnabled=false;
-  Tab("Ürün havuzu",Split(Dock(bar,products),Scroll(productEditor),350));
+  Tab("Ürün havuzu",Split(Dock(bar,products),BuildProductWorkspace(),350));
  }
- void SetProductActive(bool active){if(edit==null)throw new InvalidOperationException("Önce ürün seç.");ValidBindings(productEditor);edit.Active=active;store.SaveProduct(edit);RefreshProducts();Log(active?"Ürün yerel havuzda aktif.":"Ürün yerel havuzda pasif. Etsy ilanının durumu değiştirilmedi.");}
+ TabControl BuildProductWorkspace()
+ {
+  var tabs=new TabControl();
+  tabs.Items.Add(new TabItem{Header="Genel",Content=Scroll(productEditor)});
+  tabs.Items.Add(new TabItem{Header="Görseller / açıklama",Content=Scroll(ProductReadOnlyFields(("Açıklama","Description"),("Görsel URL'leri","ImageUrls")))});
+  tabs.Items.Add(new TabItem{Header="Pazaryerleri",Content=Scroll(new StackPanel{Children={Heading("Kanal ve mağaza bağları"),productChannelSummary,Hint("Eşleştirme ve ilan durumları yerel kanal planlarından okunur; canlı write bu sekmeden başlatılmaz.")}})});
+  tabs.Items.Add(new TabItem{Header="XML / provenance",Content=Scroll(ProductReadOnlyFields(("Kaynak kimliği","SourceId"),("Kaynak türü","SourceKind"),("Fiyat kaynağı","PriceSource"),("Stok kaynağı","StockSource"),("Medya kaynağı","MediaSource")))});
+  tabs.Items.Add(new TabItem{Header="Sipariş raporu",Content=Scroll(new StackPanel{Children={Heading("Ürün sipariş raporu"),Hint("Ürün seçildiğinde sipariş ve stok hareketleri ilgili operasyon merkezlerinden güvenli şekilde izlenir; bu sekme canlı marketplace çağrısı yapmaz."),ProductReadOnlyFields(("SKU","Sku"),("Ürün adı","Name"))}})});
+  return tabs;
+ }
+ static StackPanel ProductReadOnlyFields(params (string Label,string Property)[] fields)
+ {
+  var panel=new StackPanel(); foreach(var field in fields){panel.Children.Add(new TextBlock{Text=field.Label,Margin=new Thickness(4,7,4,0)});var box=new TextBox{IsReadOnly=true,MinHeight=28,TextWrapping=TextWrapping.Wrap};box.SetBinding(TextBox.TextProperty,new Binding(field.Property));panel.Children.Add(box);} return panel;
+ }
+ void ShowProductChannelStatus(CatalogProduct? product){if(product==null){productChannelSummary.Text="Ürün seçince kanal planları burada görünür.";return;}var rows=MarketplaceProductPanelModel.Build(product.Id,dataDirectory).Select(x=>$"{x.Channel} / {x.ShopId}: {x.Status} · {x.Readiness}"+(string.IsNullOrWhiteSpace(x.MappingId)?"":$" · eşleme {x.MappingId}"));productChannelSummary.Text=string.Join("\n",rows);}
+ void SetProductActive(bool active){var selected=products.SelectedItems.OfType<CatalogProduct>().ToList();if(selected.Count==0&&edit!=null)selected.Add(edit);if(selected.Count==0)throw new InvalidOperationException("Önce ürün seç.");ValidBindings(productEditor);foreach(var row in selected){var copy=Clone(row);copy.Active=active;store.SaveProduct(copy);}RefreshProducts();Log($"{selected.Count} ürün yerel havuzda {(active?"aktif":"pasif")} yapıldı. Canlı ilan durumu değiştirilmedi.");}
  void DeleteSelectedProduct(){if(edit==null)throw new InvalidOperationException("Önce ürün seç.");if(MessageBox.Show(this,edit.Name+"\n\nYerel havuzdan silinsin mi? XML içinde varsa sonraki alımda yeniden gelir. Etsy ilanı silinmez.","Ürünü sil",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)return;store.DeleteProduct(edit);RefreshProducts();Log("Ürün yerel havuzdan silindi.");}
  void BuildSources()
  {
-  var sourceActions=new StackPanel();sourceActions.Children.Add(Button("+ Yeni XML kaynağı",()=>SetSource(new(){Name="Yeni tedarikçi",PriceMode="Formula",Formula=PriceFormula.Example,AutoFx=true})));sourceActions.Children.Add(Button("XML şablonu aç…",LoadSourceTemplate));sourceActions.Children.Add(Button("Şablonu dışa aktar…",ExportSourceTemplate));var left=Dock(sourceActions,sources);
+   var sourceActions=new StackPanel();sourceActions.Children.Add(Button("+ Yeni XML kaynağı",()=>SetSource(new(){Name="Yeni tedarikçi",PriceMode="Formula",Formula=PriceFormula.Example,AutoFx=true})));sourceActions.Children.Add(Button("Kaynağı çoğalt",CloneCurrentSource));sourceActions.Children.Add(Button("XML şablonu aç…",LoadSourceTemplate));sourceActions.Children.Add(Button("Şablonu dışa aktar…",ExportSourceTemplate));var xmlViewStore=new UiPreferenceStore(dataDirectory);var xmlViewName=new TextBox{Width=145,ToolTip="Kaynak görünümü adı"};var xmlViews=new ComboBox{Width=175,DisplayMemberPath="Name"};var saveXmlView=Button("Görünümü kaydet",()=>{if(source==null)throw new InvalidOperationException("Önce XML kaynağı seçin.");xmlViewStore.SaveView("xml",xmlViewName.Text,JsonSerializer.Serialize(new{sourceId=source.Id}));xmlViewName.Clear();xmlViews.ItemsSource=xmlViewStore.ListViews("xml");});var deleteXmlView=Button("Görünümü sil",()=>{if(xmlViews.SelectedItem is not SavedUiView view)throw new InvalidOperationException("Önce görünüm seçin.");xmlViewStore.DeleteView("xml",view.Name);xmlViews.ItemsSource=xmlViewStore.ListViews("xml");});xmlViews.SelectionChanged+=(_,_)=>{if(xmlViews.SelectedItem is not SavedUiView view)return;try{using var doc=JsonDocument.Parse(view.Payload);var id=doc.RootElement.GetProperty("sourceId").GetString();var row=store.Sources().FirstOrDefault(x=>x.Id==id);if(row!=null){sources.ItemsSource=store.Sources();sources.SelectedItem=row;SetSource(Clone(row));}}catch{Log("XML görünümü okunamadı.");}};var xmlViewRow=new WrapPanel();xmlViewRow.Children.Add(new TextBlock{Text="Görünüm",Margin=new Thickness(3,5,2,3),VerticalAlignment=VerticalAlignment.Center});xmlViewRow.Children.Add(xmlViews);xmlViewRow.Children.Add(xmlViewName);xmlViewRow.Children.Add(saveXmlView);xmlViewRow.Children.Add(deleteXmlView);sourceActions.Children.Add(xmlViewRow);xmlViews.ItemsSource=xmlViewStore.ListViews("xml");var left=Dock(sourceActions,sources);
   sources.SelectionChanged+=(_,_)=>{if(sources.SelectedItem is XmlSource s)SetSource(Clone(s));};
   Field(sourceGeneral,"Tedarikçi / XML adı","Name");Field(sourceGeneral,"HTTPS adresi veya XML dosyası","Location");sourceGeneral.Children.Add(Button("XML dosyası seç",()=>{if(source==null)return;var d=new OpenFileDialog{Filter="XML (*.xml)|*.xml",CheckFileExists=true};if(d.ShowDialog(this)==true){source.Location=d.FileName;BindSource();}}));
-  Flag(sourceGeneral,"Kaynak aktif","Enabled");Flag(sourceGeneral,"Program açıkken otomatik havuz güncellemesi","AutoImport");Field(sourceGeneral,"Kontrol aralığı (dakika)","IntervalMinutes");Label(sourceGeneral,"Basic Auth kullanıcı adı (isteğe bağlı)",xmlUser);Label(sourceGeneral,"XML şifresi",xmlPassword);sourceGeneral.Children.Add(Hint("Şifre Windows hesabına özel şifrelenir. XML sınırı 25 MB. Kaynaktan kaybolan ürünler korunur; otomatik Etsy gönderimi yapılmaz."));
+  Flag(sourceGeneral,"Kaynak aktif","Enabled");Flag(sourceGeneral,"Program açıkken otomatik havuz güncellemesi","AutoImport");Field(sourceGeneral,"Kontrol aralığı (dakika)","IntervalMinutes");Label(sourceGeneral,"Basic Auth kullanıcı adı (isteğe bağlı)",xmlUser);Label(sourceGeneral,"XML şifresi",xmlPassword);sourceGeneral.Children.Add(xmlSourceHealth);sourceGeneral.Children.Add(AsyncButton("Kaynak sağlığını kontrol et",CheckXmlSourceAsync));sourceGeneral.Children.Add(Hint("Şifre Windows hesabına özel şifrelenir. XML sınırı 25 MB; HTTPS, timeout, HTTP durum kodu ve gzip yanıtı denetlenir. Kaynaktan kaybolan ürünler korunur; otomatik Etsy gönderimi yapılmaz."));
   sources.Height=115;
   var mapTop=new StackPanel();Label(mapTop,"Ürün XPath yolu (/Products/Product gibi)",itemPath);Label(mapTop,"Ondalık ayırıcı",decimalSeparator);mapTop.Children.Add(Hint("XML'i oku: alanlar otomatik önerilir. Değiştirmek için listeden seç. Birden fazla görsel yolu gerekiyorsa | ile birleştirebilirsin."));
   mapping.Columns.Add(new DataGridTextColumn{Header="Ürün alanı",Binding=new Binding("Label"),IsReadOnly=true,Width=125});
@@ -170,19 +201,48 @@ public partial class MainWindow : Window
  void BindSource(){sourceGeneral.DataContext=null;sourceRules.DataContext=null;sourceGeneral.DataContext=source;sourceRules.DataContext=source;}
  void SetSource(XmlSource s)
  {
-  source=s;BindSource();fxStatus.Text=RateDescription(s);calculationStatus.Text="Alış fiyatını girip hesaplamayı test edebilirsin.";itemPath.Text=s.ItemPath;decimalSeparator.SelectedItem=s.DecimalSeparator;
+  source=s;BindSource();fxStatus.Text=RateDescription(s);calculationStatus.Text="Alış fiyatını girip hesaplamayı test edebilirsin.";itemPath.Text=s.ItemPath;decimalSeparator.SelectedItem=s.DecimalSeparator;_ = RefreshXmlSourceHealthAsync(s);
   var names=new[]{("Sku","SKU / stok kodu"),("Barcode","Barkod"),("Gtin","GTIN / EAN / UPC"),("Name","Ürün adı"),("Description","Açıklama"),("Cost","Alış fiyatı"),("Stock","Stok"),("Brand","Marka"),("Category","Kategori"),("ImageUrls","Görseller")};
   mappings=names.Select(x=>new MappingEntry{Key=x.Item1,Label=x.Item2,Path=s.Fields.GetValueOrDefault(x.Item1,"")}).ToList();mapping.ItemsSource=mappings;xml="";loadedLocation="";previewRevision="";preview.ItemsSource=null;paths.ItemsSource=null;xmlPaths.Clear();
   try{var auth=XmlAuthStore.Load(s.Id,dataDirectory);xmlUser.Text=auth.User;xmlPassword.Password=auth.Password;}catch(Exception){xmlUser.Clear();xmlPassword.Clear();Log("XML şifresi açılamadı; yeniden kaydet.");}
  }
+ async Task RefreshXmlSourceHealthAsync(XmlSource candidate)
+ {
+  var id=candidate.Id;
+  try
+  {
+   var summary=await Task.Run(()=>{var count=store.Products().Count(p=>p.SourceId==id);var run=new XmlRunStore(dataDirectory).List(id,1).FirstOrDefault();return (count,run);});
+   if(source?.Id!=id)return;
+   var runText=summary.run==null?"Henüz çalışmadı":$"{summary.run.Status} · {summary.run.StartedUtc.ToLocalTime():g} · +{summary.run.Added}/~{summary.run.Updated}/={summary.run.Unchanged}";
+   xmlSourceHealth.Text=$"Kaynak özeti: {summary.count:N0} ürün · son çalışma {runText}";
+  }
+  catch(Exception error){if(source?.Id==id)xmlSourceHealth.Text="Kaynak özeti okunamadı: "+MarketplaceConnectionStore.Redact(error.Message);}
+ }
+ void CloneCurrentSource()
+ {
+  var current=CurrentSource();var clone=Clone(current);clone.Id=Guid.NewGuid().ToString("N");clone.Name=(string.IsNullOrWhiteSpace(current.Name)?"XML kaynağı":current.Name)+" kopya";clone.AutoImport=false;clone.LastRunUtc=null;clone.LastStatus="Kopyalandı; adres ve yetkilendirme doğrulanmalı.";store.SaveSource(clone);XmlAuthStore.Save(clone.Id,new(),dataDirectory);RefreshSources(false);sources.SelectedItem=clone;SetSource(clone);Log("XML kaynağı eşleme ve kurallarıyla çoğaltıldı; gizli yetkilendirme kopyalanmadı.");
+ }
+ async Task CheckXmlSourceAsync()
+ {
+  if(source==null)throw new InvalidOperationException("Önce XML kaynağı seçin.");
+  var candidate=source;var location=candidate.Location.Trim();if(location.Length==0)throw new InvalidOperationException("Sağlık kontrolü için XML adresi veya dosyası gerekli.");
+  xmlSourceHealth.Text="Kaynak erişilebilirliği, HTTP durumu, timeout ve gzip yanıtı kontrol ediliyor…";
+  try
+  {
+   var text=await new XmlSourceReader(http).ReadAsync(location,new(xmlUser.Text,xmlPassword.Password),lifetime.Token);
+   var scan=await Task.Run(()=>XmlCatalog.Inspect(text,string.IsNullOrWhiteSpace(candidate.ItemPath)?null:candidate.ItemPath),lifetime.Token);
+   xmlSourceHealth.Text=$"Sağlıklı · {text.Length:N0} karakter · {scan.Paths.Count:N0} alan yolu · 25 MB sınırı içinde · gzip/HTTPS kontrolü geçti.";
+  }
+  catch(Exception error){xmlSourceHealth.Text="Sağlık kontrolü başarısız: "+MarketplaceConnectionStore.Redact(error.Message);throw;}
+ }
  XmlSource CurrentSource(){if(source==null)throw new InvalidOperationException("Önce XML kaynağı seç veya ekle.");ValidBindings(sourceGeneral);ValidBindings(sourceRules);mapping.CommitEdit(DataGridEditingUnit.Cell,true);mapping.CommitEdit(DataGridEditingUnit.Row,true);source.ItemPath=itemPath.Text.Trim();source.DecimalSeparator=decimalSeparator.SelectedItem?.ToString()??".";source.Fields=mappings.Where(m=>!string.IsNullOrWhiteSpace(m.Path)).ToDictionary(m=>m.Key,m=>m.Path.Trim());source.Currency=source.Currency.Trim().ToUpperInvariant();source.CostCurrency=source.CostCurrency.Trim().ToUpperInvariant();XmlCatalog.ValidateSource(source);return source;}
- void SaveSource(){var s=CurrentSource();if(string.IsNullOrWhiteSpace(s.Name)||string.IsNullOrWhiteSpace(s.Location))throw new InvalidOperationException("Kaynak adı ve XML adresi/dosyası gerekli.");var latest=store.Sources().SingleOrDefault(x=>x.Id==s.Id);if(latest!=null){s.LastRunUtc=latest.LastRunUtc;s.LastStatus=latest.LastStatus;}XmlAuthStore.Save(s.Id,new(xmlUser.Text,xmlPassword.Password),dataDirectory);store.SaveSource(s);RefreshSources(false);Log("XML kaynağı, eşleştirme ve kurallar kaydedildi.");}
+ void SaveSource(){var s=CurrentSource();if(string.IsNullOrWhiteSpace(s.Name)||string.IsNullOrWhiteSpace(s.Location))throw new InvalidOperationException("Kaynak adı ve XML adresi/dosyası gerekli.");var latest=store.Sources().SingleOrDefault(x=>x.Id==s.Id);if(latest!=null){s.LastRunUtc=latest.LastRunUtc;s.LastStatus=latest.LastStatus;}XmlAuthStore.Save(s.Id,new(xmlUser.Text,xmlPassword.Password),dataDirectory);store.SaveSource(s);RefreshSources(false);_ = RefreshXmlSourceHealthAsync(s);Log("XML kaynağı, eşleştirme ve kurallar kaydedildi.");}
  void RefreshSources(bool choose=true){sources.ItemsSource=store.Sources();if(choose&&source==null&&sources.Items.Count>0)sources.SelectedIndex=0;}
  async Task InspectAsync(){var s=CurrentSource();xml="";loadedLocation="";previewRevision="";preview.ItemsSource=null;xml=await new XmlSourceReader(http).ReadAsync(s.Location,new(xmlUser.Text,xmlPassword.Password),lifetime.Token);loadedLocation=s.Location;var scan=await Task.Run(()=>XmlCatalog.Inspect(xml,string.IsNullOrWhiteSpace(s.ItemPath)?null:s.ItemPath));itemPath.Text=scan.ItemPath;paths.ItemsSource=scan.Paths;xmlPaths.Clear();xmlPaths.Add("");foreach(var path in scan.Paths)xmlPaths.Add(path);foreach(var m in mappings)if(string.IsNullOrWhiteSpace(m.Path)&&scan.SuggestedFields.TryGetValue(m.Key,out var value))m.Path=value;mapping.Items.Refresh();previewRevision="";preview.ItemsSource=null;Log($"XML okundu; {scan.Paths.Count} alan yolu bulundu.");}
  async Task PreviewAsync(){var s=CurrentSource();if(xml==""||loadedLocation!=s.Location)throw new InvalidOperationException("Bu kaynak adresi için önce XML'i oku.");previewRevision="";preview.ItemsSource=null;previewStatus.Text="Fiyat ve kur hesaplanıyor…";await UpdateFxAsync(s);BindSource();var snapshot=Clone(s);var rows=await Task.Run(()=>XmlCatalog.Preview(xml,snapshot));preview.ItemsSource=rows;previewRevision=JsonSerializer.Serialize(snapshot);previewStatus.Text=$"{rows.Count} ürün • Fiyat/stok hesaplandı. Kaydetmeden önce satırları seç. Etsy'ye gönderim yapılmaz.";Log($"XML önizlemesi: {rows.Count} ürün.");}
- async Task ImportAsync(){var s=CurrentSource();if(previewRevision==""||previewRevision!=JsonSerializer.Serialize(s))throw new InvalidOperationException("Ayarlar değişti veya önizleme yok. Önizlemeyi yeniden hesapla.");CatalogPricing.ValidateRate(s);var rows=preview.SelectedItems.Cast<CatalogProduct>().Select(Clone).ToList();if(rows.Count==0)throw new InvalidOperationException("Önizlemeden en az bir ürün seç.");XmlAuthStore.Save(s.Id,new(xmlUser.Text,xmlPassword.Password),dataDirectory);store.SaveSource(s);var result=await Task.Run(()=>store.Import(s,rows));s.LastRunUtc=DateTime.UtcNow;s.LastStatus=$"{result.Added} yeni / {result.Updated} güncel / {result.Unchanged} aynı";store.SaveSource(s);previewRevision="";RefreshSources(false);RefreshProducts();Log(s.LastStatus);Navigate("products");}
+ async Task ImportAsync(){var s=CurrentSource();if(previewRevision==""||previewRevision!=JsonSerializer.Serialize(s))throw new InvalidOperationException("Ayarlar değişti veya önizleme yok. Önizlemeyi yeniden hesapla.");CatalogPricing.ValidateRate(s);var rows=preview.SelectedItems.Cast<CatalogProduct>().Select(Clone).ToList();if(rows.Count==0)throw new InvalidOperationException("Önizlemeden en az bir ürün seç.");XmlAuthStore.Save(s.Id,new(xmlUser.Text,xmlPassword.Password),dataDirectory);store.SaveSource(s);var runs=new XmlRunStore(dataDirectory);var run=runs.Start(s.Id);try{var result=await Task.Run(()=>store.Import(s,rows));runs.Complete(run,result);s.LastRunUtc=DateTime.UtcNow;s.LastStatus=$"{result.Added} yeni / {result.Updated} güncel / {result.Unchanged} aynı";store.SaveSource(s);previewRevision="";RefreshSources(false);_ = RefreshXmlSourceHealthAsync(s);RefreshProducts();Log(s.LastStatus);Navigate("products");}catch(Exception e){runs.Fail(run,e.Message);throw;}}
  void ShowProducts(CatalogPage page){var id=edit?.Id;productTotal=page.Total;products.ItemsSource=page.Items;if(id!=null)products.SelectedItem=page.Items.FirstOrDefault(p=>p.Id==id);SummaryText.Text=$"{page.Total:N0} sonuç   •   {page.InStock:N0} stokta   •   {page.Linked:N0} Etsy ile eşleşen   •   Sayfa {productOffset/200+1} / {Math.Max(1,(page.Total+199)/200)}";}
- void RefreshProducts(){searchRevision++;ShowProducts(store.Search(search.Text.Trim(),productOffset,200,productFilter));}
+ void RefreshProducts(){globalSearchIndex.Invalidate();searchRevision++;ShowProducts(store.Search(search.Text.Trim(),productOffset,200,productFilter));}
  async Task SearchProductsAsync(){var revision=++searchRevision;var q=search.Text.Trim();var offset=productOffset;var filter=productFilter;try{var page=await Task.Run(()=>store.Search(q,offset,200,filter));if(revision==searchRevision)ShowProducts(page);}catch(Exception e){Log(Safe(e));}}
  void Refresh_Click(object sender,RoutedEventArgs e){try{RefreshProducts();}catch(Exception ex){Log(Safe(ex));}}
  EtsyCredentials ReadCredentials(){var key=apiKey.Password.Trim();var secret=apiSecret.Password.Trim();var token=apiToken.Password.Trim();var changedApp=key!=credentials.Key||secret!=credentials.Secret;var changedToken=token!=credentials.Token;var refresh=refreshToken.Password.Trim();return credentials with{Key=key,Secret=secret,Token=token,RefreshToken=(changedApp||changedToken)&&refresh==credentials.RefreshToken?"":refresh,ExpiresAt=changedApp||changedToken?null:credentials.ExpiresAt,ShopId=shopId.Text.Trim(),RedirectUri=redirect.Text.Trim()};}
@@ -207,15 +267,17 @@ public partial class MainWindow : Window
   try{
    var due=store.Sources().Where(s=>s.Enabled&&s.AutoImport&&DateTime.UtcNow-(s.LastRunUtc??DateTime.MinValue)>=TimeSpan.FromMinutes(s.IntervalMinutes)).ToList();
    if(due.Count==0)return;ModuleTabs.IsEnabled=false;
-   foreach(var s in due){try{var text=await new XmlSourceReader(http).ReadAsync(s.Location,XmlAuthStore.Load(s.Id,dataDirectory),lifetime.Token);await UpdateFxAsync(s);var rows=await Task.Run(()=>XmlCatalog.Preview(text,s));var result=await Task.Run(()=>store.Import(s,rows));s.LastStatus=$"Otomatik: {result.Added} yeni / {result.Updated} güncel / {result.Unchanged} aynı";}catch(Exception e){s.LastStatus=Safe(e);}s.LastRunUtc=DateTime.UtcNow;store.SaveSource(s);Log(s.LastStatus);}
+   foreach(var s in due){var run=new XmlRunStore(dataDirectory).Start(s.Id);try{var text=await new XmlSourceReader(http).ReadAsync(s.Location,XmlAuthStore.Load(s.Id,dataDirectory),lifetime.Token);await UpdateFxAsync(s);var rows=await Task.Run(()=>XmlCatalog.Preview(text,s));var result=await Task.Run(()=>store.Import(s,rows));new XmlRunStore(dataDirectory).Complete(run,result);s.LastStatus=$"Otomatik: {result.Added} yeni / {result.Updated} güncel / {result.Unchanged} aynı";}catch(Exception e){new XmlRunStore(dataDirectory).Fail(run,e.Message);s.LastStatus=Safe(e);}s.LastRunUtc=DateTime.UtcNow;store.SaveSource(s);Log(s.LastStatus);}
+   foreach(var job in new AutomationStore(dataDirectory).List().Where(j=>j.Enabled&&j.NextRunUtc<=DateTime.UtcNow)){try{var result=await Task.Run(()=>AutomationRunner.RunDue(store,new AutomationStore(dataDirectory),new SyncStore(dataDirectory),job.Id,DateTime.UtcNow));Log($"Otomasyon {job.Channel}/{job.Shop}: {result.Queued} iş kuyruğa alındı, {result.Errors.Count} hata.");}catch(Exception e){Log(Safe(e));}}
    // Do not replace ItemsSource or editor clones: unsaved manual edits must survive timer ticks.
    Log("Otomatik kontrol bitti. Güncel listeyi görmek için Havuzu yenile düğmesini kullan.");
   }catch(Exception e){Log(Safe(e));}finally{ModuleTabs.IsEnabled=true;gate.Release();}
  }
  async Task RunAsync(Func<Task> action){if(!await gate.WaitAsync(0)){Log("Önceki işlem sürüyor.");return;}ModuleTabs.IsEnabled=false;try{await action();}catch(Exception e){Log(Safe(e));apiStatus.Text=Safe(e);}finally{ModuleTabs.IsEnabled=true;gate.Release();}}
  static string Safe(Exception e)=>e is InvalidOperationException or ArgumentException?e.Message:"İşlem tamamlanamadı. Dosya biçimini, erişim izinlerini ve bağlantıyı kontrol et.";
- void Log(string text){StatusText.Text=text;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);}catch(IOException){} }
- protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();lifetime.Cancel();http.Dispose();base.OnClosed(e);}
+ void Log(string text){StatusText.Text=text;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);new AuditStore(dataDirectory).Append(new(){Module="UI",Action="log",Outcome="Info",Detail=text});}catch(IOException){}catch(Exception){ } }
+ protected override void OnClosing(System.ComponentModel.CancelEventArgs e){lifetime.Cancel();globalSearchCts?.Cancel();base.OnClosing(e);}
+ protected override void OnClosed(EventArgs e){timer.Stop();searchTimer.Stop();globalSearchTimer.Stop();globalSearchCts?.Dispose();startupRecovery.Complete();http.Dispose();base.OnClosed(e);}
 }
 
 

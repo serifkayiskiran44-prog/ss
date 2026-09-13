@@ -149,7 +149,8 @@ public sealed class EtsyDrafts(HttpClient http)
         if (t.TaxonomyId <= 0) errors.Add("Etsy kategori ID gerekli.");
         if (t.ShippingProfileId <= 0) errors.Add("Fiziksel ürün için kargo profili ID gerekli.");
         if (t.ReadinessStateId <= 0) errors.Add("Fiziksel ürün için hazırlık profili ID gerekli.");
-        if (Parts(t.Tags).Length > 13 || Parts(t.Tags).Any(x => x.Length > 20)) errors.Add("En fazla 13 etiket ve etiket başına 20 karakter kullanılabilir.");
+        if (Parts(t.Tags).Length > 13 || Parts(t.Tags).Any(x => x.Length is < 1 or > 20)) errors.Add("En fazla 13 etiket ve etiket başına 20 karakter kullanılabilir.");
+        if (Parts(t.Materials).Any(x => x.Any(c => !(char.IsLetterOrDigit(c) || char.IsWhiteSpace(c))))) errors.Add("Malzeme alanı yalnızca harf, sayı ve boşluk içerebilir.");
         return errors;
     }
     public async Task<long> CreateAsync(EtsyCredentials credentials, CatalogProduct product, EtsyListingTemplate template, CancellationToken cancellationToken = default, Func<Task>? beforePost = null)
@@ -179,7 +180,7 @@ public sealed class EtsyDrafts(HttpClient http)
         }
         catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException or IOException)
         { throw new InvalidOperationException("Etsy mağaza doğrulaması tamamlanamadı; bağlantıyı ve mağazayı kontrol edin. Taslak isteği gönderilmedi."); }
-        using var request = Request(HttpMethod.Post, "/listings");
+        using var request = Request(HttpMethod.Post, "/listings?legacy=false");
         var fields = new Dictionary<string, string> {
             ["quantity"] = product.Stock.ToString(CultureInfo.InvariantCulture), ["title"] = Title(product, template), ["description"] = product.Description,
             ["price"] = product.Price.ToString("0.00##########################", CultureInfo.InvariantCulture), ["who_made"] = template.WhoMade, ["when_made"] = template.WhenMade,

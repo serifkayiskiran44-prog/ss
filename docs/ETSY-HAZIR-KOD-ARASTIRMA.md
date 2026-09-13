@@ -6,8 +6,6 @@ Kontrol tarihi: 10 Eylül 2026. İnceleme salt okunurdur; paket kurulmadı, mağ
 
 Mevcut .NET 8 / WPF uygulamasını korumak uygun. İncelenen hazır projeler çoğunlukla Etsy API istemci kütüphanesidir; Entegra düzeyinde stok, kategori, XML, kur, iş kuyruğu ve masaüstü yönetim uygulamasını birlikte sağlamaz. C# tarafında sınırlı bir `HttpClient` uyarlaması ve Etsy'nin resmi API şeması, yalnızca bir JavaScript SDK kullanabilmek için ikinci çalışma ortamı eklemekten daha doğrudan bir yoldur. Bu bir mimari değerlendirmedir.
 
-Görsel/WPF açık kaynak araştırması bu belgeden ayrı tutulur: `docs/VISUAL-REPORTING-PARITY-2026-09-11.md`. Etsy API client kodu ile WPF chart/theme/grid paketleri aynı karar olarak ele alınmamalıdır.
-
 ## Aday karşılaştırması
 
 | Aday | Doğrulanan durum | Projeye uygunluk |
