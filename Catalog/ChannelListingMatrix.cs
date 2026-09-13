@@ -21,11 +21,13 @@ public sealed class ChannelListingMatrixService
         foreach (var connection in connections)
         {
             var definition = MarketplaceConnectionCatalog.Get(connection.Channel);
+            var categoryHealth = Catalog.CategoryMappingHealth.Snapshot(directory, connection.Channel, connection.ShopId); // #914: one taxonomy read per connection
             foreach (var product in catalog)
             {
                 plans.TryGetValue((connection.Channel, connection.ShopId, product.Id), out var plan);
                 var latest = sync.Where(x => x.Channel.Equals(connection.Channel, StringComparison.OrdinalIgnoreCase) && (x.EntityId == product.Id || (plan is not null && x.EntityId == plan.ListingId))).OrderByDescending(x => x.UpdatedUtc).FirstOrDefault();
                 var status = string.IsNullOrWhiteSpace(plan?.ListingId) ? "MISSING" : plan.UpdatedUtc < now.AddDays(-180) ? "STALE" : latest?.Status == Catalog.SyncStatus.Failed ? "ERROR" : latest?.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running ? "PENDING" : latest?.Status == Catalog.SyncStatus.Succeeded ? "SYNCED" : "DRAFT";
+                if (categoryHealth.Evaluate(product.Category).Blocks) status = ChannelMatrixLegend.CategoryStale; // #914: a deactivated category under this product outranks the plan state
                 var auth = connection.Status is "FAILED" or "LIVE_API_BLOCKED" or "NOT_CONFIGURED" ? "AUTH_ERROR" : connection.Status;
                 var capabilities = definition.Capabilities.Enabled.Count == 0 ? LocalOnlyCapabilities : string.Join(", ", definition.Capabilities.Enabled.Select(x => x.ToString()));
                 result.Add(new(product.Id, product.Sku, product.Name, connection.Channel, definition.Name, connection.ShopId, status, plan?.ListingId ?? "", latest?.Status.ToString() ?? "None", latest?.LastError ?? "", latest?.UpdatedUtc, auth, capabilities));

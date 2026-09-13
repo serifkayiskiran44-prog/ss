@@ -19,6 +19,7 @@ public static class ChannelMatrixLegend
     public const string AuthError = "AUTH_ERROR";
     public const string LocalOnly = "LOCAL_ONLY";
     public const string None = "NONE";
+    public const string CategoryStale = "CATEGORY_STALE"; // #914
 
     public static readonly IReadOnlyList<ChannelMatrixLegendEntry> Entries = new[]
     {
@@ -28,6 +29,7 @@ public static class ChannelMatrixLegend
         new ChannelMatrixLegendEntry("STALE", "◔", "bayat", "Yerel plan 180 günden eski; yeniden gözden geçirin.", SeverityLevel.Warning),
         new ChannelMatrixLegendEntry("MISSING", "○", "eşleme yok", "Bu mağaza için ilan kimliği/eşleme kaydı yok.", SeverityLevel.Warning),
         new ChannelMatrixLegendEntry("ERROR", "✖", "hata", "Son senkron başarısız; hata Liste görünümünde.", SeverityLevel.Blocking),
+        new ChannelMatrixLegendEntry(CategoryStale, "⚑", "kategori", "Ürünün kategorisi bu mağazada pasif; ilan gönderimi kategori düzelmeden engellenir.", SeverityLevel.Blocking), // #914
         new ChannelMatrixLegendEntry(AuthError, "⚠", "bağlantı", "Mağaza bağlantısı başarısız, engelli veya yapılandırılmamış; hücre durumu bu düzelmeden anlamsız.", SeverityLevel.Blocking),
         new ChannelMatrixLegendEntry(LocalOnly, "⊘", "yalnız yerel", "Bu kanal için bu sürümde canlı ilan yeteneği yok; yalnızca yerel plan tutulur.", SeverityLevel.Info),
         new ChannelMatrixLegendEntry(None, "·", "kayıt yok", "Ürünün bu mağaza için hiç kaydı yok.", SeverityLevel.Info),
@@ -36,7 +38,7 @@ public static class ChannelMatrixLegend
     static readonly IReadOnlyDictionary<string, ChannelMatrixLegendEntry> ByKey = Entries.ToDictionary(e => e.Key, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The mapping statuses the listing service can record -- the legend must explain each of them.</summary>
-    public static readonly IReadOnlyList<string> ServiceStatuses = new[] { "MISSING", "STALE", "ERROR", "PENDING", "SYNCED", "DRAFT" };
+    public static readonly IReadOnlyList<string> ServiceStatuses = new[] { "MISSING", "STALE", "ERROR", "PENDING", "SYNCED", "DRAFT", CategoryStale };
 
     /// <summary>Which entry a cell shows: a channel without live capability first (its connection status is meaningless -- there is nothing to connect to), then connection trouble, then the recorded mapping state; an unknown state falls back to "kayıt yok".</summary>
     public static ChannelMatrixLegendEntry For(string? mappingStatus, string? authStatus, bool localOnly)
