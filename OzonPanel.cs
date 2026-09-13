@@ -53,7 +53,7 @@ public static class OzonPanel
             finally { busy = false; inputs.IsEnabled = actions.IsEnabled = true; }
         }
         save.Click += async (_,_) => await Run(() => {
-            var settings = Read(); store.Save(settings); saved = settings; key.MarkSaved(); tracker?.Snapshot();
+            var settings = Read(); store.Save(settings); saved = settings; key.MarkSaved(); tracker?.Snapshot(); editState?.NotifySaved("ozon-connection");
             status.Text = "Ayarlar Windows kullanıcı profilinde şifreli kaydedildi. Kaydetme API erişimini doğrulamaz."; return Task.CompletedTask;
         });
         products.Click += async (_,_) => await Run(async () => {
@@ -72,7 +72,7 @@ public static class OzonPanel
             status.Text = count == 0 ? "API erişimi var; listede FBS/rFBS deposu yok. Seller panelindeki depo ve teslimat kurulumunu tamamlayın." : "Depo listesi okundu. Depoların sevkiyata hazır olması bu kontrolle doğrulanmaz.";
         });
         delete.Click += async (_,_) => await Run(() => {
-            store.Delete(); saved = null; key.MarkCleared(); tracker?.Snapshot(); status.Text = "Yerel Ozon anahtarı silindi. Ozon tarafındaki anahtarı kaldırmak için Seller API ayarlarını kullanın."; return Task.CompletedTask;
+            store.Delete(); saved = null; key.MarkCleared(); tracker?.Snapshot(); editState?.NotifySaved("ozon-connection"); status.Text = "Yerel Ozon anahtarı silindi. Ozon tarafındaki anahtarı kaldırmak için Seller API ayarlarını kullanın."; return Task.CompletedTask;
         });
         return panel;
     }

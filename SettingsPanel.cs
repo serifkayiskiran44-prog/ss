@@ -15,7 +15,8 @@ public static class SettingsPanel
 {
     /// <param name="OpenSection">Opens a route and selects a section inside it (a channel's connection tab); null falls back to Navigate.</param>
     /// <param name="EditState">#854: the app's settings edit state; a category and an entry with unsaved changes carry a badge that names the fields, never a value.</param>
-    public sealed record Context(string? Directory, Action<string>? Navigate, Func<string, bool> RouteExists, Action<string, string>? OpenSection = null, SettingsEditState? EditState = null);
+    /// <param name="Validate">#856: the check behind the banner at the top -- the issues of the real stores plus what the forms reported; run on open, after every announced save and on every reported conflict.</param>
+    public sealed record Context(string? Directory, Action<string>? Navigate, Func<string, bool> RouteExists, Action<string, string>? OpenSection = null, SettingsEditState? EditState = null, Func<IReadOnlyList<SettingsIssue>>? Validate = null);
 
     public const double CategoryWidth = 240;
     public const string SecretBadge = "Gizli bilgiler maskeli alanlarda, kendi sayfasında düzenlenir.";
@@ -29,6 +30,8 @@ public static class SettingsPanel
         var top = new StackPanel(); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         top.Children.Add(new TextBlock { Text = "Ayarlar", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 8, 4, 6) });
         top.Children.Add(Hint("Var olan ayarlar tek ağaçta: her giriş, ayarı sahiplenen ekranı açar. Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindeki maskeli alanlarda düzenlenir; bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
+        // #856: the validation banner sits above the search, under the title, so an issue is the first thing on the page.
+        var banner = new StackPanel { Tag = "settings-banner-host", Visibility = Visibility.Collapsed }; top.Children.Add(banner);
         var bar = new WrapPanel { Margin = new Thickness(4, 0, 4, 6) };
         var search = new TextBox { Tag = "settings-search", Width = 260, ToolTip = "Ayar ara: kategori, ad veya açıklama" }; AutomationProperties.SetName(search, "Ayar ara");
         bar.Children.Add(new TextBlock { Text = "Ara", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) }); bar.Children.Add(search); top.Children.Add(bar);
@@ -89,7 +92,32 @@ public static class SettingsPanel
             search.Text = ""; list.SelectedItem = item; item.Focus();
         }
         exposeSelect?.Invoke(Select);
+        // #856: a banner row's "Git" selects the owning category, then opens the owner the way the entry's own "Aç" does.
+        void OpenEntry(string entryKey)
+        {
+            var hit = categories.SelectMany(c => c.Entries.Select(e => (Category: c, Entry: e))).FirstOrDefault(x => string.Equals(x.Entry.Key, entryKey, StringComparison.OrdinalIgnoreCase));
+            if (hit.Category is null) return;
+            Select(hit.Category.Key);
+            if (hit.Entry.Inline) return;
+            if (hit.Entry.Section.Length > 0 && context.OpenSection is not null) context.OpenSection(hit.Entry.Route, hit.Entry.Section); else context.Navigate?.Invoke(hit.Entry.Route);
+        }
+        var hadIssues = false;
+        void Refresh()
+        {
+            if (context.Validate is null) return;
+            IReadOnlyList<SettingsIssue> issues;
+            try { issues = context.Validate(); }
+            catch (Exception error) { issues = new[] { new SettingsIssue(SettingsIssueKind.InvalidConfig, "diagnostics", "Ayar denetimi çalıştırılamadı", SettingsValidation.Safe(error.Message), SeverityLevel.Warning) }; }
+            SettingsValidationBanner.Render(banner, issues, showResolved: issues.Count == 0 && hadIssues, OpenEntry, Refresh, () => { banner.Children.Clear(); banner.Visibility = Visibility.Collapsed; });
+            hadIssues = issues.Count > 0;
+        }
+        if (context.EditState is { } edits)
+        {
+            edits.Saved += () => banner.Dispatcher.BeginInvoke(new Action(Refresh));
+            edits.IssuesChanged += () => banner.Dispatcher.BeginInvoke(new Action(Refresh));
+        }
         RefreshBadges();
+        Refresh();
         if (list.Items.Count > 0) list.SelectedIndex = 0;
         return root;
     }

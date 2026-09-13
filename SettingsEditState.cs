@@ -21,9 +21,42 @@ public sealed record DirtySection(string EntryKey, IReadOnlyList<DirtyField> Fie
 public sealed class SettingsEditState
 {
     readonly Dictionary<string, FormTracker> forms = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string, SettingsIssue> reported = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Raised when any section becomes dirty, clean, or changes which fields are dirty.</summary>
     public event Action? Changed;
+
+    /// <summary>#856: raised after a form stored its values (a save or a delete), so the shell re-checks the settings.</summary>
+    public event Action? Saved;
+
+    /// <summary>#856: raised when a form reports a conflict or resolves one.</summary>
+    public event Action? IssuesChanged;
+
+    /// <summary>Conflicts the forms reported and have not yet reloaded or saved past; copy only, never a value.</summary>
+    public IReadOnlyList<SettingsIssue> Reported => reported.Values.OrderBy(i => i.EntryKey, StringComparer.Ordinal).ThenBy(i => (int)i.Kind).ToList();
+
+    /// <summary>A form reports an issue it found on its own path (a save conflict); one row per kind and entry, the latest detail wins.</summary>
+    public void Report(SettingsIssue issue)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        var key = (issue.EntryKey ?? "").Trim(); if (key.Length == 0) throw new ArgumentException("Ayar bölümü anahtarı gerekli.", nameof(issue));
+        reported[issue.Kind + "|" + key] = issue with { EntryKey = key };
+        IssuesChanged?.Invoke();
+    }
+
+    /// <summary>Drops a reported issue (the form reloaded); silent when nothing was reported.</summary>
+    public bool Resolve(SettingsIssueKind kind, string entryKey)
+    {
+        if (!reported.Remove(kind + "|" + (entryKey ?? "").Trim())) return false;
+        IssuesChanged?.Invoke(); return true;
+    }
+
+    /// <summary>A form stored its values: its conflict, if any, is over, and the shell re-checks.</summary>
+    public void NotifySaved(string entryKey)
+    {
+        reported.Remove(SettingsIssueKind.SaveConflict + "|" + (entryKey ?? "").Trim());
+        Saved?.Invoke();
+    }
 
     public FormTracker Form(string entryKey)
     {

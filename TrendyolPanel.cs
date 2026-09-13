@@ -33,7 +33,7 @@ public static class TrendyolPanel
             // Worded without the literal "secret": the redaction pass would blank that word in the slot and the status line.
             if (!secret.HasTyped && !secret.HasSaved) { secret.Field.SetValidation("Gizli değer gerekli."); throw new InvalidOperationException("Gizli değer gerekli; kaydetmek için yeni değeri yazın."); }
             TrendyolConnection.Validate(settings); store.Save(settings); saved = settings; secret.MarkSaved(); secret.Field.SetValidation("");
-            state.Text = "Trendyol ayarları DPAPI ile kaydedildi. Canlı API durumu: LIVE_API_BLOCKED."; tracker?.Snapshot();
+            state.Text = "Trendyol ayarları DPAPI ile kaydedildi. Canlı API durumu: LIVE_API_BLOCKED."; tracker?.Snapshot(); editState?.NotifySaved("trendyol-connection");
         }));
         root.Children.Add(AsyncButton("Salt okunur bağlantı testi", async () => await new TrendyolConnection().TestReadOnlyAsync(Read())));
         try { saved = store.Load(); if (saved is not null) { supplier.Text = saved.SupplierId; key.Text = saved.ApiKey; agent.Text = saved.UserAgent; secret.SetSaved(true); state.Text = TrendyolConnection.Describe(saved); } else { secret.SetSaved(false); state.Text = "NOT_CONFIGURED: Trendyol ayarı yok."; } } catch (Exception e) { secret.SetSaved(false); state.Text = MarketplaceConnectionStore.Redact(e.Message); }

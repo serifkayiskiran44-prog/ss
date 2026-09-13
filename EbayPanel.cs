@@ -72,7 +72,7 @@ public static class EbayPanel
         {
             var current = Read(); EbayConnection.Validate(current);
             var next = new EbaySavedConnection(current, saved?.Settings == current ? saved.Tokens : null);
-            store.Save(next); saved = next; secret.MarkSaved(); tracker?.Snapshot(); return next;
+            store.Save(next); saved = next; secret.MarkSaved(); tracker?.Snapshot(); editState?.NotifySaved("ebay-connection"); return next;
         }
         save.Click += async (_, _) => await Run(() => { SaveCurrent(); status.Text = "Ayarlar Windows kullanıcı profilinde şifreli kaydedildi; bağlantı doğrulanmadı."; return Task.CompletedTask; });
         authorize.Click += async (_, _) => await Run(() => {
@@ -105,7 +105,7 @@ public static class EbayPanel
                 + " Bu kontrol ödeme/Payoneer kurulumunu veya ürün yayınlama uygunluğunu doğrulamaz.";
         });
         disconnect.Click += async (_, _) => await Run(() => {
-            store.Delete(); saved = null; attempt = null; returned.Clear(); secret.MarkCleared(); tracker?.Snapshot();
+            store.Delete(); saved = null; attempt = null; returned.Clear(); secret.MarkCleared(); tracker?.Snapshot(); editState?.NotifySaved("ebay-connection");
             status.Text = "Yerel eBay bilgileri silindi. eBay tarafındaki uygulama iznini kaldırmak için hesap ayarlarınızı kullanın.";
             return Task.CompletedTask;
         });

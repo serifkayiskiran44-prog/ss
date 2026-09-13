@@ -23,8 +23,24 @@ public static class LocaleSettingsPanel
         foreach (var box in new[] { channel, shop, vat, date }) box.TextChanged += (_, _) => tracker?.Recompute();
         foreach (var combo in new[] { currency, culture }) combo.SelectionChanged += (_, _) => tracker?.Recompute();
         var copyChannel = new TextBox { Text = "etsy", Width = 100 }; var copyShop = new TextBox { Text = "default", Width = 120 }; var copyToChannel = new TextBox { Text = "ebay", Width = 100 }; var copyToShop = new TextBox { Text = "default", Width = 120 }; var actions = new WrapPanel();
-        actions.Children.Add(Button("Kaydet", () => { var selectedCulture = culture.SelectedItem?.ToString() ?? "tr-TR"; if (!decimal.TryParse(vat.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.GetCultureInfo(selectedCulture), out var rate)) throw new InvalidOperationException($"KDV oranı {selectedCulture} kültüründe sayı olmalı."); var saved = store.Save(new StoreLocaleSettings { Channel = channel.Text, ShopId = shop.Text, Currency = currency.SelectedItem?.ToString() ?? "TRY", CultureName = selectedCulture, VatRate = rate, DatePattern = date.Text }); status.Text = $"{saved.Channel}/{saved.ShopId} ayarı kaydedildi · sürüm {saved.Version}"; Reload(); tracker?.Snapshot(); }));
-        actions.Children.Add(Button("Seçileni yükle", () => { if (grid.SelectedItem is not StoreLocaleSettings selected) throw new InvalidOperationException("Önce ayar seçin."); channel.Text = selected.Channel; shop.Text = selected.ShopId; currency.SelectedItem = selected.Currency; culture.SelectedItem = selected.CultureName; vat.Text = selected.VatRate.ToString(System.Globalization.CultureInfo.InvariantCulture); date.Text = selected.DatePattern; tracker?.Snapshot(); }));
+        // #856: the row this form loaded (or last saved) and its version; a save that would overwrite a newer version of that row is a conflict, not a save.
+        int? loadedVersion = null; var loadedKey = "";
+        string Key() => channel.Text.Trim().ToLowerInvariant() + "/" + shop.Text.Trim();
+        actions.Children.Add(Button("Kaydet", () =>
+        {
+            var selectedCulture = culture.SelectedItem?.ToString() ?? "tr-TR"; if (!decimal.TryParse(vat.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.GetCultureInfo(selectedCulture), out var rate)) throw new InvalidOperationException($"KDV oranı {selectedCulture} kültüründe sayı olmalı.");
+            var current = store.Get(channel.Text, shop.Text);
+            if (current is not null && loadedVersion is int seen && string.Equals(loadedKey, Key(), StringComparison.Ordinal) && current.Version != seen)
+            {
+                Reload();
+                var detail = $"{current.Channel}/{current.ShopId} yerel ayarı bu formda yüklenen sürümden sonra değiştirildi (sürüm {seen} → {current.Version}); Seçileni yükle ile yeniden yükleyin, sonra kaydedin.";
+                editState?.Report(new SettingsIssue(SettingsIssueKind.SaveConflict, "locale", "Kayıt çakışması", detail, SeverityLevel.Blocking));
+                throw new InvalidOperationException("Kayıt çakışması: " + detail);
+            }
+            var saved = store.Save(new StoreLocaleSettings { Channel = channel.Text, ShopId = shop.Text, Currency = currency.SelectedItem?.ToString() ?? "TRY", CultureName = selectedCulture, VatRate = rate, DatePattern = date.Text });
+            status.Text = $"{saved.Channel}/{saved.ShopId} ayarı kaydedildi · sürüm {saved.Version}"; Reload(); loadedVersion = saved.Version; loadedKey = saved.Channel + "/" + saved.ShopId; tracker?.Snapshot(); editState?.NotifySaved("locale");
+        }));
+        actions.Children.Add(Button("Seçileni yükle", () => { if (grid.SelectedItem is not StoreLocaleSettings selected) throw new InvalidOperationException("Önce ayar seçin."); channel.Text = selected.Channel; shop.Text = selected.ShopId; currency.SelectedItem = selected.Currency; culture.SelectedItem = selected.CultureName; vat.Text = selected.VatRate.ToString(System.Globalization.CultureInfo.InvariantCulture); date.Text = selected.DatePattern; loadedVersion = selected.Version; loadedKey = selected.Channel + "/" + selected.ShopId; tracker?.Snapshot(); editState?.Resolve(SettingsIssueKind.SaveConflict, "locale"); }));
         actions.Children.Add(Button("Kopyala", () => { var copied = store.Copy(copyChannel.Text, copyShop.Text, copyToChannel.Text, copyToShop.Text); status.Text = $"{copied.Channel}/{copied.ShopId} ayarı kopyalandı ve audit'e yazıldı."; Reload(); })); top.Children.Add(actions);
         var copy = new WrapPanel(); copy.Children.Add(new TextBlock { Text = "Kaynak", Margin = new Thickness(4, 7, 2, 0) }); copy.Children.Add(copyChannel); copy.Children.Add(copyShop); copy.Children.Add(new TextBlock { Text = "Hedef", Margin = new Thickness(10, 7, 2, 0) }); copy.Children.Add(copyToChannel); copy.Children.Add(copyToShop); top.Children.Add(copy); top.Children.Add(status);
         void Reload() => grid.ItemsSource = store.List(); Reload(); tracker?.Snapshot(); return root;
