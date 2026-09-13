@@ -43,7 +43,16 @@ public sealed class SecretFieldTests
                 // Copy and cut are refused; paste is the only way in besides typing.
                 row.Box.Focus(); Drain(window);
                 Assert.IsFalse(ApplicationCommands.Copy.CanExecute(null, row.Box)); Assert.IsFalse(ApplicationCommands.Cut.CanExecute(null, row.Box));
-                Assert.IsTrue(ApplicationCommands.Paste.CanExecute(null, row.Box));
+                // A paste runs through the cleaning handler -- raised directly, because Paste.CanExecute answers from the
+                // machine's clipboard (full on a dev machine, empty on the CI runner) and says nothing about the row. A quoted,
+                // multi-line dump lands as one clean line with the default paste cancelled; a non-text paste changes nothing.
+                var pasting = new DataObjectPastingEventArgs(new DataObject(DataFormats.UnicodeText, "\"pasted-value\"\r\nsecond line\r\n"), false, DataFormats.UnicodeText);
+                row.Box.RaiseEvent(pasting);
+                Assert.IsTrue(pasting.CommandCancelled, "The default paste is replaced by the cleaned value."); Assert.AreEqual("pasted-value", row.Box.Password);
+                var files = new DataObjectPastingEventArgs(new DataObject(DataFormats.FileDrop, new[] { "C:\\x.txt" }), false, DataFormats.FileDrop);
+                row.Box.RaiseEvent(files);
+                Assert.IsTrue(files.CommandCancelled); Assert.AreEqual("pasted-value", row.Box.Password, "A non-text paste changes nothing.");
+                row.Box.Password = "new-secret";
 
                 // A validation failure keeps what was typed and speaks in the row's own slot.
                 row.Field.SetValidation("Trendyol API kimlik bilgileri geçersiz.");
