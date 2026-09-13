@@ -28,7 +28,8 @@ public sealed class OrderCustomerStoreTests
             Assert.IsNotNull(read); Assert.AreEqual("Ayşe Yılmaz", read!.Name); Assert.AreEqual("ayse@example.com", read.Email);
 
             var payload = JsonSerializer.Serialize(store.ReadAll().Single());
-            Assert.IsFalse(payload.Contains("Yılmaz") || payload.Contains("example.com") || payload.Contains("532") || payload.Contains("Bağdat"), "The snapshot carries no customer data: " + payload);
+            // The phone is checked by a fragment a timestamp can never contain: "532" alone once matched the snapshot's fractional seconds ("…26.1532931") on CI.
+            Assert.IsFalse(payload.Contains("Yılmaz") || payload.Contains("example.com") || payload.Contains("+90 532") || payload.Contains("532 123") || payload.Contains("Bağdat"), "The snapshot carries no customer data: " + payload);
             var export = OrderTransferCodec.Export(store.ReadAll().Select(o => new OrderTransferRow(o.Marketplace, o.ShopId, o.OrderId, o.Source, o.UpdatedAt, o.Total ?? 0m)));
             Assert.IsFalse(export.Contains("Yılmaz") || export.Contains("example.com"), "The transfer export carries none either.");
             using (var c = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "orders.db") }.ToString()))
