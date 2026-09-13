@@ -9,7 +9,9 @@ public partial class MainWindow
  readonly Dictionary<string, UIElement> builtPages = new();
  readonly Dictionary<string, TabItem> routes = new();
  readonly Dictionary<string, string> routeTitles = new();
- readonly Stack<string> routeHistory = new();
+ // #810: the trail is a context stack, not a list of route keys -- a crumb remembers the store the board was
+ // filtered to and the entity the card was counting, so Back restores the view instead of just the screen.
+ readonly DrillThroughStack drillStack = new(new DrillTarget("dashboard", "Genel bakış"));
  UiPreferenceStore uiPreferences = null!;
  string? currentRoute;
  bool selectingRoute;
@@ -25,7 +27,7 @@ public partial class MainWindow
    item.Selected+=(_,_)=>SelectRoute(key, !selectingRoute, title, description);
   }
   Group("KATALOG VE TEDARİK");
-  Page("dashboard","Genel bakış","Ürün, sipariş, XML, bağlantı ve sync durumunu tek ekranda izleyin.",DashboardPanel.Create(dataDirectory,key=>Navigate(key)));
+  Page("dashboard","Genel bakış","Ürün, sipariş, XML, bağlantı ve sync durumunu tek ekranda izleyin.",DashboardPanel.Create(dataDirectory,key=>Navigate(key),DrillThrough,SwitchDashboardStore));
   Page("onboarding","İlk kurulum","Mağaza, XML, stok, fiyat ve Excel başlangıç adımlarını güvenli önizlemeyle tamamlayın.",OnboardingPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("products","Ürün yönetimi","Ortak ürün havuzu • Ürün seçerek kartını, fiyatını ve stok kilitlerini düzenleyin.",builtPages["Ürün havuzu"]);
   Page("bulk-products","Toplu ürün işlemleri","Seçili veya filtrelenmiş ürünleri preview, sürüm kontrolü ve açık onay ile güncelleyin.",BulkProductsPanel.Create(dataDirectory,key=>Navigate(key)));
@@ -92,7 +94,13 @@ public partial class MainWindow
  void SelectRoute(string key, bool push, string? title = null, string? description = null)
  {
   if (!routes.TryGetValue(key, out var page)) return;
-  if (push && !selectingRoute && currentRoute is not null && currentRoute != key) routeHistory.Push(currentRoute);
+  if (push && !selectingRoute && currentRoute is not null && currentRoute != key)
+  {
+   // Sidebar navigation stays inside the board's current scope, so it is offered that scope and nothing else.
+   var scope = drillStack.CurrentStoreKey;
+   var open = drillStack.Open(new DrillTarget(key, routeTitles.TryGetValue(key, out var routeTitle) ? routeTitle : key, scope), new[] { scope });
+   if (!open.Allowed) { Log(open.Notice); return; }
+  }
   currentRoute = key;
   uiPreferences.Set("last-route", key);
   var item = NavigationList.Items.OfType<ListBoxItem>().Single(i => i.Tag?.ToString() == key);
@@ -100,10 +108,36 @@ public partial class MainWindow
   try { NavigationList.SelectedItem = item; ModuleTabs.SelectedItem = page; } finally { selectingRoute = false; }
   PageTitle.Text = title ?? routeTitles[key];
   PageDescription.Text = description ?? item.ToolTip?.ToString() ?? "";
-  BreadcrumbText.Text = routeHistory.Count == 0 ? "Ana sayfa" : $"Ana sayfa  /  {string.Join("  /  ", routeHistory.Reverse().Take(2).Select(x => routeTitles.TryGetValue(x, out var t) ? t : x))}";
-  BackButton.IsEnabled = routeHistory.Count > 0;
+  BreadcrumbText.Text = drillStack.TrailText();
+  BackButton.IsEnabled = drillStack.CanGoBack;
  }
  void Navigate(string key, bool push = true) => SelectRoute(key, push);
+ // #810: a dashboard card drills through with its context; a wrong-store link is refused before anything moves.
+ void DrillThrough(DrillRequest request)
+ {
+  var open = drillStack.Open(request.Target, request.AllowedStoreKeys);
+  if (!open.Allowed) { Log(open.Notice); return; }
+  SelectRoute(request.Target.Route, false);
+ }
+ void SwitchDashboardStore(string storeKey)
+ {
+  var current = drillStack.SwitchStore(storeKey);
+  if (currentRoute != current.Route) SelectRoute(current.Route, false); else { BreadcrumbText.Text = drillStack.TrailText(); BackButton.IsEnabled = drillStack.CanGoBack; }
+ }
+ // A crumb is only worth returning to if what it pointed at still exists.
+ bool DrillEntityAlive(DrillTarget target)
+ {
+  try
+  {
+   return target.EntityKind switch
+   {
+    "product" => new Catalog.CatalogStore(dataDirectory).FindProduct(target.EntityId) is not null,
+    "order" => target.EntityId.Split('|') is { Length: 3 } parts && new OrdersStore(dataDirectory).Find(parts[0], parts[1], parts[2]) is not null,
+    _ => true,
+   };
+  }
+  catch (Exception error) { Log("Geri dönüş kontrolü yapılamadı: " + error.Message); return true; }
+ }
  void FilterNavigationItems()
  {
   var query = NavigationSearchBox.Text.Trim();
@@ -115,9 +149,10 @@ public partial class MainWindow
  }
  void Back_Click(object sender, RoutedEventArgs e)
  {
-  if (routeHistory.Count == 0) return;
-  var previous = routeHistory.Pop();
-  SelectRoute(previous, false);
+  if (!drillStack.CanGoBack) return;
+  var back = drillStack.Back(DrillEntityAlive);
+  if (back.DroppedStaleEntity) Log(back.Notice);
+  SelectRoute(back.Target.Route, false);
  }
 }
 

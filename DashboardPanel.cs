@@ -9,7 +9,7 @@ namespace TrMarketplaceHubDesktop;
 
 public static class DashboardPanel
 {
-    public static FrameworkElement Create(string? directory, Action<string> navigate)
+    public static FrameworkElement Create(string? directory, Action<string> navigate, Action<DrillRequest>? drill = null, Action<string>? storeChanged = null)
     {
         var root = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(10) };
         var panel = new StackPanel();
@@ -49,6 +49,15 @@ public static class DashboardPanel
         DashboardSnapshot? lastSnapshot = null;
         var storeScope = "tüm mağazalar";
         var applyingStoreFilter = false;
+        // #810: a card drills through with the board's scope and the entity it was counting; the offered keys
+        // travel with the request so the window can refuse a link naming a store this session cannot use.
+        var storeKey = DashboardStoreFilter.AllStoresKey;
+        var offeredStoreKeys = new List<string>();
+        void Drill(string route, string title, string entityKind, string entityId, string entityLabel)
+        {
+            if (drill is null) { navigate(route); return; }
+            drill(new DrillRequest(new DrillTarget(route, title, storeKey, entityKind, entityId, entityLabel), offeredStoreKeys.ToList()));
+        }
         static string RouteFor(string key) => key switch { "products" or "out-of-stock" => "products", "orders" => "orders", "sync" => "sync", "xml" => "xml", _ => "connections" };
         // Navigation uses the short-lived revision-aware cache (#783); the explicit "Durumu yenile" click is
         // the user asking for an authoritative re-read and always bypasses it.
@@ -62,7 +71,10 @@ public static class DashboardPanel
                 lastSnapshot = snapshot;
                 // #807: every card carries its own data time, coverage and fresh/stale state.
                 foreach (var kpi in DashboardKpiFreshness.ForSnapshot(snapshot, DateTime.UtcNow))
-                    AddCard(cards, kpi.Title, kpi.Value, RouteFor(kpi.Key), navigate, kpi.Freshness);
+                {
+                    var current = kpi;
+                    AddCard(cards, kpi.Title, kpi.Value, RouteFor(kpi.Key), _ => Drill(RouteFor(current.Key), current.Title, "kpi", current.Key, current.Title), kpi.Freshness);
+                }
                 foreach (var quick in new[] { ("Kategoriler / markalar", "taxonomy"), ("Excel işlemleri", "excel"), ("Raporlar", "reports"), ("Mesaj / hata merkezi", "messages"), ("Ayarlar", "settings") }) AddCard(cards, quick.Item1, "Aç", quick.Item2, navigate);
                 applyingStoreFilter = true;
                 try
@@ -72,6 +84,8 @@ public static class DashboardPanel
                     storeFilter.ItemsSource = options;
                     storeFilter.SelectedItem = options.FirstOrDefault(o => o.Key == selection.Selected.Key) ?? options[0];
                     storeScope = selection.Selected.Scope;
+                    storeKey = selection.Selected.Key;
+                    offeredStoreKeys = options.Select(o => o.Key).Where(k => k != DashboardStoreFilter.AllStoresKey).ToList();
                     if (selection.FellBack)
                     {
                         // The saved store is gone or switched off: say so and stop pointing at it.
@@ -80,7 +94,7 @@ public static class DashboardPanel
                     }
                 }
                 finally { applyingStoreFilter = false; }
-                ShowAnomalies(anomalies, snapshot, navigate, storeScope);
+                ShowAnomalies(anomalies, snapshot, card => Drill(card.Route, card.Title, "anomaly", card.Key, card.Title), storeScope);
                 channels.ItemsSource = snapshot.Connections.Select(x => new { x.Channel, x.ShopId, x.Status, LastTestLabel = x.LastTestUtc?.ToLocalTime().ToString("g") ?? "—", x.LastError }).ToList();
                 notifications.Children.Clear(); foreach (var item in snapshot.Notifications) AddNotification(notifications, item, navigate);
                 trends.ItemsSource = snapshot.OrderTrend.Select(x => new { DateLabel = x.Date.ToString("dd.MM.yyyy"), x.Orders, StockLabel = x.CurrentStock < 0 ? "—" : x.CurrentStock.ToString("N0") }).ToList();
@@ -104,6 +118,8 @@ public static class DashboardPanel
         {
             if (applyingStoreFilter || storeFilter.SelectedItem is not DashboardStoreOption chosen) return;
             try { preferences.Set(DashboardStoreFilter.PreferenceKey, chosen.Key); } catch (Exception saveError) { System.Diagnostics.Debug.WriteLine(saveError.Message); }
+            // #810: the trail was dug through the previous store's data, so the window drops it before the reload.
+            storeChanged?.Invoke(chosen.Key);
             await RefreshAsync(force: false);
         };
         refresh.Click += async (_, _) => await RefreshAsync(force: true);
@@ -112,7 +128,7 @@ public static class DashboardPanel
     }
 
     // #808: the tracked anomaly states as cards carrying impact, age and the next action, ordered by severity.
-    static void ShowAnomalies(Panel parent, DashboardSnapshot snapshot, Action<string> navigate, string scope)
+    static void ShowAnomalies(Panel parent, DashboardSnapshot snapshot, Action<DashboardAnomalyCard> open, string scope)
     {
         parent.Children.Clear();
         var view = DashboardAnomalies.Project(new DashboardAnomalyInput
@@ -132,7 +148,8 @@ public static class DashboardPanel
             body.Children.Add(new TextBlock { Text = card.Impact, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
             body.Children.Add(new TextBlock { Text = $"{card.Age} · kapsam: {card.Scope}", TextWrapping = TextWrapping.Wrap, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(126, 146, 158)) });
             var go = new Button { Content = card.NextAction, Tag = card.Route, Margin = new Thickness(0, 4, 0, 0), Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left };
-            go.Click += (_, _) => navigate((string)go.Tag);
+            var drilled = card;
+            go.Click += (_, _) => open(drilled);
             body.Children.Add(go);
             var border = new Border { BorderBrush = new SolidColorBrush(critical ? Color.FromRgb(190, 52, 52) : Color.FromRgb(214, 226, 235)), BorderThickness = new Thickness(critical ? 2 : 1), Padding = new Thickness(8), Margin = new Thickness(2, 3, 2, 3), Child = body };
             AutomationProperties.SetName(border, $"{card.Title}, {card.Count}, {card.Age}");
