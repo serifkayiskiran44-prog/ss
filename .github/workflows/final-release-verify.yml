@@ -1,0 +1,67 @@
+name: Final Release Verify
+
+on:
+  push:
+    branches:
+      - codex/final-production-release
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-verify:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore TrMarketplaceHubDesktop.csproj
+
+      - name: Build Release
+        shell: pwsh
+        run: dotnet build TrMarketplaceHubDesktop.csproj -c Release --no-restore
+
+      - name: Test Release
+        shell: pwsh
+        run: dotnet test tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj -c Release
+
+      - name: Publish and package win-x64
+        shell: pwsh
+        run: ./installer/Build-Package.ps1 -OutputDirectory ./Windows-Current -PackagePath ./MarketplaceHub-win-x64.zip
+
+      - name: Verify package manifest hashes
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path './Windows-Current').Path
+          $manifest = Get-Content (Join-Path $root 'publish-manifest.json') -Raw | ConvertFrom-Json
+          if (-not $manifest.files -or $manifest.files.Count -eq 0) { throw 'publish-manifest has no files' }
+          foreach ($entry in $manifest.files) {
+            $path = Join-Path $root $entry.path
+            if (-not (Test-Path -LiteralPath $path)) { throw "Manifest file missing: $($entry.path)" }
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $entry.sha256) { throw "Hash mismatch: $($entry.path)" }
+          }
+          Write-Output "manifest verified: $($manifest.files.Count) files"
+
+      - name: Upload MarketplaceHub release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarketplaceHub-win-x64
+          path: |
+            MarketplaceHub-win-x64.zip
+            Windows-Current/publish-manifest.json
+            Windows-Current/release-manifest.json
+          if-no-files-found: error
+          retention-days: 14
