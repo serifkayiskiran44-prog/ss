@@ -9,6 +9,10 @@ public partial class MainWindow
  readonly Dictionary<string, UIElement> builtPages = new();
  readonly Dictionary<string, TabItem> routes = new();
  readonly Dictionary<string, string> routeTitles = new();
+ readonly Dictionary<string, string> routeDescriptions = new();
+ readonly Dictionary<string, string> navLabels = new();
+ // #812: collapsed-or-not and the open width are the operator's, persisted per data directory.
+ NavigationSidebarState sidebarState = NavigationSidebar.Default;
  // #810: the trail is a context stack, not a list of route keys -- a crumb remembers the store the board was
  // filtered to and the entity the card was counting, so Back restores the view instead of just the screen.
  readonly DrillThroughStack drillStack = new(new DrillTarget("dashboard", "Genel bakış"));
@@ -22,8 +26,9 @@ public partial class MainWindow
   void Group(string title) => NavigationList.Items.Add(new ListBoxItem { Content=title, IsEnabled=false, Focusable=false, FontSize=10, FontWeight=FontWeights.Bold, Foreground=new SolidColorBrush(Color.FromRgb(130,161,177)), Padding=new Thickness(14,12,4,2) });
   void Page(string key,string title,string description,UIElement content,string? label=null)
   {
-   var page=new TabItem{Tag=key,Header=title,Content=content};routes.Add(key,page);routeTitles[key]=title;ModuleTabs.Items.Add(page);
-   var item=new ListBoxItem{Tag=key,Content=label??title,ToolTip=description};NavigationList.Items.Add(item);
+   var page=new TabItem{Tag=key,Header=title,Content=content};routes.Add(key,page);routeTitles[key]=title;routeDescriptions[key]=description;ModuleTabs.Items.Add(page);
+   navLabels[key]=label??title;
+   var item=new ListBoxItem{Tag=key,Content=label??title,ToolTip=description};System.Windows.Automation.AutomationProperties.SetName(item,label??title);NavigationList.Items.Add(item);
    item.Selected+=(_,_)=>SelectRoute(key, !selectingRoute, title, description);
   }
   Group("KATALOG VE TEDARİK");
@@ -90,6 +95,47 @@ public partial class MainWindow
   var readiness=PreflightCenter.FromEtsy(new EtsyReadinessService().Build()); Log($"Yayın öncesi preflight: {readiness.Status}; engel={readiness.BlockingItems.Count}");
   var initial = uiPreferences.Get("last-route");
   Navigate(routes.ContainsKey(initial ?? "") ? initial! : "dashboard", false);
+  sidebarState = NavigationSidebar.Parse(uiPreferences.Get(NavigationSidebar.PreferenceKey));
+  ApplySidebarState();
+ }
+ // #812: one place turns the state into the shell -- column width, brand, search box, group headers and every
+ // entry's content/tooltip/accessible name -- so toggle, drag and restart all render the same way.
+ void ApplySidebarState()
+ {
+  var collapsed = sidebarState.Collapsed;
+  SidebarColumn.Width = new GridLength(NavigationSidebar.CurrentWidth(sidebarState));
+  SidebarColumn.MinWidth = collapsed ? NavigationSidebar.CollapsedWidth : NavigationSidebar.MinExpandedWidth;
+  SidebarColumn.MaxWidth = collapsed ? NavigationSidebar.CollapsedWidth : NavigationSidebar.MaxExpandedWidth;
+  SidebarSplitter.IsEnabled = !collapsed;
+  SidebarBrand.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+  SidebarFooter.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+  NavigationSearchBox.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+  SidebarToggle.Content = collapsed ? "»" : "«";
+  SidebarToggle.ToolTip = collapsed ? "Menüyü genişlet (Ctrl+B)" : "Menüyü daralt (Ctrl+B)";
+  foreach (var item in NavigationList.Items.OfType<ListBoxItem>())
+  {
+   if (item.Tag is not string key) { item.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible; continue; }
+   var shown = NavigationSidebar.Present(navLabels.TryGetValue(key, out var label) ? label : key, routeDescriptions.TryGetValue(key, out var description) ? description : "", collapsed);
+   item.Content = shown.Content;
+   item.ToolTip = shown.ToolTip;
+   item.HorizontalContentAlignment = collapsed ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+   System.Windows.Automation.AutomationProperties.SetName(item, shown.AccessibleName);
+  }
+  if (!collapsed) FilterNavigationItems();
+ }
+ void SaveSidebarState() { try { uiPreferences.Set(NavigationSidebar.PreferenceKey, NavigationSidebar.Serialize(sidebarState)); } catch (Exception error) { Log("Menü durumu kaydedilemedi: " + error.Message); } }
+ void ToggleSidebar()
+ {
+  sidebarState = NavigationSidebar.Toggle(sidebarState);
+  ApplySidebarState();
+  SaveSidebarState();
+ }
+ void SidebarToggle_Click(object sender, RoutedEventArgs e) => ToggleSidebar();
+ void SidebarSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+ {
+  sidebarState = NavigationSidebar.Resize(sidebarState, SidebarColumn.ActualWidth);
+  ApplySidebarState();
+  SaveSidebarState();
  }
  void SelectRoute(string key, bool push, string? title = null, string? description = null)
  {
@@ -143,8 +189,11 @@ public partial class MainWindow
   var query = NavigationSearchBox.Text.Trim();
   foreach (var item in NavigationList.Items.OfType<ListBoxItem>())
   {
-   if (item.Tag is null) { item.Visibility = Visibility.Visible; continue; }
-   item.Visibility = query.Length == 0 || item.Content?.ToString()?.Contains(query, StringComparison.CurrentCultureIgnoreCase) == true ? Visibility.Visible : Visibility.Collapsed;
+   // Group headers stay hidden while the sidebar is collapsed; entries match on their label, not on the
+   // glyph that icons-only mode prints in Content.
+   if (item.Tag is not string key) { item.Visibility = sidebarState.Collapsed ? Visibility.Collapsed : Visibility.Visible; continue; }
+   var label = navLabels.TryGetValue(key, out var l) ? l : item.Content?.ToString() ?? "";
+   item.Visibility = query.Length == 0 || label.Contains(query, StringComparison.CurrentCultureIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
   }
  }
  void Back_Click(object sender, RoutedEventArgs e)

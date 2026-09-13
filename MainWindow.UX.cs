@@ -14,6 +14,8 @@ public partial class MainWindow
         }
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.D1 or Key.NumPad1) { Navigate("dashboard"); e.Handled = true; return; }
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.D2 or Key.NumPad2) { Navigate("products"); e.Handled = true; return; }
+        // #812: the sidebar collapses from the keyboard too.
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.B) { ToggleSidebar(); e.Handled = true; return; }
         // #810: the drill-through trail is walkable from the keyboard, not only from the "‹ Geri" button.
         if (Keyboard.Modifiers == ModifierKeys.Alt && e.SystemKey == Key.Left && BackButton.IsEnabled) { Back_Click(BackButton, e); e.Handled = true; return; }
         if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None) { RefreshProducts(); e.Handled = true; }
