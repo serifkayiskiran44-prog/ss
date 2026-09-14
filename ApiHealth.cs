@@ -100,13 +100,32 @@ public static class ApiHealthClassifier
         foreach (var name in names) if (headers.TryGetValues(name, out var values) && int.TryParse(values.FirstOrDefault(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) && result >= 0) return result;
         return null;
     }
+    // #2561: a numeric reset is either a small "seconds from now" delta or an absolute Unix epoch second -- the two
+    // ranges never overlap in practice, so a value is read as whichever range it actually falls in, never both
+    // conditions guarded by the smaller range's own bound (the bug this replaces: the outer bound was the relative
+    // range's own ceiling, so a real epoch second -- always in the billions -- could never reach the epoch branch
+    // beneath it). Anything outside both ranges (including epoch milliseconds, which land far past the epoch
+    // ceiling) is ambiguous and is left null rather than guessed at or allowed to overflow.
+    internal const long RelativeSecondsMax = 31_536_000; // one year of relative seconds, generous for any real Retry-After-style delta
+    internal const long EpochSecondsMin = 1_000_000_000; // 2001-09-09 UTC -- below any real recent epoch second, safely above any real relative delta
+    internal const long EpochSecondsMax = 4_102_444_800; // 2100-01-01 UTC -- generous future bound; FromUnixTimeSeconds never overflows within it
+
     static DateTimeOffset? ParseResetHeader(HttpResponseHeaders headers, DateTimeOffset now, params string[] names)
     {
         foreach (var name in names) if (headers.TryGetValues(name, out var values))
         {
-            var raw = values.FirstOrDefault();
-            if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) && number >= 0 && number <= 31_536_000) return number > 1_000_000_000 ? DateTimeOffset.FromUnixTimeSeconds(number) : now.AddSeconds(number);
-            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)) return date.ToUniversalTime();
+            // #2561: a malformed value under this header name does not give up on the header -- every value offered
+            // under the same name is tried in order, and only the whole name is abandoned when none of them parse.
+            foreach (var raw in values)
+            {
+                if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+                {
+                    if (number >= 0 && number <= RelativeSecondsMax) return now.AddSeconds(number);
+                    if (number >= EpochSecondsMin && number <= EpochSecondsMax) return DateTimeOffset.FromUnixTimeSeconds(number);
+                    continue; // negative, or outside both ranges (e.g. epoch milliseconds): ambiguous, try the next value
+                }
+                if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)) return date.ToUniversalTime();
+            }
         }
         return null;
     }
