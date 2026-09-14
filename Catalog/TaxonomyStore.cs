@@ -7,7 +7,15 @@ namespace TrMarketplaceHubDesktop.Catalog;
 
 public enum TaxonomyKind { Category, Brand, Attribute }
 public sealed class TaxonomyEntry { public string Id { get; set; } = Guid.NewGuid().ToString("N"); public TaxonomyKind Kind { get; set; } public string Name { get; set; } = ""; public string Value { get; set; } = ""; public bool Active { get; set; } = true; public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow; }
-public sealed record TaxonomyMapping(TaxonomyKind Kind, string Marketplace, string ShopId, string ExternalKey, string LocalId);
+public sealed record TaxonomyMapping(TaxonomyKind Kind, string Marketplace, string ShopId, string ExternalKey, string LocalId, int Version = 0);
+/// Raised by Map(...,expectedVersion) when the mapping row for this exact key has
+/// moved on (edited/created/removed by another editor) since the caller's
+/// snapshot was taken - the write is rejected rather than silently overwriting
+/// whatever the other editor just wrote.
+public sealed class TaxonomyMappingConflictException : Exception
+{
+    public TaxonomyMappingConflictException(string message) : base(message) { }
+}
 public sealed record TaxonomyMappingView(TaxonomyKind Kind, string Marketplace, string ShopId, string ExternalKey, string LocalId, string LocalName, string Status, DateTime UpdatedUtc);
 public sealed record TaxonomySuggestion(string ExternalKey, string? LocalId, string? LocalName, string Status);
 public sealed record TaxonomyMappingHistoryRecord(DateTime ChangedUtc, TaxonomyKind Kind, string Marketplace, string ShopId, string ExternalKey, string LocalId, string Action);
@@ -29,7 +37,7 @@ public sealed class TaxonomyStore
         connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "catalog.db") }.ToString();
         using var c = Open(); using var cmd = c.CreateCommand();
         cmd.CommandText = "CREATE TABLE IF NOT EXISTS TaxonomyEntries(Id TEXT PRIMARY KEY, Kind INTEGER NOT NULL, Name TEXT NOT NULL, Value TEXT NOT NULL, Active INTEGER NOT NULL, UpdatedUtc TEXT NOT NULL DEFAULT '');CREATE UNIQUE INDEX IF NOT EXISTS UX_TaxonomyEntries_KindNameValue ON TaxonomyEntries(Kind,Name,Value);CREATE TABLE IF NOT EXISTS TaxonomyMappings(Kind INTEGER NOT NULL, Marketplace TEXT NOT NULL DEFAULT 'local', ShopId TEXT NOT NULL DEFAULT 'default', ExternalKey TEXT NOT NULL, LocalId TEXT NOT NULL, UpdatedUtc TEXT NOT NULL DEFAULT '', PRIMARY KEY(Kind,Marketplace,ShopId,ExternalKey));CREATE TABLE IF NOT EXISTS TaxonomyMappingHistory(Id TEXT PRIMARY KEY, Kind INTEGER NOT NULL, Marketplace TEXT NOT NULL, ShopId TEXT NOT NULL, ExternalKey TEXT NOT NULL, LocalId TEXT NOT NULL, Action TEXT NOT NULL, ChangedUtc TEXT NOT NULL)";
-        cmd.ExecuteNonQuery(); EnsureColumn(c, "TaxonomyEntries", "UpdatedUtc", "TEXT NOT NULL DEFAULT ''"); EnsureColumn(c, "TaxonomyMappings", "UpdatedUtc", "TEXT NOT NULL DEFAULT ''");
+        cmd.ExecuteNonQuery(); EnsureColumn(c, "TaxonomyEntries", "UpdatedUtc", "TEXT NOT NULL DEFAULT ''"); EnsureColumn(c, "TaxonomyMappings", "UpdatedUtc", "TEXT NOT NULL DEFAULT ''"); EnsureColumn(c, "TaxonomyMappings", "Version", "INTEGER NOT NULL DEFAULT 0");
     }
     static void EnsureColumn(SqliteConnection c, string table, string name, string definition) { using var check = c.CreateCommand(); check.CommandText = $"SELECT 1 FROM pragma_table_info('{table}') WHERE name=$name"; check.Parameters.AddWithValue("$name", name); if (check.ExecuteScalar() is not null) return; using var add = c.CreateCommand(); add.CommandText = $"ALTER TABLE {table} ADD COLUMN {name} {definition}"; add.ExecuteNonQuery(); }
     SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
@@ -123,11 +131,29 @@ public sealed class TaxonomyStore
     /// SqliteException, which is raised (and propagates) by the surrounding command,
     /// not by this pure string parse.
     static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
-    public void Map(TaxonomyKind kind, string externalKey, string localId, string marketplace = "local", string shopId = "default")
+    /// expectedVersion, when given, must equal the mapping row's current Version (0
+    /// for "no mapping yet") or the write is rejected with
+    /// TaxonomyMappingConflictException instead of silently overwriting whatever
+    /// another editor/import just wrote for this exact (Kind,Marketplace,ShopId,
+    /// ExternalKey) key - closing the last-writer-wins race between two concurrent
+    /// edits (or a first-create race, where both expect version 0). Omitting it
+    /// keeps the previous unconditional-upsert behavior for callers (e.g. MapBulk)
+    /// that do not carry a per-row snapshot to check against.
+    public void Map(TaxonomyKind kind, string externalKey, string localId, string marketplace = "local", string shopId = "default", int? expectedVersion = null)
     {
         ValidateExternalKey(externalKey); if (string.IsNullOrWhiteSpace(localId) || string.IsNullOrWhiteSpace(marketplace) || string.IsNullOrWhiteSpace(shopId)) throw new InvalidOperationException("Pazaryeri, mağaza, harici anahtar ve yerel eşleme zorunlu.");
         var now = DateTime.UtcNow; using var c = Open(); using var tx = c.BeginTransaction(); using var exists = c.CreateCommand(); exists.Transaction = tx; exists.CommandText = "SELECT Active FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; exists.Parameters.AddWithValue("$id", localId); exists.Parameters.AddWithValue("$kind", (int)kind); var active = exists.ExecuteScalar(); if (active is null) throw new InvalidOperationException("Eşlenecek yerel kayıt bulunamadı."); if (Convert.ToInt32(active) == 0) throw new InvalidOperationException("Pasif yerel kayıt eşlenemez.");
-        var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim(); using var cmd = c.CreateCommand(); cmd.Transaction = tx; cmd.CommandText = "INSERT INTO TaxonomyMappings(Kind,Marketplace,ShopId,ExternalKey,LocalId,UpdatedUtc) VALUES($kind,$market,$shop,$key,$id,$updated) ON CONFLICT(Kind,Marketplace,ShopId,ExternalKey) DO UPDATE SET LocalId=excluded.LocalId,UpdatedUtc=excluded.UpdatedUtc"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", market); cmd.Parameters.AddWithValue("$shop", shop); cmd.Parameters.AddWithValue("$key", key); cmd.Parameters.AddWithValue("$id", localId); cmd.Parameters.AddWithValue("$updated", now.ToString("O", CultureInfo.InvariantCulture)); cmd.ExecuteNonQuery(); using var history = c.CreateCommand(); history.Transaction = tx; history.CommandText = "INSERT INTO TaxonomyMappingHistory VALUES($id,$kind,$market,$shop,$key,$local,$action,$at)"; history.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N")); history.Parameters.AddWithValue("$kind", (int)kind); history.Parameters.AddWithValue("$market", market); history.Parameters.AddWithValue("$shop", shop); history.Parameters.AddWithValue("$key", key); history.Parameters.AddWithValue("$local", localId); history.Parameters.AddWithValue("$action", "UPSERT"); history.Parameters.AddWithValue("$at", now.ToString("O", CultureInfo.InvariantCulture)); history.ExecuteNonQuery(); tx.Commit();
+        var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim();
+        int currentVersion;
+        using (var find = c.CreateCommand())
+        {
+            find.Transaction = tx; find.CommandText = "SELECT Version FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key";
+            find.Parameters.AddWithValue("$kind", (int)kind); find.Parameters.AddWithValue("$market", market); find.Parameters.AddWithValue("$shop", shop); find.Parameters.AddWithValue("$key", key);
+            var stored = find.ExecuteScalar(); currentVersion = stored is null ? 0 : Convert.ToInt32(stored);
+        }
+        if (expectedVersion.HasValue && currentVersion != expectedVersion.Value) throw new TaxonomyMappingConflictException($"Bu eşleme ({market}/{shop}/{key}) başka bir işlemde değişti; listeyi yenileyip tekrar deneyin.");
+        var nextVersion = currentVersion + 1;
+        using var cmd = c.CreateCommand(); cmd.Transaction = tx; cmd.CommandText = "INSERT INTO TaxonomyMappings(Kind,Marketplace,ShopId,ExternalKey,LocalId,UpdatedUtc,Version) VALUES($kind,$market,$shop,$key,$id,$updated,$version) ON CONFLICT(Kind,Marketplace,ShopId,ExternalKey) DO UPDATE SET LocalId=excluded.LocalId,UpdatedUtc=excluded.UpdatedUtc,Version=excluded.Version"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", market); cmd.Parameters.AddWithValue("$shop", shop); cmd.Parameters.AddWithValue("$key", key); cmd.Parameters.AddWithValue("$id", localId); cmd.Parameters.AddWithValue("$updated", now.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$version", nextVersion); cmd.ExecuteNonQuery(); using var history = c.CreateCommand(); history.Transaction = tx; history.CommandText = "INSERT INTO TaxonomyMappingHistory VALUES($id,$kind,$market,$shop,$key,$local,$action,$at)"; history.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N")); history.Parameters.AddWithValue("$kind", (int)kind); history.Parameters.AddWithValue("$market", market); history.Parameters.AddWithValue("$shop", shop); history.Parameters.AddWithValue("$key", key); history.Parameters.AddWithValue("$local", localId); history.Parameters.AddWithValue("$action", "UPSERT"); history.Parameters.AddWithValue("$at", now.ToString("O", CultureInfo.InvariantCulture)); history.ExecuteNonQuery(); tx.Commit();
     }
     static void ValidateExternalKey(string value) { if (string.IsNullOrWhiteSpace(value) || value.Trim().Length > 300 || value.Any(char.IsControl)) throw new InvalidOperationException("Harici eşleme anahtarı boş, çok uzun veya kontrol karakteri içeriyor."); }
     public void MapBulk(TaxonomyKind kind, string marketplace, string shopId, IReadOnlyList<TaxonomySuggestion> suggestions, bool approved) { if (!approved) throw new InvalidOperationException("Toplu kategori/marka/özellik eşlemesi için önizleme onayı gerekli."); foreach (var suggestion in suggestions.Where(x => x.LocalId is not null)) Map(kind, suggestion.ExternalKey, suggestion.LocalId!, marketplace, shopId); }
@@ -162,7 +188,17 @@ public sealed class TaxonomyStore
         var name = r.GetString(0); var active = r.GetInt32(1) != 0;
         return active ? new(TaxonomyResolution.Ready, localId, name) : new(TaxonomyResolution.TargetInactive, localId, name);
     }
-    public IReadOnlyList<TaxonomyMapping> Mappings(TaxonomyKind kind) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Marketplace,ShopId,ExternalKey,LocalId FROM TaxonomyMappings WHERE Kind=$kind ORDER BY Marketplace,ShopId,ExternalKey"; cmd.Parameters.AddWithValue("$kind", (int)kind); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMapping>(); while (r.Read()) result.Add(new(kind, r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3))); return result; }
+    public IReadOnlyList<TaxonomyMapping> Mappings(TaxonomyKind kind) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Marketplace,ShopId,ExternalKey,LocalId,Version FROM TaxonomyMappings WHERE Kind=$kind ORDER BY Marketplace,ShopId,ExternalKey"; cmd.Parameters.AddWithValue("$kind", (int)kind); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMapping>(); while (r.Read()) result.Add(new(kind, r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4))); return result; }
+    /// The current Version for a mapping key (0 if none exists yet) - a caller
+    /// snapshots this immediately before editing and passes it back to
+    /// Map(...,expectedVersion) so a stale edit is rejected instead of silently
+    /// overwriting a concurrent change.
+    public int GetMappingVersion(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default")
+    {
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Version FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key";
+        cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$key", externalKey.Trim());
+        var stored = cmd.ExecuteScalar(); return stored is null ? 0 : Convert.ToInt32(stored);
+    }
     public IReadOnlyList<TaxonomyMappingView> MappingViews(TaxonomyKind kind, string marketplace, string shopId, string? query = null)
     {
         var entries = List(kind).ToDictionary(x => x.Id); var mappings = Mappings(kind).Where(x => x.Marketplace == marketplace.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim()).ToDictionary(x => x.ExternalKey, StringComparer.OrdinalIgnoreCase); var (updated, corruptTimestamps) = MappingUpdated(kind, marketplace, shopId); var rows = new List<TaxonomyMappingView>();

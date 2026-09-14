@@ -62,7 +62,18 @@ public partial class MainWindow
             if (MessageBox.Show(prompt, "Kaydı sil", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             taxonomy.Delete((TaxonomyKind)kind.SelectedItem!, selected.Id); ClearEditor(); Refresh(); status.Text = "Kayıt silindi.";
         });
-        var map = Button("Harici anahtarı eşle", () => { if (localGrid.SelectedItem is not TaxonomyEntry entry) throw new InvalidOperationException("Önce yerel listeden kayıt seçin."); taxonomy.Map((TaxonomyKind)kind.SelectedItem!, external.Text, entry.Id, marketplace.Text, shop.Text); external.Clear(); Refresh(); });
+        var map = Button("Harici anahtarı eşle", () =>
+        {
+            if (localGrid.SelectedItem is not TaxonomyEntry entry) throw new InvalidOperationException("Önce yerel listeden kayıt seçin.");
+            var selectedKind = (TaxonomyKind)kind.SelectedItem!;
+            // Snapshot the mapping's current version immediately before writing, so a
+            // concurrent edit to this exact key (by another editor/import) between
+            // this screen loading and this click is detected instead of silently
+            // overwritten.
+            var expectedVersion = taxonomy.GetMappingVersion(selectedKind, external.Text, marketplace.Text, shop.Text);
+            try { taxonomy.Map(selectedKind, external.Text, entry.Id, marketplace.Text, shop.Text, expectedVersion); external.Clear(); Refresh(); status.Text = "Eşleme kaydedildi."; }
+            catch (TaxonomyMappingConflictException ex) { Refresh(); status.Text = ex.Message; }
+        });
         var unmap = Button("Eşlemeyi kaldır", () => { if (mappingGrid.SelectedItem is not TaxonomyMappingView view || string.IsNullOrWhiteSpace(view.ExternalKey)) throw new InvalidOperationException("Önce kaldırılacak eşlemeyi listeden seçin."); taxonomy.Unmap((TaxonomyKind)kind.SelectedItem!, view.ExternalKey, view.Marketplace, view.ShopId); Refresh(); status.Text = "Eşleme kaldırıldı."; });
         var suggest = Button("İsim önerisi oluştur", () => { pendingSuggestions = taxonomy.SuggestBulk((TaxonomyKind)kind.SelectedItem!, externalBatch.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)); mappingGrid.ItemsSource = pendingSuggestions; var suggested = pendingSuggestions.Count(x => x.Status == "SUGGESTED"); var unmatched = pendingSuggestions.Count(x => x.Status == "UNMATCHED"); status.Text = $"{suggested} öneri · {unmatched} eşleşmeyen; henüz yazılmadı."; });
         var bulk = Button("Toplu eşlemeyi önizle / onayla", () => { if (pendingSuggestions.Count == 0) throw new InvalidOperationException("Önce harici anahtar listesinden öneri oluşturun."); var text = string.Join("\n", pendingSuggestions.Select(x => $"{x.ExternalKey} → {x.LocalName ?? "eşleşme yok"}")); if (MessageBox.Show(text + "\n\nSadece önerilen eşleşmeler yerel veritabanına yazılsın mı?", "Eşleme önizlemesi", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return; taxonomy.MapBulk((TaxonomyKind)kind.SelectedItem!, marketplace.Text, shop.Text, pendingSuggestions, true); Refresh(); status.Text += " · Toplu eşleme uygulandı."; });
