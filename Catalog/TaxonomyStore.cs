@@ -41,7 +41,12 @@ public sealed class TaxonomyStore
     }
     static void EnsureColumn(SqliteConnection c, string table, string name, string definition) { using var check = c.CreateCommand(); check.CommandText = $"SELECT 1 FROM pragma_table_info('{table}') WHERE name=$name"; check.Parameters.AddWithValue("$name", name); if (check.ExecuteScalar() is not null) return; using var add = c.CreateCommand(); add.CommandText = $"ALTER TABLE {table} ADD COLUMN {name} {definition}"; add.ExecuteNonQuery(); }
     SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
-    static void Validate(TaxonomyEntry entry) { entry.Name = entry.Name.Trim(); entry.Value = entry.Value.Trim(); if (entry.Name.Length == 0 || entry.Name.Length > 200) throw new InvalidOperationException("Kategori, marka veya özellik adı 1-200 karakter olmalı."); if (entry.Value.Length > 200) throw new InvalidOperationException("Özellik değeri en fazla 200 karakter olabilir."); }
+    /// The only defensible boundary against a future/corrupt persisted Kind value:
+    /// TaxonomyKind has no [Flags] and no reserved gaps, so any value outside the
+    /// three declared members is definitionally unsupported, not just "unexpected".
+    static bool IsValidKind(TaxonomyKind kind) => kind is TaxonomyKind.Category or TaxonomyKind.Brand or TaxonomyKind.Attribute;
+    static void ValidateKind(TaxonomyKind kind) { if (!IsValidKind(kind)) throw new ArgumentException($"Tanımsız taxonomy türü: {(int)kind}."); }
+    static void Validate(TaxonomyEntry entry) { ValidateKind(entry.Kind); entry.Name = entry.Name.Trim(); entry.Value = entry.Value.Trim(); if (entry.Name.Length == 0 || entry.Name.Length > 200) throw new InvalidOperationException("Kategori, marka veya özellik adı 1-200 karakter olmalı."); if (entry.Value.Length > 200) throw new InvalidOperationException("Özellik değeri en fazla 200 karakter olabilir."); }
     public TaxonomyEntry Save(TaxonomyEntry entry)
     {
         Validate(entry); entry.UpdatedUtc = DateTime.UtcNow; using var c = Open();
@@ -65,7 +70,7 @@ public sealed class TaxonomyStore
     /// current name) need the name itself to stay in sync with actual product data.
     public TaxonomyUsage Usage(TaxonomyKind kind, TaxonomyEntry entry)
     {
-        using var c = Open();
+        ValidateKind(kind); using var c = Open();
         return new(CountProductUsage(c, null, kind, entry.Name), CountMappingUsage(c, null, kind, entry.Id));
     }
     static int CountProductUsage(SqliteConnection c, SqliteTransaction? tx, TaxonomyKind kind, string name)
@@ -90,7 +95,7 @@ public sealed class TaxonomyStore
     /// serializes the concurrent writer against this transaction rather than losing it.
     public void Delete(TaxonomyKind kind, string id)
     {
-        using var c = Open(); using var tx = c.BeginTransaction();
+        ValidateKind(kind); using var c = Open(); using var tx = c.BeginTransaction();
         using var find = c.CreateCommand(); find.Transaction = tx; find.CommandText = "SELECT Name FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; find.Parameters.AddWithValue("$id", id); find.Parameters.AddWithValue("$kind", (int)kind);
         var name = find.ExecuteScalar() as string ?? throw new InvalidOperationException("Silinecek kayıt bulunamadı.");
         var products = CountProductUsage(c, tx, kind, name);
@@ -108,6 +113,7 @@ public sealed class TaxonomyStore
     /// naturally survives a restart.
     public IReadOnlyList<TaxonomyEntry> List(TaxonomyKind kind)
     {
+        ValidateKind(kind);
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,Name,Value,Active,UpdatedUtc FROM TaxonomyEntries WHERE Kind=$kind ORDER BY Name,Value"; cmd.Parameters.AddWithValue("$kind", (int)kind);
         using var r = cmd.ExecuteReader(); var result = new List<TaxonomyEntry>();
         while (r.Read()) if (TryReadEntry(r, out var entry, out _)) result.Add(entry!);
@@ -115,14 +121,33 @@ public sealed class TaxonomyStore
     }
     public IReadOnlyList<CorruptTaxonomyEntry> CorruptEntries(TaxonomyKind kind)
     {
+        ValidateKind(kind);
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,Name,Value,Active,UpdatedUtc FROM TaxonomyEntries WHERE Kind=$kind"; cmd.Parameters.AddWithValue("$kind", (int)kind);
         using var r = cmd.ExecuteReader(); var result = new List<CorruptTaxonomyEntry>();
         while (r.Read()) if (!TryReadEntry(r, out _, out var corrupt)) result.Add(corrupt!);
         return result;
     }
+    /// Unlike CorruptEntries(kind), this scans every row regardless of Kind - the
+    /// only way to surface a row whose persisted Kind is outside the three declared
+    /// enum members, since every other read path filters `WHERE Kind=$kind` on an
+    /// already-validated (therefore always-legitimate) value and would never select
+    /// such a row in the first place. Never auto-deletes or remaps it.
+    public IReadOnlyList<CorruptTaxonomyEntry> CorruptKindEntries()
+    {
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,Name,Value,Active,UpdatedUtc FROM TaxonomyEntries";
+        using var r = cmd.ExecuteReader(); var result = new List<CorruptTaxonomyEntry>();
+        while (r.Read())
+        {
+            var rawKind = r.GetInt32(1);
+            if (!IsValidKind((TaxonomyKind)rawKind)) result.Add(new(r.GetString(0), (TaxonomyKind)rawKind, $"Unknown Kind value: {rawKind}", DateTime.UtcNow));
+        }
+        return result;
+    }
     static bool TryReadEntry(SqliteDataReader r, out TaxonomyEntry? entry, out CorruptTaxonomyEntry? corrupt)
     {
-        entry = null; corrupt = null; var id = r.GetString(0); var kind = (TaxonomyKind)r.GetInt32(1);
+        entry = null; corrupt = null; var id = r.GetString(0); var rawKind = r.GetInt32(1);
+        if (!IsValidKind((TaxonomyKind)rawKind)) { corrupt = new(id, (TaxonomyKind)rawKind, $"Unknown Kind value: {rawKind}", DateTime.UtcNow); return false; }
+        var kind = (TaxonomyKind)rawKind;
         if (!TryParseUtc(r.GetString(5), out var updated)) { corrupt = new(id, kind, "Malformed UpdatedUtc timestamp", DateTime.UtcNow); return false; }
         entry = new() { Id = id, Kind = kind, Name = r.GetString(2), Value = r.GetString(3), Active = r.GetInt32(4) != 0, UpdatedUtc = updated };
         return true;
@@ -141,7 +166,7 @@ public sealed class TaxonomyStore
     /// that do not carry a per-row snapshot to check against.
     public void Map(TaxonomyKind kind, string externalKey, string localId, string marketplace = "local", string shopId = "default", int? expectedVersion = null)
     {
-        ValidateExternalKey(externalKey); if (string.IsNullOrWhiteSpace(localId) || string.IsNullOrWhiteSpace(marketplace) || string.IsNullOrWhiteSpace(shopId)) throw new InvalidOperationException("Pazaryeri, mağaza, harici anahtar ve yerel eşleme zorunlu.");
+        ValidateKind(kind); ValidateExternalKey(externalKey); if (string.IsNullOrWhiteSpace(localId) || string.IsNullOrWhiteSpace(marketplace) || string.IsNullOrWhiteSpace(shopId)) throw new InvalidOperationException("Pazaryeri, mağaza, harici anahtar ve yerel eşleme zorunlu.");
         var now = DateTime.UtcNow; using var c = Open(); using var tx = c.BeginTransaction(); using var exists = c.CreateCommand(); exists.Transaction = tx; exists.CommandText = "SELECT Active FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; exists.Parameters.AddWithValue("$id", localId); exists.Parameters.AddWithValue("$kind", (int)kind); var active = exists.ExecuteScalar(); if (active is null) throw new InvalidOperationException("Eşlenecek yerel kayıt bulunamadı."); if (Convert.ToInt32(active) == 0) throw new InvalidOperationException("Pasif yerel kayıt eşlenemez.");
         var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim();
         int currentVersion;
@@ -157,12 +182,12 @@ public sealed class TaxonomyStore
     }
     static void ValidateExternalKey(string value) { if (string.IsNullOrWhiteSpace(value) || value.Trim().Length > 300 || value.Any(char.IsControl)) throw new InvalidOperationException("Harici eşleme anahtarı boş, çok uzun veya kontrol karakteri içeriyor."); }
     public void MapBulk(TaxonomyKind kind, string marketplace, string shopId, IReadOnlyList<TaxonomySuggestion> suggestions, bool approved) { if (!approved) throw new InvalidOperationException("Toplu kategori/marka/özellik eşlemesi için önizleme onayı gerekli."); foreach (var suggestion in suggestions.Where(x => x.LocalId is not null)) Map(kind, suggestion.ExternalKey, suggestion.LocalId!, marketplace, shopId); }
-    public string? Resolve(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default") { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT LocalId FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$key", externalKey.Trim()); return cmd.ExecuteScalar() as string; }
+    public string? Resolve(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default") { ValidateKind(kind); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT LocalId FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$key", externalKey.Trim()); return cmd.ExecuteScalar() as string; }
     /// Explicit remove, distinct from Map's create/update upsert: the CRUD lifecycle
     /// was missing a way to delete a channel/shop mapping entirely.
     public void Unmap(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default")
     {
-        var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim();
+        ValidateKind(kind); var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim();
         using var c = Open(); using var tx = c.BeginTransaction();
         using var find = c.CreateCommand(); find.Transaction = tx; find.CommandText = "SELECT LocalId FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; find.Parameters.AddWithValue("$kind", (int)kind); find.Parameters.AddWithValue("$market", market); find.Parameters.AddWithValue("$shop", shop); find.Parameters.AddWithValue("$key", key);
         var localId = find.ExecuteScalar() as string ?? throw new InvalidOperationException("Kaldırılacak eşleme bulunamadı.");
@@ -188,20 +213,20 @@ public sealed class TaxonomyStore
         var name = r.GetString(0); var active = r.GetInt32(1) != 0;
         return active ? new(TaxonomyResolution.Ready, localId, name) : new(TaxonomyResolution.TargetInactive, localId, name);
     }
-    public IReadOnlyList<TaxonomyMapping> Mappings(TaxonomyKind kind) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Marketplace,ShopId,ExternalKey,LocalId,Version FROM TaxonomyMappings WHERE Kind=$kind ORDER BY Marketplace,ShopId,ExternalKey"; cmd.Parameters.AddWithValue("$kind", (int)kind); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMapping>(); while (r.Read()) result.Add(new(kind, r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4))); return result; }
+    public IReadOnlyList<TaxonomyMapping> Mappings(TaxonomyKind kind) { ValidateKind(kind); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Marketplace,ShopId,ExternalKey,LocalId,Version FROM TaxonomyMappings WHERE Kind=$kind ORDER BY Marketplace,ShopId,ExternalKey"; cmd.Parameters.AddWithValue("$kind", (int)kind); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMapping>(); while (r.Read()) result.Add(new(kind, r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4))); return result; }
     /// The current Version for a mapping key (0 if none exists yet) - a caller
     /// snapshots this immediately before editing and passes it back to
     /// Map(...,expectedVersion) so a stale edit is rejected instead of silently
     /// overwriting a concurrent change.
     public int GetMappingVersion(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default")
     {
-        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Version FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key";
+        ValidateKind(kind); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Version FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key";
         cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$key", externalKey.Trim());
         var stored = cmd.ExecuteScalar(); return stored is null ? 0 : Convert.ToInt32(stored);
     }
     public IReadOnlyList<TaxonomyMappingView> MappingViews(TaxonomyKind kind, string marketplace, string shopId, string? query = null)
     {
-        var entries = List(kind).ToDictionary(x => x.Id); var mappings = Mappings(kind).Where(x => x.Marketplace == marketplace.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim()).ToDictionary(x => x.ExternalKey, StringComparer.OrdinalIgnoreCase); var (updated, corruptTimestamps) = MappingUpdated(kind, marketplace, shopId); var rows = new List<TaxonomyMappingView>();
+        ValidateKind(kind); var entries = List(kind).ToDictionary(x => x.Id); var mappings = Mappings(kind).Where(x => x.Marketplace == marketplace.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim()).ToDictionary(x => x.ExternalKey, StringComparer.OrdinalIgnoreCase); var (updated, corruptTimestamps) = MappingUpdated(kind, marketplace, shopId); var rows = new List<TaxonomyMappingView>();
         foreach (var entry in entries.Values)
         {
             var mapping = mappings.Values.FirstOrDefault(x => x.LocalId == entry.Id); var external = mapping?.ExternalKey ?? "";
@@ -226,7 +251,7 @@ public sealed class TaxonomyStore
     /// the bounded diagnostics covering exactly those excluded rows.
     public IReadOnlyList<TaxonomyMappingHistoryRecord> History(TaxonomyKind kind, string marketplace, string shopId, int limit = 100)
     {
-        if (limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
+        ValidateKind(kind); if (limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT ChangedUtc,Kind,Marketplace,ShopId,ExternalKey,LocalId,Action FROM TaxonomyMappingHistory WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop ORDER BY ChangedUtc DESC LIMIT $limit"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$limit", limit);
         using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMappingHistoryRecord>();
         while (r.Read()) if (TryParseUtc(r.GetString(0), out var changed)) result.Add(new(changed, (TaxonomyKind)r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6)));
@@ -234,7 +259,7 @@ public sealed class TaxonomyStore
     }
     public IReadOnlyList<CorruptTaxonomyHistoryRow> CorruptHistory(TaxonomyKind kind, string marketplace, string shopId)
     {
-        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,ChangedUtc FROM TaxonomyMappingHistory WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim());
+        ValidateKind(kind); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,ChangedUtc FROM TaxonomyMappingHistory WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim());
         using var r = cmd.ExecuteReader(); var result = new List<CorruptTaxonomyHistoryRow>();
         while (r.Read()) if (!TryParseUtc(r.GetString(2), out _)) result.Add(new(r.GetString(0), (TaxonomyKind)r.GetInt32(1), "Malformed ChangedUtc timestamp", DateTime.UtcNow));
         return result;
