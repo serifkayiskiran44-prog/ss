@@ -31,6 +31,21 @@ public sealed class AutomationJob
 
 public sealed record AutomationTemplate(string Key, string Name, AutomationKind Kind, int IntervalMinutes, string ScheduleMode = "Interval");
 
+/// Bounded diagnostics only (id, a short reason, detection time) - never LastError,
+/// Channel, Shop, or TemplateKey - for an AutomationJobs row with an unparsable
+/// persisted timestamp. See CatalogStore's CorruptProductRow for the same pattern.
+public sealed record CorruptAutomationJob(string Id, string Reason, DateTime DetectedUtc);
+
+/// Raised by Get(id) when the row exists but has a corrupt timestamp - kept
+/// distinct from the "not found" InvalidOperationException so a caller (and a
+/// human reading a stack trace) never confuses "no such job" with "job exists but
+/// its schedule state is unreadable and needs explicit repair".
+public sealed class AutomationJobCorruptException : Exception
+{
+    public string JobId { get; }
+    public AutomationJobCorruptException(string jobId, string reason) : base($"Otomasyon işi bozuk (REVIEW_REQUIRED): {reason}") => JobId = jobId;
+}
+
 public static class AutomationTemplateCatalog
 {
     public static IReadOnlyList<AutomationTemplate> All { get; } = Array.AsReadOnly(new[]
@@ -123,20 +138,42 @@ public sealed class AutomationStore
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "INSERT INTO AutomationJobs(Id,Kind,IntervalMinutes,NextRunUtc,LastRunUtc,LockedUntilUtc,LastError,Channel,Shop,Enabled,ScheduleMode,RunAtLocal,DaysOfWeek,WindowStartLocal,WindowEndLocal,RetryLimit,RetryBackoffMinutes,FailureCount,TemplateKey) VALUES($id,$kind,$interval,$next,$last,$lock,$error,$channel,$shop,$enabled,$schedule,$time,$days,$windowStart,$windowEnd,$retryLimit,$retryBackoff,$failures,$template) ON CONFLICT(Id) DO UPDATE SET Kind=excluded.Kind,IntervalMinutes=excluded.IntervalMinutes,NextRunUtc=excluded.NextRunUtc,LastRunUtc=excluded.LastRunUtc,LockedUntilUtc=excluded.LockedUntilUtc,LastError=excluded.LastError,Channel=excluded.Channel,Shop=excluded.Shop,Enabled=excluded.Enabled,ScheduleMode=excluded.ScheduleMode,RunAtLocal=excluded.RunAtLocal,DaysOfWeek=excluded.DaysOfWeek,WindowStartLocal=excluded.WindowStartLocal,WindowEndLocal=excluded.WindowEndLocal,RetryLimit=excluded.RetryLimit,RetryBackoffMinutes=excluded.RetryBackoffMinutes,FailureCount=excluded.FailureCount,TemplateKey=excluded.TemplateKey";
         cmd.Parameters.AddWithValue("$id", job.Id); cmd.Parameters.AddWithValue("$kind", (int)job.Kind); cmd.Parameters.AddWithValue("$interval", job.IntervalMinutes); cmd.Parameters.AddWithValue("$next", job.NextRunUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$last", job.LastRunUtc.HasValue ? job.LastRunUtc.Value.ToString("O", CultureInfo.InvariantCulture) : DBNull.Value); cmd.Parameters.AddWithValue("$lock", job.LockedUntilUtc.HasValue ? job.LockedUntilUtc.Value.ToString("O", CultureInfo.InvariantCulture) : DBNull.Value); cmd.Parameters.AddWithValue("$error", MarketplaceConnectionStore.Redact(job.LastError)); cmd.Parameters.AddWithValue("$channel", job.Channel.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", job.Shop.Trim()); cmd.Parameters.AddWithValue("$enabled", job.Enabled ? 1 : 0); cmd.Parameters.AddWithValue("$schedule", job.ScheduleMode); cmd.Parameters.AddWithValue("$time", job.RunAtLocal); cmd.Parameters.AddWithValue("$days", job.DaysOfWeek); cmd.Parameters.AddWithValue("$windowStart", job.WindowStartLocal); cmd.Parameters.AddWithValue("$windowEnd", job.WindowEndLocal); cmd.Parameters.AddWithValue("$retryLimit", job.RetryLimit); cmd.Parameters.AddWithValue("$retryBackoff", job.RetryBackoffMinutes); cmd.Parameters.AddWithValue("$failures", job.FailureCount); cmd.Parameters.AddWithValue("$template", job.TemplateKey); cmd.ExecuteNonQuery(); return job;
     }
-    public AutomationJob Get(string id) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = Select + " WHERE Id=$id"; cmd.Parameters.AddWithValue("$id", id); using var r = cmd.ExecuteReader(); if (!r.Read()) throw new InvalidOperationException("Otomasyon işi bulunamadı."); return Read(r); }
-    public IReadOnlyList<AutomationJob> List() { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = Select + " ORDER BY NextRunUtc"; using var r = cmd.ExecuteReader(); var result = new List<AutomationJob>(); while (r.Read()) result.Add(Read(r)); return result; }
+    public AutomationJob Get(string id)
+    {
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = Select + " WHERE Id=$id"; cmd.Parameters.AddWithValue("$id", id);
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) throw new InvalidOperationException("Otomasyon işi bulunamadı.");
+        if (!TryRead(r, out var job, out var corrupt)) throw new AutomationJobCorruptException(id, corrupt!.Reason);
+        return job!;
+    }
+    /// A malformed NextRunUtc/LastRunUtc/LockedUntilUtc must never crash the whole
+    /// read - the row is excluded from the healthy result and reported only via
+    /// CorruptJobs(); detection re-runs from the row's own stored text every call,
+    /// so it stays stable across a restart without a separate tracking table.
+    public IReadOnlyList<AutomationJob> List() { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = Select + " ORDER BY NextRunUtc"; using var r = cmd.ExecuteReader(); var result = new List<AutomationJob>(); while (r.Read()) if (TryRead(r, out var job, out _)) result.Add(job!); return result; }
+    /// Bounded diagnostics for every row with an unparsable timestamp - never the
+    /// raw LastError/Channel/Shop/TemplateKey.
+    public IReadOnlyList<CorruptAutomationJob> CorruptJobs() { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = Select; using var r = cmd.ExecuteReader(); var result = new List<CorruptAutomationJob>(); while (r.Read()) if (!TryRead(r, out _, out var corrupt)) result.Add(corrupt!); return result; }
+    /// A corrupt job is fail-closed here, not fail-open: it is silently excluded
+    /// from the due set rather than running with a fabricated/default schedule.
     public IReadOnlyList<AutomationJob> Due(DateTime nowUtc)
     {
         nowUtc = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
         using var c = Open(); using var cmd = c.CreateCommand();
         cmd.CommandText = Select + " WHERE Enabled=1 AND NextRunUtc<=$now AND (LockedUntilUtc IS NULL OR LockedUntilUtc<$now) ORDER BY NextRunUtc";
         cmd.Parameters.AddWithValue("$now", nowUtc.ToString("O", CultureInfo.InvariantCulture));
-        using var r = cmd.ExecuteReader(); var result = new List<AutomationJob>(); while (r.Read()) result.Add(Read(r)); return result;
+        using var r = cmd.ExecuteReader(); var result = new List<AutomationJob>(); while (r.Read()) if (TryRead(r, out var job, out _)) result.Add(job!); return result;
     }
-    public bool TryClaim(string id, DateTime nowUtc, TimeSpan lease) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET LockedUntilUtc=$lock WHERE Id=$id AND Enabled=1 AND NextRunUtc<=$now AND (LockedUntilUtc IS NULL OR LockedUntilUtc<$now)"; cmd.Parameters.AddWithValue("$lock", (nowUtc + lease).ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$id", id); cmd.Parameters.AddWithValue("$now", nowUtc.ToString("O", CultureInfo.InvariantCulture)); return cmd.ExecuteNonQuery() == 1; }
+    /// Re-checked before the claim UPDATE (not just relied on via Due()) so a
+    /// caller that claims by id directly - bypassing Due()'s own filtering - can
+    /// never lock/lease a row whose schedule state SQLite's plain TEXT comparison
+    /// might otherwise happen to match despite it being unparsable/corrupt.
+    bool RowIsHealthy(string id) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = Select + " WHERE Id=$id"; cmd.Parameters.AddWithValue("$id", id); using var r = cmd.ExecuteReader(); return r.Read() && TryRead(r, out _, out _); }
+    public bool TryClaim(string id, DateTime nowUtc, TimeSpan lease) { if (!RowIsHealthy(id)) return false; using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET LockedUntilUtc=$lock WHERE Id=$id AND Enabled=1 AND NextRunUtc<=$now AND (LockedUntilUtc IS NULL OR LockedUntilUtc<$now)"; cmd.Parameters.AddWithValue("$lock", (nowUtc + lease).ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$id", id); cmd.Parameters.AddWithValue("$now", nowUtc.ToString("O", CultureInfo.InvariantCulture)); return cmd.ExecuteNonQuery() == 1; }
     public bool TryClaimLease(string id, DateTime nowUtc, TimeSpan lease, out string leaseToken)
     {
         if (lease <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(lease));
+        leaseToken = ""; if (!RowIsHealthy(id)) return false;
         leaseToken = Guid.NewGuid().ToString("N"); using var c = Open(); EnsureColumn(c, "LeaseToken", "TEXT NULL"); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET LockedUntilUtc=$lock,LeaseToken=$token WHERE Id=$id AND Enabled=1 AND NextRunUtc<=$now AND (LockedUntilUtc IS NULL OR LockedUntilUtc<$now)"; cmd.Parameters.AddWithValue("$lock", DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc).Add(lease).ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$token", leaseToken); cmd.Parameters.AddWithValue("$id", id); cmd.Parameters.AddWithValue("$now", DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture)); if (cmd.ExecuteNonQuery() == 1) return true; leaseToken = ""; return false;
     }
     public void Complete(string id, DateTime nowUtc) { var job = Get(id); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET NextRunUtc=$next,LastRunUtc=$last,LockedUntilUtc=NULL,LastError='',FailureCount=0 WHERE Id=$id"; cmd.Parameters.AddWithValue("$next", AutomationSchedule.NextRunUtc(job, nowUtc).ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$last", nowUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$id", id); cmd.ExecuteNonQuery(); }
@@ -144,5 +181,18 @@ public sealed class AutomationStore
     public void Fail(string id, string error) { var job = Get(id); var failures = job.FailureCount + 1; var delay = failures <= job.RetryLimit ? TimeSpan.FromMinutes(Math.Min(1440, job.RetryBackoffMinutes * Math.Pow(2, failures - 1))) : TimeSpan.Zero; var next = delay > TimeSpan.Zero ? DateTime.UtcNow.Add(delay) : AutomationSchedule.NextRunUtc(job, DateTime.UtcNow); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET NextRunUtc=$next,LockedUntilUtc=NULL,LastError=$error,FailureCount=$failures WHERE Id=$id"; cmd.Parameters.AddWithValue("$next", next.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$error", MarketplaceConnectionStore.Redact(error)); cmd.Parameters.AddWithValue("$failures", failures); cmd.Parameters.AddWithValue("$id", id); cmd.ExecuteNonQuery(); }
     public void Fail(string id, string error, string leaseToken) { var job = Get(id); var failures = job.FailureCount + 1; var delay = failures <= job.RetryLimit ? TimeSpan.FromMinutes(Math.Min(1440, job.RetryBackoffMinutes * Math.Pow(2, failures - 1))) : TimeSpan.Zero; var next = delay > TimeSpan.Zero ? DateTime.UtcNow.Add(delay) : AutomationSchedule.NextRunUtc(job, DateTime.UtcNow); using var c = Open(); EnsureColumn(c, "LeaseToken", "TEXT NULL"); using var cmd = c.CreateCommand(); cmd.CommandText = "UPDATE AutomationJobs SET NextRunUtc=$next,LockedUntilUtc=NULL,LeaseToken=NULL,LastError=$error,FailureCount=$failures WHERE Id=$id AND LeaseToken=$token"; cmd.Parameters.AddWithValue("$next", next.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$error", MarketplaceConnectionStore.Redact(error)); cmd.Parameters.AddWithValue("$failures", failures); cmd.Parameters.AddWithValue("$id", id); cmd.Parameters.AddWithValue("$token", leaseToken); if (cmd.ExecuteNonQuery() != 1) throw new InvalidOperationException("Otomasyon lease'i artık bu çalışmaya ait değil."); }
     const string Select = "SELECT Id,Kind,IntervalMinutes,NextRunUtc,LastRunUtc,LockedUntilUtc,LastError,Channel,Shop,Enabled,ScheduleMode,RunAtLocal,DaysOfWeek,WindowStartLocal,WindowEndLocal,RetryLimit,RetryBackoffMinutes,FailureCount,TemplateKey FROM AutomationJobs";
-    static AutomationJob Read(SqliteDataReader r) => new() { Id = r.GetString(0), Kind = (AutomationKind)r.GetInt32(1), IntervalMinutes = r.GetInt32(2), NextRunUtc = DateTime.Parse(r.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), LastRunUtc = r.IsDBNull(4) ? null : DateTime.Parse(r.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), LockedUntilUtc = r.IsDBNull(5) ? null : DateTime.Parse(r.GetString(5), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), LastError = r.GetString(6), Channel = r.GetString(7), Shop = r.GetString(8), Enabled = r.GetInt32(9) != 0, ScheduleMode = r.GetString(10), RunAtLocal = r.GetString(11), DaysOfWeek = r.GetString(12), WindowStartLocal = r.GetString(13), WindowEndLocal = r.GetString(14), RetryLimit = r.GetInt32(15), RetryBackoffMinutes = r.GetInt32(16), FailureCount = r.GetInt32(17), TemplateKey = r.GetString(18) };
+    static bool TryRead(SqliteDataReader r, out AutomationJob? job, out CorruptAutomationJob? corrupt)
+    {
+        job = null; corrupt = null; var id = r.GetString(0);
+        if (!TryParseUtc(r.GetString(3), out var nextRun)) { corrupt = new(id, "Malformed NextRunUtc timestamp", DateTime.UtcNow); return false; }
+        DateTime? lastRun = null;
+        if (!r.IsDBNull(4)) { if (!TryParseUtc(r.GetString(4), out var value)) { corrupt = new(id, "Malformed LastRunUtc timestamp", DateTime.UtcNow); return false; } lastRun = value; }
+        DateTime? lockedUntil = null;
+        if (!r.IsDBNull(5)) { if (!TryParseUtc(r.GetString(5), out var value)) { corrupt = new(id, "Malformed LockedUntilUtc timestamp", DateTime.UtcNow); return false; } lockedUntil = value; }
+        job = new() { Id = id, Kind = (AutomationKind)r.GetInt32(1), IntervalMinutes = r.GetInt32(2), NextRunUtc = nextRun, LastRunUtc = lastRun, LockedUntilUtc = lockedUntil, LastError = r.GetString(6), Channel = r.GetString(7), Shop = r.GetString(8), Enabled = r.GetInt32(9) != 0, ScheduleMode = r.GetString(10), RunAtLocal = r.GetString(11), DaysOfWeek = r.GetString(12), WindowStartLocal = r.GetString(13), WindowEndLocal = r.GetString(14), RetryLimit = r.GetInt32(15), RetryBackoffMinutes = r.GetInt32(16), FailureCount = r.GetInt32(17), TemplateKey = r.GetString(18) };
+        return true;
+    }
+    /// Only ever a format/parse failure - never conflated with a DB-busy/locked
+    /// SqliteException, which is raised by the surrounding command, not this parse.
+    static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
 }
