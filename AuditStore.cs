@@ -21,9 +21,24 @@ public sealed class AuditEvent
     public string Detail { get; set; } = "";
 }
 
+/// Bounded diagnostics only (id, a short reason, detection time) - never Detail,
+/// ProductId, OrderId, ShopId, or any other audit field - for a row whose AtUtc
+/// failed to parse. See CatalogStore's CorruptProductRow for the identical pattern.
+public sealed record CorruptAuditRow(string Id, string Reason, DateTime DetectedUtc);
+
+/// Raised only by LastFailure() when every "Failed" row it scanned (bounded by
+/// AuditStore.MaxLastFailureScan) has a corrupt AtUtc - a genuinely unknown "most
+/// recent failure" state, distinct from the ordinary null meaning "no failures
+/// exist". Never raised by List(), which always degrades to the healthy subset.
+public sealed class AuditStoreCorruptionException : Exception
+{
+    public AuditStoreCorruptionException(string message) : base(message) { }
+}
+
 public sealed class AuditStore
 {
     public const int RetentionLimit = 5000;
+    public const int MaxLastFailureScan = 50;
     readonly string connectionString;
     public AuditStore(string? directory = null)
     {
@@ -36,20 +51,50 @@ public sealed class AuditStore
         audit.Module = Clean(audit.Module, 80); audit.Action = Clean(audit.Action, 120); audit.ProductId = Clean(audit.ProductId, 120); audit.OrderId = Clean(audit.OrderId, 120); audit.Marketplace = Clean(audit.Marketplace, 80); audit.ShopId = Clean(audit.ShopId, 160); audit.Outcome = Clean(audit.Outcome, 40); audit.Detail = Sanitize(audit.Detail); audit.AtUtc = audit.AtUtc == default ? DateTime.UtcNow : audit.AtUtc;
         using var connection = Open(); using var transaction = connection.BeginTransaction(); using var command = connection.CreateCommand(); command.Transaction = transaction; command.CommandText = "INSERT INTO AuditEvents VALUES($id,$at,$module,$action,$product,$order,$marketplace,$shop,$outcome,$detail)"; command.Parameters.AddWithValue("$id", audit.Id); command.Parameters.AddWithValue("$at", audit.AtUtc.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$module", audit.Module); command.Parameters.AddWithValue("$action", audit.Action); command.Parameters.AddWithValue("$product", audit.ProductId); command.Parameters.AddWithValue("$order", audit.OrderId); command.Parameters.AddWithValue("$marketplace", audit.Marketplace); command.Parameters.AddWithValue("$shop", audit.ShopId); command.Parameters.AddWithValue("$outcome", audit.Outcome); command.Parameters.AddWithValue("$detail", audit.Detail); command.ExecuteNonQuery(); using var trim = connection.CreateCommand(); trim.Transaction = transaction; trim.CommandText = "DELETE FROM AuditEvents WHERE Id NOT IN (SELECT Id FROM AuditEvents ORDER BY AtUtc DESC LIMIT $limit)"; trim.Parameters.AddWithValue("$limit", RetentionLimit); trim.ExecuteNonQuery(); transaction.Commit();
     }
+    /// A malformed AtUtc must never crash the whole read - it is excluded from the
+    /// healthy result and reported only via CorruptEvents(); detection re-runs from
+    /// the row's own stored text every call, so it stays stable across a restart.
     public IReadOnlyList<AuditEvent> List(int limit = 500, string? query = null)
     {
-        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like) ORDER BY AtUtc DESC LIMIT $limit"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) result.Add(Read(reader)); return result;
+        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like) ORDER BY AtUtc DESC LIMIT $limit"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) if (TryRead(reader, out var evt, out _)) result.Add(evt!); return result;
     }
+    /// Bounded diagnostics for every row (within `limit`) whose AtUtc failed to
+    /// parse - never the raw Detail/ProductId/OrderId/ShopId values.
+    public IReadOnlyList<CorruptAuditRow> CorruptEvents(int limit = RetentionLimit)
+    {
+        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents ORDER BY AtUtc DESC LIMIT $limit"; command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<CorruptAuditRow>(); while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) result.Add(corrupt!); return result;
+    }
+    /// Scans at most MaxLastFailureScan rows so a fully corrupted table can never
+    /// spin through hundreds of exceptions; if every scanned "Failed" row is corrupt
+    /// this throws a typed AuditStoreCorruptionException instead of returning null -
+    /// null is reserved for "no failures at all", a materially different fact.
     public AuditEvent? LastFailure()
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE Outcome = $outcome ORDER BY AtUtc DESC LIMIT 1";
+        command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE Outcome = $outcome ORDER BY AtUtc DESC LIMIT $limit";
         command.Parameters.AddWithValue("$outcome", "Failed");
+        command.Parameters.AddWithValue("$limit", MaxLastFailureScan);
         using var reader = command.ExecuteReader();
-        return reader.Read() ? Read(reader) : null;
+        var sawAnyRow = false;
+        while (reader.Read())
+        {
+            sawAnyRow = true;
+            if (TryRead(reader, out var evt, out _)) return evt;
+        }
+        if (sawAnyRow) throw new AuditStoreCorruptionException($"Son {MaxLastFailureScan} 'Failed' kaydının AtUtc alanı bozuk; en son hata belirlenemiyor.");
+        return null;
     }
-    static AuditEvent Read(SqliteDataReader reader) => new() { Id = reader.GetString(0), AtUtc = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), Module = reader.GetString(2), Action = reader.GetString(3), ProductId = reader.GetString(4), OrderId = reader.GetString(5), Marketplace = reader.GetString(6), ShopId = reader.GetString(7), Outcome = reader.GetString(8), Detail = reader.GetString(9) };
+    static bool TryRead(SqliteDataReader reader, out AuditEvent? evt, out CorruptAuditRow? corrupt)
+    {
+        evt = null; corrupt = null; var id = reader.GetString(0);
+        if (!TryParseUtc(reader.GetString(1), out var at)) { corrupt = new(id, "Malformed AtUtc timestamp", DateTime.UtcNow); return false; }
+        evt = new() { Id = id, AtUtc = at, Module = reader.GetString(2), Action = reader.GetString(3), ProductId = reader.GetString(4), OrderId = reader.GetString(5), Marketplace = reader.GetString(6), ShopId = reader.GetString(7), Outcome = reader.GetString(8), Detail = reader.GetString(9) };
+        return true;
+    }
+    /// Only ever a format/parse failure - never conflated with a DB-busy/locked
+    /// SqliteException, which is raised by the surrounding command, not this parse.
+    static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
     static string Clean(string value, int max) { var clean = Sanitize(value); return clean.Length > max ? clean[..max] : clean; }
     public static string Sanitize(string? value)
     {
@@ -79,7 +124,11 @@ public sealed class DiagnosticsService
         Directory.CreateDirectory(directory); var checks = new List<DiagnosticCheck>(); foreach (var file in new[] { "catalog.db", "orders.db", "media.db", "audit.db", "excel-profiles.db" }) { var path = Path.Combine(directory, file); checks.Add(new(file, File.Exists(path) ? "OK" : "EMPTY", File.Exists(path) ? $"{new FileInfo(path).Length:N0} byte" : "Henüz oluşturulmadı")); }
         IReadOnlyList<Catalog.SyncJob> sync = []; try { sync = new Catalog.SyncStore(directory).List(); checks.Add(new("Sync kuyruğu", "OK", $"{sync.Count:N0} iş")); } catch (Exception error) { checks.Add(new("Sync kuyruğu", "ERROR", AuditStore.Sanitize(error.Message))); }
         try { _ = new Catalog.CatalogStore(directory).Products(); checks.Add(new("Katalog DB", "OK", "Okunabildi")); } catch (Exception error) { checks.Add(new("Katalog DB", "ERROR", AuditStore.Sanitize(error.Message))); }
-        var failed = sync.Count(x => x.Status == Catalog.SyncStatus.Failed); var pending = sync.Count(x => x.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running); var last = new AuditStore(directory).LastFailure(); return new(DateTime.UtcNow, directory, AppVersion.Display, checks, pending, failed, last?.Detail ?? "");
+        var failed = sync.Count(x => x.Status == Catalog.SyncStatus.Failed); var pending = sync.Count(x => x.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running);
+        string lastErrorDetail = "";
+        try { lastErrorDetail = new AuditStore(directory).LastFailure()?.Detail ?? ""; }
+        catch (AuditStoreCorruptionException error) { checks.Add(new("Audit geçmişi", "ERROR", AuditStore.Sanitize(error.Message))); }
+        return new(DateTime.UtcNow, directory, AppVersion.Display, checks, pending, failed, lastErrorDetail);
     }
 }
 
