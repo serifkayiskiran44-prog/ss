@@ -10,10 +10,18 @@ public sealed record OzonProductSummary(long ProductId, string OfferId, string N
 /// <summary>Read-only Seller API probes. POST here queries data; it never publishes products.</summary>
 public sealed class OzonConnection(HttpClient http)
 {
+    // Purely technical bounds for source/HTTP-header safety - Ozon's official
+    // Client-Id/Api-Key format is not otherwise documented here, so these limits
+    // encode no assumption about it beyond "a request must not carry an unbounded
+    // header value". ClientId is already constrained to ASCII digits, so 32 covers
+    // any realistic numeric id with generous headroom; ApiKey gets a wider budget
+    // since API keys are typically longer opaque tokens.
+    const int MaxClientIdLength = 32;
+    const int MaxApiKeyLength = 512;
     public static void Validate(OzonSettings settings)
     {
-        if (string.IsNullOrWhiteSpace(settings.ClientId) || !settings.ClientId.All(char.IsAsciiDigit)
-            || string.IsNullOrWhiteSpace(settings.ApiKey) || settings.ApiKey.Any(char.IsControl))
+        if (string.IsNullOrWhiteSpace(settings.ClientId) || settings.ClientId.Length > MaxClientIdLength || !settings.ClientId.All(char.IsAsciiDigit)
+            || string.IsNullOrWhiteSpace(settings.ApiKey) || settings.ApiKey.Length > MaxApiKeyLength || settings.ApiKey.Any(char.IsControl))
             throw new ArgumentException("Sayısal Client ID ve geçerli API key gerekli.");
     }
     public async Task<long> ReadProductCountAsync(OzonSettings settings, CancellationToken cancellationToken = default)
