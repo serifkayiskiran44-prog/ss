@@ -71,6 +71,54 @@ public partial class MainWindow
         panel.Children.Add(Hint("Listeden bir kayıt seçmek düzenleme moduna geçer (aynı kayıt güncellenir); 'Yeni kayıt' formu temizler. Kullanımda olan kayıt silinemez, yalnız pasife alınabilir."));
         var mappingRow = new WrapPanel(); mappingRow.Children.Add(new TextBlock { Text = "Harici anahtar", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); mappingRow.Children.Add(external); mappingRow.Children.Add(map); mappingRow.Children.Add(unmap); panel.Children.Add(mappingRow);
         var bulkRow = new StackPanel(); bulkRow.Children.Add(new TextBlock { Text = "Toplu öneri listesi (satır başına bir değer)", Margin = new Thickness(4) }); bulkRow.Children.Add(externalBatch); var bulkButtons = new WrapPanel(); bulkButtons.Children.Add(suggest); bulkButtons.Children.Add(bulk); bulkRow.Children.Add(bulkButtons); panel.Children.Add(bulkRow);
+        var templates = new CategoryTemplateStore(dataDirectory);
+        var templateBrand = new TextBox { Width = 150, ToolTip = "Boş bırakılırsa marka değiştirilmez" };
+        var templateCurrency = new TextBox { Width = 70, ToolTip = "3 harfli döviz kodu, örn. USD" };
+        var templateVat = new TextBox { Width = 70, ToolTip = "0-100 arası KDV %" };
+        var templateStatus = Hint("Bir kategori seçip varsayılan alanları kaydedin.");
+        var previewGrid = new DataGrid { AutoGenerateColumns = true, IsReadOnly = true, Height = 180, EnableRowVirtualization = true };
+        CategoryTemplateImpactPreview? pendingPreview = null;
+        CategoryFieldTemplate CurrentTemplateFromForm(TaxonomyEntry category) => new()
+        {
+            CategoryId = category.Id, Channel = marketplace.Text.Trim(), ShopId = shop.Text.Trim(),
+            Brand = string.IsNullOrWhiteSpace(templateBrand.Text) ? null : templateBrand.Text.Trim(),
+            Currency = string.IsNullOrWhiteSpace(templateCurrency.Text) ? null : templateCurrency.Text.Trim(),
+            VatRate = decimal.TryParse(templateVat.Text, out var vat) ? vat : null,
+        };
+        var saveTemplate = Button("Kategori şablonunu kaydet", () =>
+        {
+            if ((TaxonomyKind)kind.SelectedItem! != TaxonomyKind.Category) throw new InvalidOperationException("Şablon yalnız kategoriler için tanımlanır.");
+            if (localGrid.SelectedItem is not TaxonomyEntry category) throw new InvalidOperationException("Önce yerel listeden bir kategori seçin.");
+            var saved = templates.Save(CurrentTemplateFromForm(category));
+            templateStatus.Text = $"Şablon kaydedildi (sürüm {saved.Version}). Kanal: {saved.Channel}/{saved.ShopId}.";
+        });
+        var previewTemplate = Button("Etkiyi önizle", () =>
+        {
+            if ((TaxonomyKind)kind.SelectedItem! != TaxonomyKind.Category) throw new InvalidOperationException("Şablon yalnız kategoriler için tanımlanır.");
+            if (localGrid.SelectedItem is not TaxonomyEntry category) throw new InvalidOperationException("Önce yerel listeden bir kategori seçin.");
+            pendingPreview = templates.PreviewImpact(CurrentTemplateFromForm(category), taxonomy, store);
+            previewGrid.ItemsSource = pendingPreview.Changed.Select(row => new { row.ProductId, row.Sku, Değişenler = string.Join("; ", row.Changes.Select(c => $"{c.Field}: {c.OldValue} → {c.NewValue}")) }).ToList();
+            templateStatus.Text = $"{category.Name}: toplam {pendingPreview.TotalInCategory} üründen {pendingPreview.Changed.Count} tanesi değişecek, {pendingPreview.UnaffectedCount} zaten uygun; henüz uygulanmadı.";
+        });
+        var applyTemplate = Button("Önizlenen değişikliği uygula", () =>
+        {
+            if (pendingPreview is null || pendingPreview.Changed.Count == 0) throw new InvalidOperationException("Önce etkiyi önizleyin; uygulanacak değişiklik yok.");
+            if (MessageBox.Show($"{pendingPreview.Changed.Count} üründe alan değeri güncellenecek. Devam edilsin mi?", "Şablon uygulama", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            var result = templates.ApplyApproved(pendingPreview, true, store);
+            RefreshProducts();
+            templateStatus.Text = $"{result.Applied} ürün güncellendi" + (result.StaleProductIds.Count > 0 ? $"; {result.StaleProductIds.Count} ürün önizlemeden sonra değiştiği için atlandı (yenileyip tekrar deneyin)." : ".");
+            pendingPreview = null; previewGrid.ItemsSource = null;
+        });
+        var templateRow = new WrapPanel();
+        templateRow.Children.Add(new TextBlock { Text = "Şablon marka", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); templateRow.Children.Add(templateBrand);
+        templateRow.Children.Add(new TextBlock { Text = "Döviz", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); templateRow.Children.Add(templateCurrency);
+        templateRow.Children.Add(new TextBlock { Text = "KDV %", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) }); templateRow.Children.Add(templateVat);
+        templateRow.Children.Add(saveTemplate); templateRow.Children.Add(previewTemplate); templateRow.Children.Add(applyTemplate);
+        var templateSection = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
+        templateSection.Children.Add(Heading("Kategori bazlı varsayılan alan şablonu"));
+        templateSection.Children.Add(Hint("Seçili kategorideki ürünlere kanal/mağaza bazlı varsayılan marka/döviz/KDV uygulanabilir. Önce önizleme yapılmadan hiçbir ürün değişmez; önizlemeden sonra değişen ürün atlanır."));
+        templateSection.Children.Add(templateRow); templateSection.Children.Add(previewGrid); templateSection.Children.Add(templateStatus);
+        panel.Children.Add(templateSection);
         var tabs = new TabControl(); tabs.Items.Add(new TabItem { Header = "Yerel sözlük", Content = localGrid }); tabs.Items.Add(new TabItem { Header = "Kanal / mağaza eşleme", Content = mappingGrid }); tabs.Items.Add(new TabItem { Header = "Eşleme geçmişi", Content = historyGrid }); panel.Children.Add(tabs); panel.Children.Add(status); Refresh(); return Scroll(panel);
     }
 }
