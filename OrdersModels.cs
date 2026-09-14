@@ -11,6 +11,10 @@ public sealed class OrderSnapshot
  public string Source {get;set;}="Yerel / manuel";
  public decimal? Total {get;set;}
  public string Currency {get;set;}="";
+ // #946: the components a total is made of, when the marketplace reports them; null means "not reported", never zero by assumption.
+ public decimal? ShippingTotal {get;set;}
+ public decimal? DiscountTotal {get;set;}
+ public decimal? TaxTotal {get;set;}
  public string TotalLabel=>Total.HasValue?$"{Total:0.00} {Currency}":"—";
  public DateTimeOffset UpdatedAt {get;set;}=DateTimeOffset.UtcNow;
  public DateTimeOffset SourceUpdatedAt {get;set;}
@@ -41,7 +45,7 @@ public sealed class OrderSnapshot
  public OrderSnapshot Copy()=>JsonSerializer.Deserialize<OrderSnapshot>(JsonSerializer.Serialize(this))!;
 }
 public sealed record DeliverySla(string Status,int DaysInTransit,string Label);
-public sealed class OrderItem {public string Title {get;set;}="";public string Sku {get;set;}="";public int Quantity {get;set;}=1;}
+public sealed class OrderItem {public string Title {get;set;}="";public string Sku {get;set;}="";public int Quantity {get;set;}=1;public decimal? UnitPrice {get;set;}} // #946: the price the line was sold at; null when not reported
 public sealed class OrderShipment
 {
  public string Id {get;set;}="";
