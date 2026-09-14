@@ -247,7 +247,8 @@ public partial class MainWindow : Window
   {
    var text=await new XmlSourceReader(http).ReadAsync(location,new(xmlUser.Text,xmlPassword.Password),lifetime.Token);
    var scan=await Task.Run(()=>XmlCatalog.Inspect(text,string.IsNullOrWhiteSpace(candidate.ItemPath)?null:candidate.ItemPath),lifetime.Token);
-   xmlSourceHealth.Text=$"Sağlıklı · {text.Length:N0} karakter · {scan.Paths.Count:N0} alan yolu · 25 MB sınırı içinde · gzip/HTTPS kontrolü geçti.";
+   var sampleText=scan.Sample.Count==0?"":" · örnek: "+string.Join("; ",scan.Sample[0].Select(x=>$"{x.Key}={x.Value}"));
+   xmlSourceHealth.Text=$"Sağlıklı · {text.Length:N0} karakter · {scan.MatchCount:N0} ürün eşleşti · {scan.Paths.Count:N0} alan yolu · 25 MB sınırı içinde · gzip/HTTPS kontrolü geçti.{sampleText}";
   }
   catch(Exception error){xmlSourceHealth.Text="Sağlık kontrolü başarısız: "+MarketplaceConnectionStore.Redact(error.Message);throw;}
  }
