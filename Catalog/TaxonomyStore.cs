@@ -11,6 +11,7 @@ public sealed record TaxonomyMapping(TaxonomyKind Kind, string Marketplace, stri
 public sealed record TaxonomyMappingView(TaxonomyKind Kind, string Marketplace, string ShopId, string ExternalKey, string LocalId, string LocalName, string Status, DateTime UpdatedUtc);
 public sealed record TaxonomySuggestion(string ExternalKey, string? LocalId, string? LocalName, string Status);
 public sealed record TaxonomyMappingHistoryRecord(DateTime ChangedUtc, TaxonomyKind Kind, string Marketplace, string ShopId, string ExternalKey, string LocalId, string Action);
+public sealed record TaxonomyUsage(int Products, int Mappings) { public int Total => Products + Mappings; }
 
 public sealed class TaxonomyStore
 {
@@ -28,6 +29,48 @@ public sealed class TaxonomyStore
     static void Validate(TaxonomyEntry entry) { entry.Name = entry.Name.Trim(); entry.Value = entry.Value.Trim(); if (entry.Name.Length == 0 || entry.Name.Length > 200) throw new InvalidOperationException("Kategori, marka veya özellik adı 1-200 karakter olmalı."); if (entry.Value.Length > 200) throw new InvalidOperationException("Özellik değeri en fazla 200 karakter olabilir."); }
     public TaxonomyEntry Save(TaxonomyEntry entry)
     { Validate(entry); entry.UpdatedUtc = DateTime.UtcNow; using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id FROM TaxonomyEntries WHERE Kind=$kind AND lower(Name)=lower($name) AND lower(Value)=lower($value) AND Id<>$id"; cmd.Parameters.AddWithValue("$kind", (int)entry.Kind); cmd.Parameters.AddWithValue("$name", entry.Name); cmd.Parameters.AddWithValue("$value", entry.Value); cmd.Parameters.AddWithValue("$id", entry.Id); if (cmd.ExecuteScalar() is not null) throw new InvalidOperationException("Aynı türde aynı ad/değer zaten var."); cmd.Parameters.Clear(); cmd.CommandText = "INSERT INTO TaxonomyEntries(Id,Kind,Name,Value,Active,UpdatedUtc) VALUES($id,$kind,$name,$value,$active,$updated) ON CONFLICT(Id) DO UPDATE SET Kind=excluded.Kind,Name=excluded.Name,Value=excluded.Value,Active=excluded.Active,UpdatedUtc=excluded.UpdatedUtc"; cmd.Parameters.AddWithValue("$id", entry.Id); cmd.Parameters.AddWithValue("$kind", (int)entry.Kind); cmd.Parameters.AddWithValue("$name", entry.Name); cmd.Parameters.AddWithValue("$value", entry.Value); cmd.Parameters.AddWithValue("$active", entry.Active ? 1 : 0); cmd.Parameters.AddWithValue("$updated", entry.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.ExecuteNonQuery(); return entry; }
+    /// Brand/Category identity lives in TaxonomyEntries.Id, independent of the
+    /// user-editable display Name - renaming an entry (Save keeps the same Id) never
+    /// changes its identity or breaks existing TaxonomyMappings/history rows that
+    /// reference the Id, only CatalogProducts.Brand/Category (free text, matched by
+    /// current name) need the name itself to stay in sync with actual product data.
+    public TaxonomyUsage Usage(TaxonomyKind kind, TaxonomyEntry entry)
+    {
+        using var c = Open();
+        return new(CountProductUsage(c, null, kind, entry.Name), CountMappingUsage(c, null, kind, entry.Id));
+    }
+    static int CountProductUsage(SqliteConnection c, SqliteTransaction? tx, TaxonomyKind kind, string name)
+    {
+        if (kind is not (TaxonomyKind.Brand or TaxonomyKind.Category)) return 0;
+        var column = kind == TaxonomyKind.Brand ? "Brand" : "Category";
+        using var cmd = c.CreateCommand(); cmd.Transaction = tx;
+        cmd.CommandText = $"SELECT COUNT(*) FROM CatalogProducts WHERE lower(json_extract(Json,'$.{column}'))=lower($name)";
+        cmd.Parameters.AddWithValue("$name", name);
+        return Convert.ToInt32(cmd.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+    static int CountMappingUsage(SqliteConnection c, SqliteTransaction? tx, TaxonomyKind kind, string id)
+    {
+        using var cmd = c.CreateCommand(); cmd.Transaction = tx;
+        cmd.CommandText = "SELECT COUNT(*) FROM TaxonomyMappings WHERE Kind=$kind AND LocalId=$id";
+        cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$id", id);
+        return Convert.ToInt32(cmd.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+    /// Hard-delete is fail-closed and never cascades: usage is re-checked inside the
+    /// same write transaction as the delete (not a separate earlier read) so a
+    /// concurrently added product/mapping cannot slip through a stale check, and SQLite
+    /// serializes the concurrent writer against this transaction rather than losing it.
+    public void Delete(TaxonomyKind kind, string id)
+    {
+        using var c = Open(); using var tx = c.BeginTransaction();
+        using var find = c.CreateCommand(); find.Transaction = tx; find.CommandText = "SELECT Name FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; find.Parameters.AddWithValue("$id", id); find.Parameters.AddWithValue("$kind", (int)kind);
+        var name = find.ExecuteScalar() as string ?? throw new InvalidOperationException("Silinecek kayıt bulunamadı.");
+        var products = CountProductUsage(c, tx, kind, name);
+        var mappings = CountMappingUsage(c, tx, kind, id);
+        if (products > 0 || mappings > 0) throw new InvalidOperationException($"Bu kayıt kullanımda olduğu için silinemez: {products} üründe, {mappings} kanal eşlemesinde kullanılıyor. Önce bağlantıları kaldırın veya kaydı pasife alın.");
+        using var delete = c.CreateCommand(); delete.Transaction = tx; delete.CommandText = "DELETE FROM TaxonomyEntries WHERE Id=$id"; delete.Parameters.AddWithValue("$id", id);
+        if (delete.ExecuteNonQuery() != 1) throw new InvalidOperationException("Silinecek kayıt bulunamadı.");
+        tx.Commit();
+    }
     public IReadOnlyList<TaxonomyEntry> List(TaxonomyKind kind)
     { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,Name,Value,Active,UpdatedUtc FROM TaxonomyEntries WHERE Kind=$kind ORDER BY Name,Value"; cmd.Parameters.AddWithValue("$kind", (int)kind); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyEntry>(); while (r.Read()) result.Add(ReadEntry(r)); return result; }
     static TaxonomyEntry ReadEntry(SqliteDataReader r) => new() { Id = r.GetString(0), Kind = (TaxonomyKind)r.GetInt32(1), Name = r.GetString(2), Value = r.GetString(3), Active = r.GetInt32(4) != 0, UpdatedUtc = ParseUtc(r.GetString(5)) };
