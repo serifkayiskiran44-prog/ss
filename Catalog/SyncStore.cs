@@ -47,9 +47,46 @@ public sealed class SyncStore
  SqliteConnection OpenRaw(){var c=new SqliteConnection(connectionString);c.Open();using var pragma=c.CreateCommand();pragma.CommandText="PRAGMA busy_timeout=15000";pragma.ExecuteNonQuery();return c;}
  SqliteConnection Open()=>OpenRaw();
  const string Select="SELECT Id,Channel,ShopId,Operation,EntityId,Version,Status,FailureCount,LastError,ErrorClass,UpdatedUtc FROM SyncJobs";
- public SyncJob Enqueue(SyncRequest request){if(string.IsNullOrWhiteSpace(request.Channel)||string.IsNullOrWhiteSpace(request.ShopId)||string.IsNullOrWhiteSpace(request.Operation)||string.IsNullOrWhiteSpace(request.EntityId)||string.IsNullOrWhiteSpace(request.Version))throw new InvalidOperationException("Sync işi için kanal, mağaza, işlem, varlık ve sürüm zorunlu.");using var c=Open();using var find=c.CreateCommand();find.CommandText="SELECT Id,Channel,ShopId,Operation,EntityId,Version,Status,FailureCount,LastError,ErrorClass,UpdatedUtc FROM SyncJobs WHERE Channel=$channel AND ShopId=$shop AND Operation=$operation AND EntityId=$entity AND Version=$version";find.Parameters.AddWithValue("$channel",request.Channel.Trim().ToLowerInvariant());find.Parameters.AddWithValue("$shop",request.ShopId.Trim());find.Parameters.AddWithValue("$operation",request.Operation);find.Parameters.AddWithValue("$entity",request.EntityId);find.Parameters.AddWithValue("$version",request.Version);
-  using(var r=find.ExecuteReader())if(r.Read()){if(!TryRead(r,out var existing,out var corrupt))throw new SyncJobCorruptException(corrupt!.Id,corrupt.Reason);return existing!;}
-  var job=new SyncJob{Channel=request.Channel.Trim().ToLowerInvariant(),ShopId=request.ShopId.Trim(),Operation=request.Operation,EntityId=request.EntityId,Version=request.Version};using var cmd=c.CreateCommand();cmd.CommandText="INSERT INTO SyncJobs(Id,Channel,ShopId,Operation,EntityId,Version,Status,FailureCount,LastError,ErrorClass,UpdatedUtc) VALUES($id,$channel,$shop,$operation,$entity,$version,$status,0,'',0,$updated)";cmd.Parameters.AddWithValue("$id",job.Id);cmd.Parameters.AddWithValue("$channel",job.Channel);cmd.Parameters.AddWithValue("$shop",job.ShopId);cmd.Parameters.AddWithValue("$operation",job.Operation);cmd.Parameters.AddWithValue("$entity",job.EntityId);cmd.Parameters.AddWithValue("$version",job.Version);cmd.Parameters.AddWithValue("$status",(int)job.Status);cmd.Parameters.AddWithValue("$updated",job.UpdatedUtc.ToString("O"));cmd.ExecuteNonQuery();return job;}
+ /// Atomic idempotent upsert/readback: two concurrent Enqueue calls for the exact
+ /// same identity key must never throw a UNIQUE-constraint exception to either
+ /// caller, and must both end up returning the same canonical row. Each attempt
+ /// runs its own find-or-insert inside one transaction (SQLite's single-writer
+ /// model serializes the two INSERTs); whichever call loses the race catches the
+ /// resulting unique-constraint violation, rolls back its own attempt, and reads
+ /// back the row the winner just committed instead of surfacing an error.
+ public SyncJob Enqueue(SyncRequest request)
+ {
+  if(string.IsNullOrWhiteSpace(request.Channel)||string.IsNullOrWhiteSpace(request.ShopId)||string.IsNullOrWhiteSpace(request.Operation)||string.IsNullOrWhiteSpace(request.EntityId)||string.IsNullOrWhiteSpace(request.Version))throw new InvalidOperationException("Sync işi için kanal, mağaza, işlem, varlık ve sürüm zorunlu.");
+  var channel=request.Channel.Trim().ToLowerInvariant();var shop=request.ShopId.Trim();
+  using var c=Open();
+  void AddIdentity(SqliteCommand cmd){cmd.Parameters.AddWithValue("$channel",channel);cmd.Parameters.AddWithValue("$shop",shop);cmd.Parameters.AddWithValue("$operation",request.Operation);cmd.Parameters.AddWithValue("$entity",request.EntityId);cmd.Parameters.AddWithValue("$version",request.Version);}
+  SyncJob? ReadExisting(SqliteTransaction? tx)
+  {
+   using var find=c.CreateCommand();find.Transaction=tx;find.CommandText=Select+" WHERE Channel=$channel AND ShopId=$shop AND Operation=$operation AND EntityId=$entity AND Version=$version";AddIdentity(find);
+   using var r=find.ExecuteReader();
+   if(!r.Read())return null;
+   if(!TryRead(r,out var existing,out var corrupt))throw new SyncJobCorruptException(corrupt!.Id,corrupt.Reason);
+   return existing;
+  }
+  using(var tx=c.BeginTransaction())
+  {
+   var existing=ReadExisting(tx);
+   if(existing is not null){tx.Commit();return existing;}
+   var job=new SyncJob{Channel=channel,ShopId=shop,Operation=request.Operation,EntityId=request.EntityId,Version=request.Version};
+   try
+   {
+    using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="INSERT INTO SyncJobs(Id,Channel,ShopId,Operation,EntityId,Version,Status,FailureCount,LastError,ErrorClass,UpdatedUtc) VALUES($id,$channel,$shop,$operation,$entity,$version,$status,0,'',0,$updated)";
+    cmd.Parameters.AddWithValue("$id",job.Id);AddIdentity(cmd);cmd.Parameters.AddWithValue("$status",(int)job.Status);cmd.Parameters.AddWithValue("$updated",job.UpdatedUtc.ToString("O"));
+    cmd.ExecuteNonQuery();tx.Commit();return job;
+   }
+   catch(SqliteException ex) when(ex.SqliteErrorCode==19)
+   {
+    tx.Rollback();
+   }
+  }
+  // Lost the race: a concurrent Enqueue for this exact key committed first.
+  return ReadExisting(null) ?? throw new InvalidOperationException("Sync işi kaydedilemedi.");
+ }
  static bool TryRead(SqliteDataReader r,out SyncJob? job,out CorruptSyncJob? corrupt)
  {
   job=null;corrupt=null;var id=r.GetString(0);var channel=r.GetString(1);var shop=r.GetString(2);
