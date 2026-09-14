@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -31,6 +32,32 @@ public partial class App : Application
             MessageBox.Show(
                 "Uygulama üst üste birkaç kez açılırken kapandı. Bu pencereyi kapattıktan sonra program yine de açılmayı deneyecek; sorun sürerse Tanılama ekranından destek paketi dışa aktarabilir veya veri klasörünü yedekleyip inceleyebilirsiniz.",
                 "MarketplaceHub — kurtarma modu",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
+        StartupHealthReport health;
+        try { health = StartupPreflight.Run(); }
+        catch (Exception ex) { LogFatal(ex); health = new([]); }
+
+        if (health.Overall is StartupHealthStatus.Blocked or StartupHealthStatus.RecoveryRequired)
+        {
+            var problems = string.Join(Environment.NewLine, health.Checks.Where(c => c.Status is StartupHealthStatus.Blocked or StartupHealthStatus.RecoveryRequired).Select(c => "• " + c.Detail));
+            MessageBox.Show(
+                "Uygulama şu anda güvenli şekilde açılamıyor:" + Environment.NewLine + Environment.NewLine + problems,
+                "MarketplaceHub — başlatma engellendi",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(-1);
+            return;
+        }
+
+        if (health.Overall == StartupHealthStatus.Degraded)
+        {
+            var warnings = string.Join(Environment.NewLine, health.Checks.Where(c => c.Status == StartupHealthStatus.Degraded).Select(c => "• " + c.Detail));
+            MessageBox.Show(
+                "Uygulama açılıyor ancak bazı özellikler sınırlı olabilir:" + Environment.NewLine + Environment.NewLine + warnings,
+                "MarketplaceHub — sınırlı başlangıç",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
