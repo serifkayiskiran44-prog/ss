@@ -12,6 +12,8 @@ public sealed record TaxonomyMappingView(TaxonomyKind Kind, string Marketplace, 
 public sealed record TaxonomySuggestion(string ExternalKey, string? LocalId, string? LocalName, string Status);
 public sealed record TaxonomyMappingHistoryRecord(DateTime ChangedUtc, TaxonomyKind Kind, string Marketplace, string ShopId, string ExternalKey, string LocalId, string Action);
 public sealed record TaxonomyUsage(int Products, int Mappings) { public int Total => Products + Mappings; }
+public enum TaxonomyResolution { NotMapped, Ready, TargetInactive, TargetMissing }
+public sealed record TaxonomyResolutionResult(TaxonomyResolution Status, string? LocalId, string? LocalName);
 
 public sealed class TaxonomyStore
 {
@@ -98,6 +100,36 @@ public sealed class TaxonomyStore
     static void ValidateExternalKey(string value) { if (string.IsNullOrWhiteSpace(value) || value.Trim().Length > 300 || value.Any(char.IsControl)) throw new InvalidOperationException("Harici eşleme anahtarı boş, çok uzun veya kontrol karakteri içeriyor."); }
     public void MapBulk(TaxonomyKind kind, string marketplace, string shopId, IReadOnlyList<TaxonomySuggestion> suggestions, bool approved) { if (!approved) throw new InvalidOperationException("Toplu kategori/marka/özellik eşlemesi için önizleme onayı gerekli."); foreach (var suggestion in suggestions.Where(x => x.LocalId is not null)) Map(kind, suggestion.ExternalKey, suggestion.LocalId!, marketplace, shopId); }
     public string? Resolve(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default") { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT LocalId FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$key", externalKey.Trim()); return cmd.ExecuteScalar() as string; }
+    /// Explicit remove, distinct from Map's create/update upsert: the CRUD lifecycle
+    /// was missing a way to delete a channel/shop mapping entirely.
+    public void Unmap(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default")
+    {
+        var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim();
+        using var c = Open(); using var tx = c.BeginTransaction();
+        using var find = c.CreateCommand(); find.Transaction = tx; find.CommandText = "SELECT LocalId FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; find.Parameters.AddWithValue("$kind", (int)kind); find.Parameters.AddWithValue("$market", market); find.Parameters.AddWithValue("$shop", shop); find.Parameters.AddWithValue("$key", key);
+        var localId = find.ExecuteScalar() as string ?? throw new InvalidOperationException("Kaldırılacak eşleme bulunamadı.");
+        using var delete = c.CreateCommand(); delete.Transaction = tx; delete.CommandText = "DELETE FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; delete.Parameters.AddWithValue("$kind", (int)kind); delete.Parameters.AddWithValue("$market", market); delete.Parameters.AddWithValue("$shop", shop); delete.Parameters.AddWithValue("$key", key); delete.ExecuteNonQuery();
+        var now = DateTime.UtcNow;
+        using var history = c.CreateCommand(); history.Transaction = tx; history.CommandText = "INSERT INTO TaxonomyMappingHistory VALUES($id,$kind,$market,$shop,$key,$local,$action,$at)"; history.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N")); history.Parameters.AddWithValue("$kind", (int)kind); history.Parameters.AddWithValue("$market", market); history.Parameters.AddWithValue("$shop", shop); history.Parameters.AddWithValue("$key", key); history.Parameters.AddWithValue("$local", localId); history.Parameters.AddWithValue("$action", "REMOVE"); history.Parameters.AddWithValue("$at", now.ToString("O", CultureInfo.InvariantCulture)); history.ExecuteNonQuery();
+        tx.Commit();
+    }
+    /// Resolve alone only tells the caller a mapping row exists; it never checked
+    /// whether the local target it points to is still usable. ResolveForUse is the
+    /// single owner for that usability preflight: NotMapped (no mapping row),
+    /// TargetMissing (mapping points at a deleted/unknown entry - fail closed),
+    /// TargetInactive (entry exists but deactivated - needs review/reactivation), or
+    /// Ready. Live dispatch/preview code should call this instead of raw Resolve.
+    public TaxonomyResolutionResult ResolveForUse(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default")
+    {
+        var localId = Resolve(kind, externalKey, marketplace, shopId);
+        if (localId is null) return new(TaxonomyResolution.NotMapped, null, null);
+        using var c = Open(); using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT Name,Active FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; cmd.Parameters.AddWithValue("$id", localId); cmd.Parameters.AddWithValue("$kind", (int)kind);
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return new(TaxonomyResolution.TargetMissing, localId, null);
+        var name = r.GetString(0); var active = r.GetInt32(1) != 0;
+        return active ? new(TaxonomyResolution.Ready, localId, name) : new(TaxonomyResolution.TargetInactive, localId, name);
+    }
     public IReadOnlyList<TaxonomyMapping> Mappings(TaxonomyKind kind) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Marketplace,ShopId,ExternalKey,LocalId FROM TaxonomyMappings WHERE Kind=$kind ORDER BY Marketplace,ShopId,ExternalKey"; cmd.Parameters.AddWithValue("$kind", (int)kind); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMapping>(); while (r.Read()) result.Add(new(kind, r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3))); return result; }
     public IReadOnlyList<TaxonomyMappingView> MappingViews(TaxonomyKind kind, string marketplace, string shopId, string? query = null)
     {
