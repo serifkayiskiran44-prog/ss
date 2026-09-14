@@ -10,7 +10,7 @@ public static class PolicyCenterPanel
 {
     public static FrameworkElement Create(string? directory = null)
     {
-        var store = new CatalogStore(directory); var tabs = new TabControl { Margin = new Thickness(12) }; tabs.Items.Add(new TabItem { Header = "Stok politikaları", Content = Stock(store, directory) }); tabs.Items.Add(new TabItem { Header = "Fiyat politikaları", Content = Price(store, directory) }); return tabs;
+        var store = new CatalogStore(directory); var tabs = new TabControl { Margin = new Thickness(12) }; tabs.Items.Add(new TabItem { Header = "Stok politikaları", Content = Stock(store, directory) }); tabs.Items.Add(new TabItem { Header = "Fiyat politikaları", Content = Price(store, directory) }); tabs.Items.Add(new TabItem { Header = "Fiyat formülü profilleri", Content = PricingProfiles(directory) }); return tabs;
     }
     static FrameworkElement Stock(CatalogStore store, string? directory)
     {
@@ -32,6 +32,28 @@ public static class PolicyCenterPanel
         var save = Button("Politikayı kaydet"); save.Click += (_, _) => { try { if (loaded is null || loaded.Channel != channel.Text.Trim().ToLowerInvariant() || loaded.Shop != shop.Text.Trim()) throw new InvalidOperationException("Önce aynı kanal/mağaza politikasını yükleyin."); loaded = store.SavePricePolicy(new() { Channel = loaded.Channel, Shop = loaded.Shop, Formula = formula.Text, Currency = currency.SelectedItem?.ToString() ?? "", TryPerUnit = Number(rate.Text), MinimumPrice = Number(minimum.Text), MinimumMarginTry = Number(margin.Text), Enabled = enabled.IsChecked == true, Version = loaded.Version }); status.Text = "Fiyat politikası kaydedildi; canlı fiyat değişmedi."; Reload(); } catch (Exception error) { status.Text = error.Message; } }; row.Children.Add(save);
         var sourceChannel = new TextBox { Text = "etsy", Width = 100 }; var sourceShop = new TextBox { Width = 120 }; var targetChannel = new TextBox { Text = "ebay", Width = 100 }; var targetShop = new TextBox { Width = 120 }; var copyRow = new WrapPanel(); Add(copyRow, "Kaynak kanal", sourceChannel); Add(copyRow, "Kaynak mağaza", sourceShop); Add(copyRow, "Hedef kanal", targetChannel); Add(copyRow, "Hedef mağaza", targetShop); var copy = Button("Politikayı çoğalt"); copy.Click += (_, _) => { try { if (MessageBox.Show("Fiyat politikası hedef mağazaya yerel olarak kopyalansın mı?", "Politika kopyalama", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return; store.CopyPricePolicy(sourceChannel.Text, sourceShop.Text, targetChannel.Text, targetShop.Text); status.Text = "Fiyat politikası kopyalandı; canlı kanal değişmedi."; Reload(); } catch (Exception error) { status.Text = error.Message; } }; copyRow.Children.Add(copy); root.Children.Add(copyRow);
         var product = new ComboBox { DisplayMemberPath = "Name", MinWidth = 380 }; var productRow = new WrapPanel(); productRow.Children.Add(new TextBlock { Text = "Ürün", Margin = new Thickness(4, 8, 2, 4), VerticalAlignment = VerticalAlignment.Center }); productRow.Children.Add(product); productRow.Children.Add(Button("Ürünleri yenile", () => product.ItemsSource = store.Products())); var preview = Button("Ürün fiyat preview"); preview.Click += (_, _) => { try { if (product.SelectedItem is not CatalogProduct p) throw new InvalidOperationException("Ürün seçin."); var result = store.PreviewPriceDetailed(channel.Text, shop.Text, p.Id); status.Text = $"{result.Channel}/{result.Shop} · {result.Sku}: {result.Price} {result.Currency} · formül {result.FormulaPriceTry:N2} TL · policy v{result.PolicyVersion} · ürün {result.ProductUpdatedUtc.ToLocalTime():g}. Canlı gönderim yapılmadı."; } catch (Exception error) { status.Text = error.Message; } }; productRow.Children.Add(preview); root.Children.Add(productRow); root.Children.Add(status); Reload(); product.ItemsSource = store.Products(); return new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+    static FrameworkElement PricingProfiles(string? directory)
+    {
+        var store = new PricingProfileStore(directory);
+        var root = new StackPanel { Margin = new Thickness(14), MaxWidth = 900 };
+        root.Children.Add(Text("İsimli fiyat formülü profilleri", 21));
+        root.Children.Add(Text("Bir formülü isimlendirip birden çok kanal/mağaza politikasında yeniden kullanılabilir hale getirin. Kritik fiyat kapsamda değildir."));
+        var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, Height = 190 };
+        foreach (var c in new[] { ("Ad", "Name", 180d), ("Formül", "Formula", 220d), ("Kaynak alan", "SourceField", 100d), ("Etkin", "Active", 60d), ("Sürüm", "Version", 60d), ("Son değişiklik", "UpdatedUtc", 160d) })
+            grid.Columns.Add(new DataGridTextColumn { Header = c.Item1, Binding = new System.Windows.Data.Binding(c.Item2), Width = c.Item3 });
+        root.Children.Add(grid);
+        var name = new TextBox { Width = 200 }; var formula = new TextBox { Text = "x", Width = 260 }; var sourceField = new ComboBox { ItemsSource = Enum.GetValues<PricingSourceField>(), SelectedIndex = 0, Width = 100 }; var active = new CheckBox { Content = "Etkin", IsChecked = true, Margin = new Thickness(5) };
+        PricingProfile? editing = null; var status = Text("");
+        void Reload() => grid.ItemsSource = store.List();
+        void ClearEditor() { editing = null; name.Clear(); formula.Text = "x"; sourceField.SelectedIndex = 0; active.IsChecked = true; }
+        grid.SelectionChanged += (_, _) => { if (grid.SelectedItem is PricingProfile selected) { editing = selected; name.Text = selected.Name; formula.Text = selected.Formula; sourceField.SelectedItem = selected.SourceField; active.IsChecked = selected.Active; } };
+        var row = new WrapPanel(); Add(row, "Ad", name); Add(row, "Formül", formula); Add(row, "Kaynak alan", sourceField); row.Children.Add(active); root.Children.Add(row);
+        var save = Button("Ekle / güncelle"); save.Click += (_, _) => { try { var profile = new PricingProfile { Name = name.Text, Formula = formula.Text, SourceField = (PricingSourceField)sourceField.SelectedItem!, Active = active.IsChecked == true }; if (editing is not null) { profile.Id = editing.Id; profile.Version = editing.Version; } store.Save(profile); ClearEditor(); Reload(); status.Text = "Profil kaydedildi."; } catch (Exception error) { status.Text = error.Message; } };
+        var clear = Button("Yeni profil", ClearEditor);
+        var actions = new WrapPanel(); actions.Children.Add(save); actions.Children.Add(clear); root.Children.Add(actions);
+        root.Children.Add(status); Reload();
+        return new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
     static void Add(Panel panel, string label, UIElement control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(4, 8, 2, 2) }); panel.Children.Add(control); }
     static TextBlock Text(string value, int size = 12) => new() { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(3, 4, 3, 7), Foreground = Brushes.DarkSlateGray };
