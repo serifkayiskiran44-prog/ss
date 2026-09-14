@@ -5,6 +5,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 dotnet publish $Project -c Release -r win-x64 --self-contained true -o $OutputDirectory
+& (Join-Path $PSScriptRoot 'New-PublishManifest.ps1') -PackageDirectory $OutputDirectory
 if (Test-Path $PackagePath) { Remove-Item -LiteralPath $PackagePath -Force }
 Compress-Archive -Path (Join-Path $OutputDirectory '*') -DestinationPath $PackagePath -CompressionLevel Optimal
 Write-Output "Self-contained paket hazır: $PackagePath"

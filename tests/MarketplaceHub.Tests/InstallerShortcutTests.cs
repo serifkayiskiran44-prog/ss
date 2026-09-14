@@ -43,6 +43,9 @@ public sealed class InstallerShortcutTests
         File.WriteAllBytes(Path.Combine(packageDirectory, ExeName), new byte[] { 0x4D, 0x5A, 1, 2, 3, 4 });
         File.WriteAllText(Path.Combine(packageDirectory, "TrMarketplaceHubDesktop.runtimeconfig.json"), "{}");
         File.WriteAllText(Path.Combine(packageDirectory, "TrMarketplaceHubDesktop.deps.json"), "{}");
+        // #2566 made publish-manifest.json/.sha256 mandatory for a real install -- a fake package must carry one too.
+        var (exitCode, output) = RunScript("installer/New-PublishManifest.ps1", "-PackageDirectory", packageDirectory);
+        Assert.AreEqual(0, exitCode, "manifest generation for the fixture package must succeed: " + output);
     }
 
     static (int ExitCode, string Output) RunScript(string scriptRelativePath, params string[] args)
