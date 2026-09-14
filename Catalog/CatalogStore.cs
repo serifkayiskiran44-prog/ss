@@ -95,12 +95,12 @@ public partial class CatalogStore
  {
   cancellationToken.ThrowIfCancellationRequested();
   if(context?.CompleteFeed==true&&context.MappingShapeFingerprint.Length>0)XmlCatalog.EnsureMappingReady(source,new XmlMappingSnapshot(context.MappingShapeFingerprint,incoming.Count,Array.Empty<string>(),Array.Empty<string>()),scheduled:false);
-  EnsureDropshipFeedSafe(source,incoming);
+  EnsureDropshipFeedSafe(source,incoming,context?.RunId??""); /* #939: the run id is the diagnostic's correlation id */
   ImportSummary? result=null;
   XmlSourceExecutionGate.RunAsync(source.Id,()=>{result=ImportCore(source,incoming,cancellationToken,context,progress);return Task.CompletedTask;},cancellationToken).GetAwaiter().GetResult();
   return result!;
  }
- void EnsureDropshipFeedSafe(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
+ void EnsureDropshipFeedSafe(XmlSource source,IReadOnlyList<CatalogProduct> incoming,string correlationId)
  {
   var existing=Products().Where(x=>x.SourceId==source.Id).ToList();
   // The caller has already selected a source; this guard is deliberately fail-closed for
@@ -109,7 +109,10 @@ public partial class CatalogStore
   var previous=existing.Count==0?null:new FeedRunMetrics(source.Id,existing.Count,existing.Count(x=>x.Stock<=0),existing.Average(x=>x.Price),0,0,DateTimeOffset.UtcNow);
   var guard=new DropshipAnomalyGuard();
   var report=guard.Evaluate(new FeedRunMetrics(source.Id,currentCount,zeroCount,average,0,0,DateTimeOffset.UtcNow),previous);
-  if(report.ApplyBlocked)throw new InvalidOperationException("Dropshipping anomaly gate blocked import: "+string.Join(", ",report.Reasons));
+  // #939: the decision explained and kept -- triggering values, baseline, thresholds, source age, correlation id -- as a safe diagnostic, for a block and for a near miss alike; the refusal names it.
+  var diagnostic=AnomalyDiagnostics.Explain(report,new AnomalyProfile(),source.LastSuccessfulFeedUtc,correlationId,DateTime.UtcNow);
+  if(diagnostic is not null){try{diagnostic=new AnomalyDiagnosticStore(dataDirectory).Record(diagnostic);}catch(Exception){}}
+  if(report.ApplyBlocked)throw new InvalidOperationException("Dropshipping anomaly gate blocked import: "+string.Join(", ",report.Reasons)+(diagnostic is null?"":" (tanı #"+diagnostic.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)+(diagnostic.CorrelationId.Length>0?", korelasyon "+diagnostic.CorrelationId:"")+")"));
  }
  internal ImportSummary ImportCore(XmlSource source,IReadOnlyList<CatalogProduct> incoming,CancellationToken cancellationToken=default,XmlImportContext? context=null,IProgress<ImportProgressEvent>? progress=null)
  {
