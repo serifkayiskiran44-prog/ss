@@ -6,7 +6,7 @@ using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
 
-public enum BulkProductOperationKind { Activate, Deactivate, SetCategory, SetBrand, SetDescription, SetName, SetChannelMapping }
+public enum BulkProductOperationKind { Activate, Deactivate, SetCategory, SetBrand, SetDescription, SetName, SetChannelMapping, SetPrice, AdjustPricePercent }
 public sealed record BulkProductOperationRequest(BulkProductOperationKind Kind, string Value = "", string Channel = "", string ShopId = "", string ListingId = "", string TargetCategory = "");
 /// Explicit, separate-from-the-filter state: whether a bulk operation targets only
 /// the rows the user selected in the grid, or every row the current search/filter
@@ -51,17 +51,38 @@ public sealed class BulkProductOperations
                 var afterText = $"ilan={plan.ListingId}; kategori={plan.TargetCategory}";
                 rows.Add(new() { ProductId = product.Id, Sku = product.Sku, Name = product.Name, Operation = $"{plan.ChannelId}/{plan.ShopId}", Before = beforeText, After = afterText, ExpectedUpdatedUtc = product.UpdatedUtc, ChannelPlan = plan }); continue;
             }
-            var clone = Clone(product); var beforeValue = Value(product, request.Kind); var afterValue = beforeValue;
+            var clone = Clone(product); var beforeValue = Value(product, request.Kind); var afterValue = beforeValue; var status = "READY"; var error = "";
             if (request.Kind == BulkProductOperationKind.Activate) clone.Active = true;
             else if (request.Kind == BulkProductOperationKind.Deactivate) clone.Active = false;
             else if (request.Kind == BulkProductOperationKind.SetCategory) clone.Category = request.Value.Trim();
             else if (request.Kind == BulkProductOperationKind.SetBrand) clone.Brand = request.Value.Trim();
             else if (request.Kind == BulkProductOperationKind.SetDescription) clone.Description = request.Value;
             else if (request.Kind == BulkProductOperationKind.SetName) clone.Name = request.Value.Trim();
-            afterValue = Value(clone, request.Kind);
-            var status = beforeValue == afterValue ? "SKIP" : "READY"; var error = "";
+            else if (request.Kind == BulkProductOperationKind.SetPrice)
+            {
+                if (product.LockPrice) { status = "SKIP"; error = "Fiyat kilidi etkin; toplu değişiklik uygulanmadı."; }
+                else clone.Price = decimal.Parse(request.Value, NumberStyles.Number, CultureInfo.InvariantCulture);
+            }
+            else if (request.Kind == BulkProductOperationKind.AdjustPricePercent)
+            {
+                if (product.LockPrice) { status = "SKIP"; error = "Fiyat kilidi etkin; toplu değişiklik uygulanmadı."; }
+                else
+                {
+                    var percent = decimal.Parse(request.Value, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+                    try
+                    {
+                        var factor = 1m + percent / 100m;
+                        var newPrice = checked(product.Price * factor);
+                        if (newPrice < 0) { status = "ERROR"; error = "Yüzde değişimi sonucu fiyat negatif olamaz."; }
+                        else clone.Price = Math.Round(newPrice, 2, MidpointRounding.AwayFromZero);
+                    }
+                    catch (OverflowException) { status = "ERROR"; error = "Yüzde değişimi sonucu fiyat taşması oluşuyor."; }
+                }
+            }
+            if (status == "READY") { afterValue = Value(clone, request.Kind); if (beforeValue == afterValue) status = "SKIP"; }
             if (request.Kind == BulkProductOperationKind.SetName && string.IsNullOrWhiteSpace(clone.Name)) { status = "ERROR"; error = "Ürün adı boş olamaz."; }
             if (request.Kind == BulkProductOperationKind.SetDescription && product.LockDescription) { status = "SKIP"; error = "Açıklama kilidi etkin; toplu değişiklik uygulanmadı."; }
+            if (status == "ERROR") afterValue = Value(product, request.Kind);
             rows.Add(new() { ProductId = product.Id, Sku = product.Sku, Name = product.Name, Operation = request.Kind.ToString(), Before = beforeValue, After = afterValue, Status = status, Error = error, ExpectedUpdatedUtc = product.UpdatedUtc, BeforeSnapshot = product, AfterSnapshot = clone });
         }
         return new(Guid.NewGuid(), request, rows, DateTime.UtcNow, scope);
@@ -84,12 +105,21 @@ public sealed class BulkProductOperations
         var result = catalog.ApplyBulkSnapshots(ready, cancellationToken, progress); return new(result.Applied, skipped, errors);
     }
 
-    static string Value(CatalogProduct product, BulkProductOperationKind kind) => kind switch { BulkProductOperationKind.Activate or BulkProductOperationKind.Deactivate => product.Active ? "Aktif" : "Pasif", BulkProductOperationKind.SetCategory => product.Category, BulkProductOperationKind.SetBrand => product.Brand, BulkProductOperationKind.SetDescription => product.Description, BulkProductOperationKind.SetName => product.Name, _ => "" };
+    static string Value(CatalogProduct product, BulkProductOperationKind kind) => kind switch { BulkProductOperationKind.Activate or BulkProductOperationKind.Deactivate => product.Active ? "Aktif" : "Pasif", BulkProductOperationKind.SetCategory => product.Category, BulkProductOperationKind.SetBrand => product.Brand, BulkProductOperationKind.SetDescription => product.Description, BulkProductOperationKind.SetName => product.Name, BulkProductOperationKind.SetPrice or BulkProductOperationKind.AdjustPricePercent => product.Price.ToString("0.00", CultureInfo.InvariantCulture) + " " + product.Currency, _ => "" };
     static CatalogProduct Clone(CatalogProduct product) => JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(product))!;
     static void ValidateRequest(BulkProductOperationRequest request)
     {
         if (request.Kind == BulkProductOperationKind.SetChannelMapping)
         { if (string.IsNullOrWhiteSpace(request.Channel) || string.IsNullOrWhiteSpace(request.ShopId)) throw new ArgumentException("Kanal ve mağaza zorunlu."); if (string.IsNullOrWhiteSpace(request.ListingId) && string.IsNullOrWhiteSpace(request.TargetCategory)) throw new ArgumentException("İlan ID veya hedef kategori girin."); return; }
         if ((request.Kind is BulkProductOperationKind.SetCategory or BulkProductOperationKind.SetBrand or BulkProductOperationKind.SetName or BulkProductOperationKind.SetDescription) && string.IsNullOrWhiteSpace(request.Value)) throw new ArgumentException("Yeni değer boş olamaz.");
+        if (request.Kind == BulkProductOperationKind.SetPrice)
+        {
+            if (!decimal.TryParse(request.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var price) || price < 0) throw new ArgumentException("Yeni fiyat negatif olmayan bir sayı olmalı.");
+        }
+        if (request.Kind == BulkProductOperationKind.AdjustPricePercent)
+        {
+            if (!decimal.TryParse(request.Value, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var percent)) throw new ArgumentException("Yüzde değeri geçerli bir sayı olmalı.");
+            if (percent <= -100) throw new ArgumentException("Yüzde değişimi -100'den küçük veya eşit olamaz (fiyat negatif/sıfır olamaz).");
+        }
     }
 }
