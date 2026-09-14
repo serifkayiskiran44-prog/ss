@@ -25,6 +25,11 @@ public sealed class DataQualityIssue
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 }
 public sealed record DataQualitySummary(int Total, int Critical, int Error, int Warning, int Open, int Resolved);
+/// Bounded diagnostics only (id, a short reason, detection time) - never Message,
+/// Suggestion, Sku, ProductId, Marketplace, or ShopId - for a row whose
+/// CreatedUtc/UpdatedUtc failed to parse. See CatalogStore's CorruptProductRow for
+/// the identical pattern applied to products.
+public sealed record CorruptDataQualityRow(string Id, string Reason, DateTime DetectedUtc);
 
 public sealed class DataQualityStore
 {
@@ -38,13 +43,36 @@ public sealed class DataQualityStore
     {
         Validate(issue); issue.Fingerprint = issue.Fingerprint.Trim(); issue.Message = MarketplaceConnectionStore.Redact(issue.Message); issue.Suggestion = MarketplaceConnectionStore.Redact(issue.Suggestion); issue.UpdatedUtc = DateTime.UtcNow; using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "INSERT INTO QualityIssues VALUES($id,$fingerprint,$severity,$type,$product,$sku,$source,$marketplace,$shop,$message,$suggestion,$status,$created,$updated) ON CONFLICT(Fingerprint) DO UPDATE SET Severity=excluded.Severity,Type=excluded.Type,ProductId=excluded.ProductId,Sku=excluded.Sku,SourceId=excluded.SourceId,Marketplace=excluded.Marketplace,ShopId=excluded.ShopId,Message=excluded.Message,Suggestion=excluded.Suggestion,UpdatedUtc=excluded.UpdatedUtc"; command.Parameters.AddWithValue("$id", issue.Id); command.Parameters.AddWithValue("$fingerprint", issue.Fingerprint); command.Parameters.AddWithValue("$severity", issue.Severity); command.Parameters.AddWithValue("$type", issue.Type); command.Parameters.AddWithValue("$product", issue.ProductId); command.Parameters.AddWithValue("$sku", issue.Sku); command.Parameters.AddWithValue("$source", issue.SourceId); command.Parameters.AddWithValue("$marketplace", issue.Marketplace); command.Parameters.AddWithValue("$shop", issue.ShopId); command.Parameters.AddWithValue("$message", issue.Message); command.Parameters.AddWithValue("$suggestion", issue.Suggestion); command.Parameters.AddWithValue("$status", issue.Status); command.Parameters.AddWithValue("$created", issue.CreatedUtc.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$updated", issue.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)); command.ExecuteNonQuery(); return List().Single(x => x.Fingerprint == issue.Fingerprint);
     }
+    /// A malformed CreatedUtc/UpdatedUtc must never crash the whole read - the row is
+    /// excluded from the healthy result and reported only via CorruptIssues();
+    /// detection re-runs from the row's own stored text every call, so it stays
+    /// stable across a restart without a separate tracking table.
     public IReadOnlyList<DataQualityIssue> List(string? query = null, string? severity = null, string? status = null, string? type = null)
     {
-        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT * FROM QualityIssues WHERE ($query='' OR Message LIKE $like OR Suggestion LIKE $like OR Sku LIKE $like OR ProductId LIKE $like OR SourceId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like) AND ($severity='' OR Severity=$severity) AND ($status='' OR Status=$status) AND ($type='' OR Type=$type) ORDER BY CASE Severity WHEN 'Critical' THEN 0 WHEN 'Error' THEN 1 WHEN 'Warning' THEN 2 ELSE 3 END,UpdatedUtc DESC"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$severity", severity?.Trim() ?? ""); command.Parameters.AddWithValue("$status", status?.Trim() ?? ""); command.Parameters.AddWithValue("$type", type?.Trim() ?? ""); using var r = command.ExecuteReader(); var rows = new List<DataQualityIssue>(); while (r.Read()) rows.Add(Read(r)); return rows;
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT * FROM QualityIssues WHERE ($query='' OR Message LIKE $like OR Suggestion LIKE $like OR Sku LIKE $like OR ProductId LIKE $like OR SourceId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like) AND ($severity='' OR Severity=$severity) AND ($status='' OR Status=$status) AND ($type='' OR Type=$type) ORDER BY CASE Severity WHEN 'Critical' THEN 0 WHEN 'Error' THEN 1 WHEN 'Warning' THEN 2 ELSE 3 END,UpdatedUtc DESC"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$severity", severity?.Trim() ?? ""); command.Parameters.AddWithValue("$status", status?.Trim() ?? ""); command.Parameters.AddWithValue("$type", type?.Trim() ?? ""); using var r = command.ExecuteReader(); var rows = new List<DataQualityIssue>(); while (r.Read()) if (TryRead(r, out var issue, out _)) rows.Add(issue!); return rows;
+    }
+    /// Bounded diagnostics for every row whose CreatedUtc or UpdatedUtc failed to
+    /// parse - never the raw Message/Suggestion/Sku/ProductId/Marketplace/ShopId.
+    public IReadOnlyList<CorruptDataQualityRow> CorruptIssues()
+    {
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT * FROM QualityIssues";
+        using var r = command.ExecuteReader(); var rows = new List<CorruptDataQualityRow>();
+        while (r.Read()) if (!TryRead(r, out _, out var corrupt)) rows.Add(corrupt!);
+        return rows;
     }
     public void SetStatus(string id, string status) { if (status is not ("Open" or "Resolved")) throw new ArgumentException("Kalite durumu geçersiz."); using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "UPDATE QualityIssues SET Status=$status,UpdatedUtc=$updated WHERE Id=$id"; command.Parameters.AddWithValue("$status", status); command.Parameters.AddWithValue("$updated", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$id", id); command.ExecuteNonQuery(); }
     public DataQualitySummary Summary() { var all = List(); return new(all.Count, all.Count(x => x.Severity == "Critical"), all.Count(x => x.Severity == "Error"), all.Count(x => x.Severity == "Warning"), all.Count(x => x.Status == "Open"), all.Count(x => x.Status == "Resolved")); }
-    static DataQualityIssue Read(SqliteDataReader r) => new() { Id = r.GetString(0), Fingerprint = r.GetString(1), Severity = r.GetString(2), Type = r.GetString(3), ProductId = r.GetString(4), Sku = r.GetString(5), SourceId = r.GetString(6), Marketplace = r.GetString(7), ShopId = r.GetString(8), Message = r.GetString(9), Suggestion = r.GetString(10), Status = r.GetString(11), CreatedUtc = DateTime.Parse(r.GetString(12), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), UpdatedUtc = DateTime.Parse(r.GetString(13), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind) };
+    static bool TryRead(SqliteDataReader r, out DataQualityIssue? issue, out CorruptDataQualityRow? corrupt)
+    {
+        issue = null; corrupt = null; var id = r.GetString(0);
+        if (!TryParseUtc(r.GetString(12), out var created)) { corrupt = new(id, "Malformed CreatedUtc timestamp", DateTime.UtcNow); return false; }
+        if (!TryParseUtc(r.GetString(13), out var updated)) { corrupt = new(id, "Malformed UpdatedUtc timestamp", DateTime.UtcNow); return false; }
+        issue = new() { Id = id, Fingerprint = r.GetString(1), Severity = r.GetString(2), Type = r.GetString(3), ProductId = r.GetString(4), Sku = r.GetString(5), SourceId = r.GetString(6), Marketplace = r.GetString(7), ShopId = r.GetString(8), Message = r.GetString(9), Suggestion = r.GetString(10), Status = r.GetString(11), CreatedUtc = created, UpdatedUtc = updated };
+        return true;
+    }
+    /// Only ever a format/parse failure - never conflated with a DB-busy/locked
+    /// SqliteException, which is raised by the surrounding command, not this parse.
+    static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
     static void Validate(DataQualityIssue issue) { if (string.IsNullOrWhiteSpace(issue.Fingerprint) || string.IsNullOrWhiteSpace(issue.Type) || string.IsNullOrWhiteSpace(issue.Message)) throw new ArgumentException("Kalite kaydı fingerprint, tür ve açıklama içermeli."); }
 }
 
@@ -74,6 +102,7 @@ public sealed class DataQualityService
         return discovered;
     }
     public IReadOnlyList<DataQualityIssue> List(string? query = null, string? severity = null, string? status = null, string? type = null) => issues.List(query, severity, status, type);
+    public IReadOnlyList<CorruptDataQualityRow> CorruptIssues() => issues.CorruptIssues();
     public DataQualitySummary Summary() => issues.Summary();
     public void Resolve(string id) => issues.SetStatus(id, "Resolved");
     static string Fingerprint(params string[] values) { using var sha = SHA256.Create(); return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("|", values)))); }
