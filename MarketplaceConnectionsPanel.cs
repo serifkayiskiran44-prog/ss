@@ -31,7 +31,14 @@ public static class MarketplaceConnectionsPanel
         var result = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
         var health = new ApiHealthStore(dataDirectory);
         foreach (var connection in rows) health.EnsureConnection(connection.Channel, connection.ShopId, connection.Status, connection.LastError);
-        var capture = new ApiHealthCaptureHandler { InnerHandler = new HttpClientHandler() };
+        // AllowAutoRedirect=false: this client sends credential-bearing headers
+        // (x-api-key/Bearer via EtsyHttp.AddHeaders) that HttpClientHandler does not
+        // strip on redirect the way it strips Authorization - the default
+        // auto-follow would resend those secrets to whatever host a malicious or
+        // compromised 3xx response names. A 3xx now surfaces directly as a non-2xx
+        // status, which the connector's own IsSuccessStatusCode check already
+        // treats as a failed test, without ever issuing the second request.
+        var capture = new ApiHealthCaptureHandler { InnerHandler = new HttpClientHandler { AllowAutoRedirect = false } };
         var http = new HttpClient(capture) { Timeout = TimeSpan.FromSeconds(30) };
 
         void Show(MarketplaceConnection? item)
