@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
@@ -117,6 +118,35 @@ public static class MediaPanel
         var addRow = new WrapPanel(); addRow.Children.Add(new TextBlock { Text = "Adres", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(url); addRow.Children.Add(new TextBlock { Text = "Kaynak", Margin = new Thickness(4), VerticalAlignment = VerticalAlignment.Center }); addRow.Children.Add(source); addRow.Children.Add(add); panel.Children.Add(addRow);
         var actions = new WrapPanel(); actions.Children.Add(validate); actions.Children.Add(validateAll); actions.Children.Add(primary); actions.Children.Add(remove); panel.Children.Add(actions);
         var body = new Grid(); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(390) }); Grid.SetColumn(grid, 0); Grid.SetColumn(preview, 1); body.Children.Add(grid); body.Children.Add(preview); panel.Children.Add(body); panel.Children.Add(status);
+
+        var runs = new MediaScanRunStore(directory);
+        var scanStatus = Hint("Bir klasör seçip taramayı başlatın. Yalnız dosya adı ürün SKU/barkoduyla birebir eşleşirse eşleme önerilir; belirsiz veya eşleşmeyen dosyalar uygulanmaz.");
+        var scanGrid = new DataGrid { AutoGenerateColumns = true, IsReadOnly = true, Height = 220, EnableRowVirtualization = true };
+        MediaScanPreview? pendingScan = null; string? activeRunId = null;
+        var pickFolder = Button("Klasörden görsel eşle", () =>
+        {
+            var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Ürün görsellerinin bulunduğu klasörü seçin" };
+            if (dialog.ShowDialog() != true) return;
+            pendingScan = MediaFolderScan.Preview(dialog.FolderName, catalog.Products());
+            scanGrid.ItemsSource = pendingScan.Candidates.Select(c => new { c.FileName, Durum = c.Status.ToString(), c.ProductSku }).ToList();
+            var run = runs.Start(pendingScan.Directory, pendingScan.Candidates.Count, pendingScan.Matched, pendingScan.Review);
+            activeRunId = run.Id;
+            scanStatus.Text = $"{pendingScan.Candidates.Count} dosya bulundu · {pendingScan.Matched} eşleşti · {pendingScan.Review} incelemeli · {pendingScan.Unsupported} desteklenmeyen. Henüz hiçbir görsel bağlanmadı.";
+        });
+        var applyScan = Button("Eşleşenleri bağla", () =>
+        {
+            if (pendingScan is null || pendingScan.Matched == 0) throw new InvalidOperationException("Önce bir klasör tarayın; bağlanacak eşleşme yok.");
+            if (MessageBox.Show($"{pendingScan.Matched} dosya ilgili ürünlere görsel olarak bağlanacak. Devam edilsin mi?", "Klasörden görsel eşleme", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            var result = MediaFolderScan.ApplyApproved(pendingScan, true, catalog, media, runs, activeRunId);
+            scanStatus.Text = $"{result.Committed} yeni bağlandı, {result.AlreadyLinked} zaten bağlıydı, {result.Stale} ürün önizlemeden sonra değiştiği için atlandı, {result.Failed} hata.";
+            pendingScan = null; activeRunId = null; scanGrid.ItemsSource = null; RefreshMedia();
+        });
+        var scanSection = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        scanSection.Children.Add(Heading("Klasörden toplu görsel eşleme"));
+        var scanButtons = new WrapPanel(); scanButtons.Children.Add(pickFolder); scanButtons.Children.Add(applyScan); scanSection.Children.Add(scanButtons);
+        scanSection.Children.Add(scanGrid); scanSection.Children.Add(scanStatus);
+        panel.Children.Add(scanSection);
+
         SyncCatalogImages(); RefreshProducts();
         return Scroll(panel);
     }
