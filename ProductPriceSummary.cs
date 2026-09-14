@@ -15,7 +15,8 @@ public sealed record ProductPriceSummaryInfo(
     bool IsCalculationStale,
     IReadOnlyList<string> Warnings,
     IReadOnlyList<string> Order,
-    string CostOrigin = ""); // #922: the words for where the cost came from
+    string CostOrigin = "", // #922: the words for where the cost came from
+    string CostCompleteness = "UNKNOWN", string MissingFees = ""); // #927: COMPLETE, INCOMPLETE_COST, or UNKNOWN without a rule to ask; the fees the rule lacks, named
 
 /// <summary>
 /// The product card's pricing block (#798): sale price, currency, when it was last calculated and whether the
@@ -30,6 +31,7 @@ public static class ProductPriceSummary
     public const string Negative = "negative";
     public const string Thin = "thin";
     public const string Healthy = "healthy";
+    public const string IncompleteCost = "incomplete-cost"; // #927: a required fee is missing -- no margin is shown as an estimate
 
     /// <summary>Same 24 hour window the money calculator uses for an FX snapshot, so the card and the gate agree on "stale".</summary>
     public static readonly TimeSpan StaleAfter = TimeSpan.FromHours(24);
@@ -37,7 +39,7 @@ public static class ProductPriceSummary
     public const decimal ThinMarginPercent = 10m;
     const string Dash = "—";
 
-    public static ProductPriceSummaryInfo Build(CatalogProduct product, DateTime nowUtc, Func<string, XmlSource?>? sourceById = null)
+    public static ProductPriceSummaryInfo Build(CatalogProduct product, DateTime nowUtc, Func<string, XmlSource?>? sourceById = null, PricePolicy? policy = null)
     {
         ArgumentNullException.ThrowIfNull(product);
         var warnings = new List<string>();
@@ -50,7 +52,11 @@ public static class ProductPriceSummary
         if (hasPrice && product.Cost > 0 && !sameCurrency) warnings.Add("Alış ve satış para birimleri farklı; yaklaşık kâr hesaplanamıyor.");
 
         string marginLevel = Unknown, marginText = Dash;
-        if (hasPrice && sameCurrency && product.Cost > 0)
+        // #927: with a rule to ask, a required fee it lacks makes the cost incomplete -- the card names the fees and shows no margin at all rather than an estimate.
+        var missingFees = policy is null ? Array.Empty<string>() : MoneyPriceCalculator.MissingFees(policy.CommissionPercent, policy.EstimatedShippingTry, policy.TransactionCostTry);
+        var completeness = policy is null ? "UNKNOWN" : missingFees.Count > 0 ? "INCOMPLETE_COST" : "COMPLETE";
+        if (missingFees.Count > 0) { marginLevel = IncompleteCost; warnings.Add($"Eksik maliyet kalemleri: {string.Join(", ", missingFees)}; net kâr tahmin edilmez."); }
+        else if (hasPrice && sameCurrency && product.Cost > 0)
         {
             var percent = (product.Price - product.Cost) / product.Price * 100m;
             marginText = percent.ToString("N0", CultureInfo.CurrentCulture) + "%";
@@ -75,7 +81,8 @@ public static class ProductPriceSummary
             IsCalculationStale: stale,
             Warnings: warnings,
             Order: ["Satış fiyatı", "Kâr (yaklaşık)", "Son hesaplama"],
-            CostOrigin: CostProvenance.Describe(product, sourceById, nowUtc)); // #922: the net margin names where its cost came from
+            CostOrigin: CostProvenance.Describe(product, sourceById, nowUtc), // #922: the net margin names where its cost came from
+            CostCompleteness: completeness, MissingFees: string.Join(", ", missingFees)); // #927
     }
 
     // A currency label sits beside the price, so it is clamped rather than allowed to run over it; the price

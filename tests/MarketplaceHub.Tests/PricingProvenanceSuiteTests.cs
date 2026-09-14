@@ -89,8 +89,10 @@ public sealed class PricingProvenanceSuiteTests
             catalog.SavePricePolicy(Policy("no-transaction", "x*1.6", transaction: null));
             catalog.SavePricePolicy(Policy("complete", "x*1.6"));
 
-            foreach (var shop in new[] { "no-shipping", "no-commission", "no-vat", "no-transaction" })
-                StringAssert.Contains(Blocked(catalog, shop, id).Message, "BlockedMissingInput", shop);
+            // #927: a missing fee is its own state, named; the tax rate missing stays the input gap it was.
+            foreach (var shop in new[] { "no-shipping", "no-commission", "no-transaction" })
+                StringAssert.Contains(Blocked(catalog, shop, id).Message, "IncompleteCost", shop);
+            StringAssert.Contains(Blocked(catalog, "no-vat", id).Message, "BlockedMissingInput");
             Assert.AreEqual(160m, catalog.PreviewPrice("local", "complete", id).Price, "The positive control with every fee present is Ready.");
         }
         finally { Cleanup(root); }

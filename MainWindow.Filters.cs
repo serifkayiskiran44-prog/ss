@@ -137,7 +137,8 @@ public partial class MainWindow {
  {
   productPriceSummaryPanel.Children.Clear();
   if (product is null) return;
-  var sourceList = store.Sources(); var summary = ProductPriceSummary.Build(product, DateTime.UtcNow, id => sourceList.FirstOrDefault(s => s.Id == id)); // #922: the card names where the cost came from
+  var sourceList = store.Sources(); PricePolicy? cardPolicy = null; var cardStore = drillStack?.CurrentStoreKey ?? DashboardStoreFilter.AllStoresKey; if (cardStore != DashboardStoreFilter.AllStoresKey && cardStore.Split('|') is { Length: 2 } cardParts) { try { cardPolicy = store.GetPricePolicy(cardParts[0], cardParts[1]); } catch (Exception) { cardPolicy = null; } } /* #927: the board's current store lends its rule so a missing fee is said instead of an estimate */
+  var summary = ProductPriceSummary.Build(product, DateTime.UtcNow, id => sourceList.FirstOrDefault(s => s.Id == id), cardPolicy); // #922: the card names where the cost came from
   var headline = new TextBlock { FontSize = DesignTokens.TextSectionTitleSize, FontWeight = DesignTokens.FontWeightTitle, Text = summary.SalePrice, VerticalAlignment = VerticalAlignment.Center };
   var currency = new TextBlock { Text = " " + summary.Currency, FontSize = DesignTokens.TextBodySize, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(3, 0, 0, 3), Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) };
   var priceLine = new StackPanel { Orientation = Orientation.Horizontal, Children = { headline, currency } };
