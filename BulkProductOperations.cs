@@ -6,7 +6,7 @@ using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
 
-public enum BulkProductOperationKind { Activate, Deactivate, SetCategory, SetBrand, SetDescription, SetName, SetChannelMapping, SetPrice, AdjustPricePercent }
+public enum BulkProductOperationKind { Activate, Deactivate, SetCategory, SetBrand, SetDescription, SetName, SetChannelMapping, SetPrice, AdjustPricePercent, SetStock, AdjustStockDelta }
 public sealed record BulkProductOperationRequest(BulkProductOperationKind Kind, string Value = "", string Channel = "", string ShopId = "", string ListingId = "", string TargetCategory = "");
 /// Explicit, separate-from-the-filter state: whether a bulk operation targets only
 /// the rows the user selected in the grid, or every row the current search/filter
@@ -79,6 +79,23 @@ public sealed class BulkProductOperations
                     catch (OverflowException) { status = "ERROR"; error = "Yüzde değişimi sonucu fiyat taşması oluşuyor."; }
                 }
             }
+            else if (request.Kind == BulkProductOperationKind.SetStock)
+            {
+                if (product.LockStock) { status = "SKIP"; error = "Stok kilidi etkin; toplu değişiklik uygulanmadı."; }
+                else clone.Stock = int.Parse(request.Value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            }
+            else if (request.Kind == BulkProductOperationKind.AdjustStockDelta)
+            {
+                if (product.LockStock) { status = "SKIP"; error = "Stok kilidi etkin; toplu değişiklik uygulanmadı."; }
+                else
+                {
+                    var delta = long.Parse(request.Value, NumberStyles.Integer | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+                    var result = (long)product.Stock + delta;
+                    if (result < 0) { status = "ERROR"; error = "Stok deltası sonucu stok negatif olamaz."; }
+                    else if (result > int.MaxValue) { status = "ERROR"; error = "Stok deltası sonucu tam sayı taşması oluşuyor."; }
+                    else clone.Stock = (int)result;
+                }
+            }
             if (status == "READY") { afterValue = Value(clone, request.Kind); if (beforeValue == afterValue) status = "SKIP"; }
             if (request.Kind == BulkProductOperationKind.SetName && string.IsNullOrWhiteSpace(clone.Name)) { status = "ERROR"; error = "Ürün adı boş olamaz."; }
             if (request.Kind == BulkProductOperationKind.SetDescription && product.LockDescription) { status = "SKIP"; error = "Açıklama kilidi etkin; toplu değişiklik uygulanmadı."; }
@@ -105,7 +122,7 @@ public sealed class BulkProductOperations
         var result = catalog.ApplyBulkSnapshots(ready, cancellationToken, progress); return new(result.Applied, skipped, errors);
     }
 
-    static string Value(CatalogProduct product, BulkProductOperationKind kind) => kind switch { BulkProductOperationKind.Activate or BulkProductOperationKind.Deactivate => product.Active ? "Aktif" : "Pasif", BulkProductOperationKind.SetCategory => product.Category, BulkProductOperationKind.SetBrand => product.Brand, BulkProductOperationKind.SetDescription => product.Description, BulkProductOperationKind.SetName => product.Name, BulkProductOperationKind.SetPrice or BulkProductOperationKind.AdjustPricePercent => product.Price.ToString("0.00", CultureInfo.InvariantCulture) + " " + product.Currency, _ => "" };
+    static string Value(CatalogProduct product, BulkProductOperationKind kind) => kind switch { BulkProductOperationKind.Activate or BulkProductOperationKind.Deactivate => product.Active ? "Aktif" : "Pasif", BulkProductOperationKind.SetCategory => product.Category, BulkProductOperationKind.SetBrand => product.Brand, BulkProductOperationKind.SetDescription => product.Description, BulkProductOperationKind.SetName => product.Name, BulkProductOperationKind.SetPrice or BulkProductOperationKind.AdjustPricePercent => product.Price.ToString("0.00", CultureInfo.InvariantCulture) + " " + product.Currency, BulkProductOperationKind.SetStock or BulkProductOperationKind.AdjustStockDelta => product.Stock.ToString(CultureInfo.InvariantCulture), _ => "" };
     static CatalogProduct Clone(CatalogProduct product) => JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(product))!;
     static void ValidateRequest(BulkProductOperationRequest request)
     {
@@ -120,6 +137,14 @@ public sealed class BulkProductOperations
         {
             if (!decimal.TryParse(request.Value, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var percent)) throw new ArgumentException("Yüzde değeri geçerli bir sayı olmalı.");
             if (percent <= -100) throw new ArgumentException("Yüzde değişimi -100'den küçük veya eşit olamaz (fiyat negatif/sıfır olamaz).");
+        }
+        if (request.Kind == BulkProductOperationKind.SetStock)
+        {
+            if (!int.TryParse(request.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var stock) || stock < 0) throw new ArgumentException("Yeni stok negatif olmayan bir tam sayı olmalı.");
+        }
+        if (request.Kind == BulkProductOperationKind.AdjustStockDelta)
+        {
+            if (!long.TryParse(request.Value, NumberStyles.Integer | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _)) throw new ArgumentException("Stok deltası geçerli bir tam sayı olmalı.");
         }
     }
 }
