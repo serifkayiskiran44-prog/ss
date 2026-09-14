@@ -15,6 +15,10 @@ public sealed class OrderSnapshot
  public decimal? ShippingTotal {get;set;}
  public decimal? DiscountTotal {get;set;}
  public decimal? TaxTotal {get;set;}
+ // #947: a component's own currency, when it differs from (or simply confirms) the header's; null means "assumed the header's, not separately reported".
+ public string? ShippingCurrency {get;set;}
+ public decimal? RefundTotal {get;set;}
+ public string? RefundCurrency {get;set;}
  public string TotalLabel=>Total.HasValue?$"{Total:0.00} {Currency}":"—";
  public DateTimeOffset UpdatedAt {get;set;}=DateTimeOffset.UtcNow;
  public DateTimeOffset SourceUpdatedAt {get;set;}
@@ -45,7 +49,7 @@ public sealed class OrderSnapshot
  public OrderSnapshot Copy()=>JsonSerializer.Deserialize<OrderSnapshot>(JsonSerializer.Serialize(this))!;
 }
 public sealed record DeliverySla(string Status,int DaysInTransit,string Label);
-public sealed class OrderItem {public string Title {get;set;}="";public string Sku {get;set;}="";public int Quantity {get;set;}=1;public decimal? UnitPrice {get;set;}} // #946: the price the line was sold at; null when not reported
+public sealed class OrderItem {public string Title {get;set;}="";public string Sku {get;set;}="";public int Quantity {get;set;}=1;public decimal? UnitPrice {get;set;}public string? Currency {get;set;}} // #946: the price the line was sold at; #947: the line's own currency when reported separately from the header
 public sealed class OrderShipment
 {
  public string Id {get;set;}="";
