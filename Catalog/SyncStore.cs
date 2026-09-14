@@ -27,7 +27,7 @@ public sealed class SyncStore
   // Columns must exist before any index referencing them is (re)built - a legacy
   // SyncJobs table predating ShopId/ErrorClass previously hit "no such column:
   // ShopId" here because the unique index was built in Open() before this ran.
-  EnsureColumn(c,"ShopId","TEXT NOT NULL DEFAULT 'default'");EnsureColumn(c,"ErrorClass","INTEGER NOT NULL DEFAULT 0");
+  EnsureColumn(c,"ShopId","TEXT NOT NULL DEFAULT 'default'");EnsureColumn(c,"ErrorClass","INTEGER NOT NULL DEFAULT 0");EnsureColumn(c,"Generation","INTEGER NOT NULL DEFAULT 0");
   EnsureUniqueKeyIndex(c);
   SchemaVersion.Ensure(c);
  }
@@ -68,7 +68,25 @@ public sealed class SyncStore
  /// can never be claimed/started even though the UPDATE...WHERE itself only keys
  /// off Id/Status and never parses the timestamp.
  bool RowIsHealthy(string id){using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText=Select+" WHERE Id=$id";cmd.Parameters.AddWithValue("$id",id);using var r=cmd.ExecuteReader();return r.Read()&&TryRead(r,out _,out _);}
- public bool TryStart(string id){if(!RowIsHealthy(id))return false;using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="UPDATE SyncJobs SET Status=$running,UpdatedUtc=$updated WHERE Id=$id AND Status=$pending";cmd.Parameters.AddWithValue("$running",(int)SyncStatus.Running);cmd.Parameters.AddWithValue("$pending",(int)SyncStatus.Pending);cmd.Parameters.AddWithValue("$updated",DateTime.UtcNow.ToString("O"));cmd.Parameters.AddWithValue("$id",id);return cmd.ExecuteNonQuery()==1;}
+ public bool TryStart(string id) => TryStart(id, out _);
+ /// The returned generation identifies this specific Running episode: it bumps
+ /// every time a job is claimed out of Pending. A completion (Succeed/Fail) that
+ /// quotes back this generation can only apply while the job is still on this
+ /// exact episode - see the generation-aware Succeed/Fail overloads, which close
+ /// the abandoned-run recovery race (Running A -> abandoned -> Pending -> Running
+ /// B -> A's late completion arrives): A's generation no longer matches once B
+ /// has claimed the job, even though Status is Running again for B.
+ public bool TryStart(string id, out long generation)
+ {
+  generation=0; if(!RowIsHealthy(id))return false;
+  using var c=Open();using var cmd=c.CreateCommand();
+  cmd.CommandText="UPDATE SyncJobs SET Status=$running,UpdatedUtc=$updated,Generation=Generation+1 WHERE Id=$id AND Status=$pending";
+  cmd.Parameters.AddWithValue("$running",(int)SyncStatus.Running);cmd.Parameters.AddWithValue("$pending",(int)SyncStatus.Pending);cmd.Parameters.AddWithValue("$updated",DateTime.UtcNow.ToString("O"));cmd.Parameters.AddWithValue("$id",id);
+  if(cmd.ExecuteNonQuery()!=1)return false;
+  using var sel=c.CreateCommand();sel.CommandText="SELECT Generation FROM SyncJobs WHERE Id=$id";sel.Parameters.AddWithValue("$id",id);
+  generation=Convert.ToInt64(sel.ExecuteScalar());
+  return true;
+ }
  public bool Cancel(string id){using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="UPDATE SyncJobs SET Status=$cancelled,LastError=$error,ErrorClass=0,UpdatedUtc=$updated WHERE Id=$id AND Status IN ($pending,$running)";cmd.Parameters.AddWithValue("$cancelled",(int)SyncStatus.Cancelled);cmd.Parameters.AddWithValue("$pending",(int)SyncStatus.Pending);cmd.Parameters.AddWithValue("$running",(int)SyncStatus.Running);cmd.Parameters.AddWithValue("$error","Kullanıcı tarafından iptal edildi; yeniden dispatch edilmez.");cmd.Parameters.AddWithValue("$updated",DateTime.UtcNow.ToString("O"));cmd.Parameters.AddWithValue("$id",id);return cmd.ExecuteNonQuery()==1;}
  /// Candidates are re-validated in .NET (not decided by raw SQL text comparison
  /// against a corrupt UpdatedUtc) before any row is actually recovered, so a
@@ -85,8 +103,50 @@ public sealed class SyncStore
   foreach(var id in candidateIds){using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="UPDATE SyncJobs SET Status=$pending,LastError=$error,ErrorClass=$class,UpdatedUtc=$updated WHERE Id=$id AND Status=$running";cmd.Parameters.AddWithValue("$pending",(int)SyncStatus.Pending);cmd.Parameters.AddWithValue("$running",(int)SyncStatus.Running);cmd.Parameters.AddWithValue("$error","Önceki çalışma sonlandı; iş güvenli yeniden deneme için kuyruğa alındı.");cmd.Parameters.AddWithValue("$class",(int)SyncErrorClass.Unknown);cmd.Parameters.AddWithValue("$updated",now.ToString("O"));cmd.Parameters.AddWithValue("$id",id);recovered+=cmd.ExecuteNonQuery();}
   tx.Commit();return recovered;
  }
- public void Succeed(string id){using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="UPDATE SyncJobs SET Status=$status,LastError='',ErrorClass=0,UpdatedUtc=$updated WHERE Id=$id";cmd.Parameters.AddWithValue("$status",(int)SyncStatus.Succeeded);cmd.Parameters.AddWithValue("$updated",DateTime.UtcNow.ToString("O"));cmd.Parameters.AddWithValue("$id",id);if(cmd.ExecuteNonQuery()!=1)throw new InvalidOperationException("Sync işi bulunamadı.");}
- public void Fail(string id,string error){var safe=Redact(error);var classification=Classify(safe);using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="UPDATE SyncJobs SET Status=$status,FailureCount=FailureCount+1,LastError=$error,ErrorClass=$class,UpdatedUtc=$updated WHERE Id=$id";cmd.Parameters.AddWithValue("$status",(int)SyncStatus.Failed);cmd.Parameters.AddWithValue("$error",safe);cmd.Parameters.AddWithValue("$class",(int)classification);cmd.Parameters.AddWithValue("$updated",DateTime.UtcNow.ToString("O"));cmd.Parameters.AddWithValue("$id",id);if(cmd.ExecuteNonQuery()!=1)throw new InvalidOperationException("Sync işi bulunamadı.");}
+ /// Terminal transition, CAS'd on Status=Running (and, with the generation
+ /// overload, the exact Running episode) so a late/duplicate completion callback
+ /// can never overwrite Cancelled or any other terminal state. Returns false
+ /// (rather than throwing) when the job exists but the transition was rejected as
+ /// stale - only a genuinely missing id still throws, matching every other
+ /// id-keyed method's contract.
+ public bool Succeed(string id) => Succeed(id, null);
+ public bool Succeed(string id, long generation) => Succeed(id, (long?)generation);
+ bool Succeed(string id, long? generation)
+ {
+  using var c=Open();using var cmd=c.CreateCommand();
+  cmd.CommandText = generation.HasValue
+   ? "UPDATE SyncJobs SET Status=$status,LastError='',ErrorClass=0,UpdatedUtc=$updated WHERE Id=$id AND Status=$running AND Generation=$generation"
+   : "UPDATE SyncJobs SET Status=$status,LastError='',ErrorClass=0,UpdatedUtc=$updated WHERE Id=$id AND Status=$running";
+  cmd.Parameters.AddWithValue("$status",(int)SyncStatus.Succeeded);cmd.Parameters.AddWithValue("$running",(int)SyncStatus.Running);cmd.Parameters.AddWithValue("$updated",DateTime.UtcNow.ToString("O"));cmd.Parameters.AddWithValue("$id",id);
+  if(generation.HasValue)cmd.Parameters.AddWithValue("$generation",generation.Value);
+  if(cmd.ExecuteNonQuery()==1)return true;
+  return RowExistsOrThrow(c,id);
+ }
+ /// Same CAS discipline as Succeed, but a job can legitimately fail before ever
+ /// being started (a caller that Enqueues and immediately Fails without going
+ /// through TryStart), so the no-generation overload accepts Pending or Running -
+ /// both are pre-terminal - while still excluding Cancelled/Succeeded/Failed.
+ public bool Fail(string id,string error) => Fail(id, null, error);
+ public bool Fail(string id, long generation, string error) => Fail(id, (long?)generation, error);
+ bool Fail(string id, long? generation, string error)
+ {
+  var safe=Redact(error);var classification=Classify(safe);
+  using var c=Open();using var cmd=c.CreateCommand();
+  cmd.CommandText = generation.HasValue
+   ? "UPDATE SyncJobs SET Status=$status,FailureCount=FailureCount+1,LastError=$error,ErrorClass=$class,UpdatedUtc=$updated WHERE Id=$id AND Status=$running AND Generation=$generation"
+   : "UPDATE SyncJobs SET Status=$status,FailureCount=FailureCount+1,LastError=$error,ErrorClass=$class,UpdatedUtc=$updated WHERE Id=$id AND Status IN ($pending,$running)";
+  cmd.Parameters.AddWithValue("$status",(int)SyncStatus.Failed);cmd.Parameters.AddWithValue("$error",safe);cmd.Parameters.AddWithValue("$class",(int)classification);cmd.Parameters.AddWithValue("$updated",DateTime.UtcNow.ToString("O"));cmd.Parameters.AddWithValue("$id",id);
+  if(generation.HasValue){cmd.Parameters.AddWithValue("$running",(int)SyncStatus.Running);cmd.Parameters.AddWithValue("$generation",generation.Value);}
+  else{cmd.Parameters.AddWithValue("$pending",(int)SyncStatus.Pending);cmd.Parameters.AddWithValue("$running",(int)SyncStatus.Running);}
+  if(cmd.ExecuteNonQuery()==1)return true;
+  return RowExistsOrThrow(c,id);
+ }
+ static bool RowExistsOrThrow(SqliteConnection c,string id)
+ {
+  using var exists=c.CreateCommand();exists.CommandText="SELECT 1 FROM SyncJobs WHERE Id=$id";exists.Parameters.AddWithValue("$id",id);
+  if(exists.ExecuteScalar() is null)throw new InvalidOperationException("Sync işi bulunamadı.");
+  return false;
+ }
  public void Retry(string id){var job=Get(id);if(job.Status!=SyncStatus.Failed)throw new InvalidOperationException("Yalnızca başarısız sync işleri tekrarlanabilir.");if(!IsRetryable(job.ErrorClass))throw new InvalidOperationException($"{job.ErrorClass} sınıfındaki sync işi otomatik tekrar denenemez; veriyi düzeltip yeni önizleme oluşturun.");if(job.FailureCount>=3)throw new InvalidOperationException("Sync işi üç başarısız denemeden sonra durduruldu.");using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="UPDATE SyncJobs SET Status=$status,LastError='',ErrorClass=0,UpdatedUtc=$updated WHERE Id=$id";cmd.Parameters.AddWithValue("$status",(int)SyncStatus.Pending);cmd.Parameters.AddWithValue("$updated",DateTime.UtcNow.ToString("O"));cmd.Parameters.AddWithValue("$id",id);cmd.ExecuteNonQuery();}
  public static TimeSpan RetryDelay(int failureCount){if(failureCount<1)throw new ArgumentOutOfRangeException(nameof(failureCount));return TimeSpan.FromSeconds(Math.Min(300,Math.Pow(2,failureCount)*5));}
  /// A malformed UpdatedUtc must never crash the whole read - the row is excluded
