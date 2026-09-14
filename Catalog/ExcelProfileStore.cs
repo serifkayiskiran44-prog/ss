@@ -14,6 +14,15 @@ public sealed class ExcelImportProfile
     public Dictionary<string, string> HeaderAliases { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> Defaults { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<string> VisibleFields { get; set; } = [];
+    /// null/empty means "first worksheet" (previous fixed behavior); set explicitly
+    /// once the user picks a sheet other than the first, or a hidden/empty first
+    /// sheet would otherwise be silently assumed.
+    public string? SheetName { get; set; }
+    /// 1-based row number containing headers; previously always assumed to be 1.
+    public int HeaderRow { get; set; } = 1;
+    /// Header text captured at save time, so a later load can detect the workbook's
+    /// header set changed and warn instead of silently mis-mapping columns.
+    public List<string> ExpectedHeaders { get; set; } = [];
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 }
 
