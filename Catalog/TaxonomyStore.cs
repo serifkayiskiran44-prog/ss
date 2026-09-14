@@ -14,6 +14,11 @@ public sealed record TaxonomyMappingHistoryRecord(DateTime ChangedUtc, TaxonomyK
 public sealed record TaxonomyUsage(int Products, int Mappings) { public int Total => Products + Mappings; }
 public enum TaxonomyResolution { NotMapped, Ready, TargetInactive, TargetMissing }
 public sealed record TaxonomyResolutionResult(TaxonomyResolution Status, string? LocalId, string? LocalName);
+/// Bounded diagnostics only (id/kind, a short reason, detection time) - never
+/// Name/Value/ExternalKey/LocalId - for a persisted timestamp that failed to parse.
+/// See CatalogStore's CorruptProductRow for the identical pattern applied to products.
+public sealed record CorruptTaxonomyEntry(string Id, TaxonomyKind Kind, string Reason, DateTime DetectedUtc);
+public sealed record CorruptTaxonomyHistoryRow(string Id, TaxonomyKind Kind, string Reason, DateTime DetectedUtc);
 
 public sealed class TaxonomyStore
 {
@@ -87,10 +92,37 @@ public sealed class TaxonomyStore
         if (delete.ExecuteNonQuery() != 1) throw new InvalidOperationException("Silinecek kayıt bulunamadı.");
         tx.Commit();
     }
+    /// A malformed persisted UpdatedUtc must never resolve to DateTime.MinValue and
+    /// pass as a normal (if very old) entry - that would let a mapping freshness
+    /// check (MappingViews) misclassify it as STALE based on a fabricated date. This
+    /// row is instead excluded from List() and reported only via CorruptEntries();
+    /// re-detection runs from the row's own stored text every call, so review state
+    /// naturally survives a restart.
     public IReadOnlyList<TaxonomyEntry> List(TaxonomyKind kind)
-    { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,Name,Value,Active,UpdatedUtc FROM TaxonomyEntries WHERE Kind=$kind ORDER BY Name,Value"; cmd.Parameters.AddWithValue("$kind", (int)kind); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyEntry>(); while (r.Read()) result.Add(ReadEntry(r)); return result; }
-    static TaxonomyEntry ReadEntry(SqliteDataReader r) => new() { Id = r.GetString(0), Kind = (TaxonomyKind)r.GetInt32(1), Name = r.GetString(2), Value = r.GetString(3), Active = r.GetInt32(4) != 0, UpdatedUtc = ParseUtc(r.GetString(5)) };
-    static DateTime ParseUtc(string value) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date) ? date : DateTime.MinValue;
+    {
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,Name,Value,Active,UpdatedUtc FROM TaxonomyEntries WHERE Kind=$kind ORDER BY Name,Value"; cmd.Parameters.AddWithValue("$kind", (int)kind);
+        using var r = cmd.ExecuteReader(); var result = new List<TaxonomyEntry>();
+        while (r.Read()) if (TryReadEntry(r, out var entry, out _)) result.Add(entry!);
+        return result;
+    }
+    public IReadOnlyList<CorruptTaxonomyEntry> CorruptEntries(TaxonomyKind kind)
+    {
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,Name,Value,Active,UpdatedUtc FROM TaxonomyEntries WHERE Kind=$kind"; cmd.Parameters.AddWithValue("$kind", (int)kind);
+        using var r = cmd.ExecuteReader(); var result = new List<CorruptTaxonomyEntry>();
+        while (r.Read()) if (!TryReadEntry(r, out _, out var corrupt)) result.Add(corrupt!);
+        return result;
+    }
+    static bool TryReadEntry(SqliteDataReader r, out TaxonomyEntry? entry, out CorruptTaxonomyEntry? corrupt)
+    {
+        entry = null; corrupt = null; var id = r.GetString(0); var kind = (TaxonomyKind)r.GetInt32(1);
+        if (!TryParseUtc(r.GetString(5), out var updated)) { corrupt = new(id, kind, "Malformed UpdatedUtc timestamp", DateTime.UtcNow); return false; }
+        entry = new() { Id = id, Kind = kind, Name = r.GetString(2), Value = r.GetString(3), Active = r.GetInt32(4) != 0, UpdatedUtc = updated };
+        return true;
+    }
+    /// Only ever a format/parse failure - never conflated with a DB-busy/locked
+    /// SqliteException, which is raised (and propagates) by the surrounding command,
+    /// not by this pure string parse.
+    static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
     public void Map(TaxonomyKind kind, string externalKey, string localId, string marketplace = "local", string shopId = "default")
     {
         ValidateExternalKey(externalKey); if (string.IsNullOrWhiteSpace(localId) || string.IsNullOrWhiteSpace(marketplace) || string.IsNullOrWhiteSpace(shopId)) throw new InvalidOperationException("Pazaryeri, mağaza, harici anahtar ve yerel eşleme zorunlu.");
@@ -133,13 +165,44 @@ public sealed class TaxonomyStore
     public IReadOnlyList<TaxonomyMapping> Mappings(TaxonomyKind kind) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Marketplace,ShopId,ExternalKey,LocalId FROM TaxonomyMappings WHERE Kind=$kind ORDER BY Marketplace,ShopId,ExternalKey"; cmd.Parameters.AddWithValue("$kind", (int)kind); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMapping>(); while (r.Read()) result.Add(new(kind, r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3))); return result; }
     public IReadOnlyList<TaxonomyMappingView> MappingViews(TaxonomyKind kind, string marketplace, string shopId, string? query = null)
     {
-        var entries = List(kind).ToDictionary(x => x.Id); var mappings = Mappings(kind).Where(x => x.Marketplace == marketplace.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim()).ToDictionary(x => x.ExternalKey, StringComparer.OrdinalIgnoreCase); var updated = MappingUpdated(kind, marketplace, shopId); var rows = new List<TaxonomyMappingView>();
+        var entries = List(kind).ToDictionary(x => x.Id); var mappings = Mappings(kind).Where(x => x.Marketplace == marketplace.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim()).ToDictionary(x => x.ExternalKey, StringComparer.OrdinalIgnoreCase); var (updated, corruptTimestamps) = MappingUpdated(kind, marketplace, shopId); var rows = new List<TaxonomyMappingView>();
         foreach (var entry in entries.Values)
-        { var mapping = mappings.Values.FirstOrDefault(x => x.LocalId == entry.Id); var external = mapping?.ExternalKey ?? ""; if (!string.IsNullOrWhiteSpace(query) && !($"{entry.Name} {entry.Value} {external}").Contains(query, StringComparison.CurrentCultureIgnoreCase)) continue; var state = mapping is null ? "MISSING" : !entry.Active ? "INVALID" : updated.GetValueOrDefault(mapping.ExternalKey) < DateTime.UtcNow.AddDays(-180) ? "STALE" : "MAPPED"; rows.Add(new(kind, marketplace.Trim().ToLowerInvariant(), shopId.Trim(), external, mapping?.LocalId ?? entry.Id, entry.Name, state, updated.GetValueOrDefault(external))); }
+        {
+            var mapping = mappings.Values.FirstOrDefault(x => x.LocalId == entry.Id); var external = mapping?.ExternalKey ?? "";
+            if (!string.IsNullOrWhiteSpace(query) && !($"{entry.Name} {entry.Value} {external}").Contains(query, StringComparison.CurrentCultureIgnoreCase)) continue;
+            var when = updated.GetValueOrDefault(external);
+            // An unparsable mapping timestamp must never be treated as "very old": that
+            // would silently force STALE. It gets its own explicit review state instead.
+            var state = mapping is null ? "MISSING" : corruptTimestamps.Contains(external) ? "REVIEW_REQUIRED" : !entry.Active ? "INVALID" : when < DateTime.UtcNow.AddDays(-180) ? "STALE" : "MAPPED";
+            rows.Add(new(kind, marketplace.Trim().ToLowerInvariant(), shopId.Trim(), external, mapping?.LocalId ?? entry.Id, entry.Name, state, when));
+        }
         return rows.OrderBy(x => x.Status).ThenBy(x => x.LocalName).ToList();
     }
-    Dictionary<string, DateTime> MappingUpdated(TaxonomyKind kind, string marketplace, string shopId) { using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT ExternalKey,UpdatedUtc FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); using var r = cmd.ExecuteReader(); var result = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase); while (r.Read()) result[r.GetString(0)] = ParseUtc(r.GetString(1)); return result; }
-    public IReadOnlyList<TaxonomyMappingHistoryRecord> History(TaxonomyKind kind, string marketplace, string shopId, int limit = 100) { if (limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit)); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT ChangedUtc,Kind,Marketplace,ShopId,ExternalKey,LocalId,Action FROM TaxonomyMappingHistory WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop ORDER BY ChangedUtc DESC LIMIT $limit"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$limit", limit); using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMappingHistoryRecord>(); while (r.Read()) result.Add(new(ParseUtc(r.GetString(0)), (TaxonomyKind)r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6))); return result; }
+    (Dictionary<string, DateTime> Updated, HashSet<string> Corrupt) MappingUpdated(TaxonomyKind kind, string marketplace, string shopId)
+    {
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT ExternalKey,UpdatedUtc FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim());
+        using var r = cmd.ExecuteReader(); var result = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase); var corrupt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (r.Read()) { var key = r.GetString(0); if (TryParseUtc(r.GetString(1), out var when)) result[key] = when; else corrupt.Add(key); }
+        return (result, corrupt);
+    }
+    /// A row whose ChangedUtc can't be parsed is excluded rather than injected into
+    /// the chronology as a fabricated DateTime.MinValue entry; see CorruptHistory() for
+    /// the bounded diagnostics covering exactly those excluded rows.
+    public IReadOnlyList<TaxonomyMappingHistoryRecord> History(TaxonomyKind kind, string marketplace, string shopId, int limit = 100)
+    {
+        if (limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT ChangedUtc,Kind,Marketplace,ShopId,ExternalKey,LocalId,Action FROM TaxonomyMappingHistory WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop ORDER BY ChangedUtc DESC LIMIT $limit"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$limit", limit);
+        using var r = cmd.ExecuteReader(); var result = new List<TaxonomyMappingHistoryRecord>();
+        while (r.Read()) if (TryParseUtc(r.GetString(0), out var changed)) result.Add(new(changed, (TaxonomyKind)r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6)));
+        return result;
+    }
+    public IReadOnlyList<CorruptTaxonomyHistoryRow> CorruptHistory(TaxonomyKind kind, string marketplace, string shopId)
+    {
+        using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id,Kind,ChangedUtc FROM TaxonomyMappingHistory WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim());
+        using var r = cmd.ExecuteReader(); var result = new List<CorruptTaxonomyHistoryRow>();
+        while (r.Read()) if (!TryParseUtc(r.GetString(2), out _)) result.Add(new(r.GetString(0), (TaxonomyKind)r.GetInt32(1), "Malformed ChangedUtc timestamp", DateTime.UtcNow));
+        return result;
+    }
     public IReadOnlyList<TaxonomySuggestion> SuggestBulk(TaxonomyKind kind, IEnumerable<string> externalKeys) { var entries = List(kind).Where(x => x.Active).ToList(); return externalKeys.Select(key => key.Trim()).Where(key => key.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Select(key => { var normalized = Normalize(key); var best = entries.Select(entry => (entry, score: Score(normalized, Normalize(entry.Name)))).Where(x => x.score > 0).OrderByDescending(x => x.score).FirstOrDefault(); return best.entry is null || best.score < 50 ? new TaxonomySuggestion(key, null, null, "UNMATCHED") : new TaxonomySuggestion(key, best.entry.Id, best.entry.Name, "SUGGESTED"); }).ToList(); }
     static int Score(string left, string right) => left == right ? 100 : right.StartsWith(left, StringComparison.Ordinal) || left.StartsWith(right, StringComparison.Ordinal) ? 75 : left.Contains(right, StringComparison.Ordinal) || right.Contains(left, StringComparison.Ordinal) ? 50 : 0;
     static string Normalize(string value) { var form = value.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD); var filtered = new string(form.Where(x => CharUnicodeInfo.GetUnicodeCategory(x) != UnicodeCategory.NonSpacingMark && (char.IsLetterOrDigit(x) || char.IsWhiteSpace(x))).ToArray()); return string.Join(' ', filtered.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)); }
