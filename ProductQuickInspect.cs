@@ -22,7 +22,7 @@ public static class ProductQuickInspect
 {
     const string Dash = "—";
 
-    public static ProductQuickInspectView Build(CatalogProduct product, IReadOnlyList<SyncJob> jobs, DateTime nowUtc, IReadOnlyList<XmlSource>? sources = null)
+    public static ProductQuickInspectView Build(CatalogProduct product, IReadOnlyList<SyncJob> jobs, DateTime nowUtc, IReadOnlyList<XmlSource>? sources = null, IReadOnlyList<OrderSnapshot>? orders = null)
     {
         ArgumentNullException.ThrowIfNull(product); ArgumentNullException.ThrowIfNull(jobs);
         var rows = new List<ProductQuickInspectRow>();
@@ -48,6 +48,7 @@ public static class ProductQuickInspect
         Add("Stok", "Ağırlık (kargo)", ProductUnits.DescribeWeight(product));
         Add("Stok", "Boyut (kargo)", ProductUnits.DescribeDimensions(product));
         Add("Stok", "Desi (kargo)", ProductDimensions.Describe(product)); // #908: the desi with its origin, or why there is none
+        Add("Stok", "Oversell riski", OversellRisk.Judge(product, jobs, orders, id => sources?.FirstOrDefault(s => s.Id == id), nowUtc).Words); // #934: explainable, decision support only -- the freshness, the open orders, the sync lag
 
         Add("Kaynak", "Kaynak türü", product.SourceKind);
         Add("Kaynak", "Son kaynak güncellemesi", product.SourceUpdatedUtc is { } touched ? Ago(nowUtc - touched) : null);
