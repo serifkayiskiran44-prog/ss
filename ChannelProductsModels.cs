@@ -12,5 +12,8 @@ public sealed class ChannelProductPlan
  public int PlannedStock {get;set;}
  public string Notes {get;set;}="";
  public DateTime UpdatedUtc {get;set;}
+ /// Optimistic-concurrency token: must equal the currently-stored value (0 for
+ /// "no plan yet") for Save/SaveBatch to accept the write - see ChannelProductsStore.
+ public int Version {get;set;}
  public string Provenance => "Yerel taslak";
 }

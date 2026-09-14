@@ -46,7 +46,10 @@ public sealed class BulkProductOperations
             var before = request.Kind == BulkProductOperationKind.SetChannelMapping ? plans.Find(request.Channel, request.ShopId, product.Id) : null;
             if (request.Kind == BulkProductOperationKind.SetChannelMapping)
             {
-                var plan = new ChannelProductPlan { ChannelId = request.Channel.Trim().ToLowerInvariant(), ShopId = request.ShopId.Trim(), ProductId = product.Id, ListingId = request.ListingId.Trim(), TargetCategory = request.TargetCategory.Trim(), PlannedPrice = product.Price, PlannedStock = product.Stock, Currency = product.Currency, Notes = "Toplu yerel kanal planı" };
+                // Version starts at the currently-stored plan's version (0 if none) so
+                // Apply's re-check against the live row can detect a plan that changed,
+                // was deleted, or was newly created after this preview was built.
+                var plan = new ChannelProductPlan { ChannelId = request.Channel.Trim().ToLowerInvariant(), ShopId = request.ShopId.Trim(), ProductId = product.Id, ListingId = request.ListingId.Trim(), TargetCategory = request.TargetCategory.Trim(), PlannedPrice = product.Price, PlannedStock = product.Stock, Currency = product.Currency, Notes = "Toplu yerel kanal planı", Version = before?.Version ?? 0 };
                 var beforeText = before is null ? "plan yok" : $"ilan={before.ListingId}; kategori={before.TargetCategory}";
                 var afterText = $"ilan={plan.ListingId}; kategori={plan.TargetCategory}";
                 rows.Add(new() { ProductId = product.Id, Sku = product.Sku, Name = product.Name, Operation = $"{plan.ChannelId}/{plan.ShopId}", Before = beforeText, After = afterText, ExpectedUpdatedUtc = product.UpdatedUtc, ChannelPlan = plan }); continue;
@@ -113,11 +116,25 @@ public sealed class BulkProductOperations
         cancellationToken.ThrowIfCancellationRequested();
         if (preview.Request.Kind == BulkProductOperationKind.SetChannelMapping)
         {
-            foreach (var line in ready) { cancellationToken.ThrowIfCancellationRequested(); var current = catalog.Products().SingleOrDefault(x => x.Id == line.ProductId) ?? throw new InvalidOperationException("Ürün silinmiş; yeni önizleme alınmalı."); if (current.UpdatedUtc != line.ExpectedUpdatedUtc) throw new InvalidOperationException($"{line.Sku} önizlemeden sonra değişti; işlem iptal edildi."); }
-            // Validation is cancellable, but the commit phase is deliberately non-cancellable:
-            // ChannelPlans has one-row upserts, so stopping halfway would leave a partial batch.
-            // Once all optimistic checks pass, finish the local commit and report cancellation on the next run.
-            var count = 0; foreach (var line in ready) { plans.Save(line.ChannelPlan!); count++; progress?.Report(count * 100 / ready.Count); } return new(count, skipped, errors);
+            var products = catalog.Products();
+            foreach (var line in ready)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var current = products.SingleOrDefault(x => x.Id == line.ProductId) ?? throw new InvalidOperationException("Ürün silinmiş; yeni önizleme alınmalı.");
+                if (current.UpdatedUtc != line.ExpectedUpdatedUtc) throw new InvalidOperationException($"{line.Sku} önizlemeden sonra değişti; işlem iptal edildi.");
+                // Re-check the plan's own version against the live row, not just the
+                // product: the plan could have changed, been deleted, or been newly
+                // created under this key after this preview was built, even if the
+                // product itself never changed.
+                var plan = line.ChannelPlan!; var liveVersion = plans.Find(plan.ChannelId, plan.ShopId, plan.ProductId)?.Version ?? 0;
+                if (liveVersion != plan.Version) throw new InvalidOperationException($"{line.Sku} kanal planı önizlemeden sonra değişti; yeni önizleme alınmalı.");
+            }
+            // Commit is a single all-or-nothing transaction (SaveBatch): a mid-batch
+            // failure never leaves a partial commit, and cancellation past this point
+            // has no effect - either every row lands together or none do.
+            plans.SaveBatch(ready.Select(x => x.ChannelPlan!).ToList());
+            progress?.Report(100);
+            return new(ready.Count, skipped, errors);
         }
         var result = catalog.ApplyBulkSnapshots(ready, cancellationToken, progress); return new(result.Applied, skipped, errors);
     }
