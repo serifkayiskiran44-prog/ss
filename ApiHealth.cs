@@ -160,18 +160,83 @@ public sealed class ApiHealthStore
     }
     public void Observe(string channel, string shopId, ApiHealthObservation observation)
     {
-        ValidateIdentity(channel, shopId); var normalizedChannel = channel.Trim().ToLowerInvariant(); var normalizedShop = shopId.Trim(); var observed = observation.ObservedUtc == default ? DateTimeOffset.UtcNow : observation.ObservedUtc; var lastSuccess = observation.State == "HEALTHY" ? observed.ToString("O", CultureInfo.InvariantCulture) : null; var error = observation.ErrorMessage.Length == 0 ? "" : AuditStore.Sanitize(observation.ErrorMessage); using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "INSERT INTO ApiHealth(Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc) VALUES($channel,$shop,$state,$auth,$class,$http,$attempt,$success,$error,$remaining,$limit,$reset,$retry,$backoff,$updated) ON CONFLICT(Channel,ShopId) DO UPDATE SET State=excluded.State,AuthStatus=excluded.AuthStatus,ErrorClass=excluded.ErrorClass,HttpStatus=excluded.HttpStatus,LastAttemptUtc=excluded.LastAttemptUtc,LastSuccessUtc=COALESCE(excluded.LastSuccessUtc,ApiHealth.LastSuccessUtc),LastError=excluded.LastError,RateLimitRemaining=excluded.RateLimitRemaining,RateLimitLimit=excluded.RateLimitLimit,RateLimitResetUtc=excluded.RateLimitResetUtc,RetryAfterSeconds=excluded.RetryAfterSeconds,BackoffUntilUtc=excluded.BackoffUntilUtc,UpdatedUtc=excluded.UpdatedUtc"; command.Parameters.AddWithValue("$channel", normalizedChannel); command.Parameters.AddWithValue("$shop", normalizedShop); command.Parameters.AddWithValue("$state", observation.State); command.Parameters.AddWithValue("$auth", observation.AuthStatus); command.Parameters.AddWithValue("$class", observation.ErrorClass); command.Parameters.AddWithValue("$http", (object?)observation.HttpStatus ?? DBNull.Value); command.Parameters.AddWithValue("$attempt", observed.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$success", (object?)lastSuccess ?? DBNull.Value); command.Parameters.AddWithValue("$error", error); command.Parameters.AddWithValue("$remaining", (object?)observation.RateLimitRemaining ?? DBNull.Value); command.Parameters.AddWithValue("$limit", (object?)observation.RateLimitLimit ?? DBNull.Value); command.Parameters.AddWithValue("$reset", observation.RateLimitResetUtc?.ToString("O", CultureInfo.InvariantCulture) ?? (object)DBNull.Value); command.Parameters.AddWithValue("$retry", (object?)observation.RetryAfterSeconds ?? DBNull.Value); command.Parameters.AddWithValue("$backoff", observation.BackoffUntilUtc?.ToString("O", CultureInfo.InvariantCulture) ?? (object)DBNull.Value); command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)); command.ExecuteNonQuery();
+        ValidateIdentity(channel, shopId); var normalizedChannel = channel.Trim().ToLowerInvariant(); var normalizedShop = shopId.Trim(); var observed = (observation.ObservedUtc == default ? DateTimeOffset.UtcNow : observation.ObservedUtc).ToUniversalTime(); var lastSuccess = observation.State == "HEALTHY" ? observed.ToString("O", CultureInfo.InvariantCulture) : null; var error = observation.ErrorMessage.Length == 0 ? "" : AuditStore.Sanitize(observation.ErrorMessage); using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "INSERT INTO ApiHealth(Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc) VALUES($channel,$shop,$state,$auth,$class,$http,$attempt,$success,$error,$remaining,$limit,$reset,$retry,$backoff,$updated) ON CONFLICT(Channel,ShopId) DO UPDATE SET State=excluded.State,AuthStatus=excluded.AuthStatus,ErrorClass=excluded.ErrorClass,HttpStatus=excluded.HttpStatus,LastAttemptUtc=excluded.LastAttemptUtc,LastSuccessUtc=COALESCE(excluded.LastSuccessUtc,ApiHealth.LastSuccessUtc),LastError=excluded.LastError,RateLimitRemaining=excluded.RateLimitRemaining,RateLimitLimit=excluded.RateLimitLimit,RateLimitResetUtc=excluded.RateLimitResetUtc,RetryAfterSeconds=excluded.RetryAfterSeconds,BackoffUntilUtc=excluded.BackoffUntilUtc,UpdatedUtc=excluded.UpdatedUtc"; command.Parameters.AddWithValue("$channel", normalizedChannel); command.Parameters.AddWithValue("$shop", normalizedShop); command.Parameters.AddWithValue("$state", observation.State); command.Parameters.AddWithValue("$auth", observation.AuthStatus); command.Parameters.AddWithValue("$class", observation.ErrorClass); command.Parameters.AddWithValue("$http", (object?)observation.HttpStatus ?? DBNull.Value); command.Parameters.AddWithValue("$attempt", observed.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$success", (object?)lastSuccess ?? DBNull.Value); command.Parameters.AddWithValue("$error", error); command.Parameters.AddWithValue("$remaining", (object?)observation.RateLimitRemaining ?? DBNull.Value); command.Parameters.AddWithValue("$limit", (object?)observation.RateLimitLimit ?? DBNull.Value); command.Parameters.AddWithValue("$reset", observation.RateLimitResetUtc?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) ?? (object)DBNull.Value); command.Parameters.AddWithValue("$retry", (object?)observation.RetryAfterSeconds ?? DBNull.Value); command.Parameters.AddWithValue("$backoff", observation.BackoffUntilUtc?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) ?? (object)DBNull.Value); command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)); command.ExecuteNonQuery();
     }
-    public ApiHealthRecord? Get(string channel, string shopId) => List().FirstOrDefault(x => x.Channel == channel.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim());
-    public IReadOnlyList<ApiHealthRecord> List(string? query = null, string? state = null)
+    // #2560: bounded/paged read path. The panel and any decision (ShouldDefer) must never materialize the whole
+    // table: Get is a single-row lookup, List takes a server-side LIMIT/OFFSET with a stable tiebreaker so paging
+    // never skips or repeats a row when several share the same UpdatedUtc, Summary is one SQL aggregate query, and
+    // a search string is matched literally -- a caller's own '%' or '_' is escaped, never treated as a wildcard.
+    public const int DefaultPageSize = 200, MaxPageSize = 500, MaxQueryLength = 200;
+
+    public ApiHealthRecord? Get(string channel, string shopId)
     {
-        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc FROM ApiHealth WHERE ($query='' OR Channel LIKE $like OR ShopId LIKE $like OR State LIKE $like OR AuthStatus LIKE $like OR ErrorClass LIKE $like OR LastError LIKE $like) AND ($state='' OR State=$state) ORDER BY CASE State WHEN 'AUTH_ERROR' THEN 0 WHEN 'RATE_LIMITED' THEN 1 WHEN 'SERVER_ERROR' THEN 2 WHEN 'NETWORK_ERROR' THEN 3 WHEN 'TIMEOUT' THEN 4 WHEN 'LIVE_API_BLOCKED' THEN 5 WHEN 'NOT_CONFIGURED' THEN 6 WHEN 'HEALTHY' THEN 7 ELSE 8 END,UpdatedUtc DESC"; var value = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", value); command.Parameters.AddWithValue("$like", $"%{value}%"); command.Parameters.AddWithValue("$state", state?.Trim() ?? ""); using var reader = command.ExecuteReader(); var rows = new List<ApiHealthRecord>(); while (reader.Read()) rows.Add(Read(reader)); return rows;
+        ValidateIdentity(channel, shopId);
+        using var c = Open(); using var command = c.CreateCommand();
+        command.CommandText = "SELECT Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc FROM ApiHealth WHERE Channel=$channel AND ShopId=$shop";
+        command.Parameters.AddWithValue("$channel", channel.Trim().ToLowerInvariant()); command.Parameters.AddWithValue("$shop", shopId.Trim());
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? Read(reader) : null;
     }
+
+    /// <summary>Escapes a caller's own '%', '_' and the escape character itself, so the search is a literal substring match -- never a wildcard the caller did not ask for.</summary>
+    public static string EscapeLikeLiteral(string value) => value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
+    static (string Query, string Like, string State, int Limit, int Offset) NormalizeListArgs(string? query, string? state, int? limit, int offset)
+    {
+        var raw = query ?? ""; if (raw.Length > MaxQueryLength) raw = raw[..MaxQueryLength]; // bounded query length (edge case)
+        var cleanState = (state ?? "").Trim();
+        var boundedLimit = Math.Clamp(limit ?? DefaultPageSize, 1, MaxPageSize);
+        var boundedOffset = Math.Max(0, offset);
+        return (raw.Trim(), raw.Trim().Length == 0 ? "" : $"%{EscapeLikeLiteral(raw.Trim())}%", cleanState, boundedLimit, boundedOffset);
+    }
+
+    const string ListSql = "SELECT Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc FROM ApiHealth WHERE ($query='' OR Channel LIKE $like ESCAPE '\\' OR ShopId LIKE $like ESCAPE '\\' OR State LIKE $like ESCAPE '\\' OR AuthStatus LIKE $like ESCAPE '\\' OR ErrorClass LIKE $like ESCAPE '\\' OR LastError LIKE $like ESCAPE '\\') AND ($state='' OR State=$state) ORDER BY CASE State WHEN 'AUTH_ERROR' THEN 0 WHEN 'RATE_LIMITED' THEN 1 WHEN 'SERVER_ERROR' THEN 2 WHEN 'NETWORK_ERROR' THEN 3 WHEN 'TIMEOUT' THEN 4 WHEN 'LIVE_API_BLOCKED' THEN 5 WHEN 'NOT_CONFIGURED' THEN 6 WHEN 'HEALTHY' THEN 7 ELSE 8 END,UpdatedUtc DESC,Channel ASC,ShopId ASC LIMIT $limit OFFSET $offset";
+
+    /// <summary>One page, bounded and deterministically ordered; a query longer than <see cref="MaxQueryLength"/> is truncated, never rejected with an error that could leak into a crash log.</summary>
+    public IReadOnlyList<ApiHealthRecord> List(string? query = null, string? state = null, int? limit = null, int offset = 0)
+    {
+        var (value, like, cleanState, boundedLimit, boundedOffset) = NormalizeListArgs(query, state, limit, offset);
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = ListSql;
+        command.Parameters.AddWithValue("$query", value); command.Parameters.AddWithValue("$like", like); command.Parameters.AddWithValue("$state", cleanState); command.Parameters.AddWithValue("$limit", boundedLimit); command.Parameters.AddWithValue("$offset", boundedOffset);
+        using var reader = command.ExecuteReader(); var rows = new List<ApiHealthRecord>(); while (reader.Read()) rows.Add(Read(reader)); return rows;
+    }
+
+    /// <summary>The same page, but cancellable: honored between each row and before the query itself starts, so a superseded refresh stops promptly instead of finishing into a stale UI state.</summary>
+    public async Task<IReadOnlyList<ApiHealthRecord>> ListAsync(string? query, string? state, int? limit, int offset, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var (value, like, cleanState, boundedLimit, boundedOffset) = NormalizeListArgs(query, state, limit, offset);
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = ListSql;
+        command.Parameters.AddWithValue("$query", value); command.Parameters.AddWithValue("$like", like); command.Parameters.AddWithValue("$state", cleanState); command.Parameters.AddWithValue("$limit", boundedLimit); command.Parameters.AddWithValue("$offset", boundedOffset);
+        using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<ApiHealthRecord>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) rows.Add(Read(reader));
+        return rows;
+    }
+
     public bool ShouldDefer(string channel, string shopId, DateTimeOffset? now = null) => Get(channel, shopId)?.BackoffUntilUtc is { } until && until > (now ?? DateTimeOffset.UtcNow);
+
+    const string SummarySql = "SELECT COUNT(*), SUM(CASE WHEN State='HEALTHY' THEN 1 ELSE 0 END), SUM(CASE WHEN State='LIVE_API_BLOCKED' THEN 1 ELSE 0 END), SUM(CASE WHEN State='AUTH_ERROR' THEN 1 ELSE 0 END), SUM(CASE WHEN State='RATE_LIMITED' THEN 1 ELSE 0 END), SUM(CASE WHEN State NOT IN('HEALTHY','LIVE_API_BLOCKED','AUTH_ERROR','RATE_LIMITED') THEN 1 ELSE 0 END), SUM(CASE WHEN BackoffUntilUtc IS NOT NULL AND BackoffUntilUtc > $now THEN 1 ELSE 0 END) FROM ApiHealth";
+
+    /// <summary>One SQL aggregate round trip -- never a full table scan into managed rows to count them.</summary>
     public ApiHealthSummary Summary(DateTimeOffset? now = null)
     {
-        var rows = List(); var at = now ?? DateTimeOffset.UtcNow; return new(rows.Count, rows.Count(x => x.State == "HEALTHY"), rows.Count(x => x.State == "LIVE_API_BLOCKED"), rows.Count(x => x.State == "AUTH_ERROR"), rows.Count(x => x.State == "RATE_LIMITED"), rows.Count(x => x.State is not ("HEALTHY" or "LIVE_API_BLOCKED" or "AUTH_ERROR" or "RATE_LIMITED")), rows.Count(x => x.BackoffUntilUtc is { } until && until > at));
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = SummarySql;
+        command.Parameters.AddWithValue("$now", (now ?? DateTimeOffset.UtcNow).ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? ReadSummary(reader) : new(0, 0, 0, 0, 0, 0, 0);
     }
+
+    public async Task<ApiHealthSummary> SummaryAsync(DateTimeOffset? now, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = SummarySql;
+        command.Parameters.AddWithValue("$now", (now ?? DateTimeOffset.UtcNow).ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+        using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? ReadSummary(reader) : new(0, 0, 0, 0, 0, 0, 0);
+    }
+
+    static ApiHealthSummary ReadSummary(SqliteDataReader r) => new(r.GetInt32(0), r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6));
     static ApiHealthRecord Read(SqliteDataReader r) => new() { Channel = r.GetString(0), ShopId = r.GetString(1), State = r.GetString(2), AuthStatus = r.GetString(3), ErrorClass = r.GetString(4), HttpStatus = r.IsDBNull(5) ? null : r.GetInt32(5), LastAttemptUtc = DateTimeOffset.Parse(r.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), LastSuccessUtc = r.IsDBNull(7) ? null : DateTimeOffset.Parse(r.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), LastError = r.GetString(8), RateLimitRemaining = r.IsDBNull(9) ? null : r.GetInt32(9), RateLimitLimit = r.IsDBNull(10) ? null : r.GetInt32(10), RateLimitResetUtc = r.IsDBNull(11) ? null : DateTimeOffset.Parse(r.GetString(11), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), RetryAfterSeconds = r.IsDBNull(12) ? null : r.GetInt32(12), BackoffUntilUtc = r.IsDBNull(13) ? null : DateTimeOffset.Parse(r.GetString(13), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), UpdatedUtc = DateTimeOffset.Parse(r.GetString(14), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind) };
     static void ValidateIdentity(string channel, string shop) { if (string.IsNullOrWhiteSpace(channel) || string.IsNullOrWhiteSpace(shop) || channel.Length > 80 || shop.Length > 160 || channel.Any(char.IsControl) || shop.Any(char.IsControl)) throw new ArgumentException("Kanal ve mağaza kimliği geçerli olmalı."); }
 }

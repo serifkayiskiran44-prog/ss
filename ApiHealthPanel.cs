@@ -47,13 +47,24 @@ public static class ApiHealthPanel
         var detail = Text("Bir bağlantı seçin."); top.Children.Add(detail);
         var actions = new WrapPanel(); var openChannel = Button("Kanal ekranına git"); actions.Children.Add(openChannel); top.Children.Add(actions);
         ApiHealthRecord? selected = null;
-        void Reload()
+        // #2560: a stale async result must never overwrite a newer one -- a generation counter tags each refresh,
+        // and a superseded refresh is cancelled so it stops promptly instead of finishing into the wrong UI state.
+        var generation = 0; CancellationTokenSource? inFlight = null;
+        async void Reload()
         {
+            var mine = ++generation;
+            inFlight?.Cancel(); inFlight = new CancellationTokenSource(); var token = inFlight.Token;
             foreach (var connection in connections.List()) health.EnsureConnection(connection.Channel, connection.ShopId, connection.Status, connection.LastError);
             var selectedState = state.SelectedItem?.ToString() == "Tümü" ? null : state.SelectedItem?.ToString();
-            grid.ItemsSource = health.List(query.Text, selectedState);
-            var totals = health.Summary();
-            summary.Text = $"{totals.Total:N0} bağlantı · Sağlıklı {totals.Healthy} · Auth hatası {totals.AuthErrors} · Rate-limit {totals.RateLimited} · Diğer hata {totals.OtherErrors} · Backoff {totals.BackingOff}";
+            try
+            {
+                var rows = await health.ListAsync(query.Text, selectedState, ApiHealthStore.DefaultPageSize, 0, token);
+                var totals = await health.SummaryAsync(null, token);
+                if (mine != generation) return; // a newer refresh already started; this one's result is stale
+                grid.ItemsSource = rows;
+                summary.Text = $"{totals.Total:N0} bağlantı · Sağlıklı {totals.Healthy} · Auth hatası {totals.AuthErrors} · Rate-limit {totals.RateLimited} · Diğer hata {totals.OtherErrors} · Backoff {totals.BackingOff}" + (rows.Count >= ApiHealthStore.DefaultPageSize ? $" · ilk {ApiHealthStore.DefaultPageSize} satır gösteriliyor, daraltmak için arayın" : "");
+            }
+            catch (OperationCanceledException) { /* superseded by a later refresh */ }
         }
         grid.SelectionChanged += (_, _) =>
         {
