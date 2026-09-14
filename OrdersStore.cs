@@ -5,10 +5,10 @@ namespace TrMarketplaceHubDesktop;
 public sealed class OrdersStore
 {
  public sealed record OrderPage(IReadOnlyList<OrderSnapshot> Items,int Total);
- readonly string connectionString;
+ readonly string connectionString; readonly string directory; /* #943 */
  public OrdersStore(string? directory=null)
  {
-  directory??=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");Directory.CreateDirectory(directory);
+  directory??=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");Directory.CreateDirectory(directory);this.directory=directory;
   connectionString=new SqliteConnectionStringBuilder{DataSource=Path.Combine(directory,"orders.db"),DefaultTimeout=15,Pooling=true}.ToString();
   using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA busy_timeout=15000;CREATE TABLE IF NOT EXISTS orders(marketplace TEXT NOT NULL,shop TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(marketplace,shop,id));CREATE INDEX IF NOT EXISTS IX_orders_marketplace_shop ON orders(marketplace,shop);CREATE INDEX IF NOT EXISTS IX_orders_status ON orders(json_extract(payload,'$.RawStatus'));CREATE INDEX IF NOT EXISTS IX_orders_updated ON orders(json_extract(payload,'$.UpdatedAt') DESC);"+
   // ReadPage always filters by marketplace/shop (the common "one store's order list" case) and always sorts
@@ -64,5 +64,7 @@ public sealed class OrdersStore
  public OrderCustomer? ReadCustomer(string marketplace,string shopId,string orderId){using var c=Open();EnsureCustomers(c);using var cmd=c.CreateCommand();cmd.CommandText="SELECT payload FROM order_customers WHERE marketplace=$m COLLATE NOCASE AND shop=$s AND id=$o";cmd.Parameters.AddWithValue("$m",marketplace??"");cmd.Parameters.AddWithValue("$s",shopId??"");cmd.Parameters.AddWithValue("$o",orderId??"");if(cmd.ExecuteScalar() is not string json)return null;try{return JsonSerializer.Deserialize<OrderCustomer>(json);}catch(JsonException){return null;}}
  public void SaveCustomer(OrderCustomer customer){ArgumentNullException.ThrowIfNull(customer);if(string.IsNullOrWhiteSpace(customer.Marketplace)||string.IsNullOrWhiteSpace(customer.ShopId)||string.IsNullOrWhiteSpace(customer.OrderId))throw new ArgumentException("Pazaryeri, mağaza ve sipariş numarası zorunlu.");using var c=Open();EnsureCustomers(c);using var cmd=c.CreateCommand();
   if(customer.IsEmpty){cmd.CommandText="DELETE FROM order_customers WHERE marketplace=$m COLLATE NOCASE AND shop=$s AND id=$o";}else{cmd.CommandText="INSERT INTO order_customers(marketplace,shop,id,payload) VALUES($m,$s,$o,$p) ON CONFLICT(marketplace,shop,id) DO UPDATE SET payload=excluded.payload";cmd.Parameters.AddWithValue("$p",JsonSerializer.Serialize(customer));}
-  cmd.Parameters.AddWithValue("$m",customer.Marketplace.Trim());cmd.Parameters.AddWithValue("$s",customer.ShopId.Trim());cmd.Parameters.AddWithValue("$o",customer.OrderId.Trim());cmd.ExecuteNonQuery();}
+  cmd.Parameters.AddWithValue("$m",customer.Marketplace.Trim());cmd.Parameters.AddWithValue("$s",customer.ShopId.Trim());cmd.Parameters.AddWithValue("$o",customer.OrderId.Trim());cmd.ExecuteNonQuery();
+  if(!customer.IsEmpty){try{new CustomerIdentityStore(directory).Link(customer,DateTime.UtcNow);}catch(Exception){}} // #943: every saved snapshot is linked to the store's canonical customer; the snapshot itself is what was saved
+ }
 }

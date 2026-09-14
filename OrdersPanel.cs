@@ -80,6 +80,7 @@ public static class OrdersPanel
    var box=new Border{Tag="order-customer-section",Padding=new Thickness(8,6,8,6),Margin=new Thickness(3,4,3,6),BorderBrush=SeverityStyle.AccentBrush(granted==null?SeverityLevel.Info:SeverityLevel.Warning,hc),BorderThickness=new Thickness(SeverityStyle.For(granted==null?SeverityLevel.Info:SeverityLevel.Warning,hc).BorderWeight,0,0,0),Focusable=true};FocusStyles.MakeFocusable(box);var body=new StackPanel();box.Child=body;
    body.Children.Add(new TextBlock{Text=granted==null?"Müşteri · maskeli":"Müşteri · AÇIK (otomatik maskelenecek)",FontWeight=FontWeights.SemiBold});
    if(customer.IsEmpty&&granted==null)body.Children.Add(new TextBlock{Tag="order-customer-empty",Text="Kayıtlı müşteri iletişim verisi yok.",TextWrapping=TextWrapping.Wrap});
+   if(!customer.IsEmpty){CustomerLink? link=null;try{link=new CustomerIdentityStore(directory).LinkOf(o.Marketplace,o.ShopId,o.OrderId);}catch(Exception){}if(link is not null)body.Children.Add(new TextBlock{Tag="order-customer-link",Text="Kanonik müşteri: "+link.Words,TextWrapping=TextWrapping.Wrap});} // #943: the store-scoped canonical record this snapshot belongs to -- key prefixes and outcome, never a value
    var editors=new Dictionary<string,TextBox>();
    foreach(var (field,masked) in PiiReveal.Masked(customer)){
     if(granted==null){var t=new TextBlock{Tag="order-customer-field",Text=$"{field}: {masked}",TextWrapping=TextWrapping.Wrap};System.Windows.Automation.AutomationProperties.SetName(t,$"{field}: maskeli");if(!customer.IsEmpty)body.Children.Add(t);}
