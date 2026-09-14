@@ -45,6 +45,10 @@ public sealed class ApiHealthRecord
 }
 
 public sealed record ApiHealthSummary(int Total, int Healthy, int Blocked, int AuthErrors, int RateLimited, int OtherErrors, int BackingOff);
+/// Bounded diagnostics only (channel/shop identity, a short reason, detection time) -
+/// never LastError or any other health field - for a row with an unparsable
+/// persisted timestamp. See CatalogStore's CorruptProductRow for the same pattern.
+public sealed record CorruptApiHealthRow(string Channel, string ShopId, string Reason, DateTime DetectedUtc);
 
 public static class ApiHealthClassifier
 {
@@ -163,15 +167,60 @@ public sealed class ApiHealthStore
         ValidateIdentity(channel, shopId); var normalizedChannel = channel.Trim().ToLowerInvariant(); var normalizedShop = shopId.Trim(); var observed = observation.ObservedUtc == default ? DateTimeOffset.UtcNow : observation.ObservedUtc; var lastSuccess = observation.State == "HEALTHY" ? observed.ToString("O", CultureInfo.InvariantCulture) : null; var error = observation.ErrorMessage.Length == 0 ? "" : AuditStore.Sanitize(observation.ErrorMessage); using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "INSERT INTO ApiHealth(Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc) VALUES($channel,$shop,$state,$auth,$class,$http,$attempt,$success,$error,$remaining,$limit,$reset,$retry,$backoff,$updated) ON CONFLICT(Channel,ShopId) DO UPDATE SET State=excluded.State,AuthStatus=excluded.AuthStatus,ErrorClass=excluded.ErrorClass,HttpStatus=excluded.HttpStatus,LastAttemptUtc=excluded.LastAttemptUtc,LastSuccessUtc=COALESCE(excluded.LastSuccessUtc,ApiHealth.LastSuccessUtc),LastError=excluded.LastError,RateLimitRemaining=excluded.RateLimitRemaining,RateLimitLimit=excluded.RateLimitLimit,RateLimitResetUtc=excluded.RateLimitResetUtc,RetryAfterSeconds=excluded.RetryAfterSeconds,BackoffUntilUtc=excluded.BackoffUntilUtc,UpdatedUtc=excluded.UpdatedUtc"; command.Parameters.AddWithValue("$channel", normalizedChannel); command.Parameters.AddWithValue("$shop", normalizedShop); command.Parameters.AddWithValue("$state", observation.State); command.Parameters.AddWithValue("$auth", observation.AuthStatus); command.Parameters.AddWithValue("$class", observation.ErrorClass); command.Parameters.AddWithValue("$http", (object?)observation.HttpStatus ?? DBNull.Value); command.Parameters.AddWithValue("$attempt", observed.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$success", (object?)lastSuccess ?? DBNull.Value); command.Parameters.AddWithValue("$error", error); command.Parameters.AddWithValue("$remaining", (object?)observation.RateLimitRemaining ?? DBNull.Value); command.Parameters.AddWithValue("$limit", (object?)observation.RateLimitLimit ?? DBNull.Value); command.Parameters.AddWithValue("$reset", observation.RateLimitResetUtc?.ToString("O", CultureInfo.InvariantCulture) ?? (object)DBNull.Value); command.Parameters.AddWithValue("$retry", (object?)observation.RetryAfterSeconds ?? DBNull.Value); command.Parameters.AddWithValue("$backoff", observation.BackoffUntilUtc?.ToString("O", CultureInfo.InvariantCulture) ?? (object)DBNull.Value); command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)); command.ExecuteNonQuery();
     }
     public ApiHealthRecord? Get(string channel, string shopId) => List().FirstOrDefault(x => x.Channel == channel.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim());
+    /// A row with any unparsable persisted timestamp is excluded from the healthy
+    /// result rather than crashing the whole read; see CorruptRecords() for the
+    /// bounded diagnostics covering exactly those excluded rows. Detection re-runs
+    /// from each row's own stored text every call, so it stays stable across a
+    /// restart without a separate tracking table.
     public IReadOnlyList<ApiHealthRecord> List(string? query = null, string? state = null)
     {
-        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc FROM ApiHealth WHERE ($query='' OR Channel LIKE $like OR ShopId LIKE $like OR State LIKE $like OR AuthStatus LIKE $like OR ErrorClass LIKE $like OR LastError LIKE $like) AND ($state='' OR State=$state) ORDER BY CASE State WHEN 'AUTH_ERROR' THEN 0 WHEN 'RATE_LIMITED' THEN 1 WHEN 'SERVER_ERROR' THEN 2 WHEN 'NETWORK_ERROR' THEN 3 WHEN 'TIMEOUT' THEN 4 WHEN 'LIVE_API_BLOCKED' THEN 5 WHEN 'NOT_CONFIGURED' THEN 6 WHEN 'HEALTHY' THEN 7 ELSE 8 END,UpdatedUtc DESC"; var value = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", value); command.Parameters.AddWithValue("$like", $"%{value}%"); command.Parameters.AddWithValue("$state", state?.Trim() ?? ""); using var reader = command.ExecuteReader(); var rows = new List<ApiHealthRecord>(); while (reader.Read()) rows.Add(Read(reader)); return rows;
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc FROM ApiHealth WHERE ($query='' OR Channel LIKE $like OR ShopId LIKE $like OR State LIKE $like OR AuthStatus LIKE $like OR ErrorClass LIKE $like OR LastError LIKE $like) AND ($state='' OR State=$state) ORDER BY CASE State WHEN 'AUTH_ERROR' THEN 0 WHEN 'RATE_LIMITED' THEN 1 WHEN 'SERVER_ERROR' THEN 2 WHEN 'NETWORK_ERROR' THEN 3 WHEN 'TIMEOUT' THEN 4 WHEN 'LIVE_API_BLOCKED' THEN 5 WHEN 'NOT_CONFIGURED' THEN 6 WHEN 'HEALTHY' THEN 7 ELSE 8 END,UpdatedUtc DESC"; var value = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", value); command.Parameters.AddWithValue("$like", $"%{value}%"); command.Parameters.AddWithValue("$state", state?.Trim() ?? ""); using var reader = command.ExecuteReader(); var rows = new List<ApiHealthRecord>(); while (reader.Read()) if (TryRead(reader, out var record, out _)) rows.Add(record!); return rows;
     }
-    public bool ShouldDefer(string channel, string shopId, DateTimeOffset? now = null) => Get(channel, shopId)?.BackoffUntilUtc is { } until && until > (now ?? DateTimeOffset.UtcNow);
+    /// Bounded diagnostics for every row with an unparsable timestamp - never the raw
+    /// LastError or any other health field.
+    public IReadOnlyList<CorruptApiHealthRow> CorruptRecords()
+    {
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc FROM ApiHealth";
+        using var reader = command.ExecuteReader(); var rows = new List<CorruptApiHealthRow>();
+        while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) rows.Add(corrupt!);
+        return rows;
+    }
+    /// Deliberately does NOT go through Get()/List(): a corrupt row must fail CLOSED
+    /// (defer/back off) rather than silently disappearing the way a missing row
+    /// would through the List()-based lookup - treating "corrupt backoff state" the
+    /// same as "no backoff row" would let a caller retry a channel/shop we actually
+    /// have no reliable rate-limit information for, risking a real ban.
+    public bool ShouldDefer(string channel, string shopId, DateTimeOffset? now = null)
+    {
+        var normalizedChannel = channel.Trim().ToLowerInvariant(); var normalizedShop = shopId.Trim();
+        using var c = Open(); using var command = c.CreateCommand();
+        command.CommandText = "SELECT Channel,ShopId,State,AuthStatus,ErrorClass,HttpStatus,LastAttemptUtc,LastSuccessUtc,LastError,RateLimitRemaining,RateLimitLimit,RateLimitResetUtc,RetryAfterSeconds,BackoffUntilUtc,UpdatedUtc FROM ApiHealth WHERE Channel=$channel AND ShopId=$shop";
+        command.Parameters.AddWithValue("$channel", normalizedChannel); command.Parameters.AddWithValue("$shop", normalizedShop);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return false;
+        if (!TryRead(reader, out var record, out _)) return true;
+        return record!.BackoffUntilUtc is { } until && until > (now ?? DateTimeOffset.UtcNow);
+    }
     public ApiHealthSummary Summary(DateTimeOffset? now = null)
     {
         var rows = List(); var at = now ?? DateTimeOffset.UtcNow; return new(rows.Count, rows.Count(x => x.State == "HEALTHY"), rows.Count(x => x.State == "LIVE_API_BLOCKED"), rows.Count(x => x.State == "AUTH_ERROR"), rows.Count(x => x.State == "RATE_LIMITED"), rows.Count(x => x.State is not ("HEALTHY" or "LIVE_API_BLOCKED" or "AUTH_ERROR" or "RATE_LIMITED")), rows.Count(x => x.BackoffUntilUtc is { } until && until > at));
     }
-    static ApiHealthRecord Read(SqliteDataReader r) => new() { Channel = r.GetString(0), ShopId = r.GetString(1), State = r.GetString(2), AuthStatus = r.GetString(3), ErrorClass = r.GetString(4), HttpStatus = r.IsDBNull(5) ? null : r.GetInt32(5), LastAttemptUtc = DateTimeOffset.Parse(r.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), LastSuccessUtc = r.IsDBNull(7) ? null : DateTimeOffset.Parse(r.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), LastError = r.GetString(8), RateLimitRemaining = r.IsDBNull(9) ? null : r.GetInt32(9), RateLimitLimit = r.IsDBNull(10) ? null : r.GetInt32(10), RateLimitResetUtc = r.IsDBNull(11) ? null : DateTimeOffset.Parse(r.GetString(11), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), RetryAfterSeconds = r.IsDBNull(12) ? null : r.GetInt32(12), BackoffUntilUtc = r.IsDBNull(13) ? null : DateTimeOffset.Parse(r.GetString(13), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), UpdatedUtc = DateTimeOffset.Parse(r.GetString(14), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind) };
+    static bool TryRead(SqliteDataReader r, out ApiHealthRecord? record, out CorruptApiHealthRow? corrupt)
+    {
+        record = null; corrupt = null; var channel = r.GetString(0); var shop = r.GetString(1);
+        if (!TryParseOffset(r.GetString(6), out var lastAttempt)) { corrupt = new(channel, shop, "Malformed LastAttemptUtc timestamp", DateTime.UtcNow); return false; }
+        DateTimeOffset? lastSuccess = null;
+        if (!r.IsDBNull(7)) { if (!TryParseOffset(r.GetString(7), out var value)) { corrupt = new(channel, shop, "Malformed LastSuccessUtc timestamp", DateTime.UtcNow); return false; } lastSuccess = value; }
+        DateTimeOffset? rateLimitReset = null;
+        if (!r.IsDBNull(11)) { if (!TryParseOffset(r.GetString(11), out var value)) { corrupt = new(channel, shop, "Malformed RateLimitResetUtc timestamp", DateTime.UtcNow); return false; } rateLimitReset = value; }
+        DateTimeOffset? backoffUntil = null;
+        if (!r.IsDBNull(13)) { if (!TryParseOffset(r.GetString(13), out var value)) { corrupt = new(channel, shop, "Malformed BackoffUntilUtc timestamp", DateTime.UtcNow); return false; } backoffUntil = value; }
+        if (!TryParseOffset(r.GetString(14), out var updated)) { corrupt = new(channel, shop, "Malformed UpdatedUtc timestamp", DateTime.UtcNow); return false; }
+        record = new() { Channel = channel, ShopId = shop, State = r.GetString(2), AuthStatus = r.GetString(3), ErrorClass = r.GetString(4), HttpStatus = r.IsDBNull(5) ? null : r.GetInt32(5), LastAttemptUtc = lastAttempt, LastSuccessUtc = lastSuccess, LastError = r.GetString(8), RateLimitRemaining = r.IsDBNull(9) ? null : r.GetInt32(9), RateLimitLimit = r.IsDBNull(10) ? null : r.GetInt32(10), RateLimitResetUtc = rateLimitReset, RetryAfterSeconds = r.IsDBNull(12) ? null : r.GetInt32(12), BackoffUntilUtc = backoffUntil, UpdatedUtc = updated };
+        return true;
+    }
+    /// Only ever a format/parse failure - never conflated with a DB-busy/locked
+    /// SqliteException, which is raised by the surrounding command, not this parse.
+    static bool TryParseOffset(string value, out DateTimeOffset result) => DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
     static void ValidateIdentity(string channel, string shop) { if (string.IsNullOrWhiteSpace(channel) || string.IsNullOrWhiteSpace(shop) || channel.Length > 80 || shop.Length > 160 || channel.Any(char.IsControl) || shop.Any(char.IsControl)) throw new ArgumentException("Kanal ve mağaza kimliği geçerli olmalı."); }
 }
