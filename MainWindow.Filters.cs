@@ -21,13 +21,19 @@ public partial class MainWindow {
   CatalogFilter Current(){var sourceIds=Values(source.Text).ToList();if(manualOnly.IsChecked==true)sourceIds.Add(CatalogFilter.ManualSource);return new(){Active=State(status),Brands=Values(brand.Text),Categories=Values(category.Text),Skus=Values(sku.Text),SourceIds=sourceIds.ToArray(),DescriptionPresent=State(description),ImagePresent=State(image),DuplicateIdentityOnly=duplicateOnly.IsChecked==true};}
   void Apply(CatalogFilter filter){status.SelectedIndex=filter.Active is null?0:filter.Active.Value?1:2;description.SelectedIndex=filter.DescriptionPresent is null?0:filter.DescriptionPresent.Value?1:2;image.SelectedIndex=filter.ImagePresent is null?0:filter.ImagePresent.Value?1:2;brand.Text=string.Join(';',filter.Brands);category.Text=string.Join(';',filter.Categories);sku.Text=string.Join(';',filter.Skus);manualOnly.IsChecked=filter.SourceIds.Contains(CatalogFilter.ManualSource);source.Text=string.Join(';',filter.SourceIds.Where(x=>x!=CatalogFilter.ManualSource));duplicateOnly.IsChecked=filter.DuplicateIdentityOnly;}
   var filterStore=new CatalogFilterStore(dataDirectory);var saved=new ComboBox{Width=170,DisplayMemberPath="Name"};var filterName=new TextBox{Width=140,ToolTip="Kaydedilecek filtre adı"};
-  void ReloadSaved(){saved.ItemsSource=filterStore.List();}
+  var corruptWarning=new TextBlock{Foreground=System.Windows.Media.Brushes.DarkRed,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(8,0,2,0)};
+  var corruptFilters=new ComboBox{Width=170,DisplayMemberPath="Name",Visibility=Visibility.Collapsed};
+  Button deleteCorrupt=null!;
+  deleteCorrupt=Button("Bozuk kaydı sil",()=>{if(corruptFilters.SelectedItem is not CorruptCatalogFilterRow selected)throw new InvalidOperationException("Bozuk kayıt seçin.");filterStore.DeleteCorruptFilter(selected.Name);ReloadSaved();});
+  deleteCorrupt.Visibility=Visibility.Collapsed;
+  void ReloadSaved(){saved.ItemsSource=filterStore.List();var corrupt=filterStore.CorruptFilters();corruptFilters.ItemsSource=corrupt;var show=corrupt.Count>0?Visibility.Visible:Visibility.Collapsed;corruptFilters.Visibility=show;deleteCorrupt.Visibility=show;corruptWarning.Text=corrupt.Count>0?$"⚠ {corrupt.Count} bozuk kayıtlı filtre":"";}
   panel.Children.Add(Button("Filtreleri uygula",()=>{productFilter=Current();productOffset=0;RefreshProducts();}));
   panel.Children.Add(Button("Filtreleri temizle",()=>{status.SelectedIndex=description.SelectedIndex=image.SelectedIndex=0;brand.Clear();category.Clear();sku.Clear();source.Clear();manualOnly.IsChecked=false;duplicateOnly.IsChecked=false;productFilter=new();productOffset=0;RefreshProducts();}));
   panel.Children.Add(new TextBlock{Text="Kayıtlı filtre",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(8,0,2,0)});panel.Children.Add(saved);panel.Children.Add(filterName);
   panel.Children.Add(Button("Filtreyi kaydet",()=>{filterStore.Save(filterName.Text,Current());ReloadSaved();filterName.Clear();}));
   panel.Children.Add(Button("Filtreyi yükle",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");Apply(selected.Filter);productFilter=selected.Filter;productOffset=0;RefreshProducts();}));
   panel.Children.Add(Button("Filtreyi sil",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");filterStore.Delete(selected.Name);ReloadSaved();}));
+  panel.Children.Add(corruptWarning);panel.Children.Add(corruptFilters);panel.Children.Add(deleteCorrupt);
   panel.Children.Add(Button("Kolon görünürlüğü",OpenProductColumnChooser));
   ApplyProductColumnPreferences();
   ReloadSaved();
