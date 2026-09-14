@@ -59,13 +59,61 @@ public static class CatalogExcel
         var normalizedCurrent = current.Select(ExcelColumnMapping.Normalize).ToList();
         return !normalizedExpected.SequenceEqual(normalizedCurrent);
     }
-    public static void ExportErrors(string path, ExcelPreview preview) { Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); var temporary = path + ".tmp-" + Guid.NewGuid().ToString("N"); try { using var book = new XLWorkbook(); var sheet = book.AddWorksheet("Hatalar"); sheet.Cell(1, 1).Value = "Hata"; for (var i = 0; i < preview.Errors.Count; i++) sheet.Cell(i + 2, 1).Value = preview.Errors[i]; sheet.Columns().AdjustToContents(); book.SaveAs(temporary); File.Move(temporary, path, true); } finally { if (File.Exists(temporary)) File.Delete(temporary); } }
+    public static void ExportErrors(string path, ExcelPreview preview) { Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); var temporary = TempSiblingPath(path); try { using var book = new XLWorkbook(); var sheet = book.AddWorksheet("Hatalar"); sheet.Cell(1, 1).Value = "Hata"; for (var i = 0; i < preview.Errors.Count; i++) sheet.Cell(i + 2, 1).Value = preview.Errors[i]; sheet.Columns().AdjustToContents(); book.SaveAs(temporary); File.Move(temporary, path, true); } finally { if (File.Exists(temporary)) File.Delete(temporary); } }
+    /// Bump only when the export column KEY set or ORDER changes (a label/header text
+    /// change alone does not require a bump - the key is the stable identity).
+    public const int ExportSchemaVersion = 2;
+    enum ExportCellKind { Text, Decimal, Int, Bool }
+    /// Single source of truth for export column identity, order and type - the same
+    /// list backs both the workbook contents and the schema version's meaning.
+    static readonly (string Key, string Header, ExportCellKind Kind, Func<CatalogProduct, object?> Value)[] ExportColumns =
+    [
+        ("Sku", "SKU", ExportCellKind.Text, p => p.Sku), ("Barcode", "Barkod", ExportCellKind.Text, p => p.Barcode), ("Name", "Ürün", ExportCellKind.Text, p => p.Name),
+        ("Brand", "Marka", ExportCellKind.Text, p => p.Brand), ("Category", "Kategori", ExportCellKind.Text, p => p.Category), ("Description", "Açıklama", ExportCellKind.Text, p => p.Description),
+        ("Cost", "Alış", ExportCellKind.Decimal, p => p.Cost), ("Price", "Satış", ExportCellKind.Decimal, p => p.Price), ("Currency", "Döviz", ExportCellKind.Text, p => p.Currency),
+        ("VatRate", "KDV %", ExportCellKind.Decimal, p => p.VatRate), ("Stock", "Stok", ExportCellKind.Int, p => p.Stock), ("Active", "Aktif", ExportCellKind.Bool, p => p.Active),
+        ("Gtin", "GTIN", ExportCellKind.Text, p => p.Gtin), ("ImageUrls", "Görseller", ExportCellKind.Text, p => p.ImageUrls), ("SourceId", "XML Kaynağı", ExportCellKind.Text, p => p.SourceId),
+        ("SourceKind", "Veri kaynağı", ExportCellKind.Text, p => p.SourceKind), ("PriceSource", "Fiyat kaynağı", ExportCellKind.Text, p => p.PriceSource),
+        ("StockSource", "Stok kaynağı", ExportCellKind.Text, p => p.StockSource), ("MediaSource", "Medya kaynağı", ExportCellKind.Text, p => p.MediaSource),
+    ];
+    public static IReadOnlyList<string> ExportColumnKeys => ExportColumns.Select(x => x.Key).ToList();
     public static void Export(string path, IReadOnlyList<CatalogProduct> products) => Export(path, products, null);
     public static void Export(string path, IReadOnlyList<CatalogProduct> products, IReadOnlyCollection<string>? visibleFields)
     {
-        var all = new (string Key, string Header, Func<CatalogProduct, object?> Value)[] { ("Sku", "SKU", p => p.Sku), ("Barcode", "Barkod", p => p.Barcode), ("Name", "Ürün", p => p.Name), ("Brand", "Marka", p => p.Brand), ("Category", "Kategori", p => p.Category), ("Description", "Açıklama", p => p.Description), ("Cost", "Alış", p => p.Cost), ("Price", "Satış", p => p.Price), ("Currency", "Döviz", p => p.Currency), ("VatRate", "KDV %", p => p.VatRate), ("Stock", "Stok", p => p.Stock), ("Active", "Aktif", p => p.Active), ("Gtin", "GTIN", p => p.Gtin), ("ImageUrls", "Görseller", p => p.ImageUrls), ("SourceId", "XML Kaynağı", p => p.SourceId), ("SourceKind", "Veri kaynağı", p => p.SourceKind), ("PriceSource", "Fiyat kaynağı", p => p.PriceSource), ("StockSource", "Stok kaynağı", p => p.StockSource), ("MediaSource", "Medya kaynağı", p => p.MediaSource) };
-        var columns = visibleFields is null || visibleFields.Count == 0 ? all : all.Where(x => visibleFields.Contains(x.Key, StringComparer.OrdinalIgnoreCase)).ToArray(); if (columns.Length == 0) throw new InvalidOperationException("Dışa aktarım için en az bir görünür alan seçin.");
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); var temporary = path + ".tmp-" + Guid.NewGuid().ToString("N"); try { using var book = new XLWorkbook(); var sheet = book.AddWorksheet("Ürünler"); for (var i = 0; i < columns.Length; i++) sheet.Cell(1, i + 1).Value = columns[i].Header; var row = 2; foreach (var product in products) { for (var i = 0; i < columns.Length; i++) sheet.Cell(row, i + 1).Value = columns[i].Value(product)?.ToString() ?? ""; row++; } sheet.Columns().AdjustToContents(); book.SaveAs(temporary); File.Move(temporary, path, true); } finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        var columns = visibleFields is null || visibleFields.Count == 0 ? ExportColumns : ExportColumns.Where(x => visibleFields.Contains(x.Key, StringComparer.OrdinalIgnoreCase)).ToArray(); if (columns.Length == 0) throw new InvalidOperationException("Dışa aktarım için en az bir görünür alan seçin.");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); var temporary = TempSiblingPath(path);
+        try
+        {
+            using var book = new XLWorkbook();
+            book.Properties.Comments = $"MarketplaceHub product export schema v{ExportSchemaVersion}";
+            var sheet = book.AddWorksheet("Ürünler");
+            for (var i = 0; i < columns.Length; i++) sheet.Cell(1, i + 1).Value = columns[i].Header;
+            var row = 2;
+            foreach (var product in products)
+            {
+                for (var i = 0; i < columns.Length; i++)
+                {
+                    var cell = sheet.Cell(row, i + 1);
+                    var value = columns[i].Value(product);
+                    switch (columns[i].Kind)
+                    {
+                        case ExportCellKind.Decimal: cell.Value = Convert.ToDecimal(value ?? 0m, CultureInfo.InvariantCulture); break;
+                        case ExportCellKind.Int: cell.Value = Convert.ToInt32(value ?? 0, CultureInfo.InvariantCulture); break;
+                        case ExportCellKind.Bool: cell.Value = value is true; break;
+                        default:
+                            // Text number format ("@") keeps a leading-zero SKU/barcode as
+                            // exact text on reopen, and prevents Excel from evaluating a
+                            // value starting with =/+/-/@ as a formula (CSV/XLSX injection).
+                            cell.Style.NumberFormat.Format = "@";
+                            cell.Value = value?.ToString() ?? "";
+                            break;
+                    }
+                }
+                row++;
+            }
+            sheet.Columns().AdjustToContents(); book.SaveAs(temporary); File.Move(temporary, path, true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
     public static ExcelPreview Preview(string path, ExcelColumnMapping? mapping = null, string? sheetName = null, int headerRow = 1) => Preview(path, mapping, CultureInfo.CurrentCulture, null, sheetName, headerRow);
     public static ExcelPreview Preview(string path, CultureInfo culture, string? sheetName = null, int headerRow = 1) => Preview(path, null, culture, null, sheetName, headerRow);
@@ -84,5 +132,9 @@ public static class CatalogExcel
     public static ImportSummary Apply(CatalogStore store, XmlSource source, ExcelPreview preview, IReadOnlyCollection<int> selectedRows) { if (selectedRows.Count == 0) throw new InvalidOperationException("Uygulamak için en az bir satır seçin."); if (preview.Errors.Count > 0) throw new InvalidOperationException("Hatalı Excel satırları düzeltilmeden katalog güncellenemez."); var rows = preview.Rows.Where((_, index) => selectedRows.Contains(index)).ToList(); if (rows.Count != selectedRows.Count) throw new InvalidOperationException("Seçili satır numarası önizleme dışında."); return Apply(store, source, new ExcelPreview(rows, Array.Empty<string>())); }
     public static CatalogUndoReceipt ApplyWithUndo(CatalogStore store, XmlSource source, ExcelPreview preview, IReadOnlyCollection<int> selectedRows) { if (selectedRows.Count == 0) throw new InvalidOperationException("Uygulamak için en az bir satır seçin."); ValidatePreview(preview); var rows = preview.Rows.Where((_, index) => selectedRows.Contains(index)).ToList(); if (rows.Count != selectedRows.Count) throw new InvalidOperationException("Seçili satır numarası önizleme dışında."); source.UpdateName = true; source.UpdateDescription = true; source.UpdateImages = true; source.Fields["Gtin"] = "excel"; rows.ForEach(p => { p.SourceId = source.Id; p.SourceKind = "excel"; p.PriceSource = "excel"; p.StockSource = "excel"; p.MediaSource = "excel"; p.SourceUpdatedUtc = DateTime.UtcNow; }); return store.ImportWithUndo(source, rows); }
     static void ValidatePreview(ExcelPreview preview) { if (preview.Errors.Count > 0) throw new InvalidOperationException("Hatalı Excel satırları düzeltilmeden katalog güncellenemez."); foreach (var row in preview.Rows) if (row.Currency.Trim().ToUpperInvariant() is not ("TRY" or "USD" or "EUR" or "GBP")) throw new InvalidOperationException($"Excel döviz değeri desteklenmiyor: {row.Currency}."); }
+    /// ClosedXML's SaveAs validates the target file's extension (.xlsx/.xlsm/.xltx/
+    /// .xltm); appending ".tmp-<guid>" after ".xlsx" makes GetExtension see ".tmp-…"
+    /// and reject it. Keep the real extension on the temp file instead.
+    static string TempSiblingPath(string path) => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, $"{Path.GetFileNameWithoutExtension(path)}.tmp-{Guid.NewGuid():N}{Path.GetExtension(path)}");
     static void EnsureFile(string path) { if (!File.Exists(path)) throw new FileNotFoundException("Excel dosyası bulunamadı.", path); if (new FileInfo(path).Length > 100L * 1024 * 1024) throw new InvalidDataException("Excel dosyası 100 MB sınırını aşıyor."); }
 }
