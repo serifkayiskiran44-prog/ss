@@ -1,8 +1,15 @@
-MONOBRIDGE MASAÜSTÜ — .NET 8 WPF
-Başlatılacak dosya: Windows\TrMarketplaceHubDesktop.exe
-Tarayıcı veya yerel web sunucusu açılmaz. .NET 8 Windows Desktop Runtime gerekir.
+MARKETPLACEHUB MASAÜSTÜ — .NET 8 WPF
 
-Bu sürümde:
+Güncel yayın sözleşmesi (self-contained):
+- Başlatılacak dosya: publish/win-x64/TrMarketplaceHubDesktop.exe (self-contained, tek dosya, win-x64).
+- Ayrı bir .NET Desktop Runtime kurulumu GEREKMEZ; publish paketinin kendisi çalışma zamanını içerir.
+- Tarayıcı veya yerel web sunucusu açılmaz; gerçek Windows penceresi açılır.
+- Veri kökü: %LOCALAPPDATA%\MonoBridgeDesktop\ (uygulamanın dahili, canlı veri dizini adı; kullanıcıya görünen ürün adından bağımsızdır — kanonik MarketplaceHub veri köküne taşıma ayrı, veritabanı bazlı geçiş görevlerinin kapsamındadır).
+  - Katalog/stok: hub.db, catalog.db · Kimlik dosyası: credentials.bin (Windows DPAPI ile şifreli).
+- Yedekleme/geri yükleme: uygulama içi "Verileri güvenli yedekle" / "Yedekten geri yükle" (Veri yönetimi ekranı) — şifreli kimlik dosyaları çözülmeden korunur, geri yükleme öncesi otomatik güvenlik yedeği alınır.
+- Kaldırma (uninstall): kullanıcı verisi %LOCALAPPDATA%\MonoBridgeDesktop\ altında kalır, kaldırma işlemiyle silinmez.
+
+İlk sürüm doğrulama kaydı (tarihsel — bu bölüm ilk bring-up anını belgeler, güncel özellik listesi değildir):
 - Gerçek Windows penceresi, çalışan menü geçişleri.
 - Ürün adı/SKU/barkod araması, stok/hazır durum filtresi.
 - Standart XML dosyası seçme ve yerel ürün listesine alma.
@@ -12,16 +19,10 @@ Bu sürümde:
 - Önceki XML panelinin pool.db dosyasını salt okunur görüntüleme.
 - Salt okunur SQLite sorgu ekranı.
 
-Henüz tamamlanmayanlar:
-- Gelişmiş XML URL/alan eşleştirme/fiyat kurallarının masaüstüne taşınması.
-- OAuth izin alma ve token yenileme; ürün gönderme; pazaryeri eşleştirme ve sipariş alma.
-- eBay/Joom, Navlungo ve Fastfatura.
-
-Doğrulama: 24 test geçti. Release derlemesi başarılı. EXE açıldı; gerçek WPF penceresi, API menüsü ve eksik bilgi doğrulaması incelendi.
+Doğrulama (ilk sürüm): 24 test geçti. Release derlemesi başarılı. EXE açıldı; gerçek WPF penceresi, API menüsü ve eksik bilgi doğrulaması incelendi.
 Canlı Etsy hesabına erişim, gerçek kimlik bilgileri olmadan doğrulanmadı.
 Kaynak: https://developer.etsy.com/documentation/essentials/requests/
 Önceki konuşma: https://chatgpt.com/s/cx_6aa2b5a567a0819181cde6398f1056b7
 
-Veri: %LOCALAPPDATA%\MonoBridgeDesktop\hub.db
-Anahtar dosyası: %LOCALAPPDATA%\MonoBridgeDesktop\credentials.bin
+Not: her sonraki iş kalemi kendi IMPLEMENTATION_STATUS.md kaydında test sayısını ve publish SHA-256'sını taşır; güncel test sayısı ve kapsam için bu dosya değil IMPLEMENTATION_STATUS.md esas alınmalıdır.
 Mevcut Entegra veritabanı ve eski proje verileri değiştirilmedi.

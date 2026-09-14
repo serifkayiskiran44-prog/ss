@@ -18,14 +18,14 @@ public static class DataBackupPanel
         var backup = new Button { Content = "Verileri güvenli yedekle" };
         backup.Click += (_, _) =>
         {
-            var dialog = new SaveFileDialog { Filter = "MonoBridge veri yedeği (*.zip)|*.zip", FileName = ExportFileNames.Build("monobridge-yedek", "zip"), AddExtension = true };
+            var dialog = new SaveFileDialog { Filter = "MarketplaceHub veri yedeği (*.zip)|*.zip", FileName = ExportFileNames.Build("marketplacehub-yedek", "zip"), AddExtension = true };
             if (dialog.ShowDialog() != true) return;
             try { status.Text = $"Yedek hazırlandı: {service.Backup(dialog.FileName, overwrite: true)}"; } catch (Exception error) { status.Text = MarketplaceConnectionStore.Redact(error.Message); }
         };
         var restore = new Button { Content = "Yedekten geri yükle" };
         restore.Click += (_, _) =>
         {
-            var dialog = new OpenFileDialog { Filter = "MonoBridge veri yedeği (*.zip)|*.zip", CheckFileExists = true };
+            var dialog = new OpenFileDialog { Filter = "MarketplaceHub veri yedeği (*.zip)|*.zip", CheckFileExists = true };
             if (dialog.ShowDialog() != true) return;
             try
             {

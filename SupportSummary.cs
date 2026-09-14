@@ -18,7 +18,7 @@ public sealed record SupportSummaryContext(string? Route = null, string? SourceL
 /// </summary>
 public static class SupportSummary
 {
-    public const string Header = "MonoBridge destek özeti";
+    public const string Header = "MarketplaceHub destek özeti"; // #2562: canonical product name
     public const int MaxDepth = 5;
     public const int MaxLineLength = 300;
     public const int MaxRecentEvents = 10;

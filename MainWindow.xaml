@@ -1,4 +1,4 @@
-<Window x:Class="TrMarketplaceHubDesktop.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="MonoBridge — Yönetim Merkezi" Width="1440" Height="900" MinWidth="1150" MinHeight="760" WindowStartupLocation="CenterScreen" Background="#F3F5F9">
+<Window x:Class="TrMarketplaceHubDesktop.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="MarketplaceHub — Yönetim Merkezi" Width="1440" Height="900" MinWidth="1150" MinHeight="760" WindowStartupLocation="CenterScreen" Background="#F3F5F9">
 <Window.Resources>
  <ResourceDictionary>
  <!-- #857: the window merges the token file itself, so it resolves the same values with or without the application (a test host, a tool). -->
