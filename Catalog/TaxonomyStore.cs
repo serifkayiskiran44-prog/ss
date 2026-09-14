@@ -28,7 +28,21 @@ public sealed class TaxonomyStore
     SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
     static void Validate(TaxonomyEntry entry) { entry.Name = entry.Name.Trim(); entry.Value = entry.Value.Trim(); if (entry.Name.Length == 0 || entry.Name.Length > 200) throw new InvalidOperationException("Kategori, marka veya özellik adı 1-200 karakter olmalı."); if (entry.Value.Length > 200) throw new InvalidOperationException("Özellik değeri en fazla 200 karakter olabilir."); }
     public TaxonomyEntry Save(TaxonomyEntry entry)
-    { Validate(entry); entry.UpdatedUtc = DateTime.UtcNow; using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT Id FROM TaxonomyEntries WHERE Kind=$kind AND lower(Name)=lower($name) AND lower(Value)=lower($value) AND Id<>$id"; cmd.Parameters.AddWithValue("$kind", (int)entry.Kind); cmd.Parameters.AddWithValue("$name", entry.Name); cmd.Parameters.AddWithValue("$value", entry.Value); cmd.Parameters.AddWithValue("$id", entry.Id); if (cmd.ExecuteScalar() is not null) throw new InvalidOperationException("Aynı türde aynı ad/değer zaten var."); cmd.Parameters.Clear(); cmd.CommandText = "INSERT INTO TaxonomyEntries(Id,Kind,Name,Value,Active,UpdatedUtc) VALUES($id,$kind,$name,$value,$active,$updated) ON CONFLICT(Id) DO UPDATE SET Kind=excluded.Kind,Name=excluded.Name,Value=excluded.Value,Active=excluded.Active,UpdatedUtc=excluded.UpdatedUtc"; cmd.Parameters.AddWithValue("$id", entry.Id); cmd.Parameters.AddWithValue("$kind", (int)entry.Kind); cmd.Parameters.AddWithValue("$name", entry.Name); cmd.Parameters.AddWithValue("$value", entry.Value); cmd.Parameters.AddWithValue("$active", entry.Active ? 1 : 0); cmd.Parameters.AddWithValue("$updated", entry.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.ExecuteNonQuery(); return entry; }
+    {
+        Validate(entry); entry.UpdatedUtc = DateTime.UtcNow; using var c = Open();
+        // SQLite's built-in lower()/NOCASE only fold ASCII A-Z, so a duplicate check
+        // done in SQL misses non-ASCII case pairs (e.g. Turkish "Ş" vs "ş"). Compare
+        // in .NET with OrdinalIgnoreCase (simple Unicode case folding) instead.
+        using (var check = c.CreateCommand())
+        {
+            check.CommandText = "SELECT Id,Name,Value FROM TaxonomyEntries WHERE Kind=$kind AND Id<>$id"; check.Parameters.AddWithValue("$kind", (int)entry.Kind); check.Parameters.AddWithValue("$id", entry.Id);
+            using var r = check.ExecuteReader();
+            while (r.Read())
+                if (string.Equals(r.GetString(1), entry.Name, StringComparison.OrdinalIgnoreCase) && string.Equals(r.GetString(2), entry.Value, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Aynı türde aynı ad/değer zaten var.");
+        }
+        using var cmd = c.CreateCommand(); cmd.CommandText = "INSERT INTO TaxonomyEntries(Id,Kind,Name,Value,Active,UpdatedUtc) VALUES($id,$kind,$name,$value,$active,$updated) ON CONFLICT(Id) DO UPDATE SET Kind=excluded.Kind,Name=excluded.Name,Value=excluded.Value,Active=excluded.Active,UpdatedUtc=excluded.UpdatedUtc"; cmd.Parameters.AddWithValue("$id", entry.Id); cmd.Parameters.AddWithValue("$kind", (int)entry.Kind); cmd.Parameters.AddWithValue("$name", entry.Name); cmd.Parameters.AddWithValue("$value", entry.Value); cmd.Parameters.AddWithValue("$active", entry.Active ? 1 : 0); cmd.Parameters.AddWithValue("$updated", entry.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.ExecuteNonQuery(); return entry;
+    }
     /// Brand/Category identity lives in TaxonomyEntries.Id, independent of the
     /// user-editable display Name - renaming an entry (Save keeps the same Id) never
     /// changes its identity or breaks existing TaxonomyMappings/history rows that
