@@ -390,7 +390,7 @@ public partial class MainWindow {
   if (productInspectDrawer is null) return;
   if (products.SelectedItem is not CatalogProduct product) { CloseProductInspect(); return; }
   var jobs = new SyncStore(dataDirectory).List().Where(j => j.EntityId == product.Id).ToList();
-  var view = ProductQuickInspect.Build(product, jobs, DateTime.UtcNow, store.Sources(), new OrdersStore(dataDirectory).ReadAll()); /* #934: the open orders feed the oversell risk */
+  var view = ProductQuickInspect.Build(product, jobs, DateTime.UtcNow, store.Sources(), new OrdersStore(dataDirectory).ReadAll(), store.StockObservations(product.Id)); /* #934: the open orders feed the oversell risk; #935: the sources' stock observations feed the aggregate */
   productInspectTitle.Text = view.Rows.First(r => r.Label == "Ürün adı").Value;
   productInspectBody.Children.Clear();
   foreach (var section in view.Sections)
