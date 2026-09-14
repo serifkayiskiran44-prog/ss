@@ -48,19 +48,42 @@ public sealed class EbayConnection(HttpClient http)
     public static EbayAuthorization Begin(EbaySettings settings, DateTimeOffset? now = null)
     { Validate(settings); return new(settings, now ?? DateTimeOffset.UtcNow); }
 
+    // Purely technical bounds on the callback intake, applied before any
+    // percent-decoding or dictionary work: a legitimate eBay redirect carries a
+    // handful of short parameters, so these limits exist only to stop an
+    // oversized/adversarial callback string from doing unbounded parsing work,
+    // never to encode an assumption about eBay's own callback contract.
+    const int MaxCallbackLength = 8192;
+    const int MaxQueryParameterCount = 50;
+    const int MaxParameterLength = 2048;
     public async Task<EbayTokens> CompleteAsync(EbayAuthorization attempt, string callback, CancellationToken cancellationToken = default)
     {
         var expected = new Uri(attempt.Settings.CallbackUrl);
         if (DateTimeOffset.UtcNow - attempt.CreatedAt > TimeSpan.FromMinutes(10)
+            || string.IsNullOrEmpty(callback) || callback.Length > MaxCallbackLength
             || !Uri.TryCreate(callback, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0
             || !string.Equals(uri.GetLeftPart(UriPartial.Path), expected.GetLeftPart(UriPartial.Path), StringComparison.Ordinal))
             throw new InvalidOperationException("Dönüş adresi geçersiz veya yetkilendirme süresi doldu. Yeniden başlatın.");
+        // Parse failures here (oversized/malformed) are deliberately never fatal to
+        // the attempt itself - Consume() is only called once state/code have
+        // actually been validated below, so a transient malformed callback (e.g. a
+        // browser/proxy mangling the URL) still allows a legitimate retry with the
+        // same attempt instead of permanently burning it.
+        var rawParts = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
+        if (rawParts.Length > MaxQueryParameterCount) throw new InvalidOperationException("Dönüş adresinde çok fazla parametre var.");
         var query = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var part in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var part in rawParts)
         {
+            if (part.Length > MaxParameterLength) throw new InvalidOperationException("Dönüş adresi parametresi çok uzun.");
             var pair = part.Split('=', 2);
-            var key = Uri.UnescapeDataString(pair[0].Replace('+', ' '));
-            var value = pair.Length == 2 ? Uri.UnescapeDataString(pair[1].Replace('+', ' ')) : "";
+            string key, value;
+            try
+            {
+                key = Uri.UnescapeDataString(pair[0].Replace('+', ' '));
+                value = pair.Length == 2 ? Uri.UnescapeDataString(pair[1].Replace('+', ' ')) : "";
+            }
+            catch (Exception ex) when (ex is UriFormatException or ArgumentException) { throw new InvalidOperationException("Dönüş adresi geçersiz biçimde kodlanmış."); }
+            if (key.Length > MaxParameterLength || value.Length > MaxParameterLength) throw new InvalidOperationException("Dönüş adresi parametresi çok uzun.");
             if (!query.TryAdd(key, value)) throw new InvalidOperationException("Dönüş parametreleri yinelenemez.");
         }
         if (!query.TryGetValue("state", out var state) || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(state), Encoding.UTF8.GetBytes(attempt.State)))
