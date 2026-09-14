@@ -181,6 +181,9 @@ public sealed class DashboardDataService
             notifications.Add(new("Uyarı", $"Bağlantı: {connection.DisplayName}", $"Durum: {connection.Status} · {connection.LastError}", connection.RouteKey, DashboardStoreFilter.KeyFor(connection.Channel, connection.ShopId)));
         if (products.Any(x => x.Active && x.Stock <= 0))
             notifications.Add(new("Uyarı", "Kritik stok", $"{products.Count(x => x.Active && x.Stock <= 0):N0} aktif ürün stokta yok.", "products"));
+        // #941: low-stock alert profiles -- one alert per product under its most specific enabled threshold (product > source; a store profile judges the store's available figure), deduplicated by the ledger's fingerprint (severity, route, store, title) and resolved by the ledger once the stock recovers or the profile is disabled.
+        foreach (var low in catalog.LowStockAlerts(DateTime.UtcNow).Take(50))
+            notifications.Add(new("Uyarı", low.Title, low.Detail, LowStockAlerts.Source, low.StoreKey));
         if (stockWaiting > 0)
             notifications.Add(new("Bilgi", "Sipariş stoğu bekliyor", $"{stockWaiting:N0} sipariş için yerel stok kararı uygulanmamış.", "orders"));
         if (quality.Critical > 0 || quality.Error > 0)
