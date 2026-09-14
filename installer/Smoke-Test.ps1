@@ -15,3 +15,38 @@ if (-not (Test-Path $publishManifest) -or -not (Test-Path $releaseManifest)) { t
 $hash = Get-FileHash $exe -Algorithm SHA256
 Write-Output "exe=$($hash.Hash) length=$((Get-Item $exe).Length)"
 Write-Output 'package smoke: PASS (EXE, runtime metadata, templates ve manifestler bulundu)'
+
+# Real process launch: file presence alone does not prove the app actually renders -
+# a missing dependency, XAML load error or unhandled startup exception would still
+# pass every check above while the EXE crashes or never shows a window. Run it against
+# an isolated temp data directory (MARKETPLACEHUB_DATA_DIR) so this never touches real
+# user data, and require MainWindow to actually become visible within a bounded time.
+$smokeDataDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("marketplacehub-smoke-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $smokeDataDirectory | Out-Null
+$process = $null
+try {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $exe
+    $psi.WorkingDirectory = $package
+    $psi.UseShellExecute = $false
+    $psi.EnvironmentVariables['MARKETPLACEHUB_DATA_DIR'] = $smokeDataDirectory
+    $process = [System.Diagnostics.Process]::Start($psi)
+
+    $deadline = (Get-Date).AddSeconds(30)
+    $title = $null
+    while ((Get-Date) -lt $deadline) {
+        $process.Refresh()
+        if ($process.HasExited) { throw "EXE MainWindow açılmadan önce kapandı (exit code $($process.ExitCode))." }
+        if ($process.MainWindowHandle -ne [IntPtr]::Zero) { $title = $process.MainWindowTitle; break }
+        Start-Sleep -Milliseconds 300
+    }
+    if (-not $title -and $process.MainWindowHandle -eq [IntPtr]::Zero) { throw 'MainWindow zaman aşımına uğradı (30s); pencere görünür olmadı.' }
+    Write-Output "MainWindow smoke: PASS ('$title' penceresi görünür oldu)"
+}
+finally {
+    if ($process -and -not $process.HasExited) {
+        $process.CloseMainWindow() | Out-Null
+        if (-not $process.WaitForExit(5000)) { $process.Kill($true) }
+    }
+    if (Test-Path -LiteralPath $smokeDataDirectory) { Remove-Item -LiteralPath $smokeDataDirectory -Recurse -Force -ErrorAction SilentlyContinue }
+}

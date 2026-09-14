@@ -12,18 +12,21 @@ namespace TrMarketplaceHubDesktop;
 public partial class App : Application
 {
     StartupCrashGuard? crashGuard;
+    string? dataDirectory;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
+        dataDirectory = ResolveDataDirectory();
+
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
-        TaskScheduler.UnobservedTaskException += (_, args) => { LogFatal(args.Exception); args.SetObserved(); };
+        TaskScheduler.UnobservedTaskException += (_, args) => { LogFatal(dataDirectory, args.Exception); args.SetObserved(); };
 
         try
         {
-            crashGuard = new StartupCrashGuard();
+            crashGuard = new StartupCrashGuard(dataDirectory);
         }
         catch { crashGuard = null; }
 
@@ -37,8 +40,8 @@ public partial class App : Application
         }
 
         StartupHealthReport health;
-        try { health = StartupPreflight.Run(); }
-        catch (Exception ex) { LogFatal(ex); health = new([]); }
+        try { health = StartupPreflight.Run(dataDirectory); }
+        catch (Exception ex) { LogFatal(dataDirectory, ex); health = new([]); }
 
         if (health.Overall is StartupHealthStatus.Blocked or StartupHealthStatus.RecoveryRequired)
         {
@@ -64,14 +67,14 @@ public partial class App : Application
 
         try
         {
-            var window = new MainWindow();
+            var window = new MainWindow(dataDirectory);
             window.ContentRendered += (_, _) => crashGuard?.MarkReachedUi();
             MainWindow = window;
             window.Show();
         }
         catch (Exception ex)
         {
-            LogFatal(ex);
+            LogFatal(dataDirectory, ex);
             MessageBox.Show(
                 "Uygulama başlatılamadı. Yerel veri klasörü bozulmuş veya erişilemez olabilir. Ayrıntılar için operations.log dosyasına bakın.",
                 "MarketplaceHub — başlatma hatası",
@@ -81,9 +84,18 @@ public partial class App : Application
         }
     }
 
+    /// Test/smoke hook only: MARKETPLACEHUB_DATA_DIR lets Smoke-Test.ps1 point a real
+    /// launched EXE at an isolated temp directory instead of the user's LocalAppData
+    /// data. Unset (the normal case) preserves the existing default resolution.
+    static string? ResolveDataDirectory()
+    {
+        var overridePath = Environment.GetEnvironmentVariable("MARKETPLACEHUB_DATA_DIR");
+        return string.IsNullOrWhiteSpace(overridePath) ? null : overridePath;
+    }
+
     void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        LogFatal(e.Exception);
+        LogFatal(dataDirectory, e.Exception);
         MessageBox.Show(
             "Beklenmeyen bir hata oluştu; uygulama güvenli şekilde kapatılacak. Ayrıntılar için operations.log dosyasına bakın.",
             "MarketplaceHub — beklenmeyen hata",
@@ -95,16 +107,16 @@ public partial class App : Application
 
     void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
-        if (e.ExceptionObject is Exception ex) LogFatal(ex);
+        if (e.ExceptionObject is Exception ex) LogFatal(dataDirectory, ex);
     }
 
-    static void LogFatal(Exception ex)
+    static void LogFatal(string? directory, Exception ex)
     {
         try
         {
-            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
+            directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
             Directory.CreateDirectory(directory);
-            var line = $"{DateTime.UtcNow:O} FATAL {AuditStore.Sanitize(ex.GetType().Name + ": " + ex.Message)}{Environment.NewLine}";
+            var line = $"{DateTime.UtcNow:O} FATAL {AuditStore.Sanitize(ex.ToString())}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(directory, "operations.log"), line);
         }
         catch { }
