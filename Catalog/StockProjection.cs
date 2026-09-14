@@ -3,7 +3,7 @@ using System.Globalization;
 namespace TrMarketplaceHubDesktop.Catalog;
 
 /// <summary>The availability projection of a product on a shop with the source stock's freshness as its own state: the stock as recorded, the available figure after the shop's safety and maximum, and whether the source stock behind it is fresh, stale, unobserved or frozen — with the observation, the threshold and the words.</summary>
-public sealed record StockProjection(string Channel, string Shop, string ProductId, string Sku, int Stock, int Available, int SafetyStock, int? MaximumStock, string State, DateTime? ObservedUtc, TimeSpan Threshold, string SourceId, string Words, string BufferWords = "", bool BelowBuffer = false, string FallbackSourceId = "", int FallbackRevision = 0) // #933: the buffer used and where it came from; whether the stock sits below it
+public sealed record StockProjection(string Channel, string Shop, string ProductId, string Sku, int Stock, int Available, int SafetyStock, int? MaximumStock, string State, DateTime? ObservedUtc, TimeSpan Threshold, string SourceId, string Words, string BufferWords = "", bool BelowBuffer = false, string FallbackSourceId = "", int FallbackRevision = 0, int Reserved = 0) // #933: the buffer used and where it came from; whether the stock sits below it
 {
     public const string Fresh = "FRESH", Stale = "STALE", Missing = "MISSING", Frozen = "FROZEN", Fallback = "FALLBACK"; // #936: an approved fallback source's fresh stock stands in
     /// <summary>Only a fresh source stock -- or an approved fallback's (#936), named with its revision -- may be written to a marketplace by itself.</summary>
@@ -27,7 +27,8 @@ public partial class CatalogStore
         var product = FindProduct(productId) ?? throw new InvalidOperationException("Ürün bulunamadı.");
         // #933: the buffer is the most specific profile in force -- product, source, store -- or the shop policy's safety stock; a stock below it is nothing available, said so.
         var buffer = new SafetyBufferProfileStore(dataDirectory).Resolve(product.Id, product.SourceId, policy.Channel, policy.Shop, policy.SafetyStock, nowUtc);
-        int Available(int units) { var a = product.Active ? Math.Max(0, units - buffer.Buffer) : 0; return policy.MaximumStock.HasValue ? Math.Min(a, policy.MaximumStock.Value) : a; } // #936: one arithmetic for the record's stock and a fallback's
+        var reserved = new StockReservationStore(dataDirectory).ActiveQuantity(product.Id, policy.Channel, policy.Shop, nowUtc); // #937: the units held for orders on this store come off the available figure
+        int Available(int units) { var a = product.Active ? Math.Max(0, units - buffer.Buffer - reserved) : 0; return policy.MaximumStock.HasValue ? Math.Min(a, policy.MaximumStock.Value) : a; } // #936: one arithmetic for the record's stock and a fallback's; #937: minus the holds
         var stock = product.Stock; var available = Available(stock); var belowBuffer = product.Active && stock < buffer.Buffer;
         var sources = Sources();
         var freshness = ProductFreshness.Evaluate(product, id => sources.FirstOrDefault(s => s.Id == id), nowUtc).Fields.Single(f => f.Field == "Stock");
@@ -51,6 +52,7 @@ public partial class CatalogStore
         };
         if (fallback is { StandsIn: false }) words += "; " + fallback.Words; // #936: what would stand in and what it waits for
         words += "; " + buffer.Words + (belowBuffer ? $"; stok tamponun altında ({stock.ToString(CultureInfo.InvariantCulture)} < {buffer.Buffer.ToString(CultureInfo.InvariantCulture)})" : ""); // #933
-        return new(policy.Channel, policy.Shop, product.Id, product.Sku, stock, available, buffer.Buffer, policy.MaximumStock, state, observedUtc, threshold, sourceId, words, buffer.Words, belowBuffer, fallbackSourceId, fallbackRevision);
+        if (reserved > 0) words += $"; rezerve {reserved.ToString(CultureInfo.InvariantCulture)} adet (aktif rezervasyon, gösterilebilirden düşüldü)"; // #937
+        return new(policy.Channel, policy.Shop, product.Id, product.Sku, stock, available, buffer.Buffer, policy.MaximumStock, state, observedUtc, threshold, sourceId, words, buffer.Words, belowBuffer, fallbackSourceId, fallbackRevision, reserved);
     }
 }
