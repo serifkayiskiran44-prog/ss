@@ -26,10 +26,21 @@ public sealed class EbayAuthorization
 public sealed class EbayConnection(HttpClient http)
 {
  public const string Scope = "https://api.ebay.com/oauth/api_scope/sell.account.readonly https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly";
+    // Purely technical bounds (never a provider-format contract): eBay's own
+    // App ID/Cert ID/RuName are far shorter than these in practice, but the limits
+    // exist only to stop an oversized value from reaching the OAuth authorize URL,
+    // the Basic-auth header, or DPAPI/JSON persistence with no upper bound at all -
+    // not to encode any assumption about eBay's real field-length contract.
+    const int MaxClientIdLength = 256;
+    const int MaxClientSecretLength = 512;
+    const int MaxRuNameLength = 256;
+    const int MaxCallbackUrlLength = 2048;
     public static void Validate(EbaySettings settings)
     {
         if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret) || string.IsNullOrWhiteSpace(settings.RuName)
-            || settings.ClientId.Contains(':') || settings.ClientId.Any(char.IsControl) || settings.ClientSecret.Any(char.IsControl)
+            || settings.ClientId.Length > MaxClientIdLength || settings.ClientSecret.Length > MaxClientSecretLength || settings.RuName.Length > MaxRuNameLength
+            || settings.ClientId.Contains(':') || settings.ClientId.Any(char.IsControl) || settings.ClientSecret.Any(char.IsControl) || settings.RuName.Any(char.IsControl)
+            || string.IsNullOrEmpty(settings.CallbackUrl) || settings.CallbackUrl.Length > MaxCallbackUrlLength
             || !Uri.TryCreate(settings.CallbackUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https"
             || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0)
             throw new ArgumentException("App ID, Cert ID, RuName ve sorgusuz HTTPS kabul adresi gerekli.");
