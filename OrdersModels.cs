@@ -50,6 +50,25 @@ public static class OrdersRules
   if(o.Items.Any(i=>string.IsNullOrWhiteSpace(i.Title)||i.Quantity<=0))throw new ArgumentException("Ürün adı ve pozitif adet zorunlu.");
  }
 }
+/// Pure predicate extracted from OrdersPanel's in-memory filter bar so the
+/// date-range (#1971) and marketplace/shop multi-select (#1972) rules are
+/// directly testable without a WPF DataGrid/ListBox host.
+public static class OrderFilterCriteria
+{
+ public static bool Matches(OrderSnapshot o,string search,string? stateFilter,IReadOnlyCollection<string> marketplaces,IReadOnlyCollection<string> shops,string stockFilter,DateTimeOffset? fromUtc,DateTimeOffset? toUtc)
+ {
+  var q=(search??"").Trim();
+  if(q.Length>0&&!$"{o.Marketplace} {o.ShopId} {o.OrderId} {o.TrackingNumbers} {string.Join(' ',o.Items.Select(i=>i.Title+" "+i.Sku))}".Contains(q,StringComparison.CurrentCultureIgnoreCase))return false;
+  if(!string.IsNullOrEmpty(stateFilter)&&!o.Shipments.Any(s=>s.State==stateFilter))return false;
+  if(marketplaces.Count>0&&!marketplaces.Contains(o.Marketplace,StringComparer.OrdinalIgnoreCase))return false;
+  if(shops.Count>0&&!shops.Contains(o.ShopId,StringComparer.OrdinalIgnoreCase))return false;
+  if(stockFilter=="Stok düşüldü"&&o.StockDecisionLabel!="Stok düşüldü")return false;
+  if(stockFilter=="Stok bekliyor"&&o.StockDecisionLabel=="Stok düşüldü")return false;
+  if(fromUtc.HasValue&&o.UpdatedAt<fromUtc.Value)return false;
+  if(toUtc.HasValue&&o.UpdatedAt>toUtc.Value)return false;
+  return true;
+ }
+}
 public static class OrderNormalizer
 {
  public static OrderSnapshot Normalize(OrderSnapshot order)
