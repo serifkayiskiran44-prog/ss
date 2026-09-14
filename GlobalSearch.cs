@@ -12,6 +12,14 @@ public sealed record GlobalSearchHit(
     string TargetId,
     DateTimeOffset UpdatedUtc);
 
+/// Bounded diagnostics only (id/type/route/target identity, a short reason,
+/// detection time) - never Title/Detail - for a SearchIndex row with an
+/// unparsable persisted UpdatedUtc. See CatalogStore's CorruptProductRow for the
+/// same pattern. The index is a fully-derived, rebuildable cache (ReplaceAll
+/// replaces it wholesale), so a corrupt row here never needs its own repair
+/// flow - it simply drops out of results until the next full rebuild.
+public sealed record CorruptGlobalSearchRow(string Type, string Route, string TargetId, string Reason, DateTime DetectedUtc);
+
 public sealed record GlobalSearchIndexEntry(
     string Id,
     string Type,
@@ -72,12 +80,37 @@ public sealed class GlobalSearchIndexStore
         using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "DELETE FROM SearchIndexMeta WHERE Key='builtUtc'"; command.ExecuteNonQuery();
     }
 
+    /// A malformed UpdatedUtc must never crash the whole search - the row is
+    /// excluded from results (this index is a fully-derived, rebuildable cache;
+    /// see CorruptGlobalSearchRow) rather than throwing mid-query. No rebuild is
+    /// triggered from a read failure, so the same corrupt row can never cause a
+    /// rebuild/exception loop - it simply drops out until the next full rebuild.
     public IReadOnlyList<GlobalSearchHit> Search(string query, int limit = 80)
     {
         query = query.Trim(); if (query.Length < 2) return Array.Empty<GlobalSearchHit>(); if (query.Length > 200) throw new ArgumentException("Arama metni en fazla 200 karakter olabilir.", nameof(query)); limit = Math.Clamp(limit, 1, 200);
         var escaped = query.ToLowerInvariant().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-        using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Type,Title,Detail,Route,TargetId,UpdatedUtc FROM SearchIndex WHERE SearchText LIKE $like ESCAPE '\\' ORDER BY UpdatedUtc DESC LIMIT $limit"; command.Parameters.AddWithValue("$like", $"%{escaped}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<GlobalSearchHit>(); while (reader.Read()) result.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), DateTimeOffset.Parse(reader.GetString(5), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind))); return result;
+        using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Type,Title,Detail,Route,TargetId,UpdatedUtc FROM SearchIndex WHERE SearchText LIKE $like ESCAPE '\\' ORDER BY UpdatedUtc DESC LIMIT $limit"; command.Parameters.AddWithValue("$like", $"%{escaped}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<GlobalSearchHit>(); while (reader.Read()) if (TryRead(reader, out var hit, out _)) result.Add(hit!); return result;
     }
+
+    /// Bounded diagnostics for every SearchIndex row whose UpdatedUtc failed to
+    /// parse - never the raw Title/Detail.
+    public IReadOnlyList<CorruptGlobalSearchRow> CorruptRows()
+    {
+        using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Type,Title,Detail,Route,TargetId,UpdatedUtc FROM SearchIndex";
+        using var reader = command.ExecuteReader(); var result = new List<CorruptGlobalSearchRow>(); while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) result.Add(corrupt!); return result;
+    }
+
+    static bool TryRead(SqliteDataReader reader, out GlobalSearchHit? hit, out CorruptGlobalSearchRow? corrupt)
+    {
+        hit = null; corrupt = null; var type = reader.GetString(0); var route = reader.GetString(3); var targetId = reader.GetString(4);
+        if (!TryParseUtc(reader.GetString(5), out var updated)) { corrupt = new(type, route, targetId, "Malformed UpdatedUtc timestamp", DateTime.UtcNow); return false; }
+        hit = new(type, reader.GetString(1), reader.GetString(2), route, targetId, updated);
+        return true;
+    }
+
+    /// Only ever a format/parse failure - never conflated with a DB-busy/locked
+    /// SqliteException, which is raised by the surrounding command, not this parse.
+    static bool TryParseUtc(string value, out DateTimeOffset result) => DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
 
     static string BuildSearchText(params string[] values) => string.Join(' ', values.Select(v => Clean(v, 2000))).ToLowerInvariant();
     static string Clean(string? value, int max) { var clean = AuditStore.Sanitize(value).Replace('\r', ' ').Replace('\n', ' ').Trim(); return clean.Length > max ? clean[..max] : clean; }
