@@ -38,8 +38,40 @@ public sealed class TaxonomyStore
         using var c = Open(); using var cmd = c.CreateCommand();
         cmd.CommandText = "CREATE TABLE IF NOT EXISTS TaxonomyEntries(Id TEXT PRIMARY KEY, Kind INTEGER NOT NULL, Name TEXT NOT NULL, Value TEXT NOT NULL, Active INTEGER NOT NULL, UpdatedUtc TEXT NOT NULL DEFAULT '');CREATE UNIQUE INDEX IF NOT EXISTS UX_TaxonomyEntries_KindNameValue ON TaxonomyEntries(Kind,Name,Value);CREATE TABLE IF NOT EXISTS TaxonomyMappings(Kind INTEGER NOT NULL, Marketplace TEXT NOT NULL DEFAULT 'local', ShopId TEXT NOT NULL DEFAULT 'default', ExternalKey TEXT NOT NULL, LocalId TEXT NOT NULL, UpdatedUtc TEXT NOT NULL DEFAULT '', PRIMARY KEY(Kind,Marketplace,ShopId,ExternalKey));CREATE TABLE IF NOT EXISTS TaxonomyMappingHistory(Id TEXT PRIMARY KEY, Kind INTEGER NOT NULL, Marketplace TEXT NOT NULL, ShopId TEXT NOT NULL, ExternalKey TEXT NOT NULL, LocalId TEXT NOT NULL, Action TEXT NOT NULL, ChangedUtc TEXT NOT NULL)";
         cmd.ExecuteNonQuery(); EnsureColumn(c, "TaxonomyEntries", "UpdatedUtc", "TEXT NOT NULL DEFAULT ''"); EnsureColumn(c, "TaxonomyMappings", "UpdatedUtc", "TEXT NOT NULL DEFAULT ''"); EnsureColumn(c, "TaxonomyMappings", "Version", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn(c, "TaxonomyEntries", "NormalizedKey", "TEXT NOT NULL DEFAULT ''");
+        BackfillNormalizedKeys(c);
+        EnsureUniqueNormalizedKeyIndex(c);
     }
     static void EnsureColumn(SqliteConnection c, string table, string name, string definition) { using var check = c.CreateCommand(); check.CommandText = $"SELECT 1 FROM pragma_table_info('{table}') WHERE name=$name"; check.Parameters.AddWithValue("$name", name); if (check.ExecuteScalar() is not null) return; using var add = c.CreateCommand(); add.CommandText = $"ALTER TABLE {table} ADD COLUMN {name} {definition}"; add.ExecuteNonQuery(); }
+    /// SQLite's own UPPER()/lower() are ASCII-only, so the normalized key that
+    /// enforces case-insensitive uniqueness must be computed in .NET (matching
+    /// CatalogStore.NormalizeIdentityKey's convention) - a legacy row inserted
+    /// before this column existed needs that same computation applied once, not a
+    /// SQL-side UPPER() that would silently disagree with it for non-ASCII names.
+    static void BackfillNormalizedKeys(SqliteConnection c)
+    {
+        var pending = new List<(string Id, string Name, string Value)>();
+        using (var select = c.CreateCommand()) { select.CommandText = "SELECT Id,Name,Value FROM TaxonomyEntries WHERE NormalizedKey=''"; using var r = select.ExecuteReader(); while (r.Read()) pending.Add((r.GetString(0), r.GetString(1), r.GetString(2))); }
+        foreach (var (id, name, value) in pending) { using var update = c.CreateCommand(); update.CommandText = "UPDATE TaxonomyEntries SET NormalizedKey=$key WHERE Id=$id"; update.Parameters.AddWithValue("$key", NormalizedKey(name, value)); update.Parameters.AddWithValue("$id", id); update.ExecuteNonQuery(); }
+    }
+    /// Built once per schema migration (constructor), never on every Open() - see
+    /// SyncStore.EnsureUniqueKeyIndex for the identical precedent. If legacy
+    /// case-collision rows already violate the new unique key, fall back to a
+    /// non-unique index instead of crashing startup or silently merging/deleting
+    /// rows; Save() below still atomically enforces uniqueness for every write
+    /// going forward via the underlying INSERT/UPDATE...ON CONFLICT.
+    static void EnsureUniqueNormalizedKeyIndex(SqliteConnection c)
+    {
+        using (var check = c.CreateCommand()) { check.CommandText = "SELECT sql FROM sqlite_master WHERE type='index' AND name='UX_TaxonomyEntries_KindNormalized'"; var existing = check.ExecuteScalar() as string; if (existing != null && existing.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)) return; }
+        using (var drop = c.CreateCommand()) { drop.CommandText = "DROP INDEX IF EXISTS UX_TaxonomyEntries_KindNormalized"; drop.ExecuteNonQuery(); }
+        try { using var unique = c.CreateCommand(); unique.CommandText = "CREATE UNIQUE INDEX UX_TaxonomyEntries_KindNormalized ON TaxonomyEntries(Kind,NormalizedKey)"; unique.ExecuteNonQuery(); }
+        catch (SqliteException) { using var fallback = c.CreateCommand(); fallback.CommandText = "CREATE INDEX IF NOT EXISTS UX_TaxonomyEntries_KindNormalized ON TaxonomyEntries(Kind,NormalizedKey)"; fallback.ExecuteNonQuery(); }
+    }
+    /// Same normalization policy as CatalogStore.NormalizeIdentityKey (trim +
+    /// invariant uppercase) applied to both Name and Value, joined by a control
+    /// character (0x01) that cannot appear in either (both are validated/trimmed
+    /// text) so "AB"/"C" can never collide with "A"/"BC".
+    static string NormalizedKey(string name, string value) => (name ?? "").Trim().ToUpperInvariant() + (char)1 + (value ?? "").Trim().ToUpperInvariant();
     SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
     /// The only defensible boundary against a future/corrupt persisted Kind value:
     /// TaxonomyKind has no [Flags] and no reserved gaps, so any value outside the
@@ -47,21 +79,22 @@ public sealed class TaxonomyStore
     static bool IsValidKind(TaxonomyKind kind) => kind is TaxonomyKind.Category or TaxonomyKind.Brand or TaxonomyKind.Attribute;
     static void ValidateKind(TaxonomyKind kind) { if (!IsValidKind(kind)) throw new ArgumentException($"Tanımsız taxonomy türü: {(int)kind}."); }
     static void Validate(TaxonomyEntry entry) { ValidateKind(entry.Kind); entry.Name = entry.Name.Trim(); entry.Value = entry.Value.Trim(); if (entry.Name.Length == 0 || entry.Name.Length > 200) throw new InvalidOperationException("Kategori, marka veya özellik adı 1-200 karakter olmalı."); if (entry.Value.Length > 200) throw new InvalidOperationException("Özellik değeri en fazla 200 karakter olabilir."); }
+    /// Uniqueness is enforced atomically by the DB's UX_TaxonomyEntries_KindNormalized
+    /// unique index (Kind,NormalizedKey), not by a separate SELECT-then-write: two
+    /// concurrent Save calls for the same case-insensitive Name/Value can no longer
+    /// both pass a pre-check and then both write - whichever INSERT/UPDATE loses the
+    /// race hits the unique-constraint violation here and is rejected with the same
+    /// "already exists" error a caller would see from the old pre-check, just as a
+    /// genuine DB-level guarantee instead of a race-prone convention.
     public TaxonomyEntry Save(TaxonomyEntry entry)
     {
-        Validate(entry); entry.UpdatedUtc = DateTime.UtcNow; using var c = Open();
-        // SQLite's built-in lower()/NOCASE only fold ASCII A-Z, so a duplicate check
-        // done in SQL misses non-ASCII case pairs (e.g. Turkish "Ş" vs "ş"). Compare
-        // in .NET with OrdinalIgnoreCase (simple Unicode case folding) instead.
-        using (var check = c.CreateCommand())
-        {
-            check.CommandText = "SELECT Id,Name,Value FROM TaxonomyEntries WHERE Kind=$kind AND Id<>$id"; check.Parameters.AddWithValue("$kind", (int)entry.Kind); check.Parameters.AddWithValue("$id", entry.Id);
-            using var r = check.ExecuteReader();
-            while (r.Read())
-                if (string.Equals(r.GetString(1), entry.Name, StringComparison.OrdinalIgnoreCase) && string.Equals(r.GetString(2), entry.Value, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Aynı türde aynı ad/değer zaten var.");
-        }
-        using var cmd = c.CreateCommand(); cmd.CommandText = "INSERT INTO TaxonomyEntries(Id,Kind,Name,Value,Active,UpdatedUtc) VALUES($id,$kind,$name,$value,$active,$updated) ON CONFLICT(Id) DO UPDATE SET Kind=excluded.Kind,Name=excluded.Name,Value=excluded.Value,Active=excluded.Active,UpdatedUtc=excluded.UpdatedUtc"; cmd.Parameters.AddWithValue("$id", entry.Id); cmd.Parameters.AddWithValue("$kind", (int)entry.Kind); cmd.Parameters.AddWithValue("$name", entry.Name); cmd.Parameters.AddWithValue("$value", entry.Value); cmd.Parameters.AddWithValue("$active", entry.Active ? 1 : 0); cmd.Parameters.AddWithValue("$updated", entry.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.ExecuteNonQuery(); return entry;
+        Validate(entry); entry.UpdatedUtc = DateTime.UtcNow; var normalizedKey = NormalizedKey(entry.Name, entry.Value);
+        using var c = Open(); using var cmd = c.CreateCommand();
+        cmd.CommandText = "INSERT INTO TaxonomyEntries(Id,Kind,Name,Value,Active,UpdatedUtc,NormalizedKey) VALUES($id,$kind,$name,$value,$active,$updated,$normalized) ON CONFLICT(Id) DO UPDATE SET Kind=excluded.Kind,Name=excluded.Name,Value=excluded.Value,Active=excluded.Active,UpdatedUtc=excluded.UpdatedUtc,NormalizedKey=excluded.NormalizedKey";
+        cmd.Parameters.AddWithValue("$id", entry.Id); cmd.Parameters.AddWithValue("$kind", (int)entry.Kind); cmd.Parameters.AddWithValue("$name", entry.Name); cmd.Parameters.AddWithValue("$value", entry.Value); cmd.Parameters.AddWithValue("$active", entry.Active ? 1 : 0); cmd.Parameters.AddWithValue("$updated", entry.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$normalized", normalizedKey);
+        try { cmd.ExecuteNonQuery(); }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { throw new InvalidOperationException("Aynı türde aynı ad/değer zaten var."); }
+        return entry;
     }
     /// Brand/Category identity lives in TaxonomyEntries.Id, independent of the
     /// user-editable display Name - renaming an entry (Save keeps the same Id) never
