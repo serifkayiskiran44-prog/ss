@@ -16,7 +16,7 @@ public sealed class PricePolicy { string currency="TRY"; public string Channel {
  public DateTimeOffset? FxRateObservedUtc {get;set;}
  // #926: the discount stack's inputs -- a supplier discount on the cost, the shop's own discount and the channel's supported discount ("percent:10" or "amount:5") on the sale price; empty means none.
  public decimal? SupplierDiscountPercent {get;set;} public decimal? LocalDiscountPercent {get;set;} public string ChannelDiscount {get;set;}=""; }
-public sealed record PricePreview(string Sku, decimal Price, string Currency, decimal FormulaPriceTry, decimal CostTry, string CostOrigin = "", string CommissionOrigin = "", string FxWarning = "", string RoundingOrigin = "", string DiscountOrigin = ""); // #922: the net margin names where its cost came from; #923: and the commission period it used; #924: and a stale-rate warning the operator's policy allowed; #925: and the rounding profile revision; #926: and the discount steps
+public sealed record PricePreview(string Sku, decimal Price, string Currency, decimal FormulaPriceTry, decimal CostTry, string CostOrigin = "", string CommissionOrigin = "", string FxWarning = "", string RoundingOrigin = "", string DiscountOrigin = "", IReadOnlyList<string>? Breakdown = null); // #922: the net margin names where its cost came from; #923: and the commission period it used; #924: and a stale-rate warning the operator's policy allowed; #925: and the rounding profile revision; #926: and the discount steps; #928: and the net margin's explanation, line by line
 public partial class CatalogStore {
  static void InitializePricePolicies(SqliteConnection c){using var x=c.CreateCommand();x.CommandText="CREATE TABLE IF NOT EXISTS PricePolicies(Channel TEXT NOT NULL,Shop TEXT NOT NULL,Json TEXT NOT NULL,PRIMARY KEY(Channel,Shop))";x.ExecuteNonQuery();}
  public PricePolicy? GetPricePolicy(string ch,string shop){var k=PolicyKey(ch,shop);using var c=Open();using var x=c.CreateCommand();x.CommandText="SELECT Json FROM PricePolicies WHERE Channel=$c AND Shop=$s";x.Parameters.AddWithValue("$c",k.Channel);x.Parameters.AddWithValue("$s",k.Shop);return x.ExecuteScalar() is string j?JsonSerializer.Deserialize<PricePolicy>(j):null;}
@@ -68,6 +68,6 @@ public partial class CatalogStore {
   // enforced here against the real net contribution the gate just computed, so "at least N TRY per sale"
   // means what the operator typed: after commission, shipping, transaction cost and VAT.
   if(money.NetContribution<p.MinimumMarginTry)throw new InvalidOperationException($"Fiyat gönderimi engellendi: net katkı {money.NetContribution.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)} TRY, asgari kâr {p.MinimumMarginTry.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)} TRY altında; {money.ChannelShop}.");
-  return new(product.Sku,salePrice,saleCurrency,formulaPriceTry,product.Cost,CostProvenance.Describe(product,SourceById,DateTime.UtcNow),commissionOrigin,fxWarning,rounding.Words,stack.Words); /* #922; #923; #924; #925; #926 */
+  return new(product.Sku,salePrice,saleCurrency,formulaPriceTry,product.Cost,CostProvenance.Describe(product,SourceById,DateTime.UtcNow),commissionOrigin,fxWarning,rounding.Words,stack.Words,money.Explanation); /* #922; #923; #924; #925; #926; #928 */
  }
 }

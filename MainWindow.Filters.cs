@@ -150,7 +150,8 @@ public partial class MainWindow {
    ProductPriceSummary.Healthy => new SolidColorBrush(Color.FromRgb(46, 125, 80)),
    _ => new SolidColorBrush(Color.FromRgb(87, 112, 125)),
   };
-  productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Kâr (yaklaşık): {summary.Margin}", Foreground = marginBrush, FontWeight = FontWeights.SemiBold });
+  productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Kâr ({(summary.MarginKind == "net" ? "net" : "yaklaşık")}): {summary.Margin}", Foreground = marginBrush, FontWeight = FontWeights.SemiBold }); // #928
+  if (summary.Breakdown is { Count: > 0 }) foreach (var line in summary.Breakdown) productPriceSummaryPanel.Children.Add(new TextBlock { Text = line, FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) }); // #928: the same lines the preview shows
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Son hesaplama: {summary.Calculated}", FontSize = DesignTokens.TextCaptionSize, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) });
   productPriceSummaryPanel.Children.Add(new TextBlock { Text = $"Alış kökeni: {summary.CostOrigin}", FontSize = DesignTokens.TextCaptionSize, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(87, 112, 125)) }); // #922
   foreach (var warning in summary.Warnings)

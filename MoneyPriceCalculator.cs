@@ -16,6 +16,9 @@ public sealed record MoneyPriceInput(string Sku, string Channel, string Shop, de
     public TimeSpan? FxStaleAfter { get; init; }
 }
 
+/// <summary>#928: one line of the net margin's explanation -- what it is, the amount in TRY (deductions negative), the words.</summary>
+public sealed record MoneyBreakdownLine(string Key, string Label, decimal AmountTry, string Words);
+
 public sealed record MoneyPriceResult(
     MoneyPriceInput Input,
     decimal SalePriceTry,
@@ -25,11 +28,14 @@ public sealed record MoneyPriceResult(
     MoneyPriceStatus Status,
     string ChannelShop,
     DateTimeOffset CalculatedAtUtc,
-    IReadOnlyList<string>? MissingFees = null) // #927: the required fees the input lacks, named
+    IReadOnlyList<string>? MissingFees = null, // #927: the required fees the input lacks, named
+    IReadOnlyList<MoneyBreakdownLine>? Breakdown = null) // #928: the immutable explanation of how the net was reached -- selling price, VAT if included, commission, shipping, payment, cost, a rounding difference when the cents need one, net
 {
     public bool IsApproximate => Input.CommissionRatePercent is null || Input.EstimatedShipping is null || Input.TransactionCost is null || Input.VatRatePercent is null;
     /// <summary>#927: COMPLETE when every required fee is known, INCOMPLETE_COST when one is missing -- the state the card and the gate share.</summary>
     public string CostCompleteness => MissingFees is { Count: > 0 } ? "INCOMPLETE_COST" : "COMPLETE";
+    /// <summary>#928: the explanation in words, one per line; empty when the gate could not compute.</summary>
+    public IReadOnlyList<string> Explanation => Breakdown is null ? Array.Empty<string>() : Breakdown.Select(l => l.Words).ToList();
 }
 
 public static class MoneyPriceCalculator
@@ -64,8 +70,30 @@ public static class MoneyPriceCalculator
         var net = netSale - commission - input.EstimatedShipping.Value - input.TransactionCost.Value - input.CostTry;
         var margin = netSale == 0 ? 0 : net / netSale * 100m;
         var status = net <= 0 ? MoneyPriceStatus.BlockedNegativeMargin : MoneyPriceStatus.Ready;
-        return new(input, decimal.Round(saleTry, 2, MidpointRounding.AwayFromZero), decimal.Round(gross, 2, MidpointRounding.AwayFromZero), decimal.Round(net, 2, MidpointRounding.AwayFromZero), decimal.Round(margin, 2, MidpointRounding.AwayFromZero), status, $"{input.Channel.Trim().ToLowerInvariant()}/{input.Shop.Trim()}", now);
+        var netRounded = decimal.Round(net, 2, MidpointRounding.AwayFromZero);
+        return new(input, decimal.Round(saleTry, 2, MidpointRounding.AwayFromZero), decimal.Round(gross, 2, MidpointRounding.AwayFromZero), netRounded, decimal.Round(margin, 2, MidpointRounding.AwayFromZero), status, $"{input.Channel.Trim().ToLowerInvariant()}/{input.Shop.Trim()}", now, null, Breakdown(input, rate, saleTry, netSale, commission, netRounded)); // #928
     }
+
+    /// <summary>#928: the explanation -- every line rounded to the cent, the lines adding up to the rounded net exactly (a rounding line absorbs the cents when they need it), the net last.</summary>
+    static IReadOnlyList<MoneyBreakdownLine> Breakdown(MoneyPriceInput input, decimal rate, decimal saleTry, decimal netSale, decimal commission, decimal netRounded)
+    {
+        var lines = new List<MoneyBreakdownLine>(); var sale = Cents(saleTry); var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var isTry = string.Equals(input.Currency, "TRY", StringComparison.OrdinalIgnoreCase);
+        lines.Add(new("sale", "Satış fiyatı", sale, isTry ? $"Satış fiyatı: {Money(sale)} TRY" : $"Satış fiyatı: {Money(input.SalePrice)} {input.Currency.Trim().ToUpperInvariant()} × {rate.ToString("0.####", inv)} = {Money(sale)} TRY"));
+        var vatWords = input.VatRatePercent!.Value.ToString("0.##", inv);
+        if (input.VatIncludedInSale) { var vat = Cents(saleTry - netSale); lines.Add(new("vat", "KDV (satışa dahil)", -vat, $"KDV (%{vatWords}, satışa dahil): -{Money(vat)} TRY")); }
+        else lines.Add(new("vat", "KDV", 0m, $"KDV (%{vatWords}): satış fiyatına dahil değil, düşülmedi"));
+        lines.Add(new("commission", "Komisyon", -Cents(commission), $"Komisyon (%{input.CommissionRatePercent!.Value.ToString("0.##", inv)}): -{Money(Cents(commission))} TRY"));
+        lines.Add(new("shipping", "Kargo", -Cents(input.EstimatedShipping!.Value), $"Kargo: -{Money(Cents(input.EstimatedShipping.Value))} TRY"));
+        lines.Add(new("transaction", "İşlem/ödeme", -Cents(input.TransactionCost!.Value), $"İşlem/ödeme: -{Money(Cents(input.TransactionCost.Value))} TRY"));
+        lines.Add(new("cost", "Maliyet", -Cents(input.CostTry), $"Maliyet: -{Money(Cents(input.CostTry))} TRY"));
+        var difference = netRounded - lines.Sum(l => l.AmountTry);
+        if (difference != 0m) lines.Add(new("rounding", "Yuvarlama farkı", difference, $"Yuvarlama farkı: {Money(difference)} TRY"));
+        lines.Add(new("net", "Net kâr", netRounded, $"Net kâr: {Money(netRounded)} TRY"));
+        return lines;
+    }
+    static decimal Cents(decimal value) => decimal.Round(value, 2, MidpointRounding.AwayFromZero);
+    static string Money(decimal value) => value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
 
     static MoneyPriceResult Result(MoneyPriceInput? input, decimal saleTry, decimal gross, decimal net, MoneyPriceStatus status, IReadOnlyList<string>? missingFees = null) => new(input ?? new("", "", "", 0, 0, ""), saleTry, gross, net, 0, status, input is null ? "" : $"{input.Channel.Trim().ToLowerInvariant()}/{input.Shop.Trim()}", DateTimeOffset.UtcNow, missingFees); // #927
 }

@@ -16,7 +16,8 @@ public sealed record ProductPriceSummaryInfo(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<string> Order,
     string CostOrigin = "", // #922: the words for where the cost came from
-    string CostCompleteness = "UNKNOWN", string MissingFees = ""); // #927: COMPLETE, INCOMPLETE_COST, or UNKNOWN without a rule to ask; the fees the rule lacks, named
+    string CostCompleteness = "UNKNOWN", string MissingFees = "", // #927: COMPLETE, INCOMPLETE_COST, or UNKNOWN without a rule to ask; the fees the rule lacks, named
+    string MarginKind = "approximate", IReadOnlyList<string>? Breakdown = null); // #928: "net" when the money gate computed it from the rule, with its explanation; "approximate" otherwise
 
 /// <summary>
 /// The product card's pricing block (#798): sale price, currency, when it was last calculated and whether the
@@ -51,11 +52,19 @@ public static class ProductPriceSummary
         var sameCurrency = string.Equals(product.Currency?.Trim(), product.CostCurrency?.Trim(), StringComparison.OrdinalIgnoreCase);
         if (hasPrice && product.Cost > 0 && !sameCurrency) warnings.Add("Alış ve satış para birimleri farklı; yaklaşık kâr hesaplanamıyor.");
 
-        string marginLevel = Unknown, marginText = Dash;
+        string marginLevel = Unknown, marginText = Dash; var marginKind = "approximate"; IReadOnlyList<string>? breakdown = null;
         // #927: with a rule to ask, a required fee it lacks makes the cost incomplete -- the card names the fees and shows no margin at all rather than an estimate.
         var missingFees = policy is null ? Array.Empty<string>() : MoneyPriceCalculator.MissingFees(policy.CommissionPercent, policy.EstimatedShippingTry, policy.TransactionCostTry);
         var completeness = policy is null ? "UNKNOWN" : missingFees.Count > 0 ? "INCOMPLETE_COST" : "COMPLETE";
         if (missingFees.Count > 0) { marginLevel = IncompleteCost; warnings.Add($"Eksik maliyet kalemleri: {string.Join(", ", missingFees)}; net kâr tahmin edilmez."); }
+        // #928: with a complete rule in the product's currency the card shows the money gate's own net -- the same result and the same lines the preview shows -- instead of an approximation.
+        else if (policy is not null && hasPrice && product.Cost > 0 && string.Equals(product.Currency?.Trim(), policy.Currency, StringComparison.OrdinalIgnoreCase) && Net(product, policy, nowUtc) is { } net)
+        {
+            marginKind = "net"; breakdown = net.Explanation; marginText = net.MarginPercent.ToString("N0", CultureInfo.CurrentCulture) + "%";
+            marginLevel = net.NetContribution < 0 ? Negative : net.MarginPercent < ThinMarginPercent ? Thin : Healthy;
+            if (marginLevel == Negative) warnings.Add("Net kâr negatif: kuralın masrafları düşülünce satış fiyatı maliyeti karşılamıyor.");
+            else if (marginLevel == Thin) warnings.Add($"Net kâr düşük (%{ThinMarginPercent.ToString("N0", CultureInfo.CurrentCulture)} altında).");
+        }
         else if (hasPrice && sameCurrency && product.Cost > 0)
         {
             var percent = (product.Price - product.Cost) / product.Price * 100m;
@@ -76,13 +85,26 @@ public static class ProductPriceSummary
             CostCurrency: Clamp(product.CostCurrency),
             Margin: marginText,
             MarginLevel: marginLevel,
-            MarginCaveat: "Yaklaşık: komisyon, kargo ve vergi gönderim öncesi hesaplanır.",
+            MarginCaveat: marginKind == "net" ? "Net: kuralın komisyon, kargo, işlem ve KDV'si düşüldü; gönderim öncesi para kapısıyla aynı hesap." : "Yaklaşık: komisyon, kargo ve vergi gönderim öncesi hesaplanır.", // #928
             Calculated: calculatedAt is { } when ? Ago(nowUtc - when) : "Hesaplanmadı",
             IsCalculationStale: stale,
             Warnings: warnings,
             Order: ["Satış fiyatı", "Kâr (yaklaşık)", "Son hesaplama"],
             CostOrigin: CostProvenance.Describe(product, sourceById, nowUtc), // #922: the net margin names where its cost came from
-            CostCompleteness: completeness, MissingFees: string.Join(", ", missingFees)); // #927
+            CostCompleteness: completeness, MissingFees: string.Join(", ", missingFees), // #927
+            MarginKind: marginKind, Breakdown: breakdown); // #928
+    }
+
+    /// <summary>#928: the money gate's result for the product's own price under the rule, when the gate could compute it (ready or a negative margin); null when it could not, so the card falls back to its approximation.</summary>
+    static MoneyPriceResult? Net(CatalogProduct product, PricePolicy policy, DateTime nowUtc)
+    {
+        var isTry = string.Equals(policy.Currency, "TRY", StringComparison.OrdinalIgnoreCase); var now = new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc));
+        var result = MoneyPriceCalculator.Calculate(new MoneyPriceInput(product.Sku, policy.Channel, policy.Shop, product.Price, product.Cost, policy.Currency)
+        {
+            CommissionRatePercent = policy.CommissionPercent, EstimatedShipping = policy.EstimatedShippingTry, TransactionCost = policy.TransactionCostTry, VatRatePercent = policy.VatRatePercent ?? product.VatRate, VatIncludedInSale = policy.VatIncludedInSale,
+            FxRateTryPerUnit = isTry ? null : policy.TryPerUnit, FxSnapshotUtc = isTry ? now : policy.FxRateObservedUtc, AsOfUtc = now,
+        });
+        return result.Status is MoneyPriceStatus.Ready or MoneyPriceStatus.BlockedNegativeMargin ? result : null;
     }
 
     // A currency label sits beside the price, so it is clamped rather than allowed to run over it; the price
