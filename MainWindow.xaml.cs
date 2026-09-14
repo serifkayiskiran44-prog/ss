@@ -75,6 +75,21 @@ public partial class MainWindow : Window
  static ScrollViewer Scroll(UIElement content)=>new(){Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Padding=new Thickness(10)};
  static void Column(DataGrid grid,string label,string property,double width=120){var binding=new Binding(property);if(property is "Price" or "Cost" or "FormulaPriceTry")binding.StringFormat="N2";else if(property=="AppliedTryRate")binding.StringFormat="N4";grid.Columns.Add(new DataGridTextColumn{Header=label,Binding=binding,Width=width});}
  void Tab(string name,UIElement content)=>builtPages.Add(name,content);
+ void AddManualProductForm(Panel bar)
+ {
+  var sku=new TextBox{Width=110,ToolTip="SKU (barkod boşsa zorunlu)"};var barcode=new TextBox{Width=110,ToolTip="Barkod (SKU boşsa zorunlu)"};var newName=new TextBox{Width=160,ToolTip="Ürün adı"};var price=new TextBox{Width=70,ToolTip="Satış fiyatı"};var currency=new TextBox{Text="USD",Width=45};var stock=new TextBox{Text="0",Width=50,ToolTip="Stok"};
+  var add=Button("+ Yeni ürün",()=>{
+   if(!decimal.TryParse(price.Text,NumberStyles.Number,CultureInfo.InvariantCulture,out var priceValue))throw new InvalidOperationException("Fiyat geçerli bir sayı olmalı.");
+   if(!int.TryParse(stock.Text,NumberStyles.Integer,CultureInfo.InvariantCulture,out var stockValue))throw new InvalidOperationException("Stok geçerli bir tam sayı olmalı.");
+   var collision=store.PreviewIdentityCollision(sku.Text,barcode.Text);
+   if(collision!=null&&MessageBox.Show(this,$"Bu {(collision.Field=="Sku"?"SKU":"barkod")} zaten '{collision.ExistingSku}' / '{collision.ExistingBarcode}' kayıtlı üründe kullanılıyor (büyük/küçük harf ve boşluk farkı gözetmeksizin).\n\nYine de farklı bir SKU/barkod ile devam etmek için iptal edip düzeltin.","SKU/barkod çakışması",MessageBoxButton.OK,MessageBoxImage.Warning)==MessageBoxResult.OK)return;
+   var created=store.CreateManual(new CatalogProduct{Sku=sku.Text,Barcode=barcode.Text,Name=newName.Text,Price=priceValue,Currency=currency.Text.Trim().ToUpperInvariant(),Stock=stockValue});
+   sku.Clear();barcode.Clear();newName.Clear();price.Clear();stock.Text="0";
+   RefreshProducts();Log($"Yeni ürün eklendi: {created.Sku}{(created.Barcode.Length>0?" / "+created.Barcode:"")} · {created.Name}");
+  });
+  foreach(var pair in new (string Label,Control Control)[]{("SKU",sku),("Barkod",barcode),("Ad",newName),("Fiyat",price),("Döviz",currency),("Stok",stock)}){bar.Children.Add(new TextBlock{Text=pair.Label,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(6,4,2,4)});bar.Children.Add(pair.Control);}
+  bar.Children.Add(add);
+ }
  static Grid Split(UIElement left,UIElement right,double rightWidth)
  {var g=new Grid{Margin=new Thickness(10)};g.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});g.ColumnDefinitions.Add(new(){Width=new GridLength(rightWidth==350?330:1,rightWidth==350?GridUnitType.Pixel:GridUnitType.Star)});g.Children.Add(left);Grid.SetColumn(right,1);g.Children.Add(right);return g;}
  static DockPanel Dock(UIElement top,UIElement body){var d=new DockPanel();DockPanel.SetDock(top,System.Windows.Controls.Dock.Top);d.Children.Add(top);d.Children.Add(body);return d;}
@@ -82,6 +97,7 @@ public partial class MainWindow : Window
  {
   var bar=new WrapPanel();search.ToolTip="SKU, barkod, ürün adı, marka veya kategori";bar.Children.Add(search);bar.Children.Add(Button("Önceki 200",()=>{productOffset=Math.Max(0,productOffset-200);RefreshProducts();}));bar.Children.Add(Button("Sonraki 200",()=>{if(productOffset+200<productTotal)productOffset+=200;RefreshProducts();}));bar.Children.Add(Button("Etsy şablonunu kontrol et",CheckDraft));search.TextChanged+=(_,_)=>{productOffset=0;searchTimer.Stop();searchTimer.Start();};
   AddProductFilters(bar);
+  AddManualProductForm(bar);
   foreach(var x in new[]{("Durum","StatusLabel",65d),("Stok kodu / SKU","Sku",135d),("Ürün","Name",200d),("Alış fiyatı","Cost",90d),("Alış döviz","CostCurrency",65d),("Satış fiyatı","Price",90d),("Satış döviz","Currency",65d),("KDV %","VatRate",60d),("Stok","Stock",60d),("Formül TL","FormulaPriceTry",95d),("1 döviz/TL","AppliedTryRate",95d),("Barkod","Barcode",140d),("GTIN","Gtin",140d),("Marka","Brand",120d),("Kategori","Category",150d),("Açıklama","Description",240d),("Etsy ilan ID","EtsyListingId",110d),("XML kaynağı","SourceId",125d),("Son güncelleme","UpdatedUtc",155d)})Column(products,x.Item1,x.Item2,x.Item3);
   Column(products,"Son veri kaynağı","SourceKind",110);Column(products,"Fiyat kaynağı","PriceSource",100);Column(products,"Stok kaynağı","StockSource",100);Column(products,"Medya kaynağı","MediaSource",100);
   products.SelectionMode=DataGridSelectionMode.Extended;products.EnableRowVirtualization=true;products.EnableColumnVirtualization=false;VirtualizingPanel.SetIsVirtualizing(products,true);VirtualizingPanel.SetVirtualizationMode(products,VirtualizationMode.Recycling);products.SelectionChanged+=(_,_)=>{edit=products.SelectedItem is CatalogProduct p?Clone(p):null;productEditor.DataContext=edit;productEditor.IsEnabled=edit!=null;ShowProductChannelStatus(edit);};

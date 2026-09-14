@@ -41,7 +41,52 @@ public partial class CatalogStore
   if(string.IsNullOrWhiteSpace(p.Name)||(string.IsNullOrWhiteSpace(p.Sku)&&string.IsNullOrWhiteSpace(p.Barcode))||p.Price<0||p.Cost<0||p.Stock<0||p.VatRate<0||p.VatRate>100)throw new InvalidOperationException("Ürün adı, kimliği, fiyatı, stoku veya KDV oranı geçersiz.");
  }
  public void SaveProduct(CatalogProduct product){Valid(product);using var c=Open();using var tx=c.BeginTransaction();using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",product.Id);var json=find.ExecuteScalar() as string??throw new InvalidOperationException("Ürün bulunamadı.");var old=JsonSerializer.Deserialize<CatalogProduct>(json)!;if(old.SourceId!=product.SourceId||old.Sku!=product.Sku||old.Barcode!=product.Barcode)throw new InvalidOperationException("Ürün kimliği elle değiştirilemez.");EnsureUniqueIdentity(c,tx,product);if(product.UpdatedUtc!=old.UpdatedUtc)throw new InvalidOperationException("Ürün başka bir işlemde güncellendi. Yenileyip tekrar düzenleyin.");if(product.Price!=old.Price||product.Currency!=old.Currency){product.FormulaPriceTry=null;product.AppliedTryRate=null;product.FxRateDate=null;}product.UpdatedUtc=DateTime.UtcNow;Put(c,"CatalogProducts",product.Id,product,tx);tx.Commit();}
- static void EnsureUniqueIdentity(SqliteConnection c,SqliteTransaction tx,CatalogProduct product){using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Json FROM CatalogProducts WHERE Id<>$id AND ((json_extract(Json,'$.Sku')=$sku AND $sku<>'') OR (json_extract(Json,'$.Barcode')=$barcode AND $barcode<>'')) LIMIT 1";cmd.Parameters.AddWithValue("$id",product.Id);cmd.Parameters.AddWithValue("$sku",product.Sku.Trim());cmd.Parameters.AddWithValue("$barcode",product.Barcode.Trim());if(cmd.ExecuteScalar() is string)throw new InvalidOperationException("SKU veya barkod başka bir üründe zaten kayıtlı.");}
+ // SQLite's default text comparison (and its ASCII-only lower()/NOCASE) misses
+ // non-ASCII case collisions (e.g. Turkish "Ş" vs "ş") and whitespace-only
+ // differences, so identity/duplicate detection here compares in .NET on a
+ // normalized key instead of matching raw JSON text in SQL.
+ public static string NormalizeIdentityKey(string value)=>(value??"").Trim().ToUpperInvariant();
+ static void EnsureUniqueIdentity(SqliteConnection c,SqliteTransaction tx,CatalogProduct product){
+  var sku=NormalizeIdentityKey(product.Sku);var barcode=NormalizeIdentityKey(product.Barcode);
+  if(sku.Length==0&&barcode.Length==0)return;
+  using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Id,json_extract(Json,'$.Sku'),json_extract(Json,'$.Barcode') FROM CatalogProducts WHERE Id<>$id";cmd.Parameters.AddWithValue("$id",product.Id);
+  using var r=cmd.ExecuteReader();
+  while(r.Read()){
+   var existingSku=NormalizeIdentityKey(r.IsDBNull(1)?"":r.GetString(1));var existingBarcode=NormalizeIdentityKey(r.IsDBNull(2)?"":r.GetString(2));
+   if((sku.Length>0&&sku==existingSku)||(barcode.Length>0&&barcode==existingBarcode))throw new InvalidOperationException("SKU veya barkod (büyük/küçük harf ve boşluk farkı gözetmeksizin) başka bir üründe zaten kayıtlı.");
+  }
+ }
+ public sealed record ManualProductCollision(string ExistingId,string ExistingSku,string ExistingBarcode,string Field);
+ /// Read-only collision check callers can run before CreateManual, so the user sees
+ /// which existing product a normalized SKU/barcode would collide with (case,
+ /// whitespace, or exact) without committing anything or destructively rewriting
+ /// their input (Turkish characters and leading zeros are preserved as typed).
+ public ManualProductCollision? PreviewIdentityCollision(string sku,string barcode){
+  var skuKey=NormalizeIdentityKey(sku);var barcodeKey=NormalizeIdentityKey(barcode);
+  if(skuKey.Length==0&&barcodeKey.Length==0)return null;
+  foreach(var p in Products()){
+   var existingSku=NormalizeIdentityKey(p.Sku);var existingBarcode=NormalizeIdentityKey(p.Barcode);
+   if(skuKey.Length>0&&skuKey==existingSku)return new(p.Id,p.Sku,p.Barcode,"Sku");
+   if(barcodeKey.Length>0&&barcodeKey==existingBarcode)return new(p.Id,p.Sku,p.Barcode,"Barcode");
+  }
+  return null;
+ }
+ /// Transactional create entry point independent of XML import: assigns a fresh Id
+ /// and MANUAL provenance itself (callers never set product identity), validates
+ /// and rejects a normalized-key collision before insert - nothing is silently
+ /// auto-corrected (SKU/barcode text is stored exactly as given, only trimmed).
+ public CatalogProduct CreateManual(CatalogProduct product){
+  if(!string.IsNullOrWhiteSpace(product.Sku)&&product.Sku.Any(char.IsControl))throw new InvalidOperationException("SKU kontrol karakteri içeremez.");
+  if(!string.IsNullOrWhiteSpace(product.Barcode)&&product.Barcode.Any(char.IsControl))throw new InvalidOperationException("Barkod kontrol karakteri içeremez.");
+  product.Sku=product.Sku.Trim();product.Barcode=product.Barcode.Trim();
+  Valid(product);
+  product.Id=Guid.NewGuid().ToString("N");product.SourceId="";product.SourceKind="manual";product.PriceSource="manual";product.StockSource="manual";product.MediaSource="manual";product.SourceUpdatedUtc=null;product.UpdatedUtc=DateTime.UtcNow;
+  using var c=Open();using var tx=c.BeginTransaction();
+  EnsureUniqueIdentity(c,tx,product);
+  Put(c,"CatalogProducts",product.Id,product,tx);
+  tx.Commit();
+  return product;
+ }
  public void DeleteProduct(CatalogProduct product){using var c=Open();using var tx=c.BeginTransaction();using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",product.Id);var json=find.ExecuteScalar() as string??throw new InvalidOperationException("Ürün bulunamadı.");var old=JsonSerializer.Deserialize<CatalogProduct>(json)!;if(old.UpdatedUtc!=product.UpdatedUtc)throw new InvalidOperationException("Ürün değişti; yenileyip tekrar deneyin.");if(old.EtsyCreationAttempted||!string.IsNullOrEmpty(old.EtsyListingId))throw new InvalidOperationException("Etsy bağlantısı veya gönderim kaydı olan ürünü silmek yerine pasife alın.");using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="DELETE FROM CatalogProducts WHERE Id=$id";cmd.Parameters.AddWithValue("$id",product.Id);cmd.ExecuteNonQuery();tx.Commit();}
  static void Index(Dictionary<string,List<CatalogProduct>> index,string key,CatalogProduct product){if(key=="")return;if(!index.TryGetValue(key,out var values))index[key]=values=new();values.Add(product);}
  public ImportSummary Import(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
