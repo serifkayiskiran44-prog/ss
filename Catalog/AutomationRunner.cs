@@ -36,6 +36,8 @@ public static class AutomationRunner
         else
         {
             RecalculationQueue.Reconcile(sync, catalog, channel, shop); /* #931: a pending job whose rule revision or product version moved on is cancelled, never applied */
+            // #932: a stale, unobserved or frozen source stock is never written to a marketplace by itself -- the projection says why and the job fails by name.
+            string StockPayload(string productId) { var projection = catalog.ProjectStock(channel, shop, productId, nowUtc); if (!projection.Dispatchable) throw new InvalidOperationException("Stok gönderimi engellendi: " + projection.Words); return projection.Available.ToString(System.Globalization.CultureInfo.InvariantCulture); }
             foreach (var product in catalog.Products())
             {
                 var operation = job.Kind == AutomationKind.Stock ? "stock" : "price";
@@ -43,7 +45,7 @@ public static class AutomationRunner
                 try
                 {
                     if (requireListingMapping && channel.Equals("etsy", StringComparison.OrdinalIgnoreCase) && (!long.TryParse(entity, out var listingId) || listingId <= 0)) throw new InvalidOperationException("Etsy ilan eşlemesi eksik.");
-                    var payload = job.Kind == AutomationKind.Stock ? catalog.PreviewStock(channel, shop, product.Id).ToString(System.Globalization.CultureInfo.InvariantCulture) : catalog.PreviewPrice(channel, shop, product.Id, null, automatic: true).Price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) /* #924: an automatic live write never proceeds on a stale rate */;
+                    var payload = job.Kind == AutomationKind.Stock ? StockPayload(product.Id) /* #932 */ : catalog.PreviewPrice(channel, shop, product.Id, null, automatic: true).Price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) /* #924: an automatic live write never proceeds on a stale rate */;
                     // #931: the key names the product, its version, the rule revision and the payload; one pending job per product, shop and operation -- the older pending ones are coalesced.
                     RecalculationQueue.Enqueue(sync, channel, shop, operation, entity, new RecalculationKey(product.Id, product.UpdatedUtc.Ticks, RecalculationQueue.RuleVersion(catalog, operation, channel, shop), payload)); queued++;
                 }

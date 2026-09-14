@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace TrMarketplaceHubDesktop.Catalog;
 
-public sealed record StockPolicyPreview(string Channel, string Shop, string ProductId, string Sku, int Stock, int AvailableStock, int PolicyVersion, DateTime ProductUpdatedUtc, DateTime PolicyUpdatedUtc);
+public sealed record StockPolicyPreview(string Channel, string Shop, string ProductId, string Sku, int Stock, int AvailableStock, int PolicyVersion, DateTime ProductUpdatedUtc, DateTime PolicyUpdatedUtc, string Freshness = ""); // #932: the source stock's freshness state and words
 public sealed record PricePolicyPreview(string Channel, string Shop, string ProductId, string Sku, decimal Price, string Currency, decimal FormulaPriceTry, decimal CostTry, int PolicyVersion, DateTime ProductUpdatedUtc, DateTime PolicyUpdatedUtc);
 
 public partial class CatalogStore
@@ -25,7 +25,7 @@ public partial class CatalogStore
     }
     public StockPolicyPreview PreviewStockDetailed(string channel, string shop, string productId)
     {
-        var policy = GetStockPolicy(channel, shop) ?? throw new InvalidOperationException("Önce mağaza stok politikasını kaydedin."); if (!policy.Enabled) throw new InvalidOperationException("Stok politikası pasif."); var product = Products().SingleOrDefault(x => x.Id == productId) ?? throw new InvalidOperationException("Ürün bulunamadı."); var available = product.Active ? Math.Max(0, product.Stock - policy.SafetyStock) : 0; if (policy.MaximumStock.HasValue) available = Math.Min(available, policy.MaximumStock.Value); return new(policy.Channel, policy.Shop, product.Id, product.Sku, product.Stock, available, policy.Version, product.UpdatedUtc, policy.UpdatedUtc);
+        var policy = GetStockPolicy(channel, shop) ?? throw new InvalidOperationException("Önce mağaza stok politikasını kaydedin."); if (!policy.Enabled) throw new InvalidOperationException("Stok politikası pasif."); var product = Products().SingleOrDefault(x => x.Id == productId) ?? throw new InvalidOperationException("Ürün bulunamadı."); var projection = ProjectStock(channel, shop, productId, DateTime.UtcNow); /* #932: the projection owns the arithmetic and carries the freshness */ return new(policy.Channel, policy.Shop, product.Id, product.Sku, product.Stock, projection.Available, policy.Version, product.UpdatedUtc, policy.UpdatedUtc, projection.State + " · " + projection.Words);
     }
     public PricePolicyPreview PreviewPriceDetailed(string channel, string shop, string productId)
     {
