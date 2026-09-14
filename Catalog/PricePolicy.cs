@@ -14,7 +14,7 @@ public sealed class PricePolicy { string currency="TRY"; public string Channel {
  // When Currency is not TRY, the moment TryPerUnit was last observed; required so a stale manual rate blocks
  // instead of silently being reused. Meaningless (and not required) for a TRY policy, which has no FX step.
  public DateTimeOffset? FxRateObservedUtc {get;set;} }
-public sealed record PricePreview(string Sku, decimal Price, string Currency, decimal FormulaPriceTry, decimal CostTry, string CostOrigin = "", string CommissionOrigin = "", string FxWarning = ""); // #922: the net margin names where its cost came from; #923: and the commission period it used; #924: and a stale-rate warning the operator's policy allowed
+public sealed record PricePreview(string Sku, decimal Price, string Currency, decimal FormulaPriceTry, decimal CostTry, string CostOrigin = "", string CommissionOrigin = "", string FxWarning = "", string RoundingOrigin = ""); // #922: the net margin names where its cost came from; #923: and the commission period it used; #924: and a stale-rate warning the operator's policy allowed; #925: and the rounding profile revision
 public partial class CatalogStore {
  static void InitializePricePolicies(SqliteConnection c){using var x=c.CreateCommand();x.CommandText="CREATE TABLE IF NOT EXISTS PricePolicies(Channel TEXT NOT NULL,Shop TEXT NOT NULL,Json TEXT NOT NULL,PRIMARY KEY(Channel,Shop))";x.ExecuteNonQuery();}
  public PricePolicy? GetPricePolicy(string ch,string shop){var k=PolicyKey(ch,shop);using var c=Open();using var x=c.CreateCommand();x.CommandText="SELECT Json FROM PricePolicies WHERE Channel=$c AND Shop=$s";x.Parameters.AddWithValue("$c",k.Channel);x.Parameters.AddWithValue("$s",k.Shop);return x.ExecuteScalar() is string j?JsonSerializer.Deserialize<PricePolicy>(j):null;}
@@ -28,6 +28,7 @@ public partial class CatalogStore {
   var asOf=asOfUtc??DateTimeOffset.UtcNow;var commission=new CommissionProfileStore(dataDirectory).Resolve(ch,shop,asOf.UtcDateTime);
   if(commission.State==CommissionResolution.Gap)throw new InvalidOperationException($"Fiyat gönderimi engellendi: {commission.Words}; {ch.Trim().ToLowerInvariant()}/{shop.Trim()}.");
   var commissionOrigin=commission.State==CommissionResolution.None?$"kural komisyonu %{p.CommissionPercent?.ToString("0.##",System.Globalization.CultureInfo.InvariantCulture)??"—"} (dönem yok)":commission.Words;
+  var rounding=new RoundingProfileStore(dataDirectory).Resolve(ch,shop,asOf.UtcDateTime,p.Currency); /* #925: the shop's rounding profile in force at the as-of date, or the currency's default */
   using var c=Open();using var x=c.CreateCommand();x.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";x.Parameters.AddWithValue("$id",id);if(x.ExecuteScalar() is not string j)throw new InvalidOperationException("Ürün bulunamadı.");var product=JsonSerializer.Deserialize<CatalogProduct>(j)!;if(!product.Active)throw new InvalidOperationException("Pasif ürün için fiyat üretilemez.");
   // The shared money preflight (#285) treats cost as TRY-denominated; a foreign-currency cost would need its
   // own FX leg the calculator doesn't model, so fail closed rather than silently treat it as TRY.
@@ -38,10 +39,10 @@ public partial class CatalogStore {
    var field=product.PriceFields.FirstOrDefault(f=>f.Name.Equals(p.PriceFieldName,StringComparison.OrdinalIgnoreCase))??throw new InvalidOperationException($"'{p.PriceFieldName}' adlı fiyat alanı üründe tanımlı değil.");
    if(!field.Currency.Equals(p.Currency,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException($"'{field.Name}' fiyat alanı {field.Currency} para biriminde; fiyat kuralı {p.Currency} bekliyor.");
    if(field.Value<p.MinimumPrice)throw new InvalidOperationException("Fiyat koruması kuralı reddetti.");
-   salePrice=field.Value;saleCurrency=field.Currency;formulaPriceTry=field.Value;
+   salePrice=rounding.Apply(field.Value);saleCurrency=field.Currency;formulaPriceTry=field.Value; /* #925 */
   } else {
    var formula=PriceFormula.Evaluate(p.Formula,product.Cost);if(formula<=0)throw new InvalidOperationException("Formül pozitif fiyat üretmedi.");
-   var rate=p.Currency=="TRY"?1:p.TryPerUnit;var result=Math.Round(formula/rate,2,MidpointRounding.AwayFromZero);
+   var rate=p.Currency=="TRY"?1:p.TryPerUnit;var result=rounding.Apply(formula/rate); /* #925: the profile decides the decimals and the midpoint, not a fixed two half away from zero */
    if(result<p.MinimumPrice)throw new InvalidOperationException("Fiyat koruması kuralı reddetti.");
    salePrice=result;saleCurrency=p.Currency;formulaPriceTry=formula;
   }
@@ -63,6 +64,6 @@ public partial class CatalogStore {
   // enforced here against the real net contribution the gate just computed, so "at least N TRY per sale"
   // means what the operator typed: after commission, shipping, transaction cost and VAT.
   if(money.NetContribution<p.MinimumMarginTry)throw new InvalidOperationException($"Fiyat gönderimi engellendi: net katkı {money.NetContribution.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)} TRY, asgari kâr {p.MinimumMarginTry.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)} TRY altında; {money.ChannelShop}.");
-  return new(product.Sku,salePrice,saleCurrency,formulaPriceTry,product.Cost,CostProvenance.Describe(product,SourceById,DateTime.UtcNow),commissionOrigin,fxWarning); /* #922; #923; #924 */
+  return new(product.Sku,salePrice,saleCurrency,formulaPriceTry,product.Cost,CostProvenance.Describe(product,SourceById,DateTime.UtcNow),commissionOrigin,fxWarning,rounding.Words); /* #922; #923; #924; #925 */
  }
 }
