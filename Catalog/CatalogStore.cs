@@ -16,10 +16,27 @@ public partial class CatalogStore
   var where=" WHERE ($all=1 OR json_extract(Json,'$.Name') LIKE $q ESCAPE '\\' OR json_extract(Json,'$.Sku') LIKE $q ESCAPE '\\' OR json_extract(Json,'$.Barcode') LIKE $q ESCAPE '\\' OR json_extract(Json,'$.Brand') LIKE $q ESCAPE '\\' OR json_extract(Json,'$.Category') LIKE $q ESCAPE '\\'";
   where += ") AND ($active=-1 OR COALESCE(json_extract(Json,'$.Active'),1)=$active) AND ($description=-1 OR (length(trim(COALESCE(json_extract(Json,'$.Description'),'')))>0)=$description) AND ($image=-1 OR (length(trim(COALESCE(json_extract(Json,'$.ImageUrls'),'')))>0)=$image)";
   var extra=new Dictionary<string,string>();
-  foreach(var (field,values) in new[]{("Brand",filter.Brands),("Category",filter.Categories),("Sku",filter.Skus),("SourceId",filter.SourceIds)}){
+  foreach(var (field,values) in new[]{("Brand",filter.Brands),("Category",filter.Categories),("Sku",filter.Skus)}){
    if(values.Length==0)continue;
    var names=new List<string>();foreach(var value in values){var clean=value.Trim();if(clean.Length==0)continue;var key="$filter"+extra.Count;extra.Add(key,clean);names.Add(key);}if(names.Count==0)continue;
    where+=$" AND json_extract(Json,'$.{field}') COLLATE NOCASE IN ({string.Join(",",names)})";
+  }
+  if(filter.SourceIds.Length>0){
+   // A manual product's SourceId is "" (see CreateManual), so a plain non-empty
+   // value filter can never select "manual only" - the reserved ManualSource token
+   // maps to an explicit empty-SourceId match instead of being treated as blank/skip.
+   var sourceClauses=new List<string>();var sourceIds=new List<string>();
+   foreach(var value in filter.SourceIds){
+    if(value==CatalogFilter.ManualSource){sourceClauses.Add("COALESCE(json_extract(Json,'$.SourceId'),'')=''");continue;}
+    var clean=value.Trim();if(clean.Length==0)continue;var key="$filter"+extra.Count;extra.Add(key,clean);sourceIds.Add(key);
+   }
+   if(sourceIds.Count>0)sourceClauses.Add($"json_extract(Json,'$.SourceId') COLLATE NOCASE IN ({string.Join(",",sourceIds)})");
+   if(sourceClauses.Count>0)where+=" AND ("+string.Join(" OR ",sourceClauses)+")";
+  }
+  if(filter.DuplicateIdentityOnly){
+   var duplicateIds=DuplicateIdentityIds(c,tx);
+   if(duplicateIds.Count==0)where+=" AND 0";
+   else{var keys=new List<string>();foreach(var id in duplicateIds){var key="$dup"+extra.Count;extra.Add(key,id);keys.Add(key);}where+=$" AND Id IN ({string.Join(",",keys)})";}
   }
   search=search.Trim();var pattern="%"+search.Replace("\\","\\\\").Replace("%","\\%").Replace("_","\\_")+"%";
   void Params(SqliteCommand cmd){cmd.Transaction=tx;cmd.Parameters.AddWithValue("$all",search.Length==0?1:0);cmd.Parameters.AddWithValue("$q",pattern);cmd.Parameters.AddWithValue("$active",filter.Active.HasValue?(filter.Active.Value?1:0):-1);cmd.Parameters.AddWithValue("$description",filter.DescriptionPresent.HasValue?(filter.DescriptionPresent.Value?1:0):-1);cmd.Parameters.AddWithValue("$image",filter.ImagePresent.HasValue?(filter.ImagePresent.Value?1:0):-1);foreach(var pair in extra)cmd.Parameters.AddWithValue(pair.Key,pair.Value);}
@@ -46,6 +63,22 @@ public partial class CatalogStore
  // differences, so identity/duplicate detection here compares in .NET on a
  // normalized key instead of matching raw JSON text in SQL.
  public static string NormalizeIdentityKey(string value)=>(value??"").Trim().ToUpperInvariant();
+ /// Ids of every product whose normalized SKU or barcode collides with at least one
+ /// other product's - a read-only review set, never used to auto-merge/delete.
+ static HashSet<string> DuplicateIdentityIds(SqliteConnection c,SqliteTransaction tx){
+  using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Id,json_extract(Json,'$.Sku'),json_extract(Json,'$.Barcode') FROM CatalogProducts";
+  using var r=cmd.ExecuteReader();
+  var skuGroups=new Dictionary<string,List<string>>();var barcodeGroups=new Dictionary<string,List<string>>();
+  while(r.Read()){
+   var id=r.GetString(0);var sku=NormalizeIdentityKey(r.IsDBNull(1)?"":r.GetString(1));var barcode=NormalizeIdentityKey(r.IsDBNull(2)?"":r.GetString(2));
+   if(sku.Length>0){if(!skuGroups.TryGetValue(sku,out var list))skuGroups[sku]=list=new();list.Add(id);}
+   if(barcode.Length>0){if(!barcodeGroups.TryGetValue(barcode,out var list2))barcodeGroups[barcode]=list2=new();list2.Add(id);}
+  }
+  var result=new HashSet<string>();
+  foreach(var group in skuGroups.Values)if(group.Count>1)foreach(var id in group)result.Add(id);
+  foreach(var group in barcodeGroups.Values)if(group.Count>1)foreach(var id in group)result.Add(id);
+  return result;
+ }
  static void EnsureUniqueIdentity(SqliteConnection c,SqliteTransaction tx,CatalogProduct product){
   var sku=NormalizeIdentityKey(product.Sku);var barcode=NormalizeIdentityKey(product.Barcode);
   if(sku.Length==0&&barcode.Length==0)return;
