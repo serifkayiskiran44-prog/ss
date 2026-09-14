@@ -8,6 +8,12 @@ namespace TrMarketplaceHubDesktop;
 
 public enum BulkProductOperationKind { Activate, Deactivate, SetCategory, SetBrand, SetDescription, SetName, SetChannelMapping }
 public sealed record BulkProductOperationRequest(BulkProductOperationKind Kind, string Value = "", string Channel = "", string ShopId = "", string ListingId = "", string TargetCategory = "");
+/// Explicit, separate-from-the-filter state: whether a bulk operation targets only
+/// the rows the user selected in the grid, or every row the current search/filter
+/// matched (used when nothing is selected). Kept as its own field on the preview so
+/// the UI can always show the user exactly which scope they are about to apply,
+/// instead of leaving "selected vs everything" implicit.
+public enum BulkSelectionScope { Selected, FilteredAll }
 public sealed class BulkProductPreviewLine
 {
     public string ProductId { get; init; } = "";
@@ -23,7 +29,7 @@ public sealed class BulkProductPreviewLine
     public CatalogProduct? AfterSnapshot { get; init; }
     public ChannelProductPlan? ChannelPlan { get; init; }
 }
-public sealed record BulkProductPreview(Guid Id, BulkProductOperationRequest Request, IReadOnlyList<BulkProductPreviewLine> Lines, DateTime CreatedUtc);
+public sealed record BulkProductPreview(Guid Id, BulkProductOperationRequest Request, IReadOnlyList<BulkProductPreviewLine> Lines, DateTime CreatedUtc, BulkSelectionScope Scope);
 public sealed record BulkProductApplyResult(int Applied, int Skipped, int Errors, bool AlreadyApplied = false);
 
 public sealed class BulkProductOperations
@@ -32,7 +38,7 @@ public sealed class BulkProductOperations
     readonly ChannelProductsStore plans;
     public BulkProductOperations(CatalogStore catalog, ChannelProductsStore? plans = null) { this.catalog = catalog; this.plans = plans ?? new ChannelProductsStore(); }
 
-    public BulkProductPreview Preview(IEnumerable<CatalogProduct> products, BulkProductOperationRequest request)
+    public BulkProductPreview Preview(IEnumerable<CatalogProduct> products, BulkProductOperationRequest request, BulkSelectionScope scope = BulkSelectionScope.FilteredAll)
     {
         ValidateRequest(request); var rows = new List<BulkProductPreviewLine>();
         foreach (var product in products.GroupBy(x => x.Id).Select(x => x.First()))
@@ -58,7 +64,7 @@ public sealed class BulkProductOperations
             if (request.Kind == BulkProductOperationKind.SetDescription && product.LockDescription) { status = "SKIP"; error = "Açıklama kilidi etkin; toplu değişiklik uygulanmadı."; }
             rows.Add(new() { ProductId = product.Id, Sku = product.Sku, Name = product.Name, Operation = request.Kind.ToString(), Before = beforeValue, After = afterValue, Status = status, Error = error, ExpectedUpdatedUtc = product.UpdatedUtc, BeforeSnapshot = product, AfterSnapshot = clone });
         }
-        return new(Guid.NewGuid(), request, rows, DateTime.UtcNow);
+        return new(Guid.NewGuid(), request, rows, DateTime.UtcNow, scope);
     }
 
     public BulkProductApplyResult Apply(BulkProductPreview preview, bool approved, CancellationToken cancellationToken = default, IProgress<int>? progress = null)
