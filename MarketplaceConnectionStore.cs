@@ -42,7 +42,12 @@ public sealed record MarketplaceConnection(
     bool Enabled,
     string Status,
     DateTime? LastTestUtc,
-    string LastError);
+    string LastError,
+    long Revision);
+
+/// Outcome of applying a connection test result through the revision fence.
+/// Applied is the only case that actually wrote Status/LastTestUtc/LastError.
+public enum ConnectionTestApplyResult { Applied, Stale, Disabled, NotFound }
 
 /// Bounded diagnostics only (id/channel/shop identity, a short reason, detection
 /// time) - never LastError - for a MarketplaceConnections row with an unparsable
@@ -83,6 +88,14 @@ public sealed class MarketplaceConnectionStore
                 UNIQUE(Channel,ShopId))
             """;
         command.ExecuteNonQuery();
+        EnsureColumn(connection, "Revision", "INTEGER NOT NULL DEFAULT 0");
+    }
+
+    static void EnsureColumn(SqliteConnection connection, string name, string definition)
+    {
+        using var check = connection.CreateCommand(); check.CommandText = "SELECT 1 FROM pragma_table_info('MarketplaceConnections') WHERE name=$name"; check.Parameters.AddWithValue("$name", name);
+        if (check.ExecuteScalar() is not null) return;
+        using var add = connection.CreateCommand(); add.CommandText = $"ALTER TABLE MarketplaceConnections ADD COLUMN {name} {definition}"; add.ExecuteNonQuery();
     }
 
     SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
@@ -96,7 +109,7 @@ public sealed class MarketplaceConnectionStore
         if (includeDefaults) EnsureDefaults();
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError FROM MarketplaceConnections ORDER BY Channel,ShopId";
+        command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError,Revision FROM MarketplaceConnections ORDER BY Channel,ShopId";
         using var reader = command.ExecuteReader();
         var result = new List<MarketplaceConnection>();
         while (reader.Read()) if (TryRead(reader, out var row, out _)) result.Add(row!);
@@ -109,7 +122,7 @@ public sealed class MarketplaceConnectionStore
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError FROM MarketplaceConnections";
+        command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError,Revision FROM MarketplaceConnections";
         using var reader = command.ExecuteReader();
         var result = new List<CorruptMarketplaceConnection>();
         while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) result.Add(corrupt!);
@@ -122,7 +135,7 @@ public sealed class MarketplaceConnectionStore
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError FROM MarketplaceConnections WHERE Id=$id";
+        command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError,Revision FROM MarketplaceConnections WHERE Id=$id";
         command.Parameters.AddWithValue("$id", id);
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return null;
@@ -141,11 +154,14 @@ public sealed class MarketplaceConnectionStore
         var actualId = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString("N") : id.Trim();
         using var connection = Open();
         using var command = connection.CreateCommand();
+        // Revision bumps on every metadata/enabled change (insert starts at 1) so an
+        // in-flight connection test started against an older revision can be fenced
+        // out by RecordTest even if Enabled itself didn't change.
         command.CommandText = """
-            INSERT INTO MarketplaceConnections(Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError)
-            VALUES($id,$channel,$shop,$name,$enabled,'NOT_CONFIGURED',NULL,'')
+            INSERT INTO MarketplaceConnections(Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError,Revision)
+            VALUES($id,$channel,$shop,$name,$enabled,'NOT_CONFIGURED',NULL,'',1)
             ON CONFLICT(Channel,ShopId) DO UPDATE SET
-                DisplayName=excluded.DisplayName, Enabled=excluded.Enabled
+                DisplayName=excluded.DisplayName, Enabled=excluded.Enabled, Revision=MarketplaceConnections.Revision+1
             """;
         command.Parameters.AddWithValue("$id", actualId);
         command.Parameters.AddWithValue("$channel", normalizedChannel);
@@ -160,7 +176,7 @@ public sealed class MarketplaceConnectionStore
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE MarketplaceConnections SET Enabled=$enabled,Status=CASE WHEN $enabled=0 THEN 'DISABLED' WHEN Status='DISABLED' THEN 'NOT_CONFIGURED' ELSE Status END WHERE Id=$id";
+        command.CommandText = "UPDATE MarketplaceConnections SET Enabled=$enabled,Status=CASE WHEN $enabled=0 THEN 'DISABLED' WHEN Status='DISABLED' THEN 'NOT_CONFIGURED' ELSE Status END,Revision=Revision+1 WHERE Id=$id";
         command.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
         command.Parameters.AddWithValue("$id", id);
         if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
@@ -169,18 +185,29 @@ public sealed class MarketplaceConnectionStore
     /// <summary>Deactivates a shop without deleting its metadata or historical health result.</summary>
     public void Deactivate(string id) => SetEnabled(id, false);
 
-    public void RecordTest(string id, bool success, string? error = null)
+    /// Applies a connection-test result only if the connection is still enabled
+    /// and still at the exact revision the caller observed when the test started
+    /// (a revision bumps on every SetEnabled/Save). A late-arriving result from a
+    /// probe started before a disable/reconfigure is rejected as Stale/Disabled
+    /// instead of silently reviving or overwriting the current state - so a
+    /// deactivated shop can never be flipped back to CONNECTED by a test that was
+    /// already in flight when it was disabled.
+    public ConnectionTestApplyResult RecordTest(string id, long expectedRevision, bool success, string? error = null)
     {
         var safeError = success ? "" : Redact(error ?? "Bağlantı testi başarısız.");
         var blocked = !success && safeError.Contains("LIVE_API_BLOCKED", StringComparison.OrdinalIgnoreCase);
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE MarketplaceConnections SET Status=$status,LastTestUtc=$tested,LastError=$error WHERE Id=$id";
+        command.CommandText = "UPDATE MarketplaceConnections SET Status=$status,LastTestUtc=$tested,LastError=$error WHERE Id=$id AND Enabled=1 AND Revision=$revision";
         command.Parameters.AddWithValue("$status", success ? "CONNECTED_READ_ONLY" : blocked ? "LIVE_API_BLOCKED" : "FAILED");
         command.Parameters.AddWithValue("$tested", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$error", safeError);
         command.Parameters.AddWithValue("$id", id);
-        if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        command.Parameters.AddWithValue("$revision", expectedRevision);
+        if (command.ExecuteNonQuery() == 1) return ConnectionTestApplyResult.Applied;
+        var current = Get(id);
+        if (current is null) return ConnectionTestApplyResult.NotFound;
+        return current.Enabled ? ConnectionTestApplyResult.Stale : ConnectionTestApplyResult.Disabled;
     }
 
     void EnsureDefaults()
@@ -205,7 +232,7 @@ public sealed class MarketplaceConnectionStore
         row = null; corrupt = null; var id = reader.GetString(0); var channel = reader.GetString(1); var shop = reader.GetString(2);
         DateTime? lastTest = null;
         if (!reader.IsDBNull(6)) { if (!TryParseUtc(reader.GetString(6), out var value)) { corrupt = new(id, channel, shop, "Malformed LastTestUtc timestamp", DateTime.UtcNow); return false; } lastTest = value; }
-        row = new(id, channel, shop, reader.GetString(3), reader.GetInt32(4) == 1, reader.GetString(5), lastTest, reader.GetString(7));
+        row = new(id, channel, shop, reader.GetString(3), reader.GetInt32(4) == 1, reader.GetString(5), lastTest, reader.GetString(7), reader.GetInt64(8));
         return true;
     }
 

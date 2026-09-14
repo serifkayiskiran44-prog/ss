@@ -94,10 +94,23 @@ public static class MarketplaceConnectionsPanel
                 return;
             }
             if (!item.Enabled) throw new InvalidOperationException("DISABLED: Devre dışı mağaza için bağlantı testi çalıştırılamaz.");
+            var testedRevision = item.Revision;
             result.Text = "Salt okunur bağlantı testi çalışıyor...";
             capture.Reset();
-            try { var message = await ProbeAsync(item, http); health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? new ApiHealthObservation { State = "HEALTHY", AuthStatus = "VALID" }); store.RecordTest(item.Id, true); result.Text = "Bağlantı testi başarılı: " + message; Reload(); }
-            catch (Exception ex) { health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? ApiHealthClassifier.FromException(ex)); store.RecordTest(item.Id, false, ex.Message); result.Text = "Bağlantı testi: " + MarketplaceConnectionStore.Redact(ex.Message); Reload(); }
+            try
+            {
+                var message = await ProbeAsync(item, http); health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? new ApiHealthObservation { State = "HEALTHY", AuthStatus = "VALID" });
+                var outcome = store.RecordTest(item.Id, testedRevision, true);
+                result.Text = outcome switch { ConnectionTestApplyResult.Applied => "Bağlantı testi başarılı: " + message, ConnectionTestApplyResult.Disabled => "Bağlantı testi tamamlandı ancak mağaza bu sırada devre dışı bırakıldı; sonuç uygulanmadı.", ConnectionTestApplyResult.Stale => "Bağlantı testi tamamlandı ancak mağaza ayarları bu sırada değişti; sonuç güncelliğini yitirdiği için uygulanmadı.", _ => "Bağlantı testi tamamlandı ancak mağaza artık bulunamıyor." };
+                Reload();
+            }
+            catch (Exception ex)
+            {
+                health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? ApiHealthClassifier.FromException(ex));
+                var outcome = store.RecordTest(item.Id, testedRevision, false, ex.Message);
+                result.Text = outcome switch { ConnectionTestApplyResult.Applied => "Bağlantı testi: " + MarketplaceConnectionStore.Redact(ex.Message), ConnectionTestApplyResult.Disabled => "Bağlantı testi başarısız oldu ancak mağaza bu sırada devre dışı bırakıldı; sonuç uygulanmadı.", ConnectionTestApplyResult.Stale => "Bağlantı testi başarısız oldu ancak mağaza ayarları bu sırada değişti; sonuç güncelliğini yitirdiği için uygulanmadı.", _ => "Bağlantı testi tamamlandı ancak mağaza artık bulunamıyor." };
+                Reload();
+            }
         }));
         form.Children.Add(actions);
         form.Children.Add(result);
