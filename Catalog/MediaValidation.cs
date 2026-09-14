@@ -11,11 +11,17 @@ public sealed record MediaValidationResult(MediaStatus Status, string Error = ""
 public sealed class MediaValidationService
 {
     public const long MaxBytes = 20 * 1024 * 1024;
+    const int MaxRedirects = 5;
     static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/tiff" };
     readonly HttpClient http;
+    readonly IReadOnlyCollection<string> approvedLocalRoots;
     readonly ConcurrentDictionary<string, (DateTimeOffset At, MediaValidationResult Result)> cache = new(StringComparer.Ordinal);
 
-    public MediaValidationService(HttpClient? httpClient = null) => http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+    public MediaValidationService(HttpClient? httpClient = null, IReadOnlyCollection<string>? approvedLocalRoots = null)
+    {
+        http = httpClient ?? SafeRemoteHttp.CreateClient(TimeSpan.FromSeconds(15));
+        this.approvedLocalRoots = approvedLocalRoots ?? MediaFileAccessPolicy.DefaultApprovedRoots;
+    }
 
     public void Invalidate(string url)
     {
@@ -48,7 +54,9 @@ public sealed class MediaValidationService
             string contentType;
             if (normalized.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
             {
-                var path = new Uri(normalized).LocalPath;
+                var requestedPath = new Uri(normalized).LocalPath;
+                if (!MediaFileAccessPolicy.TryResolveApprovedFile(requestedPath, approvedLocalRoots, out var path, out var accessError))
+                    return new(MediaStatus.InvalidUrl, accessError);
                 if (!File.Exists(path)) return new(MediaStatus.NotFound, "Yerel görsel dosyası bulunamadı.");
                 var info = new FileInfo(path);
                 if (info.Length > MaxBytes) return new(MediaStatus.TooLarge, "Görsel 20 MB sınırını aşıyor.", Bytes: info.Length);
@@ -57,26 +65,43 @@ public sealed class MediaValidationService
             }
             else
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, normalized);
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeout.CancelAfter(TimeSpan.FromSeconds(15));
-                using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
-                if (response.StatusCode == HttpStatusCode.NotFound) return new(MediaStatus.NotFound, "Görsel adresi 404 döndürdü.");
-                if ((int)response.StatusCode == 429) return new(MediaStatus.RateLimited, "Görsel sunucusu istek sınırı uyguluyor.");
-                if (!response.IsSuccessStatusCode) return new(MediaStatus.Error, $"Görsel adresi HTTP {(int)response.StatusCode} döndürdü.");
-                if (response.Content.Headers.ContentLength is > MaxBytes) return new(MediaStatus.TooLarge, "Görsel 20 MB sınırını aşıyor.", Bytes: response.Content.Headers.ContentLength);
-                await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
-                await using var memory = new MemoryStream();
-                var buffer = new byte[81920];
+                var currentUri = new Uri(normalized);
+                HttpResponseMessage response;
+                var redirects = 0;
                 while (true)
                 {
-                    var count = await stream.ReadAsync(buffer, timeout.Token).ConfigureAwait(false);
-                    if (count == 0) break;
-                    if (memory.Length + count > MaxBytes) return new(MediaStatus.TooLarge, "Görsel 20 MB sınırını aşıyor.", Bytes: memory.Length + count);
-                    await memory.WriteAsync(buffer.AsMemory(0, count), timeout.Token).ConfigureAwait(false);
+                    if (!currentUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                        return new(MediaStatus.InvalidUrl, "Yönlendirme yalnız HTTPS hedeflerine izin verir.");
+                    using var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
+                    response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+                    if (!IsRedirect(response.StatusCode)) break;
+                    var location = response.Headers.Location;
+                    response.Dispose();
+                    if (location is null) return new(MediaStatus.Error, "Yönlendirme adresi eksik.");
+                    if (++redirects > MaxRedirects) return new(MediaStatus.Error, "Yönlendirme sınırı aşıldı.");
+                    currentUri = location.IsAbsoluteUri ? location : new Uri(currentUri, location);
                 }
-                bytes = memory.ToArray();
-                contentType = response.Content.Headers.ContentType?.MediaType ?? ContentTypeFromExtension(new Uri(normalized).AbsolutePath);
+                using (response)
+                {
+                    if (response.StatusCode == HttpStatusCode.NotFound) return new(MediaStatus.NotFound, "Görsel adresi 404 döndürdü.");
+                    if ((int)response.StatusCode == 429) return new(MediaStatus.RateLimited, "Görsel sunucusu istek sınırı uyguluyor.");
+                    if (!response.IsSuccessStatusCode) return new(MediaStatus.Error, $"Görsel adresi HTTP {(int)response.StatusCode} döndürdü.");
+                    if (response.Content.Headers.ContentLength is > MaxBytes) return new(MediaStatus.TooLarge, "Görsel 20 MB sınırını aşıyor.", Bytes: response.Content.Headers.ContentLength);
+                    await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
+                    await using var memory = new MemoryStream();
+                    var buffer = new byte[81920];
+                    while (true)
+                    {
+                        var count = await stream.ReadAsync(buffer, timeout.Token).ConfigureAwait(false);
+                        if (count == 0) break;
+                        if (memory.Length + count > MaxBytes) return new(MediaStatus.TooLarge, "Görsel 20 MB sınırını aşıyor.", Bytes: memory.Length + count);
+                        await memory.WriteAsync(buffer.AsMemory(0, count), timeout.Token).ConfigureAwait(false);
+                    }
+                    bytes = memory.ToArray();
+                    contentType = response.Content.Headers.ContentType?.MediaType ?? ContentTypeFromExtension(currentUri.AbsolutePath);
+                }
             }
             if (bytes.Length == 0) return new(MediaStatus.Error, "Görsel boş.");
             if (!AllowedTypes.Contains(contentType) && !AllowedTypes.Contains(ContentTypeFromExtension(media.Url))) return new(MediaStatus.UnsupportedFormat, $"Desteklenmeyen görsel biçimi: {contentType}.", Bytes: bytes.Length, ContentType: contentType);
@@ -87,6 +112,8 @@ public sealed class MediaValidationService
         catch (HttpRequestException error) { return new(MediaStatus.Error, "Görsel alınamadı: " + error.Message); }
         catch (IOException error) { return new(MediaStatus.Error, "Görsel dosyası okunamadı: " + error.Message); }
     }
+
+    static bool IsRedirect(HttpStatusCode status) => status is HttpStatusCode.MovedPermanently or HttpStatusCode.Found or HttpStatusCode.SeeOther or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
 
     static string ContentTypeFromExtension(string value) => Path.GetExtension(value).ToLowerInvariant() switch { ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".gif" => "image/gif", ".webp" => "image/webp", ".bmp" => "image/bmp", ".tif" or ".tiff" => "image/tiff", _ => "" };
 }
