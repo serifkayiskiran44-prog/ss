@@ -24,6 +24,7 @@ public static class OrdersPanel
   var clearDates=Button(bar,"Tarihi temizle");clearDates.Click+=(_,_)=>{dateFrom.SelectedDate=null;dateTo.SelectedDate=null;};
   var viewStore=new UiPreferenceStore(directory);var savedViews=new ComboBox{Width=165,DisplayMemberPath="Name"};var viewName=new TextBox{Width=130,ToolTip="Kayıtlı sipariş görünümü adı"};bar.Children.Add(new TextBlock{Text="Görünüm",Margin=new Thickness(8,4,2,4),VerticalAlignment=VerticalAlignment.Center});bar.Children.Add(savedViews);bar.Children.Add(viewName);
   var refresh=Button(bar,"Etsy'den yenile");var cancel=Button(bar,"İptal");cancel.IsEnabled=false;var add=Button(bar,"+ Yerel sipariş");
+  var exportTemplates=new OrderExportTemplateStore(directory);var manageExport=Button(bar,"Export şablonları");manageExport.Click+=(_,_)=>ExportTemplateDialog(exportTemplates);
   var status=Text("Kayıtlar yükleniyor…");top.Children.Add(status);
   var layout=new Grid();layout.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});layout.ColumnDefinitions.Add(new(){Width=new GridLength(370)});root.Children.Add(layout);
   var grid=new DataGrid{IsReadOnly=true,AutoGenerateColumns=false,EnableRowVirtualization=true,EnableColumnVirtualization=false,SelectionMode=DataGridSelectionMode.Single};VirtualizingPanel.SetIsVirtualizing(grid,true);VirtualizingPanel.SetVirtualizationMode(grid,VirtualizationMode.Recycling);ScrollViewer.SetCanContentScroll(grid,true);layout.Children.Add(grid);
@@ -112,5 +113,43 @@ public static class OrdersPanel
  static TextBlock Text(string text,int size=12)=>new(){Text=text,FontSize=size,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(3,4,3,7),Foreground=Brushes.DarkSlateGray};
  static TextBox Field(Panel parent,string label,string value,bool readOnly=false){parent.Children.Add(Text(label));var box=new TextBox{Text=value,IsReadOnly=readOnly};parent.Children.Add(box);return box;}
  static Button Button(Panel parent,string text){var button=new Button{Content=text,Margin=new Thickness(3,5,3,5)};parent.Children.Add(button);return button;}
+ static void ExportTemplateDialog(OrderExportTemplateStore store)
+ {
+  var win=new Window{Title="Export şablonları",Width=420,Height=520,WindowStartupLocation=WindowStartupLocation.CenterScreen};
+  var outer=new DockPanel{Margin=new Thickness(10)};win.Content=outer;
+  var top=new StackPanel();DockPanel.SetDock(top,Dock.Top);outer.Children.Add(top);
+  var status=Text("");top.Children.Add(status);
+  var savedList=new ComboBox{DisplayMemberPath="Name",Margin=new Thickness(0,0,0,6)};top.Children.Add(savedList);
+  var nameBox=new TextBox{Margin=new Thickness(0,0,0,6),ToolTip="Şablon adı"};top.Children.Add(nameBox);
+  var checks=new StackPanel();var scroll=new ScrollViewer{Content=checks,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};outer.Children.Add(scroll);
+  var boxes=new List<CheckBox>();
+  foreach(var scope in Enum.GetValues<OrderExportFieldScope>())
+  {
+   var fields=OrderExportFieldRegistry.Fields.Where(f=>f.Scope==scope).ToList();if(fields.Count==0)continue;
+   checks.Children.Add(Text(scope switch{OrderExportFieldScope.Header=>"Sipariş",OrderExportFieldScope.Item=>"Ürün kalemi",_=>"Kargo"},14));
+   foreach(var field in fields){var cb=new CheckBox{Content=field.Label+(field.IsPii?" (kişisel veri)":""),Tag=field.Id,IsChecked=field.DefaultSelected,Margin=new Thickness(4,2,4,2)};checks.Children.Add(cb);boxes.Add(cb);}
+  }
+  string? editingId=null;int editingVersion=0;
+  void LoadIntoForm(OrderExportTemplate t){editingId=t.Id;editingVersion=t.Version;nameBox.Text=t.Name;foreach(var cb in boxes)cb.IsChecked=t.FieldIds.Contains((string)cb.Tag);}
+  void Reset(){editingId=null;editingVersion=0;nameBox.Clear();foreach(var cb in boxes)cb.IsChecked=OrderExportFieldRegistry.TryGet((string)cb.Tag)?.DefaultSelected??false;}
+  void Reload(){savedList.ItemsSource=store.List();}
+  Reload();
+  savedList.SelectionChanged+=(_,_)=>{if(savedList.SelectedItem is OrderExportTemplate t)LoadIntoForm(t);};
+  var bar=new WrapPanel{Margin=new Thickness(0,6,0,0)};DockPanel.SetDock(bar,Dock.Bottom);outer.Children.Add(bar);
+  var save=Button(bar,"Kaydet");save.Click+=(_,_)=>
+  {
+   try
+   {
+    var selected=boxes.Where(cb=>cb.IsChecked==true).Select(cb=>(string)cb.Tag).ToList();
+    var template=new OrderExportTemplate{Id=editingId??Guid.NewGuid().ToString("N"),Name=nameBox.Text,FieldIds=selected,Version=editingVersion};
+    var result=store.Save(template);Reload();LoadIntoForm(result);status.Text="Şablon kaydedildi.";
+   }
+   catch(Exception ex){status.Text=ex.Message;}
+  };
+  var newTemplate=Button(bar,"Yeni");newTemplate.Click+=(_,_)=>{savedList.SelectedItem=null;Reset();};
+  var delete=Button(bar,"Sil");delete.Click+=(_,_)=>{if(savedList.SelectedItem is OrderExportTemplate t){store.Delete(t.Id);Reload();Reset();status.Text="Şablon silindi.";}};
+  var close=Button(bar,"Kapat");close.Click+=(_,_)=>win.Close();
+  win.ShowDialog();
+ }
 }
 
