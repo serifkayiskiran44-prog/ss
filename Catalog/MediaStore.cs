@@ -33,6 +33,11 @@ public sealed class ProductMediaRecord
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 }
 
+/// Bounded diagnostics only (id, product id, a short reason, detection time) -
+/// never Url, Error, or ContentHash - for a ProductMedia row with an unparsable
+/// persisted timestamp. See CatalogStore's CorruptProductRow for the same pattern.
+public sealed record CorruptMediaRow(string Id, string ProductId, string Reason, DateTime DetectedUtc);
+
 public sealed class MediaStore
 {
     readonly string connectionString;
@@ -79,7 +84,23 @@ public sealed class MediaStore
         command.Parameters.AddWithValue("$like", $"%{normalizedQuery.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%");
         using var reader = command.ExecuteReader();
         var rows = new List<ProductMediaRecord>();
-        while (reader.Read()) rows.Add(Read(reader));
+        while (reader.Read()) if (TryRead(reader, out var row, out _)) rows.Add(row!);
+        return rows;
+    }
+
+    /// Bounded diagnostics for every row whose LastValidatedUtc/UpdatedUtc failed to
+    /// parse - never the raw Url/Error/ContentHash. Detection re-derives from the
+    /// row's own stored text every call, so it stays stable across a restart without
+    /// a separate tracking table.
+    public IReadOnlyList<CorruptMediaRow> CorruptRows(string? productId = null)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id,ProductId,Url,NormalizedUrl,Source,SortOrder,IsPrimary,ContentHash,Status,Error,LastValidatedUtc,UpdatedUtc FROM ProductMedia WHERE ($product='' OR ProductId=$product)";
+        command.Parameters.AddWithValue("$product", productId?.Trim() ?? "");
+        using var reader = command.ExecuteReader();
+        var rows = new List<CorruptMediaRow>();
+        while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) rows.Add(corrupt!);
         return rows;
     }
 
@@ -208,10 +229,20 @@ public sealed class MediaStore
         command.Parameters.AddWithValue("$id", row.Id); command.Parameters.AddWithValue("$product", row.ProductId); command.Parameters.AddWithValue("$url", row.Url); command.Parameters.AddWithValue("$normalized", row.NormalizedUrl); command.Parameters.AddWithValue("$source", row.Source); command.Parameters.AddWithValue("$order", row.SortOrder); command.Parameters.AddWithValue("$primary", row.IsPrimary ? 1 : 0); command.Parameters.AddWithValue("$hash", row.ContentHash); command.Parameters.AddWithValue("$status", row.Status.ToString()); command.Parameters.AddWithValue("$error", row.Error); command.Parameters.AddWithValue("$validated", row.LastValidatedUtc.HasValue ? row.LastValidatedUtc.Value.ToString("O", CultureInfo.InvariantCulture) : DBNull.Value); command.Parameters.AddWithValue("$updated", row.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture));
     }
 
-    static ProductMediaRecord Read(SqliteDataReader reader) => new()
+    static bool TryRead(SqliteDataReader reader, out ProductMediaRecord? row, out CorruptMediaRow? corrupt)
     {
-        Id = reader.GetString(0), ProductId = reader.GetString(1), Url = reader.GetString(2), NormalizedUrl = reader.GetString(3), Source = reader.GetString(4), SortOrder = reader.GetInt32(5), IsPrimary = reader.GetInt32(6) != 0, ContentHash = reader.GetString(7), Status = Enum.TryParse<MediaStatus>(reader.GetString(8), out var status) ? status : MediaStatus.Error, Error = reader.GetString(9), LastValidatedUtc = reader.IsDBNull(10) ? null : ParseDate(reader.GetString(10)), UpdatedUtc = ParseDate(reader.GetString(11))
-    };
+        row = null; corrupt = null; var id = reader.GetString(0); var productId = reader.GetString(1);
+        DateTime? lastValidated = null;
+        if (!reader.IsDBNull(10)) { if (!TryParseDate(reader.GetString(10), out var value)) { corrupt = new(id, productId, "Malformed LastValidatedUtc timestamp", DateTime.UtcNow); return false; } lastValidated = value; }
+        if (!TryParseDate(reader.GetString(11), out var updated)) { corrupt = new(id, productId, "Malformed UpdatedUtc timestamp", DateTime.UtcNow); return false; }
+        row = new()
+        {
+            Id = id, ProductId = productId, Url = reader.GetString(2), NormalizedUrl = reader.GetString(3), Source = reader.GetString(4), SortOrder = reader.GetInt32(5), IsPrimary = reader.GetInt32(6) != 0, ContentHash = reader.GetString(7), Status = Enum.TryParse<MediaStatus>(reader.GetString(8), out var status) ? status : MediaStatus.Error, Error = reader.GetString(9), LastValidatedUtc = lastValidated, UpdatedUtc = updated
+        };
+        return true;
+    }
 
-    static DateTime ParseDate(string value) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date) ? date : DateTime.MinValue;
+    /// Only ever a format/parse failure - never conflated with a DB-busy/locked
+    /// SqliteException, which is raised by the surrounding command, not this parse.
+    static bool TryParseDate(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
 }
