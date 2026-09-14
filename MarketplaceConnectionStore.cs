@@ -44,6 +44,20 @@ public sealed record MarketplaceConnection(
     DateTime? LastTestUtc,
     string LastError);
 
+/// Bounded diagnostics only (id/channel/shop identity, a short reason, detection
+/// time) - never LastError - for a MarketplaceConnections row with an unparsable
+/// LastTestUtc. See CatalogStore's CorruptProductRow for the same pattern.
+public sealed record CorruptMarketplaceConnection(string Id, string Channel, string ShopId, string Reason, DateTime DetectedUtc);
+
+/// Raised by Get(id) when the row exists but its LastTestUtc is corrupt - kept
+/// distinct from returning null (which still means "no such connection"), so a
+/// caller can never mistake "needs repair" for "not configured".
+public sealed class MarketplaceConnectionCorruptException : Exception
+{
+    public string ConnectionId { get; }
+    public MarketplaceConnectionCorruptException(string connectionId, string reason) : base($"Mağaza bağlantı kaydı bozuk (REVIEW_REQUIRED): {reason}") => ConnectionId = connectionId;
+}
+
 /// <summary>Stores only non-secret shop metadata; credentials stay in the existing DPAPI stores.</summary>
 public sealed class MarketplaceConnectionStore
 {
@@ -73,6 +87,10 @@ public sealed class MarketplaceConnectionStore
 
     SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
 
+    /// A malformed LastTestUtc must never crash the whole read - the row is
+    /// excluded from the healthy result and reported only via CorruptConnections();
+    /// detection re-runs from the row's own stored text every call, so it stays
+    /// stable across a restart without a separate tracking table.
     public IReadOnlyList<MarketplaceConnection> List(bool includeDefaults = true)
     {
         if (includeDefaults) EnsureDefaults();
@@ -81,10 +99,25 @@ public sealed class MarketplaceConnectionStore
         command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError FROM MarketplaceConnections ORDER BY Channel,ShopId";
         using var reader = command.ExecuteReader();
         var result = new List<MarketplaceConnection>();
-        while (reader.Read()) result.Add(Read(reader));
+        while (reader.Read()) if (TryRead(reader, out var row, out _)) result.Add(row!);
         return result;
     }
 
+    /// Bounded diagnostics for every row whose LastTestUtc failed to parse - never
+    /// the raw LastError.
+    public IReadOnlyList<CorruptMarketplaceConnection> CorruptConnections()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError FROM MarketplaceConnections";
+        using var reader = command.ExecuteReader();
+        var result = new List<CorruptMarketplaceConnection>();
+        while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) result.Add(corrupt!);
+        return result;
+    }
+
+    /// A corrupt target row throws MarketplaceConnectionCorruptException rather
+    /// than returning null, so "needs repair" is never confused with "not configured".
     public MarketplaceConnection? Get(string id)
     {
         using var connection = Open();
@@ -92,7 +125,9 @@ public sealed class MarketplaceConnectionStore
         command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError FROM MarketplaceConnections WHERE Id=$id";
         command.Parameters.AddWithValue("$id", id);
         using var reader = command.ExecuteReader();
-        return reader.Read() ? Read(reader) : null;
+        if (!reader.Read()) return null;
+        if (!TryRead(reader, out var row, out var corrupt)) throw new MarketplaceConnectionCorruptException(corrupt!.Id, corrupt.Reason);
+        return row;
     }
 
     public MarketplaceConnection Save(string channel, string shopId, string displayName, bool enabled, string? id = null)
@@ -165,9 +200,18 @@ public sealed class MarketplaceConnectionStore
         transaction.Commit();
     }
 
-    static MarketplaceConnection Read(SqliteDataReader reader) => new(
-        reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetInt32(4) == 1,
-        reader.GetString(5), reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), reader.GetString(7));
+    static bool TryRead(SqliteDataReader reader, out MarketplaceConnection? row, out CorruptMarketplaceConnection? corrupt)
+    {
+        row = null; corrupt = null; var id = reader.GetString(0); var channel = reader.GetString(1); var shop = reader.GetString(2);
+        DateTime? lastTest = null;
+        if (!reader.IsDBNull(6)) { if (!TryParseUtc(reader.GetString(6), out var value)) { corrupt = new(id, channel, shop, "Malformed LastTestUtc timestamp", DateTime.UtcNow); return false; } lastTest = value; }
+        row = new(id, channel, shop, reader.GetString(3), reader.GetInt32(4) == 1, reader.GetString(5), lastTest, reader.GetString(7));
+        return true;
+    }
+
+    /// Only ever a format/parse failure - never conflated with a DB-busy/locked
+    /// SqliteException, which is raised by the surrounding command, not this parse.
+    static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
 
     internal static string Redact(string value)
     {
