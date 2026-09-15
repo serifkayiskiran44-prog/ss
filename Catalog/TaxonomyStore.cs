@@ -202,6 +202,20 @@ public sealed class TaxonomyStore
         ValidateKind(kind); ValidateExternalKey(externalKey); if (string.IsNullOrWhiteSpace(localId) || string.IsNullOrWhiteSpace(marketplace) || string.IsNullOrWhiteSpace(shopId)) throw new InvalidOperationException("Pazaryeri, mağaza, harici anahtar ve yerel eşleme zorunlu.");
         var now = DateTime.UtcNow; using var c = Open(); using var tx = c.BeginTransaction(); using var exists = c.CreateCommand(); exists.Transaction = tx; exists.CommandText = "SELECT Active FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; exists.Parameters.AddWithValue("$id", localId); exists.Parameters.AddWithValue("$kind", (int)kind); var active = exists.ExecuteScalar(); if (active is null) throw new InvalidOperationException("Eşlenecek yerel kayıt bulunamadı."); if (Convert.ToInt32(active) == 0) throw new InvalidOperationException("Pasif yerel kayıt eşlenemez.");
         var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim();
+        // Never let a new write create a fresh case/whitespace-equivalent
+        // ExternalKey row alongside an existing one (SQLite's PK on this column
+        // is case-sensitive, so "ABC" then "abc" would otherwise coexist as two
+        // rows and crash the case-insensitive read path in MappingViews). If a
+        // differently-cased row for this same normalized key already exists,
+        // the write targets that existing row's exact casing instead.
+        using (var findExisting = c.CreateCommand())
+        {
+            findExisting.Transaction = tx; findExisting.CommandText = "SELECT ExternalKey FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey<>$key";
+            findExisting.Parameters.AddWithValue("$kind", (int)kind); findExisting.Parameters.AddWithValue("$market", market); findExisting.Parameters.AddWithValue("$shop", shop); findExisting.Parameters.AddWithValue("$key", key);
+            using var r = findExisting.ExecuteReader();
+            var normalized = NormalizeExternalKey(key);
+            while (r.Read()) { var candidate = r.GetString(0); if (NormalizeExternalKey(candidate) == normalized) { key = candidate; break; } }
+        }
         int currentVersion;
         using (var find = c.CreateCommand())
         {
@@ -214,6 +228,11 @@ public sealed class TaxonomyStore
         using var cmd = c.CreateCommand(); cmd.Transaction = tx; cmd.CommandText = "INSERT INTO TaxonomyMappings(Kind,Marketplace,ShopId,ExternalKey,LocalId,UpdatedUtc,Version) VALUES($kind,$market,$shop,$key,$id,$updated,$version) ON CONFLICT(Kind,Marketplace,ShopId,ExternalKey) DO UPDATE SET LocalId=excluded.LocalId,UpdatedUtc=excluded.UpdatedUtc,Version=excluded.Version"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", market); cmd.Parameters.AddWithValue("$shop", shop); cmd.Parameters.AddWithValue("$key", key); cmd.Parameters.AddWithValue("$id", localId); cmd.Parameters.AddWithValue("$updated", now.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$version", nextVersion); cmd.ExecuteNonQuery(); using var history = c.CreateCommand(); history.Transaction = tx; history.CommandText = "INSERT INTO TaxonomyMappingHistory VALUES($id,$kind,$market,$shop,$key,$local,$action,$at)"; history.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N")); history.Parameters.AddWithValue("$kind", (int)kind); history.Parameters.AddWithValue("$market", market); history.Parameters.AddWithValue("$shop", shop); history.Parameters.AddWithValue("$key", key); history.Parameters.AddWithValue("$local", localId); history.Parameters.AddWithValue("$action", "UPSERT"); history.Parameters.AddWithValue("$at", now.ToString("O", CultureInfo.InvariantCulture)); history.ExecuteNonQuery(); tx.Commit();
     }
     static void ValidateExternalKey(string value) { if (string.IsNullOrWhiteSpace(value) || value.Trim().Length > 300 || value.Any(char.IsControl)) throw new InvalidOperationException("Harici eşleme anahtarı boş, çok uzun veya kontrol karakteri içeriyor."); }
+    /// Culture-invariant (so Turkish I/İ never splits or merges keys unexpectedly)
+    /// canonical form used to detect a case/whitespace-equivalent ExternalKey
+    /// collision - SQLite's PK on this column is case-sensitive, so "ABC" and
+    /// "abc" can coexist as two distinct rows unless writes are guarded here.
+    static string NormalizeExternalKey(string value) => value.Trim().ToUpperInvariant();
     public void MapBulk(TaxonomyKind kind, string marketplace, string shopId, IReadOnlyList<TaxonomySuggestion> suggestions, bool approved) { if (!approved) throw new InvalidOperationException("Toplu kategori/marka/özellik eşlemesi için önizleme onayı gerekli."); foreach (var suggestion in suggestions.Where(x => x.LocalId is not null)) Map(kind, suggestion.ExternalKey, suggestion.LocalId!, marketplace, shopId); }
     public string? Resolve(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default") { ValidateKind(kind); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT LocalId FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$key", externalKey.Trim()); return cmd.ExecuteScalar() as string; }
     /// Explicit remove, distinct from Map's create/update upsert: the CRUD lifecycle
@@ -259,15 +278,28 @@ public sealed class TaxonomyStore
     }
     public IReadOnlyList<TaxonomyMappingView> MappingViews(TaxonomyKind kind, string marketplace, string shopId, string? query = null)
     {
-        ValidateKind(kind); var entries = List(kind).ToDictionary(x => x.Id); var mappings = Mappings(kind).Where(x => x.Marketplace == marketplace.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim()).ToDictionary(x => x.ExternalKey, StringComparer.OrdinalIgnoreCase); var (updated, corruptTimestamps) = MappingUpdated(kind, marketplace, shopId); var rows = new List<TaxonomyMappingView>();
+        ValidateKind(kind); var entries = List(kind).ToDictionary(x => x.Id);
+        var scoped = Mappings(kind).Where(x => x.Marketplace == marketplace.Trim().ToLowerInvariant() && x.ShopId == shopId.Trim()).ToList();
+        // A legacy DB can already hold two rows whose ExternalKey differs only by
+        // case/whitespace (the PK is case-sensitive) - group instead of
+        // ToDictionary(..., OrdinalIgnoreCase) so that never throws, and flag the
+        // ambiguous group as a review-required conflict instead of picking one
+        // silently.
+        var keyConflicts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in scoped.GroupBy(x => NormalizeExternalKey(x.ExternalKey)))
+        {
+            var distinctKeys = group.Select(x => x.ExternalKey).Distinct(StringComparer.Ordinal).ToList();
+            if (distinctKeys.Count > 1) foreach (var k in distinctKeys) keyConflicts.Add(k);
+        }
+        var (updated, corruptTimestamps) = MappingUpdated(kind, marketplace, shopId); var rows = new List<TaxonomyMappingView>();
         foreach (var entry in entries.Values)
         {
-            var mapping = mappings.Values.FirstOrDefault(x => x.LocalId == entry.Id); var external = mapping?.ExternalKey ?? "";
+            var mapping = scoped.FirstOrDefault(x => x.LocalId == entry.Id); var external = mapping?.ExternalKey ?? "";
             if (!string.IsNullOrWhiteSpace(query) && !($"{entry.Name} {entry.Value} {external}").Contains(query, StringComparison.CurrentCultureIgnoreCase)) continue;
             var when = updated.GetValueOrDefault(external);
             // An unparsable mapping timestamp must never be treated as "very old": that
             // would silently force STALE. It gets its own explicit review state instead.
-            var state = mapping is null ? "MISSING" : corruptTimestamps.Contains(external) ? "REVIEW_REQUIRED" : !entry.Active ? "INVALID" : when < DateTime.UtcNow.AddDays(-180) ? "STALE" : "MAPPED";
+            var state = mapping is null ? "MISSING" : keyConflicts.Contains(external) ? "REVIEW_REQUIRED" : corruptTimestamps.Contains(external) ? "REVIEW_REQUIRED" : !entry.Active ? "INVALID" : when < DateTime.UtcNow.AddDays(-180) ? "STALE" : "MAPPED";
             rows.Add(new(kind, marketplace.Trim().ToLowerInvariant(), shopId.Trim(), external, mapping?.LocalId ?? entry.Id, entry.Name, state, when));
         }
         return rows.OrderBy(x => x.Status).ThenBy(x => x.LocalName).ToList();
