@@ -72,8 +72,14 @@ public static class AutomationSchedule
     /// enough that nowUtc.AddMinutes(...) can never overflow DateTime's range
     /// even starting from a nowUtc close to DateTime.MaxValue. See #2531.
     public const int MaxIntervalMinutes = 129_600; // 90 days
-    public static DateTime NextRunUtc(AutomationJob job, DateTime nowUtc)
+    /// timeZone defaults to TimeZoneInfo.Local for every real caller; the
+    /// parameter exists so DST spring-forward/fall-back behavior can be tested
+    /// deterministically against a zone that actually observes DST, regardless
+    /// of the host machine's own local zone (e.g. Turkey Standard Time, which
+    /// has observed no DST since 2016). See #2637.
+    public static DateTime NextRunUtc(AutomationJob job, DateTime nowUtc, TimeZoneInfo? timeZone = null)
     {
+        var zone = timeZone ?? TimeZoneInfo.Local;
         nowUtc = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
         if (job.ScheduleMode.Equals("Interval", StringComparison.OrdinalIgnoreCase))
         {
@@ -81,7 +87,7 @@ public static class AutomationSchedule
             catch (ArgumentOutOfRangeException) { throw new InvalidOperationException("Bir sonraki çalışma zamanı hesaplanamadı; sistem saati veya aralık desteklenen tarih sınırına çok yakın."); }
         }
         if (!TimeSpan.TryParseExact(job.RunAtLocal, @"hh\:mm", CultureInfo.InvariantCulture, out var runAt)) throw new InvalidOperationException("Otomasyon yerel saati HH:mm olmalı.");
-        var localNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TimeZoneInfo.Local);
+        var localNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, zone);
         for (var day = 0; day <= 370; day++)
         {
             var date = localNow.Date.AddDays(day);
@@ -91,7 +97,24 @@ public static class AutomationSchedule
             if (!ApplyWindow(job, date, runAt, out var adjusted)) continue;
             candidate = adjusted;
             if (candidate <= localNow) continue;
-            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(candidate, DateTimeKind.Unspecified), TimeZoneInfo.Local);
+            // A DST spring-forward gap makes this local instant not exist at all -
+            // ConvertTimeToUtc would throw. Policy: skip this occurrence entirely
+            // and let the day-scan try the next day, rather than crashing the
+            // scheduler poll or guessing an adjacent instant. See #2637.
+            var candidateUnspecified = DateTime.SpecifyKind(candidate, DateTimeKind.Unspecified);
+            if (zone.IsInvalidTime(candidateUnspecified)) continue;
+            // A DST fall-back local instant is ambiguous (it occurs twice, under
+            // two different UTC offsets). Policy: deterministically resolve to the
+            // earlier of the two UTC instants (the larger/daylight offset) every
+            // time - restart-stable and never produces two runs for the one local
+            // wall-clock moment.
+            if (zone.IsAmbiguousTime(candidateUnspecified))
+            {
+                var offsets = zone.GetAmbiguousTimeOffsets(candidateUnspecified);
+                var earliestOffset = offsets.Max();
+                return new DateTimeOffset(candidateUnspecified, earliestOffset).UtcDateTime;
+            }
+            return TimeZoneInfo.ConvertTimeToUtc(candidateUnspecified, zone);
         }
         throw new InvalidOperationException("Otomasyon takviminde uygun bir sonraki çalışma bulunamadı.");
     }
