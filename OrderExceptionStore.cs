@@ -21,12 +21,20 @@ public sealed class OrderExceptionRecord
 
 /// Bounded diagnostics only (id/marketplace/shop/order identity, a short reason,
 /// detection time) - never Message or event payload content - for an
-/// OrderExceptions row with an unparsable CreatedUtc/UpdatedUtc. See
-/// CatalogStore's CorruptProductRow for the same pattern.
+/// OrderExceptions row with an unparsable CreatedUtc/UpdatedUtc, an unrecognized
+/// Severity, or an unrecognized Status. See CatalogStore's CorruptProductRow for
+/// the same pattern.
 public sealed record CorruptOrderExceptionRow(string Id, string Marketplace, string ShopId, string OrderId, string Reason, DateTime DetectedUtc);
 
 public sealed class OrderExceptionStore
 {
+    /// The only severities the app itself ever assigns (Save/Reconcile) or orders
+    /// by (List's CASE expression) - a closed set, not free text, so a typo or a
+    /// fabricated value can never be "silently a valid priority". See #2661.
+    public static readonly string[] Severities = ["Critical", "Error", "Warning"];
+    /// The only statuses the app itself ever assigns (Reconcile's Pending/
+    /// PreviewReady, or the panel's Resolved/Rejected decisions). See #2661.
+    public static readonly string[] Statuses = ["Pending", "PreviewReady", "Resolved", "Rejected"];
     readonly string connectionString;
     public OrderExceptionStore(string? directory = null)
     {
@@ -37,6 +45,8 @@ public sealed class OrderExceptionStore
     public OrderExceptionRecord Save(OrderExceptionRecord record)
     {
         if (new[] { record.Marketplace, record.ShopId, record.OrderId, record.Type, record.EventKey, record.Message }.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("İstisna kanal, mağaza, sipariş, tür, olay ve açıklama içermeli.");
+        if (!Severities.Contains(record.Severity, StringComparer.Ordinal)) throw new ArgumentException($"Geçersiz öncelik: '{record.Severity}'.");
+        if (!Statuses.Contains(record.Status, StringComparer.Ordinal)) throw new ArgumentException($"Geçersiz durum: '{record.Status}'.");
         record.Marketplace = Limit(record.Marketplace, 80).ToLowerInvariant(); record.ShopId = Limit(record.ShopId, 200); record.OrderId = Limit(record.OrderId, 200); record.Type = Limit(record.Type, 80); record.EventKey = Limit(record.EventKey, 240); record.Severity = Limit(record.Severity, 30); record.Status = Limit(record.Status, 40); record.Message = MarketplaceConnectionStore.Redact(Limit(record.Message, 2000)); record.UpdatedUtc = DateTime.UtcNow;
         using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "INSERT INTO OrderExceptions(Id,Marketplace,ShopId,OrderId,Type,EventKey,Severity,Message,Status,CreatedUtc,UpdatedUtc) VALUES($id,$marketplace,$shop,$order,$type,$event,$severity,$message,$status,$created,$updated) ON CONFLICT(Marketplace,ShopId,OrderId,Type,EventKey) DO UPDATE SET Severity=excluded.Severity,Message=excluded.Message,Status=excluded.Status,UpdatedUtc=excluded.UpdatedUtc"; command.Parameters.AddWithValue("$id", record.Id); command.Parameters.AddWithValue("$marketplace", record.Marketplace); command.Parameters.AddWithValue("$shop", record.ShopId); command.Parameters.AddWithValue("$order", record.OrderId); command.Parameters.AddWithValue("$type", record.Type); command.Parameters.AddWithValue("$event", record.EventKey); command.Parameters.AddWithValue("$severity", record.Severity); command.Parameters.AddWithValue("$message", record.Message); command.Parameters.AddWithValue("$status", record.Status); command.Parameters.AddWithValue("$created", record.CreatedUtc.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$updated", record.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)); command.ExecuteNonQuery(); return List(record.Marketplace, record.ShopId).Single(x => x.OrderId == record.OrderId && x.Type == record.Type && x.EventKey == record.EventKey);
     }
@@ -56,7 +66,27 @@ public sealed class OrderExceptionStore
         using var reader = command.ExecuteReader(); var result = new List<CorruptOrderExceptionRow>(); while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) result.Add(corrupt!); return result;
     }
     public OrderExceptionRecord? Find(string id) => List().FirstOrDefault(x => x.Id == id);
-    public void SetStatus(string id, string status) { if (string.IsNullOrWhiteSpace(status)) throw new ArgumentException("İstisna durumu zorunlu."); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "UPDATE OrderExceptions SET Status=$status,UpdatedUtc=$updated WHERE Id=$id"; command.Parameters.AddWithValue("$status", status.Trim()); command.Parameters.AddWithValue("$updated", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$id", id); if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("İstisna kaydı bulunamadı."); }
+    public void SetStatus(string id, string status) => SetStatus(id, null, status);
+    /// expectedStatus, when given, is a compare-and-swap guard: the write only
+    /// applies if the row's current persisted Status still equals it - so a
+    /// decision made against a queue snapshot can never silently clobber a
+    /// different decision (e.g. Reject) another concurrent action already
+    /// committed. A target/expected value outside the closed Statuses set is
+    /// rejected before any row is touched.
+    public void SetStatus(string id, string? expectedStatus, string status)
+    {
+        if (!Statuses.Contains(status, StringComparer.Ordinal)) throw new ArgumentException($"Geçersiz durum: '{status}'.");
+        if (expectedStatus is not null && !Statuses.Contains(expectedStatus, StringComparer.Ordinal)) throw new ArgumentException($"Geçersiz beklenen durum: '{expectedStatus}'.");
+        using var connection = Open(); using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE OrderExceptions SET Status=$status,UpdatedUtc=$updated WHERE Id=$id" + (expectedStatus is null ? "" : " AND Status=$expected");
+        command.Parameters.AddWithValue("$status", status); command.Parameters.AddWithValue("$updated", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$id", id);
+        if (expectedStatus is not null) command.Parameters.AddWithValue("$expected", expectedStatus);
+        var affected = command.ExecuteNonQuery();
+        if (affected == 1) return;
+        using var find = connection.CreateCommand(); find.CommandText = "SELECT 1 FROM OrderExceptions WHERE Id=$id"; find.Parameters.AddWithValue("$id", id);
+        if (find.ExecuteScalar() is null) throw new InvalidOperationException("İstisna kaydı bulunamadı.");
+        throw new InvalidOperationException("İstisna durumu başka bir işlemde değişti; kuyruğu yenileyip tekrar deneyin.");
+    }
     public int Reconcile(IReadOnlyList<OrderSnapshot> orders, Catalog.CatalogStore catalog)
     {
         var count = 0; var products = catalog.Products();
@@ -80,7 +110,11 @@ public sealed class OrderExceptionStore
         record = null; corrupt = null; var id = reader.GetString(0); var marketplace = reader.GetString(1); var shop = reader.GetString(2); var order = reader.GetString(3);
         if (!TryParseUtc(reader.GetString(9), out var created)) { corrupt = new(id, marketplace, shop, order, "Malformed CreatedUtc timestamp", DateTime.UtcNow); return false; }
         if (!TryParseUtc(reader.GetString(10), out var updated)) { corrupt = new(id, marketplace, shop, order, "Malformed UpdatedUtc timestamp", DateTime.UtcNow); return false; }
-        record = new() { Id = id, Marketplace = marketplace, ShopId = shop, OrderId = order, Type = reader.GetString(4), EventKey = reader.GetString(5), Severity = reader.GetString(6), Message = reader.GetString(7), Status = reader.GetString(8), CreatedUtc = created, UpdatedUtc = updated };
+        var severity = reader.GetString(6);
+        if (!Severities.Contains(severity, StringComparer.Ordinal)) { corrupt = new(id, marketplace, shop, order, "Unrecognized Severity value", DateTime.UtcNow); return false; }
+        var status = reader.GetString(8);
+        if (!Statuses.Contains(status, StringComparer.Ordinal)) { corrupt = new(id, marketplace, shop, order, "Unrecognized Status value", DateTime.UtcNow); return false; }
+        record = new() { Id = id, Marketplace = marketplace, ShopId = shop, OrderId = order, Type = reader.GetString(4), EventKey = reader.GetString(5), Severity = severity, Message = reader.GetString(7), Status = status, CreatedUtc = created, UpdatedUtc = updated };
         return true;
     }
     /// Only ever a format/parse failure - never conflated with a DB-busy/locked
