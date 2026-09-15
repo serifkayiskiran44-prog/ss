@@ -134,7 +134,8 @@ public static class MarketplaceConnectionsPanel
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(430) });
         layout.Children.Add(new ScrollViewer { Content = grid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        Grid.SetColumn(form, 1); layout.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        var formScroll = new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        Grid.SetColumn(formScroll, 1); layout.Children.Add(formScroll);
         return layout;
     }
 

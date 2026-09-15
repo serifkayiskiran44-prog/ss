@@ -97,6 +97,8 @@ public partial class MainWindow
   var item = NavigationList.Items.OfType<ListBoxItem>().Single(i => i.Tag?.ToString() == key);
   selectingRoute = true;
   try { NavigationList.SelectedItem = item; ModuleTabs.SelectedItem = page; } finally { selectingRoute = false; }
+  // The product-pool summary ("0 sonuç · Havuzu yenile") only means something on the product page.
+  ProductSummaryBar.Visibility = key == "products" ? Visibility.Visible : Visibility.Collapsed;
   PageTitle.Text = title ?? routeTitles[key];
   PageDescription.Text = description ?? item.ToolTip?.ToString() ?? "";
   BreadcrumbText.Text = routeHistory.Count == 0 ? "Ana sayfa" : $"Ana sayfa  /  {string.Join("  /  ", routeHistory.Reverse().Take(2).Select(x => routeTitles.TryGetValue(x, out var t) ? t : x))}";

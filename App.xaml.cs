@@ -72,6 +72,15 @@ public partial class App : Application
         {
             var window = new MainWindow(dataDirectory);
             window.ContentRendered += (_, _) => crashGuard?.MarkReachedUi();
+            // The 1440x900 default is larger than common laptop work areas (e.g. 1366x720):
+            // clamp the restore size and start maximized so nothing opens off-screen.
+            var work = SystemParameters.WorkArea;
+            if (window.Width > work.Width || window.Height > work.Height)
+            {
+                window.Width = Math.Min(window.Width, work.Width);
+                window.Height = Math.Min(window.Height, work.Height);
+                window.WindowState = WindowState.Maximized;
+            }
             MainWindow = window;
             window.Show();
         }
