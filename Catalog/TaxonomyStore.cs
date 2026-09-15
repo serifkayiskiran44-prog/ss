@@ -199,8 +199,19 @@ public sealed class TaxonomyStore
     /// that do not carry a per-row snapshot to check against.
     public void Map(TaxonomyKind kind, string externalKey, string localId, string marketplace = "local", string shopId = "default", int? expectedVersion = null)
     {
+        using var c = Open(); using var tx = c.BeginTransaction();
+        MapCore(c, tx, kind, externalKey, localId, marketplace, shopId, expectedVersion);
+        tx.Commit();
+    }
+    /// Shared by Map() (its own single-row transaction) and MapBulk() (one
+    /// transaction for the whole batch) - never opens or commits its own
+    /// transaction, so a mid-batch failure here rolls back everything the caller
+    /// already did in the same transaction rather than leaving prior rows
+    /// committed.
+    static void MapCore(SqliteConnection c, SqliteTransaction tx, TaxonomyKind kind, string externalKey, string localId, string marketplace, string shopId, int? expectedVersion)
+    {
         ValidateKind(kind); ValidateExternalKey(externalKey); if (string.IsNullOrWhiteSpace(localId) || string.IsNullOrWhiteSpace(marketplace) || string.IsNullOrWhiteSpace(shopId)) throw new InvalidOperationException("Pazaryeri, mağaza, harici anahtar ve yerel eşleme zorunlu.");
-        var now = DateTime.UtcNow; using var c = Open(); using var tx = c.BeginTransaction(); using var exists = c.CreateCommand(); exists.Transaction = tx; exists.CommandText = "SELECT Active FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; exists.Parameters.AddWithValue("$id", localId); exists.Parameters.AddWithValue("$kind", (int)kind); var active = exists.ExecuteScalar(); if (active is null) throw new InvalidOperationException("Eşlenecek yerel kayıt bulunamadı."); if (Convert.ToInt32(active) == 0) throw new InvalidOperationException("Pasif yerel kayıt eşlenemez.");
+        var now = DateTime.UtcNow; using var exists = c.CreateCommand(); exists.Transaction = tx; exists.CommandText = "SELECT Active FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; exists.Parameters.AddWithValue("$id", localId); exists.Parameters.AddWithValue("$kind", (int)kind); var active = exists.ExecuteScalar(); if (active is null) throw new InvalidOperationException("Eşlenecek yerel kayıt bulunamadı."); if (Convert.ToInt32(active) == 0) throw new InvalidOperationException("Pasif yerel kayıt eşlenemez.");
         var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim();
         // Never let a new write create a fresh case/whitespace-equivalent
         // ExternalKey row alongside an existing one (SQLite's PK on this column
@@ -225,7 +236,7 @@ public sealed class TaxonomyStore
         }
         if (expectedVersion.HasValue && currentVersion != expectedVersion.Value) throw new TaxonomyMappingConflictException($"Bu eşleme ({market}/{shop}/{key}) başka bir işlemde değişti; listeyi yenileyip tekrar deneyin.");
         var nextVersion = currentVersion + 1;
-        using var cmd = c.CreateCommand(); cmd.Transaction = tx; cmd.CommandText = "INSERT INTO TaxonomyMappings(Kind,Marketplace,ShopId,ExternalKey,LocalId,UpdatedUtc,Version) VALUES($kind,$market,$shop,$key,$id,$updated,$version) ON CONFLICT(Kind,Marketplace,ShopId,ExternalKey) DO UPDATE SET LocalId=excluded.LocalId,UpdatedUtc=excluded.UpdatedUtc,Version=excluded.Version"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", market); cmd.Parameters.AddWithValue("$shop", shop); cmd.Parameters.AddWithValue("$key", key); cmd.Parameters.AddWithValue("$id", localId); cmd.Parameters.AddWithValue("$updated", now.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$version", nextVersion); cmd.ExecuteNonQuery(); using var history = c.CreateCommand(); history.Transaction = tx; history.CommandText = "INSERT INTO TaxonomyMappingHistory VALUES($id,$kind,$market,$shop,$key,$local,$action,$at)"; history.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N")); history.Parameters.AddWithValue("$kind", (int)kind); history.Parameters.AddWithValue("$market", market); history.Parameters.AddWithValue("$shop", shop); history.Parameters.AddWithValue("$key", key); history.Parameters.AddWithValue("$local", localId); history.Parameters.AddWithValue("$action", "UPSERT"); history.Parameters.AddWithValue("$at", now.ToString("O", CultureInfo.InvariantCulture)); history.ExecuteNonQuery(); tx.Commit();
+        using var cmd = c.CreateCommand(); cmd.Transaction = tx; cmd.CommandText = "INSERT INTO TaxonomyMappings(Kind,Marketplace,ShopId,ExternalKey,LocalId,UpdatedUtc,Version) VALUES($kind,$market,$shop,$key,$id,$updated,$version) ON CONFLICT(Kind,Marketplace,ShopId,ExternalKey) DO UPDATE SET LocalId=excluded.LocalId,UpdatedUtc=excluded.UpdatedUtc,Version=excluded.Version"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", market); cmd.Parameters.AddWithValue("$shop", shop); cmd.Parameters.AddWithValue("$key", key); cmd.Parameters.AddWithValue("$id", localId); cmd.Parameters.AddWithValue("$updated", now.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$version", nextVersion); cmd.ExecuteNonQuery(); using var history = c.CreateCommand(); history.Transaction = tx; history.CommandText = "INSERT INTO TaxonomyMappingHistory VALUES($id,$kind,$market,$shop,$key,$local,$action,$at)"; history.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N")); history.Parameters.AddWithValue("$kind", (int)kind); history.Parameters.AddWithValue("$market", market); history.Parameters.AddWithValue("$shop", shop); history.Parameters.AddWithValue("$key", key); history.Parameters.AddWithValue("$local", localId); history.Parameters.AddWithValue("$action", "UPSERT"); history.Parameters.AddWithValue("$at", now.ToString("O", CultureInfo.InvariantCulture)); history.ExecuteNonQuery();
     }
     static void ValidateExternalKey(string value) { if (string.IsNullOrWhiteSpace(value) || value.Trim().Length > 300 || value.Any(char.IsControl)) throw new InvalidOperationException("Harici eşleme anahtarı boş, çok uzun veya kontrol karakteri içeriyor."); }
     /// Culture-invariant (so Turkish I/İ never splits or merges keys unexpectedly)
@@ -233,7 +244,28 @@ public sealed class TaxonomyStore
     /// collision - SQLite's PK on this column is case-sensitive, so "ABC" and
     /// "abc" can coexist as two distinct rows unless writes are guarded here.
     static string NormalizeExternalKey(string value) => value.Trim().ToUpperInvariant();
-    public void MapBulk(TaxonomyKind kind, string marketplace, string shopId, IReadOnlyList<TaxonomySuggestion> suggestions, bool approved) { if (!approved) throw new InvalidOperationException("Toplu kategori/marka/özellik eşlemesi için önizleme onayı gerekli."); foreach (var suggestion in suggestions.Where(x => x.LocalId is not null)) Map(kind, suggestion.ExternalKey, suggestion.LocalId!, marketplace, shopId); }
+    const int MaxBulkMappingCount = 5000;
+    /// All-or-nothing: every accepted suggestion in the batch is applied inside
+    /// one transaction, so a single invalid/inactive local target, invalid
+    /// external key, or DB failure partway through never leaves a partial set of
+    /// mappings/history rows committed - the whole batch rolls back instead.
+    public void MapBulk(TaxonomyKind kind, string marketplace, string shopId, IReadOnlyList<TaxonomySuggestion> suggestions, bool approved)
+    {
+        if (!approved) throw new InvalidOperationException("Toplu kategori/marka/özellik eşlemesi için önizleme onayı gerekli.");
+        var accepted = suggestions.Where(x => x.LocalId is not null).ToList();
+        if (accepted.Count > MaxBulkMappingCount) throw new InvalidOperationException($"Toplu eşleme en fazla {MaxBulkMappingCount} kayıt içerebilir.");
+        // Deterministic batch-internal duplicate detection: two suggestions in the
+        // same accepted batch targeting the same normalized external key would
+        // otherwise apply in an unspecified order and silently let the last one
+        // win - reject the whole batch instead so the caller re-derives a
+        // conflict-free suggestion set.
+        var duplicate = accepted.GroupBy(x => NormalizeExternalKey(x.ExternalKey.Trim())).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate is not null) throw new InvalidOperationException($"Toplu eşleme aynı harici anahtarı ({duplicate.First().ExternalKey}) birden fazla kez içeriyor.");
+        if (accepted.Count == 0) return;
+        using var c = Open(); using var tx = c.BeginTransaction();
+        foreach (var suggestion in accepted) MapCore(c, tx, kind, suggestion.ExternalKey, suggestion.LocalId!, marketplace, shopId, null);
+        tx.Commit();
+    }
     public string? Resolve(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default") { ValidateKind(kind); using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT LocalId FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; cmd.Parameters.AddWithValue("$kind", (int)kind); cmd.Parameters.AddWithValue("$market", marketplace.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", shopId.Trim()); cmd.Parameters.AddWithValue("$key", externalKey.Trim()); return cmd.ExecuteScalar() as string; }
     /// Explicit remove, distinct from Map's create/update upsert: the CRUD lifecycle
     /// was missing a way to delete a channel/shop mapping entirely.
