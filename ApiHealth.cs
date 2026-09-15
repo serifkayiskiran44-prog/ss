@@ -104,12 +104,30 @@ public static class ApiHealthClassifier
         foreach (var name in names) if (headers.TryGetValues(name, out var values) && int.TryParse(values.FirstOrDefault(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) && result >= 0) return result;
         return null;
     }
+    // Two disjoint, explicit numeric classes for the generic "reset" header
+    // contract (relative seconds-from-now, or absolute Unix epoch seconds) -
+    // never overlapping, so a real epoch value is never mistaken for relative
+    // seconds or vice versa. Anything in the ambiguous gap between them, or
+    // implausibly large (e.g. an epoch-milliseconds value mistakenly sent as
+    // seconds), is rejected as null rather than guessed. See #2561.
+    const long MaxRelativeSeconds = 31_536_000; // 1 year - generous relative bound
+    const long MinPlausibleEpochSeconds = 1_000_000_000; // ~2001-09-09 UTC
+    const long MaxPlausibleEpochSeconds = 4_102_444_800; // 2100-01-01 UTC
     static DateTimeOffset? ParseResetHeader(HttpResponseHeaders headers, DateTimeOffset now, params string[] names)
     {
         foreach (var name in names) if (headers.TryGetValues(name, out var values))
         {
             var raw = values.FirstOrDefault();
-            if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) && number >= 0 && number <= 31_536_000) return number > 1_000_000_000 ? DateTimeOffset.FromUnixTimeSeconds(number) : now.AddSeconds(number);
+            if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) && number >= 0)
+            {
+                if (number <= MaxRelativeSeconds) return now.AddSeconds(number);
+                if (number is >= MinPlausibleEpochSeconds and <= MaxPlausibleEpochSeconds)
+                {
+                    try { return DateTimeOffset.FromUnixTimeSeconds(number); }
+                    catch (ArgumentOutOfRangeException) { return null; }
+                }
+                return null; // ambiguous gap, or implausibly large (e.g. epoch-ms mistake, Int64.MaxValue)
+            }
             if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)) return date.ToUniversalTime();
         }
         return null;
