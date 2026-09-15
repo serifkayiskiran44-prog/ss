@@ -185,6 +185,20 @@ public sealed class MarketplaceConnectionStore
     /// <summary>Deactivates a shop without deleting its metadata or historical health result.</summary>
     public void Deactivate(string id) => SetEnabled(id, false);
 
+    /// Compare-and-delete used only to compensate a store metadata row some
+    /// caller (e.g. Migration Assistant Undo, see #2653) just created: it only
+    /// removes the row while it is still at exactly the given Revision, so a row
+    /// anyone has since enabled/edited/tested (which bumps Revision) is left
+    /// alone rather than silently deleted out from under them.
+    public bool DeleteIfUntouchedSinceCreate(string id, long expectedRevision)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM MarketplaceConnections WHERE Id=$id AND Revision=$revision";
+        command.Parameters.AddWithValue("$id", id); command.Parameters.AddWithValue("$revision", expectedRevision);
+        return command.ExecuteNonQuery() == 1;
+    }
+
     /// Applies a connection-test result only if the connection is still enabled
     /// and still at the exact revision the caller observed when the test started
     /// (a revision bumps on every SetEnabled/Save). A late-arriving result from a
