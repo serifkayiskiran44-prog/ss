@@ -2,6 +2,22 @@ using Microsoft.Data.Sqlite;
 using System.IO;
 using System.Text.Json;
 namespace TrMarketplaceHubDesktop;
+/// Bounded diagnostics only (identity + a short reason code + detection time) -
+/// never Json/Notes/ListingUrl - for a ChannelPlans row that failed to
+/// deserialize, failed domain re-validation, or whose payload identity does not
+/// match its SQL primary key. Mirrors CatalogStore's CorruptProductRow pattern.
+public sealed record CorruptChannelPlan(string ChannelId, string ShopId, string ProductId, string Reason, DateTime DetectedUtc);
+/// Raised by Find(...) when the row exists but is corrupt/identity-mismatched -
+/// kept distinct from returning null (which means "no plan yet"), so a caller
+/// can never mistake "needs repair" for "not configured".
+public sealed class ChannelPlanCorruptException : Exception
+{
+    public string ChannelId { get; }
+    public string ShopId { get; }
+    public string ProductId { get; }
+    public ChannelPlanCorruptException(string channelId, string shopId, string productId, string reason)
+        : base($"Kanal planı bozuk (REVIEW_REQUIRED): {reason}") { ChannelId = channelId; ShopId = shopId; ProductId = productId; }
+}
 public sealed class ChannelProductsStore
 {
  readonly string connectionString;
@@ -15,19 +31,53 @@ public sealed class ChannelProductsStore
  static void EnsureColumn(SqliteConnection c,string name,string definition){using var check=c.CreateCommand();check.CommandText="SELECT 1 FROM pragma_table_info('ChannelPlans') WHERE name=$name";check.Parameters.AddWithValue("$name",name);if(check.ExecuteScalar()!=null)return;using var add=c.CreateCommand();add.CommandText=$"ALTER TABLE ChannelPlans ADD COLUMN {name} {definition}";add.ExecuteNonQuery();}
  SqliteConnection Open(){var c=new SqliteConnection(connectionString);c.Open();return c;}
  static void Identity(string channel,string shop,string product){if(string.IsNullOrWhiteSpace(channel)||string.IsNullOrWhiteSpace(shop)||string.IsNullOrWhiteSpace(product))throw new ArgumentException("Kanal, mağaza anahtarı ve merkez ürün kimliği zorunlu.");}
+ const int MaxPlanJsonBytes=1024*1024;
+ const string SelectWithIdentity="SELECT ChannelId,ShopId,ProductId,Json,Version FROM ChannelPlans";
+ /// Deserializes and re-validates a persisted row, checking that the payload's own
+ /// identity/domain-value contract still matches its SQL primary key and current
+ /// business rules. A row that fails any of these checks is never silently
+ /// materialized as a normal plan and never rewritten during an ordinary read -
+ /// the raw row is left untouched for an explicit repair action.
+ static string? PlanCorruptionReason(string channel,string shop,string product,string json,out ChannelProductPlan? plan)
+ {
+  plan=null;
+  if(string.IsNullOrWhiteSpace(json))return "boş kayıt";
+  if(System.Text.Encoding.UTF8.GetByteCount(json)>MaxPlanJsonBytes)return "kayıt boyutu sınırı aşıyor";
+  ChannelProductPlan? candidate;
+  try{candidate=JsonSerializer.Deserialize<ChannelProductPlan>(json);}
+  catch(JsonException){return "geçersiz JSON";}
+  if(candidate is null)return "boş JSON";
+  if(!string.Equals(candidate.ChannelId?.Trim().ToLowerInvariant(),channel,StringComparison.Ordinal)||!string.Equals(candidate.ShopId?.Trim(),shop,StringComparison.Ordinal)||!string.Equals(candidate.ProductId,product,StringComparison.Ordinal))return "kimlik uyuşmazlığı (yanlış kanal/mağaza/ürün)";
+  if(candidate.PlannedPrice<0||candidate.PlannedStock<0)return "negatif fiyat veya stok";
+  if(candidate.Currency is null||candidate.Currency.Length!=3||!candidate.Currency.All(c=>c>='A'&&c<='Z'))return "geçersiz para birimi";
+  if(!string.IsNullOrEmpty(candidate.ListingUrl)&&(!Uri.TryCreate(candidate.ListingUrl,UriKind.Absolute,out var uri)||(uri.Scheme!="https"&&uri.Scheme!="http")||!string.IsNullOrEmpty(uri.UserInfo)))return "geçersiz ilan bağlantısı";
+  candidate.ChannelId=channel;candidate.ShopId=shop;candidate.ProductId=product;candidate.Version=0;plan=candidate;return null;
+ }
+ static bool TryReadPlan(SqliteDataReader r,out ChannelProductPlan? plan,out CorruptChannelPlan? corrupt)
+ {
+  var channel=r.GetString(0);var shop=r.GetString(1);var product=r.GetString(2);var json=r.GetString(3);var version=r.GetInt32(4);
+  var reason=PlanCorruptionReason(channel,shop,product,json,out plan);
+  if(plan is not null)plan.Version=version;
+  corrupt=reason is null?null:new(channel,shop,product,reason,DateTime.UtcNow);
+  return reason is null;
+ }
  public ChannelProductPlan? Find(string channel,string shop,string product)
  {
-  Identity(channel,shop,product);using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT Json,Version FROM ChannelPlans WHERE ChannelId=$channel AND ShopId=$shop AND ProductId=$product";cmd.Parameters.AddWithValue("$channel",channel.Trim().ToLowerInvariant());cmd.Parameters.AddWithValue("$shop",shop.Trim());cmd.Parameters.AddWithValue("$product",product);
-  using var r=cmd.ExecuteReader();if(!r.Read())return null;return ReadPlan(r);
- }
- static ChannelProductPlan? ReadPlan(SqliteDataReader r)
- {
-  var plan=JsonSerializer.Deserialize<ChannelProductPlan>(r.GetString(0));if(plan is null)return null;
-  plan.Version=r.GetInt32(1);return plan;
+  Identity(channel,shop,product);using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText=SelectWithIdentity+" WHERE ChannelId=$channel AND ShopId=$shop AND ProductId=$product";cmd.Parameters.AddWithValue("$channel",channel.Trim().ToLowerInvariant());cmd.Parameters.AddWithValue("$shop",shop.Trim());cmd.Parameters.AddWithValue("$product",product);
+  using var r=cmd.ExecuteReader();if(!r.Read())return null;
+  if(!TryReadPlan(r,out var plan,out var corrupt))throw new ChannelPlanCorruptException(corrupt!.ChannelId,corrupt.ShopId,corrupt.ProductId,corrupt.Reason);
+  return plan;
  }
  public IReadOnlyList<ChannelProductPlan> List(string? channel=null,string? shop=null,string? product=null)
  {
-  using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT Json,Version FROM ChannelPlans WHERE ($channel='' OR ChannelId=$channel) AND ($shop='' OR ShopId=$shop) AND ($product='' OR ProductId=$product) ORDER BY ChannelId,ShopId,ProductId";cmd.Parameters.AddWithValue("$channel",channel?.Trim().ToLowerInvariant()??"");cmd.Parameters.AddWithValue("$shop",shop?.Trim()??"");cmd.Parameters.AddWithValue("$product",product?.Trim()??"");using var r=cmd.ExecuteReader();var result=new List<ChannelProductPlan>();while(r.Read()){var plan=ReadPlan(r);if(plan is not null)result.Add(plan);}return result;
+  using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText=SelectWithIdentity+" WHERE ($channel='' OR ChannelId=$channel) AND ($shop='' OR ShopId=$shop) AND ($product='' OR ProductId=$product) ORDER BY ChannelId,ShopId,ProductId";cmd.Parameters.AddWithValue("$channel",channel?.Trim().ToLowerInvariant()??"");cmd.Parameters.AddWithValue("$shop",shop?.Trim()??"");cmd.Parameters.AddWithValue("$product",product?.Trim()??"");using var r=cmd.ExecuteReader();var result=new List<ChannelProductPlan>();while(r.Read()){if(TryReadPlan(r,out var plan,out _))result.Add(plan!);}return result;
+ }
+ /// Read-only diagnostics: identity + bounded reason code only, never raw
+ /// Json/Notes/ListingUrl. Corrupt rows are never auto-deleted/overwritten by
+ /// List/Find; this is the only way to discover them for operator repair.
+ public IReadOnlyList<CorruptChannelPlan> CorruptPlans(string? channel=null,string? shop=null,string? product=null)
+ {
+  using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText=SelectWithIdentity+" WHERE ($channel='' OR ChannelId=$channel) AND ($shop='' OR ShopId=$shop) AND ($product='' OR ProductId=$product) ORDER BY ChannelId,ShopId,ProductId";cmd.Parameters.AddWithValue("$channel",channel?.Trim().ToLowerInvariant()??"");cmd.Parameters.AddWithValue("$shop",shop?.Trim()??"");cmd.Parameters.AddWithValue("$product",product?.Trim()??"");using var r=cmd.ExecuteReader();var result=new List<CorruptChannelPlan>();while(r.Read()){if(!TryReadPlan(r,out _,out var corrupt))result.Add(corrupt!);}return result;
  }
  static void ValidatePlan(ChannelProductPlan plan)
  {
