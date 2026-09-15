@@ -9,7 +9,7 @@
 | Kategoriler | TAM | Kategori/marka/özellik sözlük ve mapping merkezi |
 | Markalar | TAM | Yerel marka sözlüğü ve mağaza/kanal eşlemesi |
 | XML işlemleri | TAM | Kaynak, test, mapping, önizleme, import geçmişi ve otomasyon |
-| Ayarlar | TAM | Mağaza bağlantıları, döviz/KDV, stok/fiyat, yedek ve onboarding |
+| Ayarlar | TAM | Mağaza bağlantıları, döviz/KDV, stok/fiyat ve yedek |
 | Excel işlemleri | TAM | Profil, kolon eşleme, preview, create/update/skip/error, dışa aktarma |
 | Sipariş listesi | TAM | Sipariş/kargo, filtre, duplicate-safe stok kararı ve exception merkezi |
 

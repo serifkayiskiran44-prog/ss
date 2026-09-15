@@ -18,7 +18,7 @@ Bu dosya, Claude Code'un bu repo (MarketplaceHub / TrMarketplaceHubDesktop) üze
 Etsy, eBay, Amazon, Trendyol, Hepsiburada, Ozon, Allegro, Joom, Wish, Fruugo, Navlungo. Çoğu kanal için resmi API sözleşmesi/credential doğrulanmadığı sürece canlı yazma **`LIVE_API_BLOCKED`** olarak açıkça işaretlenir — endpoint uydurulmaz, sahte HTTP çağrısı yapılmaz.
 
 ### Ana modüller (WPF panelleri)
-Ürün yönetimi, toplu ürün işlemleri, XML tedarikçi merkezi, Excel içe/dışa aktarma, kategori/marka/özellik eşleme (taxonomy), sipariş merkezi + stok kararı, sipariş istisna/iptal/iade, sync & otomasyon merkezi, mağaza bağlantıları, API sağlığı, medya/görsel yönetimi, mesaj merkezi, veri kalitesi, dashboard, tanılama/audit/destek paketi, yedekleme/geri yükleme, onboarding, üretim hazırlığı (production readiness).
+Ürün yönetimi, toplu ürün işlemleri, XML tedarikçi merkezi, Excel içe/dışa aktarma, kategori/marka/özellik eşleme (taxonomy), sipariş merkezi + stok kararı, sipariş istisna/iptal/iade, sync & otomasyon merkezi, mağaza bağlantıları, API sağlığı, medya/görsel yönetimi, mesaj merkezi, veri kalitesi, dashboard, tanılama/audit/destek paketi, yedekleme/geri yükleme, üretim hazırlığı (production readiness).
 
 ## Yeni özellik SAYILMAYAN / kapsam dışı (DEFERRED_BY_USER) alanlar
 

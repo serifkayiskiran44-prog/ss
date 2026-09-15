@@ -53,7 +53,6 @@ public partial class MainWindow : Window
   LogList.ItemsSource=logs;
   try{if(File.Exists(logPath))foreach(var line in File.ReadLines(logPath).TakeLast(100))logs.Insert(0,line);}catch(IOException){}
   BuildProducts();BuildSources();BuildApi();BuildListings();BuildTemplate();BuildNavigation();
-  if (directory is null && new OnboardingStore(dataDirectory).ShouldPrompt()) Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) OnboardingPanel.ShowWizard(this, dataDirectory, key => Navigate(key)); }));
   try{template=TemplateStore.Load(directory);templateEditor.DataContext=template;var saved=directory==null?CredentialStore.Load():null;if(saved!=null)SetCredentials(saved);}catch(Exception e){Log(Safe(e));}
   RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};globalSearchTimer.Tick+=SearchTimer_Tick;_ = WarmGlobalSearchAsync();
   Log("Global masaüstü hazır. XML otomasyonu yalnız program açıkken çalışır.");
