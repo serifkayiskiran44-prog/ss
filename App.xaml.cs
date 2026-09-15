@@ -40,12 +40,15 @@ public partial class App : Application
         }
 
         StartupHealthReport health;
+        // An unexpected exception here must never be reported as an empty (and
+        // therefore, before #2657, silently "Ready") check list - it becomes an
+        // explicit Incomplete check so the gate below gets to see it.
         try { health = StartupPreflight.Run(dataDirectory); }
-        catch (Exception ex) { LogFatal(dataDirectory, ex); health = new([]); }
+        catch (Exception ex) { LogFatal(dataDirectory, ex); health = new([new StartupHealthCheck("preflight", StartupHealthStatus.Incomplete, "Başlangıç sağlık kontrolü çalıştırılamadı: " + AuditStore.Sanitize(ex.Message))]); }
 
-        if (health.Overall is StartupHealthStatus.Blocked or StartupHealthStatus.RecoveryRequired)
+        if (health.Overall is StartupHealthStatus.Blocked or StartupHealthStatus.RecoveryRequired or StartupHealthStatus.Incomplete)
         {
-            var problems = string.Join(Environment.NewLine, health.Checks.Where(c => c.Status is StartupHealthStatus.Blocked or StartupHealthStatus.RecoveryRequired).Select(c => "• " + c.Detail));
+            var problems = string.Join(Environment.NewLine, health.Checks.Where(c => c.Status is StartupHealthStatus.Blocked or StartupHealthStatus.RecoveryRequired or StartupHealthStatus.Incomplete).Select(c => "• " + c.Detail));
             MessageBox.Show(
                 "Uygulama şu anda güvenli şekilde açılamıyor:" + Environment.NewLine + Environment.NewLine + problems,
                 "MarketplaceHub — başlatma engellendi",

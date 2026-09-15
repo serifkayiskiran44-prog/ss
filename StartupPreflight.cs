@@ -5,14 +5,21 @@ using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
 
-public enum StartupHealthStatus { Ready, Degraded, Blocked, RecoveryRequired }
+/// Incomplete is the most severe value (ordinal order drives Overall's Max()
+/// below) - it means the preflight pipeline itself failed to produce a real
+/// result (unexpected exception, or somehow an empty check list), which must
+/// never be treated as equivalent to a healthy Ready. See #2657.
+public enum StartupHealthStatus { Ready, Degraded, Blocked, RecoveryRequired, Incomplete }
 
 public sealed record StartupHealthCheck(string Key, StartupHealthStatus Status, string Detail);
 
 public sealed record StartupHealthReport(IReadOnlyList<StartupHealthCheck> Checks)
 {
+    /// An empty check list is never "nothing to report, so Ready" - it can only
+    /// mean the pipeline that should have populated it broke, so it fails closed
+    /// to Incomplete instead of silently gating the app open. See #2657.
     public StartupHealthStatus Overall => Checks.Count == 0
-        ? StartupHealthStatus.Ready
+        ? StartupHealthStatus.Incomplete
         : Checks.Select(x => x.Status).Max();
 }
 
@@ -65,9 +72,11 @@ public static class StartupPreflight
         try
         {
             var root = Path.GetPathRoot(Path.GetFullPath(directory));
-            if (string.IsNullOrEmpty(root)) return new("disk-space", StartupHealthStatus.Ready, "Sürücü tespit edilemedi; kontrol atlandı.");
+            // A check that could not actually run must never report as if it
+            // verified a healthy disk - see #2657.
+            if (string.IsNullOrEmpty(root)) return new("disk-space", StartupHealthStatus.Degraded, "Sürücü tespit edilemedi; disk alanı doğrulanamadı.");
             var drive = new DriveInfo(root);
-            if (!drive.IsReady) return new("disk-space", StartupHealthStatus.Ready, "Sürücü durumu okunamadı; kontrol atlandı.");
+            if (!drive.IsReady) return new("disk-space", StartupHealthStatus.Degraded, "Sürücü hazır değil (kaldırılabilir/ağ sürücüsü olabilir); disk alanı doğrulanamadı.");
             var free = drive.AvailableFreeSpace;
             if (free < LowDiskBlockedBytes) return new("disk-space", StartupHealthStatus.Blocked, $"Disk alanı kritik seviyede düşük ({free / 1024 / 1024} MB).");
             if (free < LowDiskWarnBytes) return new("disk-space", StartupHealthStatus.Degraded, $"Disk alanı az ({free / 1024 / 1024} MB); yakında dolabilir.");
@@ -100,16 +109,31 @@ public static class StartupPreflight
         }
     }
 
+    const long MaxTemplateFileBytes = 2 * 1024 * 1024;
+
+    /// Bounded on purpose: a per-file size budget checked before any read means a
+    /// single oversized template can never force an unbounded File.ReadAllText
+    /// into memory, and an unreadable/deleted-mid-scan/malformed-JSON file all
+    /// fold into the same "corrupt" counter without crashing the scan. See #2657.
     static StartupHealthCheck CheckTemplates()
     {
         var dir = Path.Combine(AppContext.BaseDirectory, "templates");
         if (!Directory.Exists(dir)) return new("templates", StartupHealthStatus.Degraded, "Şablon klasörü bulunamadı; şablondan açma/kaydetme özelliği sınırlı olabilir.");
-        var corrupt = 0;
-        var total = 0;
-        foreach (var file in Directory.EnumerateFiles(dir, "*.json"))
+        List<string> files;
+        try { files = Directory.EnumerateFiles(dir, "*.json").ToList(); }
+        catch (Exception ex) { return new("templates", StartupHealthStatus.Degraded, "Şablon klasörü okunamadı: " + AuditStore.Sanitize(ex.Message)); }
+        var corrupt = 0; var total = 0;
+        foreach (var file in files)
         {
             total++;
-            try { JsonDocument.Parse(File.ReadAllText(file)); }
+            try
+            {
+                var info = new FileInfo(file);
+                if (!info.Exists || info.Length > MaxTemplateFileBytes) { corrupt++; continue; }
+                using var stream = File.OpenRead(file);
+                using var document = JsonDocument.Parse(stream);
+                _ = document.RootElement;
+            }
             catch { corrupt++; }
         }
         if (corrupt > 0) return new("templates", StartupHealthStatus.Degraded, $"{corrupt}/{total} şablon dosyası okunamadı; diğer özellikler etkilenmez.");
