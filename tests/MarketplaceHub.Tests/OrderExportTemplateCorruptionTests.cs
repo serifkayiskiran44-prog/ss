@@ -24,7 +24,7 @@ public sealed class OrderExportTemplateCorruptionTests
         finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
-    static void InsertRawRow(string root, string id, string name, string fieldIdsJson, int version = 0, string? updatedUtc = null)
+    static void InsertRawRow(string root, string id, string name, string fieldIdsJson, int version = 1, string? updatedUtc = null)
     {
         using var c = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "catalog.db") }.ToString());
         c.Open();
@@ -145,7 +145,7 @@ public sealed class OrderExportTemplateCorruptionTests
     {
         var store = new OrderExportTemplateStore(root);
         InsertRawRow(root, "bad1", "Bozuk", "{not-json");
-        store.Delete("bad1");
+        store.DeleteCorruptTemplate("bad1");
         Assert.AreEqual(0, store.CorruptTemplates().Count);
     });
 

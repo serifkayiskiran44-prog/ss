@@ -147,7 +147,19 @@ public static class OrdersPanel
    catch(Exception ex){status.Text=ex.Message;}
   };
   var newTemplate=Button(bar,"Yeni");newTemplate.Click+=(_,_)=>{savedList.SelectedItem=null;Reset();};
-  var delete=Button(bar,"Sil");delete.Click+=(_,_)=>{if(savedList.SelectedItem is OrderExportTemplate t){store.Delete(t.Id);Reload();Reset();status.Text="Şablon silindi.";}};
+  var delete=Button(bar,"Sil");delete.Click+=(_,_)=>
+  {
+   if(savedList.SelectedItem is not OrderExportTemplate t)return;
+   try
+   {
+    // Delete only the exact version this screen showed; a stale result reloads
+    // and asks the user to review and delete again - never a silent retry.
+    var outcome=store.Delete(t.Id,t.Version);
+    Reload();Reset();
+    status.Text=outcome switch{OrderExportTemplateDeleteResult.Deleted=>"Şablon silindi.",OrderExportTemplateDeleteResult.AlreadyDeleted=>"Şablon zaten silinmiş; liste yenilendi.",_=>"Şablon siz görüntüledikten sonra değişti; hiçbir şey silinmedi. Liste yenilendi, güncel sürümü inceleyip tekrar silin."};
+   }
+   catch(Exception ex){status.Text=ex.Message;Reload();}
+  };
   var close=Button(bar,"Kapat");close.Click+=(_,_)=>win.Close();
   win.ShowDialog();
  }

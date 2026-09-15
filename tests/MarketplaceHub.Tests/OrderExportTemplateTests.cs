@@ -66,7 +66,7 @@ public sealed class OrderExportTemplateTests
             Assert.AreEqual(3, updated.FieldIds.Count);
             Assert.AreEqual(1, store.List().Count, "Editing must update in place, not create a second template.");
 
-            store.Delete(created.Id);
+            Assert.AreEqual(OrderExportTemplateDeleteResult.Deleted, store.Delete(updated.Id, updated.Version));
             Assert.AreEqual(0, store.List().Count);
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
