@@ -129,10 +129,10 @@ public sealed class PricingProfileTests
     [TestMethod]
     public void UnrecognizedSourceFieldStoredValueBlocksCalculation()
     {
-        // Simulates data corruption/a future enum value the running binary doesn't
-        // know: Read() falls back to Cost for an unparsable stored value, matching
-        // the "closed set" contract - SourceValue itself has no reachable default
-        // branch for a valid enum member, only for something outside the enum.
+        // Simulates an in-memory profile carrying a future/out-of-range enum value:
+        // SourceValue's switch has no reachable default for a valid enum member,
+        // only for something outside the closed set (see #2650 for the separate,
+        // persisted-row version of this in PricingProfileCorruptionTests).
         var profile = new PricingProfile { Name = "X", Formula = "x", SourceField = (PricingSourceField)99 };
         Assert.ThrowsException<InvalidOperationException>(() => PricingProfileStore.SourceValue(profile, Product()));
     }

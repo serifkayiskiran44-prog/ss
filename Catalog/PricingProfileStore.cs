@@ -19,6 +19,19 @@ public sealed class PricingProfile
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 }
 
+/// Bounded diagnostics only (id/name + a short reason code + detection time) -
+/// never Formula - for a PricingProfiles row whose persisted SourceField cannot
+/// be trusted. Mirrors CatalogStore's CorruptProductRow pattern.
+public sealed record CorruptPricingProfile(string Id, string Name, string Reason, DateTime DetectedUtc);
+/// Raised by Find(...) when the row exists but its SourceField is corrupt/
+/// unrecognized - kept distinct from returning null (which means "no such
+/// profile"), so a caller can never mistake "needs repair" for "not found", and
+/// a corrupt profile is never silently treated as SourceField=Cost.
+public sealed class PricingProfileCorruptException : Exception
+{
+    public string ProfileId { get; }
+    public PricingProfileCorruptException(string profileId, string reason) : base($"Fiyat profili bozuk (REVIEW_REQUIRED): {reason}") => ProfileId = profileId;
+}
 /// Named, reusable pricing formula definitions - distinct from PricePolicy (which is
 /// one unnamed formula per channel/shop). A profile can be created/edited/deactivated
 /// independently of any channel/shop and, once real callers exist, referenced from
@@ -68,18 +81,32 @@ public sealed class PricingProfileStore
         return profile;
     }
 
+    const string SelectAll = "SELECT Id,Name,Formula,SourceField,Active,Version,UpdatedUtc FROM PricingProfiles";
+
     public IReadOnlyList<PricingProfile> List()
     {
         using var c = Open(); using var cmd = c.CreateCommand();
-        cmd.CommandText = "SELECT Id,Name,Formula,SourceField,Active,Version,UpdatedUtc FROM PricingProfiles ORDER BY Name";
-        using var r = cmd.ExecuteReader(); var result = new List<PricingProfile>(); while (r.Read()) result.Add(Read(r)); return result;
+        cmd.CommandText = SelectAll + " ORDER BY Name";
+        using var r = cmd.ExecuteReader(); var result = new List<PricingProfile>(); while (r.Read()) if (TryRead(r, out var profile, out _)) result.Add(profile!); return result;
     }
 
     public PricingProfile? Find(string id)
     {
         using var c = Open(); using var cmd = c.CreateCommand();
-        cmd.CommandText = "SELECT Id,Name,Formula,SourceField,Active,Version,UpdatedUtc FROM PricingProfiles WHERE Id=$id"; cmd.Parameters.AddWithValue("$id", id);
-        using var r = cmd.ExecuteReader(); return r.Read() ? Read(r) : null;
+        cmd.CommandText = SelectAll + " WHERE Id=$id"; cmd.Parameters.AddWithValue("$id", id);
+        using var r = cmd.ExecuteReader(); if (!r.Read()) return null;
+        if (!TryRead(r, out var profile, out var corrupt)) throw new PricingProfileCorruptException(corrupt!.Id, corrupt.Reason);
+        return profile;
+    }
+
+    /// Read-only diagnostics: id/name + bounded reason code only, never Formula.
+    /// Corrupt rows are never auto-deleted/overwritten/repaired by List/Find; this
+    /// is the only way to discover them for operator repair.
+    public IReadOnlyList<CorruptPricingProfile> CorruptProfiles()
+    {
+        using var c = Open(); using var cmd = c.CreateCommand();
+        cmd.CommandText = SelectAll;
+        using var r = cmd.ExecuteReader(); var result = new List<CorruptPricingProfile>(); while (r.Read()) if (!TryRead(r, out _, out var corrupt)) result.Add(corrupt!); return result;
     }
 
     /// Reads the formula's configured source value directly off the product - the
@@ -100,11 +127,19 @@ public sealed class PricingProfileStore
         return PriceFormula.Evaluate(profile.Formula, source);
     }
 
-    static PricingProfile Read(SqliteDataReader r) => new()
+    /// Never silently coerces an unrecognized/blank/wrongly-cased persisted
+    /// SourceField (or an out-of-range UpdatedUtc) to a default - a row that
+    /// fails either check is corruption, not "assume Cost".
+    static bool TryRead(SqliteDataReader r, out PricingProfile? profile, out CorruptPricingProfile? corrupt)
     {
-        Id = r.GetString(0), Name = r.GetString(1), Formula = r.GetString(2),
-        SourceField = Enum.TryParse<PricingSourceField>(r.GetString(3), out var field) ? field : PricingSourceField.Cost,
-        Active = r.GetInt32(4) != 0, Version = r.GetInt32(5),
-        UpdatedUtc = DateTime.Parse(r.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-    };
+        var id = r.GetString(0); var name = r.GetString(1);
+        profile = null;
+        var rawSource = r.GetString(3);
+        if (!Enum.TryParse<PricingSourceField>(rawSource, out var field) || !Enum.IsDefined(field))
+        { corrupt = new(id, name, $"tanınmayan kaynak alanı: '{rawSource}'", DateTime.UtcNow); return false; }
+        if (!DateTime.TryParse(r.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var updated))
+        { corrupt = new(id, name, "geçersiz güncelleme zamanı", DateTime.UtcNow); return false; }
+        profile = new() { Id = id, Name = name, Formula = r.GetString(2), SourceField = field, Active = r.GetInt32(4) != 0, Version = r.GetInt32(5), UpdatedUtc = updated };
+        corrupt = null; return true;
+    }
 }
