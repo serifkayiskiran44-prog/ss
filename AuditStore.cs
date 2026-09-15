@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using System.Globalization;
+using System.Linq;
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
@@ -46,43 +47,89 @@ public sealed class AuditStore
         using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "CREATE TABLE IF NOT EXISTS AuditEvents(Id TEXT PRIMARY KEY,AtUtc TEXT NOT NULL,Module TEXT NOT NULL,Action TEXT NOT NULL,ProductId TEXT NOT NULL,OrderId TEXT NOT NULL,Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,Outcome TEXT NOT NULL,Detail TEXT NOT NULL);CREATE INDEX IF NOT EXISTS IX_AuditEvents_At ON AuditEvents(AtUtc DESC)"; command.ExecuteNonQuery();
     }
     SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
+    /// Every persisted AtUtc must represent the same canonical UTC instant
+    /// contract regardless of how the caller constructed it: Utc round-trips
+    /// unchanged, Local is converted to its true UTC instant, and Unspecified
+    /// (the property is literally named AtUtc) is deterministically treated as
+    /// already-UTC rather than silently assumed to be the machine's local zone
+    /// - the same input must produce the same stored instant on every machine.
+    /// See #2659.
+    static DateTime NormalizeUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+    };
     public void Append(AuditEvent audit)
     {
-        audit.Module = Clean(audit.Module, 80); audit.Action = Clean(audit.Action, 120); audit.ProductId = Clean(audit.ProductId, 120); audit.OrderId = Clean(audit.OrderId, 120); audit.Marketplace = Clean(audit.Marketplace, 80); audit.ShopId = Clean(audit.ShopId, 160); audit.Outcome = Clean(audit.Outcome, 40); audit.Detail = Sanitize(audit.Detail); audit.AtUtc = audit.AtUtc == default ? DateTime.UtcNow : audit.AtUtc;
-        using var connection = Open(); using var transaction = connection.BeginTransaction(); using var command = connection.CreateCommand(); command.Transaction = transaction; command.CommandText = "INSERT INTO AuditEvents VALUES($id,$at,$module,$action,$product,$order,$marketplace,$shop,$outcome,$detail)"; command.Parameters.AddWithValue("$id", audit.Id); command.Parameters.AddWithValue("$at", audit.AtUtc.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$module", audit.Module); command.Parameters.AddWithValue("$action", audit.Action); command.Parameters.AddWithValue("$product", audit.ProductId); command.Parameters.AddWithValue("$order", audit.OrderId); command.Parameters.AddWithValue("$marketplace", audit.Marketplace); command.Parameters.AddWithValue("$shop", audit.ShopId); command.Parameters.AddWithValue("$outcome", audit.Outcome); command.Parameters.AddWithValue("$detail", audit.Detail); command.ExecuteNonQuery(); using var trim = connection.CreateCommand(); trim.Transaction = transaction; trim.CommandText = "DELETE FROM AuditEvents WHERE Id NOT IN (SELECT Id FROM AuditEvents ORDER BY AtUtc DESC LIMIT $limit)"; trim.Parameters.AddWithValue("$limit", RetentionLimit); trim.ExecuteNonQuery(); transaction.Commit();
+        audit.Module = Clean(audit.Module, 80); audit.Action = Clean(audit.Action, 120); audit.ProductId = Clean(audit.ProductId, 120); audit.OrderId = Clean(audit.OrderId, 120); audit.Marketplace = Clean(audit.Marketplace, 80); audit.ShopId = Clean(audit.ShopId, 160); audit.Outcome = Clean(audit.Outcome, 40); audit.Detail = Sanitize(audit.Detail); audit.AtUtc = audit.AtUtc == default ? DateTime.UtcNow : NormalizeUtc(audit.AtUtc);
+        using var connection = Open(); using var transaction = connection.BeginTransaction(); using var command = connection.CreateCommand(); command.Transaction = transaction; command.CommandText = "INSERT INTO AuditEvents VALUES($id,$at,$module,$action,$product,$order,$marketplace,$shop,$outcome,$detail)"; command.Parameters.AddWithValue("$id", audit.Id); command.Parameters.AddWithValue("$at", audit.AtUtc.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$module", audit.Module); command.Parameters.AddWithValue("$action", audit.Action); command.Parameters.AddWithValue("$product", audit.ProductId); command.Parameters.AddWithValue("$order", audit.OrderId); command.Parameters.AddWithValue("$marketplace", audit.Marketplace); command.Parameters.AddWithValue("$shop", audit.ShopId); command.Parameters.AddWithValue("$outcome", audit.Outcome); command.Parameters.AddWithValue("$detail", audit.Detail); command.ExecuteNonQuery();
+        // The trim decision is made on the true parsed instant, not SQL's
+        // lexical ORDER BY on the stored TEXT column - legacy rows written
+        // before this fix (mixed offsets/Kinds) can otherwise sort out of
+        // chronological order as plain text, which could make retention keep
+        // stale rows and delete genuinely recent ones. The table is already
+        // capped at RetentionLimit(+1) rows by this same trim, so loading every
+        // Id/AtUtc pair here is always bounded and cheap. A row whose AtUtc
+        // fails to parse is treated as the oldest possible instant, so it is
+        // trimmed before any healthy row rather than risking a healthy row's
+        // loss in its place.
+        using (var scan = connection.CreateCommand())
+        {
+            scan.Transaction = transaction; scan.CommandText = "SELECT Id,AtUtc FROM AuditEvents";
+            using var reader = scan.ExecuteReader();
+            var all = new List<(string Id, DateTime Key)>();
+            while (reader.Read()) all.Add((reader.GetString(0), TryParseUtc(reader.GetString(1), out var at) ? at : DateTime.MinValue));
+            if (all.Count > RetentionLimit)
+            {
+                var keep = all.OrderByDescending(x => x.Key).Take(RetentionLimit).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+                var toDelete = all.Where(x => !keep.Contains(x.Id)).ToList();
+                foreach (var row in toDelete) { using var del = connection.CreateCommand(); del.Transaction = transaction; del.CommandText = "DELETE FROM AuditEvents WHERE Id=$id"; del.Parameters.AddWithValue("$id", row.Id); del.ExecuteNonQuery(); }
+            }
+        }
+        transaction.Commit();
     }
     /// A malformed AtUtc must never crash the whole read - it is excluded from the
     /// healthy result and reported only via CorruptEvents(); detection re-runs from
     /// the row's own stored text every call, so it stays stable across a restart.
+    /// Ordering/limiting is done on the true parsed instant in-process (not SQL's
+    /// lexical ORDER BY on the stored TEXT), so legacy mixed-offset/Kind rows are
+    /// still returned in correct chronological order - the whole table is always
+    /// bounded by RetentionLimit, so loading every matching row first is cheap.
     public IReadOnlyList<AuditEvent> List(int limit = 500, string? query = null)
     {
-        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like) ORDER BY AtUtc DESC LIMIT $limit"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) if (TryRead(reader, out var evt, out _)) result.Add(evt!); return result;
+        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE ($query='' OR Module LIKE $like OR Action LIKE $like OR Outcome LIKE $like OR Detail LIKE $like OR ProductId LIKE $like OR OrderId LIKE $like OR Marketplace LIKE $like OR ShopId LIKE $like)"; var q = query?.Trim() ?? ""; command.Parameters.AddWithValue("$query", q); command.Parameters.AddWithValue("$like", $"%{q}%"); using var reader = command.ExecuteReader(); var result = new List<AuditEvent>(); while (reader.Read()) if (TryRead(reader, out var evt, out _)) result.Add(evt!); return result.OrderByDescending(x => x.AtUtc).Take(limit).ToList();
     }
-    /// Bounded diagnostics for every row (within `limit`) whose AtUtc failed to
-    /// parse - never the raw Detail/ProductId/OrderId/ShopId values.
+    /// Bounded diagnostics for every row whose AtUtc failed to parse - never the
+    /// raw Detail/ProductId/OrderId/ShopId values. `limit` is accepted only for
+    /// backward-compatible bounds validation; the table itself never exceeds
+    /// RetentionLimit rows, so every row is always scanned.
     public IReadOnlyList<CorruptAuditRow> CorruptEvents(int limit = RetentionLimit)
     {
-        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents ORDER BY AtUtc DESC LIMIT $limit"; command.Parameters.AddWithValue("$limit", limit); using var reader = command.ExecuteReader(); var result = new List<CorruptAuditRow>(); while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) result.Add(corrupt!); return result;
+        if (limit is < 1 or > RetentionLimit) throw new ArgumentOutOfRangeException(nameof(limit)); using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents"; using var reader = command.ExecuteReader(); var result = new List<CorruptAuditRow>(); while (reader.Read()) if (!TryRead(reader, out _, out var corrupt)) result.Add(corrupt!); return result;
     }
-    /// Scans at most MaxLastFailureScan rows so a fully corrupted table can never
-    /// spin through hundreds of exceptions; if every scanned "Failed" row is corrupt
-    /// this throws a typed AuditStoreCorruptionException instead of returning null -
-    /// null is reserved for "no failures at all", a materially different fact.
+    /// Scans every "Failed" row (always bounded by RetentionLimit, since the
+    /// table itself never exceeds it) and picks the true most-recent one by
+    /// parsed instant, not SQL's lexical ORDER BY - so a legacy mixed-offset/
+    /// Kind row can never cause the wrong "last failure" to be reported. If
+    /// every scanned "Failed" row is corrupt this throws a typed
+    /// AuditStoreCorruptionException instead of returning null - null is
+    /// reserved for "no failures at all", a materially different fact.
     public AuditEvent? LastFailure()
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE Outcome = $outcome ORDER BY AtUtc DESC LIMIT $limit";
+        command.CommandText = "SELECT Id,AtUtc,Module,Action,ProductId,OrderId,Marketplace,ShopId,Outcome,Detail FROM AuditEvents WHERE Outcome = $outcome";
         command.Parameters.AddWithValue("$outcome", "Failed");
-        command.Parameters.AddWithValue("$limit", MaxLastFailureScan);
         using var reader = command.ExecuteReader();
-        var sawAnyRow = false;
+        var sawAnyRow = false; AuditEvent? best = null;
         while (reader.Read())
         {
             sawAnyRow = true;
-            if (TryRead(reader, out var evt, out _)) return evt;
+            if (TryRead(reader, out var evt, out _) && (best is null || evt!.AtUtc > best.AtUtc)) best = evt;
         }
-        if (sawAnyRow) throw new AuditStoreCorruptionException($"Son {MaxLastFailureScan} 'Failed' kaydının AtUtc alanı bozuk; en son hata belirlenemiyor.");
+        if (best is not null) return best;
+        if (sawAnyRow) throw new AuditStoreCorruptionException($"'Failed' kayıtlarının AtUtc alanı bozuk; en son hata belirlenemiyor.");
         return null;
     }
     static bool TryRead(SqliteDataReader reader, out AuditEvent? evt, out CorruptAuditRow? corrupt)
@@ -93,8 +140,14 @@ public sealed class AuditStore
         return true;
     }
     /// Only ever a format/parse failure - never conflated with a DB-busy/locked
-    /// SqliteException, which is raised by the surrounding command, not this parse.
-    static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
+    /// SqliteException, which is raised by the surrounding command, not this
+    /// parse. AdjustToUniversal|AssumeUniversal (not RoundtripKind) is required
+    /// here: RoundtripKind only converts a "Z"/local-matching offset to a
+    /// trustworthy instant - for any OTHER explicit offset it discards the
+    /// offset and returns the wall-clock value unconverted, which is exactly
+    /// the bug this fix closes (#2659). AssumeUniversal also gives legacy
+    /// offset-less text the same "treat as already UTC" policy Append uses.
+    static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out result);
     static string Clean(string value, int max) { var clean = Sanitize(value); return clean.Length > max ? clean[..max] : clean; }
     public static string Sanitize(string? value)
     {
