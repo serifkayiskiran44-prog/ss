@@ -68,10 +68,18 @@ public static class AutomationSchedule
         return start <= end ? time >= start && time <= end : time >= start || time <= end;
     }
 
+    /// Technical upper bound only - large enough for any real interval, small
+    /// enough that nowUtc.AddMinutes(...) can never overflow DateTime's range
+    /// even starting from a nowUtc close to DateTime.MaxValue. See #2531.
+    public const int MaxIntervalMinutes = 129_600; // 90 days
     public static DateTime NextRunUtc(AutomationJob job, DateTime nowUtc)
     {
         nowUtc = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
-        if (job.ScheduleMode.Equals("Interval", StringComparison.OrdinalIgnoreCase)) return nowUtc.AddMinutes(Math.Max(1, job.IntervalMinutes));
+        if (job.ScheduleMode.Equals("Interval", StringComparison.OrdinalIgnoreCase))
+        {
+            try { return nowUtc.AddMinutes(Math.Max(1, job.IntervalMinutes)); }
+            catch (ArgumentOutOfRangeException) { throw new InvalidOperationException("Bir sonraki çalışma zamanı hesaplanamadı; sistem saati veya aralık desteklenen tarih sınırına çok yakın."); }
+        }
         if (!TimeSpan.TryParseExact(job.RunAtLocal, @"hh\:mm", CultureInfo.InvariantCulture, out var runAt)) throw new InvalidOperationException("Otomasyon yerel saati HH:mm olmalı.");
         var localNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TimeZoneInfo.Local);
         for (var day = 0; day <= 370; day++)
@@ -139,7 +147,7 @@ public sealed class AutomationStore
     public AutomationJob Save(AutomationJob job)
     {
         if (!IsValidKind(job.Kind)) throw new InvalidOperationException($"Tanımsız otomasyon türü: {(int)job.Kind}.");
-        if (job.IntervalMinutes < 1) throw new InvalidOperationException("Otomasyon aralığı en az 1 dakika olmalı."); if (string.IsNullOrWhiteSpace(job.Channel) || string.IsNullOrWhiteSpace(job.Shop)) throw new InvalidOperationException("Kanal ve mağaza zorunlu."); AutomationSchedule.Validate(job);
+        if (job.IntervalMinutes is < 1 or > AutomationSchedule.MaxIntervalMinutes) throw new InvalidOperationException($"Otomasyon aralığı 1–{AutomationSchedule.MaxIntervalMinutes} dakika arasında olmalı."); if (string.IsNullOrWhiteSpace(job.Channel) || string.IsNullOrWhiteSpace(job.Shop)) throw new InvalidOperationException("Kanal ve mağaza zorunlu."); AutomationSchedule.Validate(job);
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "INSERT INTO AutomationJobs(Id,Kind,IntervalMinutes,NextRunUtc,LastRunUtc,LockedUntilUtc,LastError,Channel,Shop,Enabled,ScheduleMode,RunAtLocal,DaysOfWeek,WindowStartLocal,WindowEndLocal,RetryLimit,RetryBackoffMinutes,FailureCount,TemplateKey) VALUES($id,$kind,$interval,$next,$last,$lock,$error,$channel,$shop,$enabled,$schedule,$time,$days,$windowStart,$windowEnd,$retryLimit,$retryBackoff,$failures,$template) ON CONFLICT(Id) DO UPDATE SET Kind=excluded.Kind,IntervalMinutes=excluded.IntervalMinutes,NextRunUtc=excluded.NextRunUtc,LastRunUtc=excluded.LastRunUtc,LockedUntilUtc=excluded.LockedUntilUtc,LastError=excluded.LastError,Channel=excluded.Channel,Shop=excluded.Shop,Enabled=excluded.Enabled,ScheduleMode=excluded.ScheduleMode,RunAtLocal=excluded.RunAtLocal,DaysOfWeek=excluded.DaysOfWeek,WindowStartLocal=excluded.WindowStartLocal,WindowEndLocal=excluded.WindowEndLocal,RetryLimit=excluded.RetryLimit,RetryBackoffMinutes=excluded.RetryBackoffMinutes,FailureCount=excluded.FailureCount,TemplateKey=excluded.TemplateKey";
         cmd.Parameters.AddWithValue("$id", job.Id); cmd.Parameters.AddWithValue("$kind", (int)job.Kind); cmd.Parameters.AddWithValue("$interval", job.IntervalMinutes); cmd.Parameters.AddWithValue("$next", job.NextRunUtc.ToString("O", CultureInfo.InvariantCulture)); cmd.Parameters.AddWithValue("$last", job.LastRunUtc.HasValue ? job.LastRunUtc.Value.ToString("O", CultureInfo.InvariantCulture) : DBNull.Value); cmd.Parameters.AddWithValue("$lock", job.LockedUntilUtc.HasValue ? job.LockedUntilUtc.Value.ToString("O", CultureInfo.InvariantCulture) : DBNull.Value); cmd.Parameters.AddWithValue("$error", MarketplaceConnectionStore.Redact(job.LastError)); cmd.Parameters.AddWithValue("$channel", job.Channel.Trim().ToLowerInvariant()); cmd.Parameters.AddWithValue("$shop", job.Shop.Trim()); cmd.Parameters.AddWithValue("$enabled", job.Enabled ? 1 : 0); cmd.Parameters.AddWithValue("$schedule", job.ScheduleMode); cmd.Parameters.AddWithValue("$time", job.RunAtLocal); cmd.Parameters.AddWithValue("$days", job.DaysOfWeek); cmd.Parameters.AddWithValue("$windowStart", job.WindowStartLocal); cmd.Parameters.AddWithValue("$windowEnd", job.WindowEndLocal); cmd.Parameters.AddWithValue("$retryLimit", job.RetryLimit); cmd.Parameters.AddWithValue("$retryBackoff", job.RetryBackoffMinutes); cmd.Parameters.AddWithValue("$failures", job.FailureCount); cmd.Parameters.AddWithValue("$template", job.TemplateKey); cmd.ExecuteNonQuery(); return job;
     }
@@ -196,7 +204,9 @@ public sealed class AutomationStore
         if (!r.IsDBNull(5)) { if (!TryParseUtc(r.GetString(5), out var value)) { corrupt = new(id, "Malformed LockedUntilUtc timestamp", DateTime.UtcNow); return false; } lockedUntil = value; }
         var rawKind = r.GetInt32(1); var kind = (AutomationKind)rawKind;
         if (!IsValidKind(kind)) { corrupt = new(id, $"Unrecognized Kind value: {rawKind}", DateTime.UtcNow); return false; }
-        job = new() { Id = id, Kind = kind, IntervalMinutes = r.GetInt32(2), NextRunUtc = nextRun, LastRunUtc = lastRun, LockedUntilUtc = lockedUntil, LastError = r.GetString(6), Channel = r.GetString(7), Shop = r.GetString(8), Enabled = r.GetInt32(9) != 0, ScheduleMode = r.GetString(10), RunAtLocal = r.GetString(11), DaysOfWeek = r.GetString(12), WindowStartLocal = r.GetString(13), WindowEndLocal = r.GetString(14), RetryLimit = r.GetInt32(15), RetryBackoffMinutes = r.GetInt32(16), FailureCount = r.GetInt32(17), TemplateKey = r.GetString(18) };
+        var interval = r.GetInt32(2);
+        if (interval is < 1 or > AutomationSchedule.MaxIntervalMinutes) { corrupt = new(id, $"Out-of-bounds IntervalMinutes: {interval}", DateTime.UtcNow); return false; }
+        job = new() { Id = id, Kind = kind, IntervalMinutes = interval, NextRunUtc = nextRun, LastRunUtc = lastRun, LockedUntilUtc = lockedUntil, LastError = r.GetString(6), Channel = r.GetString(7), Shop = r.GetString(8), Enabled = r.GetInt32(9) != 0, ScheduleMode = r.GetString(10), RunAtLocal = r.GetString(11), DaysOfWeek = r.GetString(12), WindowStartLocal = r.GetString(13), WindowEndLocal = r.GetString(14), RetryLimit = r.GetInt32(15), RetryBackoffMinutes = r.GetInt32(16), FailureCount = r.GetInt32(17), TemplateKey = r.GetString(18) };
         return true;
     }
     /// Only ever a format/parse failure - never conflated with a DB-busy/locked

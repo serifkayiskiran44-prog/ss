@@ -20,6 +20,13 @@ public static class AutomationRunner
 
     static AutomationRunResult RunClaimed(CatalogStore catalog, AutomationStore automation, SyncStore sync, AutomationJob job, string channel, string shop, DateTime nowUtc, bool requireListingMapping, string leaseToken)
     {
+        // Precompute the schedule step before any product/sync side effect: if the
+        // next-run arithmetic can't succeed (e.g. nowUtc pathologically close to
+        // DateTime.MaxValue), the job is blocked with zero enqueues rather than
+        // enqueueing products and only then failing inside Complete() with a
+        // stuck lease (#2531).
+        try { _ = AutomationSchedule.NextRunUtc(job, nowUtc); }
+        catch (InvalidOperationException error) { automation.Fail(job.Id, error.Message, leaseToken); return new(0, new[] { error.Message }); }
         var errors = new List<string>(); var queued = 0;
         // Exhaustive by AutomationKind, not an is/else fallback: an unrecognized
         // job.Kind (a corrupt/future value) must never silently fall into the
