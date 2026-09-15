@@ -7,6 +7,13 @@ namespace TrMarketplaceHubDesktop;
 public static class CredentialStore
 {
     private static string StorePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop", "credentials.bin");
+    // Purely technical bounds - a DPAPI-wrapped EtsyCredentials JSON blob is
+    // normally well under 1KB even encrypted; these budgets give generous
+    // headroom for future fields while making an oversized/corrupt file a
+    // deterministic, bounded-memory reject rather than an unbounded
+    // ReadAllBytes/deserialize. See #2644.
+    private const int MaxEncryptedFileBytes = 64 * 1024;
+    private const int MaxPlaintextBytes = 32 * 1024;
     public static void Save(EtsyCredentials credentials)
     {
         var plain = JsonSerializer.SerializeToUtf8Bytes(credentials);
@@ -25,10 +32,21 @@ public static class CredentialStore
     public static EtsyCredentials? Load()
     {
         if (!File.Exists(StorePath)) return null;
+        const string recoveryMessage = "Kayıtlı bağlantı bilgileri bu Windows kullanıcısı tarafından okunamadı. Bilgileri yeniden girip kaydedin.";
         byte[]? plain = null;
-        try { plain = Unprotect(File.ReadAllBytes(StorePath)); return JsonSerializer.Deserialize<EtsyCredentials>(plain); }
+        try
+        {
+            // Check the file's length before ever allocating/reading it - an
+            // oversized/corrupt file is rejected deterministically without an
+            // unbounded ReadAllBytes. Never truncated, deleted, or overwritten.
+            var length = new FileInfo(StorePath).Length;
+            if (length > MaxEncryptedFileBytes) throw new InvalidOperationException(recoveryMessage);
+            plain = Unprotect(File.ReadAllBytes(StorePath));
+            if (plain.Length > MaxPlaintextBytes) throw new InvalidOperationException(recoveryMessage);
+            return JsonSerializer.Deserialize<EtsyCredentials>(plain);
+        }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or JsonException)
-        { throw new InvalidOperationException("Kayıtlı bağlantı bilgileri bu Windows kullanıcısı tarafından okunamadı. Bilgileri yeniden girip kaydedin."); }
+        { throw new InvalidOperationException(recoveryMessage); }
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
     }
     internal static byte[] Protect(byte[] data) => Transform(data, true);
