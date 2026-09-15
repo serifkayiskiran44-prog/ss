@@ -32,7 +32,7 @@ public partial class MainWindow {
   panel.Children.Add(new TextBlock{Text="Kayıtlı filtre",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(8,0,2,0)});panel.Children.Add(saved);panel.Children.Add(filterName);
   panel.Children.Add(Button("Filtreyi kaydet",()=>{filterStore.Save(filterName.Text,Current());ReloadSaved();filterName.Clear();}));
   panel.Children.Add(Button("Filtreyi yükle",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");Apply(selected.Filter);productFilter=selected.Filter;productOffset=0;RefreshProducts();}));
-  panel.Children.Add(Button("Filtreyi sil",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");filterStore.Delete(selected.Name);ReloadSaved();}));
+  panel.Children.Add(Button("Filtreyi sil",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");var result=filterStore.Delete(selected.Name,selected.Revision);if(result==CatalogFilterStore.DeleteResult.Stale)throw new InvalidOperationException("Bu filtre başka bir işlemde değişti; listeyi yenileyip tekrar deneyin.");ReloadSaved();}));
   panel.Children.Add(corruptWarning);panel.Children.Add(corruptFilters);panel.Children.Add(deleteCorrupt);
   panel.Children.Add(Button("Kolon görünürlüğü",OpenProductColumnChooser));
   ApplyProductColumnPreferences();

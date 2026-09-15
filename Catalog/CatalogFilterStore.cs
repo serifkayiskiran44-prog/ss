@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace TrMarketplaceHubDesktop.Catalog;
 
-public sealed record SavedCatalogFilter(string Name, CatalogFilter Filter);
+public sealed record SavedCatalogFilter(string Name, CatalogFilter Filter, int Revision);
 
 /// Bounded diagnostics only (row name, a short reason, byte length, detection time) -
 /// never the raw filter JSON/values - for a CatalogFilterViews row that failed
@@ -25,9 +25,18 @@ public sealed class CatalogFilterStore
         Directory.CreateDirectory(directory);
         connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "catalog.db") }.ToString();
         using var c = Open(); using var command = c.CreateCommand();
-        command.CommandText = "CREATE TABLE IF NOT EXISTS CatalogFilterViews(Name TEXT PRIMARY KEY, Json TEXT NOT NULL)";
+        command.CommandText = "CREATE TABLE IF NOT EXISTS CatalogFilterViews(Name TEXT PRIMARY KEY, Json TEXT NOT NULL, Revision INTEGER NOT NULL DEFAULT 0);" +
+            // Never deleted, never decremented: the durable floor a given Name's
+            // revision must exceed, so deleting a saved filter and later saving a
+            // different filter under the same Name can never reissue a revision
+            // number a still-open, older screen might remember from before the
+            // delete (#2663's ABA guard - the same pattern as
+            // ExcelProfileRevisionFloor).
+            "CREATE TABLE IF NOT EXISTS CatalogFilterRevisionFloor(Name TEXT PRIMARY KEY, Floor INTEGER NOT NULL)";
         command.ExecuteNonQuery();
+        EnsureColumn(c, "Revision", "INTEGER NOT NULL DEFAULT 0");
     }
+    static void EnsureColumn(SqliteConnection c, string name, string definition) { using var check = c.CreateCommand(); check.CommandText = "SELECT 1 FROM pragma_table_info('CatalogFilterViews') WHERE name=$name"; check.Parameters.AddWithValue("$name", name); if (check.ExecuteScalar() != null) return; using var add = c.CreateCommand(); add.CommandText = $"ALTER TABLE CatalogFilterViews ADD COLUMN {name} {definition}"; add.ExecuteNonQuery(); }
     SqliteConnection Open() { var c = new SqliteConnection(connectionString); c.Open(); return c; }
 
     /// Only ever wraps JsonSerializer/validation failures - a SqliteException from the
@@ -66,12 +75,12 @@ public sealed class CatalogFilterStore
 
     public IReadOnlyList<SavedCatalogFilter> List()
     {
-        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT Name,Json FROM CatalogFilterViews ORDER BY Name";
+        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "SELECT Name,Json,Revision FROM CatalogFilterViews ORDER BY Name";
         using var reader = command.ExecuteReader(); var rows = new List<SavedCatalogFilter>();
         while (reader.Read())
         {
-            var name = reader.GetString(0); var json = reader.GetString(1);
-            if (TryDeserializeFilter(name, json, out var filter, out _)) rows.Add(new(name, filter!));
+            var name = reader.GetString(0); var json = reader.GetString(1); var revision = reader.GetInt32(2);
+            if (TryDeserializeFilter(name, json, out var filter, out _)) rows.Add(new(name, filter!, revision));
         }
         return rows;
     }
@@ -105,15 +114,34 @@ public sealed class CatalogFilterStore
             if (find.ExecuteScalar() is string existingJson && !TryDeserializeFilter(name, existingJson, out _, out _))
                 throw new InvalidOperationException("Bu adla kayıtlı filtre bozuk (REVIEW_REQUIRED); önce kurtarma veya silme yapılmalı.");
         }
+        int currentRevision;
+        using (var findRevision = c.CreateCommand()) { findRevision.Transaction = tx; findRevision.CommandText = "SELECT Revision FROM CatalogFilterViews WHERE Name=$name"; findRevision.Parameters.AddWithValue("$name", name); var current = findRevision.ExecuteScalar(); currentRevision = current is null ? 0 : Convert.ToInt32(current, System.Globalization.CultureInfo.InvariantCulture); }
+        int floor;
+        using (var findFloor = c.CreateCommand()) { findFloor.Transaction = tx; findFloor.CommandText = "SELECT Floor FROM CatalogFilterRevisionFloor WHERE Name=$name"; findFloor.Parameters.AddWithValue("$name", name); var value = findFloor.ExecuteScalar(); floor = value is null ? 0 : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture); }
+        var nextRevision = Math.Max(currentRevision, floor) + 1;
+        using (var upsertFloor = c.CreateCommand()) { upsertFloor.Transaction = tx; upsertFloor.CommandText = "INSERT INTO CatalogFilterRevisionFloor(Name,Floor) VALUES($name,$floor) ON CONFLICT(Name) DO UPDATE SET Floor=excluded.Floor"; upsertFloor.Parameters.AddWithValue("$name", name); upsertFloor.Parameters.AddWithValue("$floor", nextRevision); upsertFloor.ExecuteNonQuery(); }
         using var command = c.CreateCommand(); command.Transaction = tx;
-        command.CommandText = "INSERT INTO CatalogFilterViews(Name,Json) VALUES($name,$json) ON CONFLICT(Name) DO UPDATE SET Json=excluded.Json";
-        command.Parameters.AddWithValue("$name", name); command.Parameters.AddWithValue("$json", JsonSerializer.Serialize(filter));
+        command.CommandText = "INSERT INTO CatalogFilterViews(Name,Json,Revision) VALUES($name,$json,$revision) ON CONFLICT(Name) DO UPDATE SET Json=excluded.Json,Revision=excluded.Revision";
+        command.Parameters.AddWithValue("$name", name); command.Parameters.AddWithValue("$json", JsonSerializer.Serialize(filter)); command.Parameters.AddWithValue("$revision", nextRevision);
         command.ExecuteNonQuery(); tx.Commit();
     }
 
-    public void Delete(string name)
+    public enum DeleteResult { Deleted, AlreadyDeleted, Stale }
+    /// Compare-and-delete: the row is only removed if its current persisted
+    /// Revision still equals expectedRevision. A caller working from a stale
+    /// list snapshot (someone else replaced the filter under this Name since)
+    /// gets Stale with zero mutation rather than silently deleting the newer
+    /// replacement; a Name that no longer exists is the distinct idempotent
+    /// AlreadyDeleted outcome.
+    public DeleteResult Delete(string name, int expectedRevision)
     {
-        using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "DELETE FROM CatalogFilterViews WHERE Name=$name"; command.Parameters.AddWithValue("$name", name); command.ExecuteNonQuery();
+        using var c = Open(); using var tx = c.BeginTransaction();
+        using var find = c.CreateCommand(); find.Transaction = tx; find.CommandText = "SELECT Revision FROM CatalogFilterViews WHERE Name=$name"; find.Parameters.AddWithValue("$name", name);
+        var current = find.ExecuteScalar();
+        if (current is null) { tx.Commit(); return DeleteResult.AlreadyDeleted; }
+        if (Convert.ToInt32(current, System.Globalization.CultureInfo.InvariantCulture) != expectedRevision) { tx.Commit(); return DeleteResult.Stale; }
+        using var del = c.CreateCommand(); del.Transaction = tx; del.CommandText = "DELETE FROM CatalogFilterViews WHERE Name=$name"; del.Parameters.AddWithValue("$name", name); del.ExecuteNonQuery();
+        tx.Commit(); return DeleteResult.Deleted;
     }
 
     /// Explicit, transactional recovery action: re-validates the row is still corrupt
