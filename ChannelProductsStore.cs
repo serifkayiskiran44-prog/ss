@@ -79,12 +79,26 @@ public sealed class ChannelProductsStore
  {
   using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText=SelectWithIdentity+" WHERE ($channel='' OR ChannelId=$channel) AND ($shop='' OR ShopId=$shop) AND ($product='' OR ProductId=$product) ORDER BY ChannelId,ShopId,ProductId";cmd.Parameters.AddWithValue("$channel",channel?.Trim().ToLowerInvariant()??"");cmd.Parameters.AddWithValue("$shop",shop?.Trim()??"");cmd.Parameters.AddWithValue("$product",product?.Trim()??"");using var r=cmd.ExecuteReader();var result=new List<CorruptChannelPlan>();while(r.Read()){if(!TryReadPlan(r,out _,out var corrupt))result.Add(corrupt!);}return result;
  }
+ // Purely technical storage/UI bounds - never a provider-format contract - so an
+ // oversized identity/URL/JSON can never reach persistence, an HTTP header, or a
+ // UI control. See #2539.
+ const int MaxIdentityFieldLength=200;
+ const int MaxListingUrlLength=2048;
+ const int MaxTargetCategoryLength=300;
+ const int MaxNotesLength=4000;
  static void ValidatePlan(ChannelProductPlan plan)
  {
   Identity(plan.ChannelId,plan.ShopId,plan.ProductId);
+  if(plan.ChannelId.Trim().Length>MaxIdentityFieldLength||plan.ShopId.Trim().Length>MaxIdentityFieldLength||plan.ProductId.Length>MaxIdentityFieldLength||(plan.ListingId?.Length??0)>MaxIdentityFieldLength)throw new ArgumentException($"Kanal, mağaza, ürün veya ilan kimliği en fazla {MaxIdentityFieldLength} karakter olabilir.");
+  if((plan.TargetCategory?.Length??0)>MaxTargetCategoryLength)throw new ArgumentException($"Hedef kategori en fazla {MaxTargetCategoryLength} karakter olabilir.");
+  if((plan.Notes?.Length??0)>MaxNotesLength)throw new ArgumentException($"Notlar en fazla {MaxNotesLength} karakter olabilir.");
   if(plan.PlannedPrice<0||plan.PlannedStock<0)throw new ArgumentException("Plan fiyatı ve stok negatif olamaz.");
   if(plan.Currency is null||plan.Currency.Length!=3||!plan.Currency.All(c=>c>='A'&&c<='Z'))throw new ArgumentException("Para birimini üç büyük harfle girin (USD, EUR, RUB, TRY).");
-  if(!string.IsNullOrEmpty(plan.ListingUrl)&&(!Uri.TryCreate(plan.ListingUrl,UriKind.Absolute,out var uri)||(uri.Scheme!="https"&&uri.Scheme!="http")||!string.IsNullOrEmpty(uri.UserInfo)))throw new ArgumentException("İlan bağlantısı geçerli bir HTTP/HTTPS adresi olmalı.");
+  if(!string.IsNullOrEmpty(plan.ListingUrl))
+  {
+   if(plan.ListingUrl.Length>MaxListingUrlLength)throw new ArgumentException($"İlan bağlantısı en fazla {MaxListingUrlLength} karakter olabilir.");
+   if(!Uri.TryCreate(plan.ListingUrl,UriKind.Absolute,out var uri)||(uri.Scheme!="https"&&uri.Scheme!="http")||!string.IsNullOrEmpty(uri.UserInfo))throw new ArgumentException("İlan bağlantısı geçerli bir HTTP/HTTPS adresi olmalı.");
+  }
  }
  /// plan.Version must equal the currently-stored version (0 for "no plan yet") -
  /// the same optimistic-concurrency contract used elsewhere in this app (e.g.
@@ -127,9 +141,15 @@ public sealed class ChannelProductsStore
   }
   var nextVersion=currentVersion+1;
   var stored=new ChannelProductPlan{ChannelId=plan.ChannelId,ShopId=plan.ShopId,ProductId=plan.ProductId,ListingId=plan.ListingId,ListingUrl=plan.ListingUrl,TargetCategory=plan.TargetCategory,PlannedPrice=plan.PlannedPrice,Currency=plan.Currency,PlannedStock=plan.PlannedStock,Notes=plan.Notes,UpdatedUtc=DateTime.UtcNow,Version=nextVersion};
+  var json=JsonSerializer.Serialize(stored);
+  // Fail-closed before any DB write - never truncate/repair silently. This is
+  // the same bound TryReadPlan already enforces on read (#2665); enforcing it
+  // here too means a plan can never be written in the first place only to be
+  // quarantined as corrupt the next time it's read.
+  if(System.Text.Encoding.UTF8.GetByteCount(json)>MaxPlanJsonBytes)throw new ArgumentException("Kanal planı boyutu izin verilen sınırı aşıyor.");
   using var cmd=c.CreateCommand();cmd.Transaction=tx;
   cmd.CommandText="INSERT INTO ChannelPlans(ChannelId,ShopId,ProductId,Json,Version) VALUES($channel,$shop,$product,$json,$version) ON CONFLICT(ChannelId,ShopId,ProductId) DO UPDATE SET Json=excluded.Json,Version=excluded.Version";
-  cmd.Parameters.AddWithValue("$channel",plan.ChannelId);cmd.Parameters.AddWithValue("$shop",plan.ShopId);cmd.Parameters.AddWithValue("$product",plan.ProductId);cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(stored));cmd.Parameters.AddWithValue("$version",nextVersion);
+  cmd.Parameters.AddWithValue("$channel",plan.ChannelId);cmd.Parameters.AddWithValue("$shop",plan.ShopId);cmd.Parameters.AddWithValue("$product",plan.ProductId);cmd.Parameters.AddWithValue("$json",json);cmd.Parameters.AddWithValue("$version",nextVersion);
   cmd.ExecuteNonQuery();
  }
 }
