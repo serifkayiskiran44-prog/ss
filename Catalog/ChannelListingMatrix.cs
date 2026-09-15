@@ -24,7 +24,7 @@ public sealed class ChannelListingMatrixService
             foreach (var product in catalog)
             {
                 plans.TryGetValue((connection.Channel, connection.ShopId, product.Id), out var plan);
-                var latest = sync.Where(x => x.Channel.Equals(connection.Channel, StringComparison.OrdinalIgnoreCase) && (x.EntityId == product.Id || (plan is not null && x.EntityId == plan.ListingId))).OrderByDescending(x => x.UpdatedUtc).FirstOrDefault();
+                var latest = sync.Where(x => x.Channel.Equals(connection.Channel, StringComparison.OrdinalIgnoreCase) && x.ShopId == connection.ShopId && (x.EntityId == product.Id || (plan is not null && x.EntityId == plan.ListingId))).OrderByDescending(x => x.UpdatedUtc).FirstOrDefault();
                 var status = string.IsNullOrWhiteSpace(plan?.ListingId) ? "MISSING" : plan.UpdatedUtc < now.AddDays(-180) ? "STALE" : latest?.Status == Catalog.SyncStatus.Failed ? "ERROR" : latest?.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running ? "PENDING" : latest?.Status == Catalog.SyncStatus.Succeeded ? "SYNCED" : "DRAFT";
                 var auth = connection.Status is "FAILED" or "LIVE_API_BLOCKED" or "NOT_CONFIGURED" ? "AUTH_ERROR" : connection.Status;
                 var capabilities = definition.Capabilities.Enabled.Count == 0 ? "Yerel plan" : string.Join(", ", definition.Capabilities.Enabled.Select(x => x.ToString()));
