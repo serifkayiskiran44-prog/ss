@@ -115,18 +115,30 @@ public sealed class MessageStore
     {
         using var c = Open(); using var command = c.CreateCommand(); command.CommandText = "DELETE FROM MessageTemplates WHERE Name=$name"; command.Parameters.AddWithValue("$name", name); command.ExecuteNonQuery();
     }
+    /// The only two directions the app itself ever assigns/reads (MessagePanel).
+    /// A closed set, not free text, so a typo or a made-up value can never be
+    /// "silently a valid direction" - see #2660.
+    public static readonly string[] Directions = ["Inbound", "Outbound"];
     static bool TryRead(SqliteDataReader r, out MessageRecord? message, out CorruptMessageRow? corrupt)
     {
         message = null; corrupt = null; var id = r.GetString(0); var marketplace = r.GetString(1); var shop = r.GetString(2);
         if (!TryParseUtc(r.GetString(11), out var created)) { corrupt = new(id, marketplace, shop, "Malformed CreatedUtc timestamp", DateTime.UtcNow); return false; }
         if (!TryParseUtc(r.GetString(12), out var updated)) { corrupt = new(id, marketplace, shop, "Malformed UpdatedUtc timestamp", DateTime.UtcNow); return false; }
-        message = new() { Id = id, Marketplace = marketplace, ShopId = shop, ExternalId = r.GetString(3), OrderId = r.GetString(4), ProductId = r.GetString(5), Customer = r.GetString(6), Subject = r.GetString(7), Body = r.GetString(8), Direction = r.GetString(9), Status = Enum.TryParse<MessageStatus>(r.GetString(10), out var status) ? status : MessageStatus.Unread, CreatedUtc = created, UpdatedUtc = updated, LastError = r.GetString(13) };
+        var rawStatus = r.GetString(10);
+        // Enum.TryParse also accepts the numeric underlying value as text (e.g.
+        // "0" -> Unread), which this app never itself writes (Upsert always
+        // writes status.ToString(), a name) - so a persisted numeric-text value
+        // is corruption, not a legitimate alternate spelling of a valid status.
+        if (!Enum.TryParse<MessageStatus>(rawStatus, out var status) || !Enum.IsDefined(status) || !string.Equals(rawStatus, status.ToString(), StringComparison.Ordinal)) { corrupt = new(id, marketplace, shop, "Unrecognized Status value", DateTime.UtcNow); return false; }
+        var direction = r.GetString(9);
+        if (!Directions.Contains(direction, StringComparer.Ordinal)) { corrupt = new(id, marketplace, shop, "Unrecognized Direction value", DateTime.UtcNow); return false; }
+        message = new() { Id = id, Marketplace = marketplace, ShopId = shop, ExternalId = r.GetString(3), OrderId = r.GetString(4), ProductId = r.GetString(5), Customer = r.GetString(6), Subject = r.GetString(7), Body = r.GetString(8), Direction = direction, Status = status, CreatedUtc = created, UpdatedUtc = updated, LastError = r.GetString(13) };
         return true;
     }
     /// Only ever a format/parse failure - never conflated with a DB-busy/locked
     /// SqliteException, which is raised by the surrounding command, not this parse.
     static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
-    static void Validate(MessageRecord message) { if (new[] { message.Marketplace, message.ShopId, message.Subject, message.Body }.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("Mesaj kanalı, mağaza, konu ve metin içermeli."); }
+    static void Validate(MessageRecord message) { if (new[] { message.Marketplace, message.ShopId, message.Subject, message.Body }.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("Mesaj kanalı, mağaza, konu ve metin içermeli."); if (!Directions.Contains(message.Direction, StringComparer.Ordinal)) throw new ArgumentException("Mesaj yönü Inbound veya Outbound olmalı."); if (!Enum.IsDefined(message.Status)) throw new ArgumentException("Mesaj durumu tanınmıyor."); }
     static string Limit(string value, int max) => value.Length > max ? value[..max] : value;
 }
 
