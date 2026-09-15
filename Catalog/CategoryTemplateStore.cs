@@ -39,6 +39,14 @@ public sealed class CategoryTemplateCorruptException : Exception
     public string TemplateId { get; }
     public CategoryTemplateCorruptException(string templateId, string reason) : base($"Kategori şablonu bozuk (REVIEW_REQUIRED): {reason}") => TemplateId = templateId;
 }
+/// Raised by ApplyApproved when the template's persisted revision no longer
+/// matches what the preview was built against - deleted, scope moved, or
+/// Save()'d again (Version advanced) since PreviewImpact ran. Kept distinct
+/// from CategoryTemplateCorruptException so a caller can tell "approval is
+/// stale, refresh the preview and re-approve" from "the data is actually
+/// corrupt". Raised before any product is touched, so an approval against a
+/// stale template never partially applies. See #2662.
+public sealed class CategoryTemplateStalePreviewException(string message) : Exception(message);
 
 /// Versioned per-category, per-channel/shop default field values (Brand/Currency/
 /// VatRate only - the fields CatalogProduct actually has; this does not introduce
@@ -179,6 +187,17 @@ public sealed class CategoryTemplateStore
     public CategoryTemplateApplyResult ApplyApproved(CategoryTemplateImpactPreview preview, bool approved, CatalogStore catalog)
     {
         if (!approved) throw new InvalidOperationException("Şablon uygulaması için önizleme onayı gerekli.");
+        // Re-validate the template's own revision before touching any product: if
+        // it was deleted, its scope moved, or it was Save()'d again since
+        // PreviewImpact ran (Version advanced), this approval was taken against a
+        // preview that no longer reflects reality and must apply to zero
+        // products - never partially. A corrupt row propagates
+        // CategoryTemplateCorruptException from Get() itself. See #2662.
+        var currentTemplate = Get(preview.Template.CategoryId, preview.Template.Channel, preview.Template.ShopId)
+            ?? throw new CategoryTemplateStalePreviewException("STALE_PREVIEW: şablon artık mevcut değil; önizlemeyi yenileyip tekrar onaylayın.");
+        if (currentTemplate.Id != preview.Template.Id || currentTemplate.Version != preview.Template.Version)
+            throw new CategoryTemplateStalePreviewException("STALE_PREVIEW: şablon önizlemeden sonra değişti; önizlemeyi yenileyip tekrar onaylayın.");
+
         var applied = 0; var stale = new List<string>();
         var current = catalog.Products().ToDictionary(p => p.Id);
         foreach (var row in preview.Changed)
