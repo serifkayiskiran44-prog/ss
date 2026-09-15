@@ -15,7 +15,7 @@ public static class AllegroPanel
         var client = Field(root, "Client ID"); var secret = Password(root, "Client secret"); var redirect = Field(root, "Redirect URI (HTTPS)"); var token = Password(root, "Access token"); var refresh = Password(root, "Refresh token"); var state = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 8, 0, 8) }; root.Children.Add(state);
         AllegroSettings Read() => new(client.Text.Trim(), secret.Password, redirect.Text.Trim(), token.Password, refresh.Password, false);
         root.Children.Add(Button("Şifreli kaydet", () => { var settings = Read(); AllegroConnection.Validate(settings); store.Save(settings); state.Text = "Allegro ayarları DPAPI ile kaydedildi."; }));
-        var test = AsyncButton("Salt okunur teklif testi", async () => state.Text = await new AllegroConnection(http).TestReadOnlyAsync(Read())); root.Children.Add(test);
+        var test = AsyncButton("Salt okunur teklif + sipariş testi", async () => state.Text = (await new AllegroConnection(http).TestReadOnlyAsync(Read())).Summary); root.Children.Add(test);
         root.Children.Add(Button("Yerel ayarı sil", () => { store.Delete(); secret.Clear(); token.Clear(); refresh.Clear(); state.Text = "Allegro ayarı silindi."; }));
         try { var saved = store.Load(); if (saved is not null) { client.Text = saved.ClientId; redirect.Text = saved.RedirectUri; state.Text = "Ayarlar şifreli kayıttan yüklendi; read-only testi bekliyor."; } else state.Text = "NOT_CONFIGURED: Allegro ayarı yok."; } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); }
         return new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
