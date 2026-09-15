@@ -118,7 +118,7 @@ public sealed class ExcelImportProfileTests
             Assert.AreEqual("Ürünler", loaded.SheetName);
             Assert.AreEqual(2, loaded.HeaderRow);
 
-            store.Delete(profile.Id);
+            store.Delete(profile.Id, loaded.Revision);
             Assert.IsNull(store.Find(profile.Id));
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
