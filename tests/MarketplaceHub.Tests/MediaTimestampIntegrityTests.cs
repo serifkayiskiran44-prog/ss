@@ -20,14 +20,14 @@ public sealed class MediaTimestampIntegrityTests
         return new MediaStore(root);
     }
 
-    static void InsertRawRow(string root, string id, string productId, string updatedUtc, string? lastValidatedUtc = null)
+    static void InsertRawRow(string root, string id, string productId, string updatedUtc, string? lastValidatedUtc = null, int sortOrder = 0)
     {
         using var c = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "media.db") }.ToString());
         c.Open();
         using var cmd = c.CreateCommand();
         var url = "https://x/" + id + ".jpg";
-        cmd.CommandText = "INSERT INTO ProductMedia(Id,ProductId,Url,NormalizedUrl,Source,SortOrder,IsPrimary,ContentHash,Status,Error,LastValidatedUtc,UpdatedUtc) VALUES($id,$product,$url,$url,'manual',0,0,'','Pending','',$validated,$updated)";
-        cmd.Parameters.AddWithValue("$id", id); cmd.Parameters.AddWithValue("$product", productId); cmd.Parameters.AddWithValue("$url", url);
+        cmd.CommandText = "INSERT INTO ProductMedia(Id,ProductId,Url,NormalizedUrl,Source,SortOrder,IsPrimary,ContentHash,Status,Error,LastValidatedUtc,UpdatedUtc) VALUES($id,$product,$url,$url,'manual',$order,0,'','Pending','',$validated,$updated)";
+        cmd.Parameters.AddWithValue("$id", id); cmd.Parameters.AddWithValue("$product", productId); cmd.Parameters.AddWithValue("$url", url); cmd.Parameters.AddWithValue("$order", sortOrder);
         cmd.Parameters.AddWithValue("$validated", (object?)lastValidatedUtc ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$updated", updatedUtc);
         cmd.ExecuteNonQuery();
@@ -54,7 +54,7 @@ public sealed class MediaTimestampIntegrityTests
         try
         {
             store.Add("p1", "https://example.com/good.jpg");
-            InsertRawRow(root, "bad-1", "p1", "not-a-date");
+            InsertRawRow(root, "bad-1", "p1", "not-a-date", sortOrder: 1);
 
             var list = store.List("p1");
             Assert.AreEqual(1, list.Count);
@@ -114,7 +114,7 @@ public sealed class MediaTimestampIntegrityTests
         {
             store.Add("p1", "https://example.com/a.jpg");
             store.Add("p2", "https://example.com/b.jpg");
-            InsertRawRow(root, "bad-1", "p2", "junk");
+            InsertRawRow(root, "bad-1", "p2", "junk", sortOrder: 1);
 
             Assert.AreEqual(1, store.List("p1").Count);
             Assert.AreEqual(1, store.List("p2").Count);
@@ -132,7 +132,7 @@ public sealed class MediaTimestampIntegrityTests
         try
         {
             new MediaStore(root).Add("p1", "https://example.com/a.jpg");
-            InsertRawRow(root, "bad-1", "p1", "junk");
+            InsertRawRow(root, "bad-1", "p1", "junk", sortOrder: 1);
 
             var reopened = new MediaStore(root);
             Assert.AreEqual(1, reopened.List("p1").Count);
@@ -160,8 +160,8 @@ public sealed class MediaTimestampIntegrityTests
         var store = NewStore(out var root);
         try
         {
-            InsertRawRow(root, "bad-a", "p1", "1");
-            InsertRawRow(root, "bad-b", "p1", DateTime.UtcNow.ToString("O"), lastValidatedUtc: "2");
+            InsertRawRow(root, "bad-a", "p1", "1", sortOrder: 0);
+            InsertRawRow(root, "bad-b", "p1", DateTime.UtcNow.ToString("O"), lastValidatedUtc: "2", sortOrder: 1);
 
             var corrupt = store.CorruptRows("p1");
             Assert.AreEqual(2, corrupt.Count);

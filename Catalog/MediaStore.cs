@@ -68,9 +68,23 @@ public sealed class MediaStore
             CREATE INDEX IF NOT EXISTS IX_ProductMedia_ProductOrder ON ProductMedia(ProductId, SortOrder, Id);
             """;
         command.ExecuteNonQuery();
+        EnsureUniqueOrderIndex(connection);
     }
 
-    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
+    /// Build-once, with a fallback to a non-unique index if a legacy DB already
+    /// has a (ProductId,SortOrder) collision - never fails startup or silently
+    /// renumbers pre-existing rows. New writes (Add/SetSortOrder) additionally
+    /// serialize via an IMMEDIATE transaction so they never themselves create a
+    /// new collision, regardless of which index variant ended up installed. See
+    /// #2594 (mirrors TaxonomyStore.EnsureUniqueNormalizedKeyIndex/
+    /// SyncStore.EnsureUniqueKeyIndex).
+    static void EnsureUniqueOrderIndex(SqliteConnection connection)
+    {
+        try { using var unique = connection.CreateCommand(); unique.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS UX_ProductMedia_ProductOrder ON ProductMedia(ProductId, SortOrder)"; unique.ExecuteNonQuery(); }
+        catch (SqliteException) { /* legacy DB already has a (ProductId,SortOrder) collision - the plain IX_ProductMedia_ProductOrder index created above still covers ordered reads. */ }
+    }
+
+    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); using var pragma = connection.CreateCommand(); pragma.CommandText = "PRAGMA busy_timeout=15000"; pragma.ExecuteNonQuery(); return connection; }
 
     public IReadOnlyList<ProductMediaRecord> List(string? productId = null, string? query = null)
     {
@@ -111,7 +125,12 @@ public sealed class MediaStore
         if (normalized.Length == 0) throw new InvalidOperationException("Geçerli bir HTTPS veya yerel file adresi girin.");
         var cleanSource = string.IsNullOrWhiteSpace(source) ? "manual" : source.Trim();
         using var connection = Open();
-        using var transaction = connection.BeginTransaction();
+        // IMMEDIATE acquires SQLite's write lock up front, serializing concurrent
+        // Add() calls for any product against this connection string - the
+        // MAX(SortOrder)+1 read and the INSERT below can never interleave with
+        // another writer's, so parallel Add() calls never allocate the same
+        // logical order (#2594).
+        using var transaction = connection.BeginTransaction(deferred: false);
         var order = sortOrder ?? NextOrder(connection, transaction, productId);
         var row = new ProductMediaRecord { ProductId = productId.Trim(), Url = url.Trim(), NormalizedUrl = normalized, Source = cleanSource, SortOrder = order, IsPrimary = order == 0 };
         using var command = connection.CreateCommand();
@@ -119,7 +138,12 @@ public sealed class MediaStore
         command.CommandText = "INSERT INTO ProductMedia(Id,ProductId,Url,NormalizedUrl,Source,SortOrder,IsPrimary,ContentHash,Status,Error,LastValidatedUtc,UpdatedUtc) VALUES($id,$product,$url,$normalized,$source,$order,$primary,$hash,$status,$error,$validated,$updated)";
         AddParameters(command, row);
         try { command.ExecuteNonQuery(); }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { throw new InvalidOperationException("Bu ürün için aynı görsel zaten kayıtlı.", ex); }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            using var checkUrl = connection.CreateCommand(); checkUrl.Transaction = transaction; checkUrl.CommandText = "SELECT 1 FROM ProductMedia WHERE ProductId=$product AND NormalizedUrl=$normalized"; checkUrl.Parameters.AddWithValue("$product", row.ProductId); checkUrl.Parameters.AddWithValue("$normalized", normalized);
+            var byUrlAlready = checkUrl.ExecuteScalar() is not null;
+            throw new InvalidOperationException(byUrlAlready ? "Bu ürün için aynı görsel zaten kayıtlı." : "Bu sıra numarası bu üründe zaten kullanılıyor.", ex);
+        }
         transaction.Commit();
         return row;
     }
@@ -135,7 +159,7 @@ public sealed class MediaStore
     public void Delete(string id)
     {
         using var connection = Open();
-        using var transaction = connection.BeginTransaction();
+        using var transaction = connection.BeginTransaction(deferred: false);
         using var find = connection.CreateCommand();
         find.Transaction = transaction;
         find.CommandText = "SELECT ProductId,IsPrimary FROM ProductMedia WHERE Id=$id";
@@ -155,7 +179,7 @@ public sealed class MediaStore
     public void SetPrimary(string id)
     {
         using var connection = Open();
-        using var transaction = connection.BeginTransaction();
+        using var transaction = connection.BeginTransaction(deferred: false);
         using var find = connection.CreateCommand();
         find.Transaction = transaction;
         find.CommandText = "SELECT ProductId FROM ProductMedia WHERE Id=$id";
@@ -176,16 +200,41 @@ public sealed class MediaStore
         transaction.Commit();
     }
 
-    public void SetSortOrder(string id, int sortOrder)
+    /// expectedUpdatedUtc, when given, is a compare-and-swap guard: the reorder
+    /// only applies if the row's current persisted UpdatedUtc still matches, so
+    /// a stale writer (working from a list snapshot someone else already
+    /// changed) is rejected instead of silently applying its own ordering on
+    /// top. The move itself is a swap, not a partial shift: whichever sibling
+    /// currently holds the requested SortOrder takes over the moving row's old
+    /// order, so the (ProductId,SortOrder) uniqueness invariant holds
+    /// continuously - there is never an intermediate state with two rows
+    /// sharing one order or a temporarily-missing order. Runs inside an
+    /// IMMEDIATE transaction so two concurrent reorders for the same product
+    /// can never interleave. See #2594.
+    public void SetSortOrder(string id, int sortOrder, DateTime? expectedUpdatedUtc = null)
     {
         if (sortOrder < 0) throw new ArgumentOutOfRangeException(nameof(sortOrder));
         using var connection = Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE ProductMedia SET SortOrder=$order,UpdatedUtc=$now WHERE Id=$id";
-        command.Parameters.AddWithValue("$order", sortOrder);
-        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$id", id);
-        if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("Görsel bulunamadı.");
+        using var transaction = connection.BeginTransaction(deferred: false);
+        using var find = connection.CreateCommand(); find.Transaction = transaction; find.CommandText = "SELECT ProductId,SortOrder,UpdatedUtc FROM ProductMedia WHERE Id=$id"; find.Parameters.AddWithValue("$id", id);
+        using (var reader = find.ExecuteReader())
+        {
+            if (!reader.Read()) throw new InvalidOperationException("Görsel bulunamadı.");
+            var productId = reader.GetString(0); var oldOrder = reader.GetInt32(1);
+            if (expectedUpdatedUtc.HasValue && (!TryParseDate(reader.GetString(2), out var currentUpdated) || currentUpdated != expectedUpdatedUtc.Value)) throw new InvalidOperationException("Görsel sırası başka bir işlemde değişti; listeyi yenileyip tekrar deneyin.");
+            reader.Close();
+            if (oldOrder == sortOrder) { transaction.Commit(); return; }
+            var now = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            // Three-step swap so the (ProductId,SortOrder) unique index is never
+            // violated mid-transaction: move the row out to a sentinel no real
+            // row ever uses (SetSortOrder rejects negative input, so -1 is safe),
+            // then move any sibling occupying the target slot into the vacated
+            // old slot, then finally place the moving row at the target.
+            using (var park = connection.CreateCommand()) { park.Transaction = transaction; park.CommandText = "UPDATE ProductMedia SET SortOrder=-1,UpdatedUtc=$now WHERE Id=$id"; park.Parameters.AddWithValue("$now", now); park.Parameters.AddWithValue("$id", id); park.ExecuteNonQuery(); }
+            using (var swap = connection.CreateCommand()) { swap.Transaction = transaction; swap.CommandText = "UPDATE ProductMedia SET SortOrder=$old,UpdatedUtc=$now WHERE ProductId=$product AND SortOrder=$target"; swap.Parameters.AddWithValue("$old", oldOrder); swap.Parameters.AddWithValue("$now", now); swap.Parameters.AddWithValue("$product", productId); swap.Parameters.AddWithValue("$target", sortOrder); swap.ExecuteNonQuery(); }
+            using (var move = connection.CreateCommand()) { move.Transaction = transaction; move.CommandText = "UPDATE ProductMedia SET SortOrder=$target,UpdatedUtc=$now WHERE Id=$id"; move.Parameters.AddWithValue("$target", sortOrder); move.Parameters.AddWithValue("$now", now); move.Parameters.AddWithValue("$id", id); move.ExecuteNonQuery(); }
+        }
+        transaction.Commit();
     }
 
     public void UpdateValidation(string id, MediaValidationResult result)
