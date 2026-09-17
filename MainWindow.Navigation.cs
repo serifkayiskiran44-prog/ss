@@ -13,6 +13,7 @@ public partial class MainWindow
  UiPreferenceStore uiPreferences = null!;
  string? currentRoute;
  bool selectingRoute;
+ TabControl? etsyTabs;
 
  void BuildNavigation()
  {
