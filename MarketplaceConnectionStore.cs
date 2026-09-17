@@ -27,7 +27,8 @@ public static class MarketplaceConnectionCatalog
         new MarketplaceConnectionDefinition("joom", "Joom", "joom", MarketplaceCapabilities.LocalOnly, "https://merchant.joom.com/docs/api", true),
         new MarketplaceConnectionDefinition("wish", "Wish", "wish", MarketplaceCapabilities.LocalOnly, "https://merchant.wish.com/documentation/api/v3/oauth", true),
         new MarketplaceConnectionDefinition("fruugo", "Fruugo", "fruugo", MarketplaceCapabilities.LocalOnly, "https://developer.fruugo.com/", true),
-        new MarketplaceConnectionDefinition("navlungo", "Navlungo", "shipping", MarketplaceCapabilities.LocalOnly, "https://navlungo.com/", true)
+        new MarketplaceConnectionDefinition("navlungo", "Navlungo", "shipping", MarketplaceCapabilities.LocalOnly, "https://navlungo.com/", true),
+        new MarketplaceConnectionDefinition("bizimhesap", "BizimHesap", "bizimhesap", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead }), "https://bizimhesap.com/", false)
     });
 
     public static MarketplaceConnectionDefinition Get(string id) => All.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase))

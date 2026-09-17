@@ -51,6 +51,7 @@ public partial class MainWindow
    tabs.Items.Add(new TabItem{Header="Bağlantı",Content=id=="joom"?JoomPanel.Create(dataDirectory):MarketplaceSetupPanel.CreateChannel(id)});
    Page(id,channel.Name,id=="joom"?"Satıcı kaydı / kabulü bekleniyor • Canlı ürün aktarımı etkin değil.":"Yerel kanal ürün planları • API bağlantı kontrolü ayrı; canlı ürün aktarımı etkin değil.",tabs);
   }
+  Page("bizimhesap","BizimHesap","Ürün ve depo okuma, XML ürün havuzuyla eşleştirme hazırlığı ve güvenli bağlantı ayarları.",BizimHesapPanel.Create(dataDirectory));
   var amazonTabs=new TabControl();amazonTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("amazon",dataDirectory)});amazonTabs.Items.Add(new TabItem{Header="Bağlantı",Content=AmazonPanel.Create(dataDirectory)});Page("amazon","Amazon","SP-API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",amazonTabs);
   var trendyolTabs=new TabControl();trendyolTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("trendyol",dataDirectory)});trendyolTabs.Items.Add(new TabItem{Header="Bağlantı",Content=TrendyolPanel.Create(dataDirectory)});Page("trendyol","Trendyol","Satıcı API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",trendyolTabs);
   var hepsiTabs=new TabControl();hepsiTabs.Items.Add(new TabItem{Header="Ürünler",Content=ChannelProductsPanel.Create("hepsiburada",dataDirectory)});hepsiTabs.Items.Add(new TabItem{Header="Bağlantı",Content=HepsiburadaPanel.Create(dataDirectory)});Page("hepsiburada","Hepsiburada","Merchant API ayarları ve yerel ürün planları; resmi sözleşme doğrulanana kadar canlı operasyon kapalı.",hepsiTabs);
@@ -76,7 +77,7 @@ public partial class MainWindow
   var settings=new StackPanel{Margin=new Thickness(20)};
   settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
   settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
-  foreach(var id in new[]{"etsy","ebay","ozon","joom","amazon","trendyol","hepsiburada","fruugo","allegro","wish"})
+  foreach(var id in new[]{"etsy","ebay","ozon","joom","bizimhesap","amazon","trendyol","hepsiburada","fruugo","allegro","wish"})
   {var key=id;settings.Children.Add(Button(id=="ebay"?"eBay bağlantı ayarları":char.ToUpper(id[0])+id[1..]+" bağlantı ayarları",()=>{Navigate(key);if(routes[key].Content is TabControl tabs)tabs.SelectedIndex=tabs.Items.Count-1;}));}
   settings.Children.Add(Heading("Görseller"));settings.Children.Add(MarketplaceImagePanel.Create());
   settings.Children.Add(Heading("Sürüm, yedek ve taşıma"));settings.Children.Add(DataBackupPanel.Create(dataDirectory));
