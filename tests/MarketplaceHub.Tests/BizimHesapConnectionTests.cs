@@ -3,6 +3,7 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using TrMarketplaceHubDesktop;
@@ -68,5 +69,18 @@ public sealed class BizimHesapConnectionTests
         using var http = new HttpClient(handler);
 
         await Assert.ThrowsExceptionAsync<ArgumentException>(() => new BizimHesapConnection(http).ReadProductsAsync(new("", "token")));
+    }
+
+    [TestMethod]
+    public void BuildAddProductRequest_uses_net_price_and_collection_field_names()
+    {
+        using var request = BizimHesapConnection.BuildAddProductRequest(Settings(), new BizimHesapCreateProduct("SKU-1", "BARKOD-1", "Ürün", 100m, 20m, 5, "TRY"));
+        Assert.AreEqual(HttpMethod.Post, request.Method);
+        Assert.AreEqual("https://bizimhesap.com/api/b2b/addproduct", request.RequestUri!.ToString());
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStream());
+        Assert.AreEqual("SKU-1", body.RootElement.GetProperty("id").GetString());
+        Assert.AreEqual(100m, body.RootElement.GetProperty("price").GetDecimal());
+        Assert.AreEqual("TL", body.RootElement.GetProperty("currency").GetString());
+        Assert.AreEqual(20m, body.RootElement.GetProperty("taxRate").GetDecimal());
     }
 }
