@@ -61,6 +61,16 @@ public sealed class ProductSourceBindingTests
         }
     }
 
+    sealed class TcmbHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var today = DateTime.UtcNow.ToString("dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            var body = $"<Tarih_Date Tarih=\"{today}\"><Currency Kod=\"USD\"><Unit>1</Unit><ForexSelling>34.5</ForexSelling><ForexBuying>34</ForexBuying></Currency></Tarih_Date>";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+        }
+    }
+
     static void SetField(object target, string name, object value) =>
         target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
 
@@ -318,6 +328,88 @@ public sealed class ProductSourceBindingTests
                 handler.Resume.TrySetResult();
                 window.Close();
             }
+        });
+    }
+
+    [TestMethod]
+    public void MainWindowScheduledRefreshRejectsSourceChangedAfterPreviewBeforeImport()
+    {
+        InSta(async root =>
+        {
+            var window = new MainWindow(root);
+            var handler = new PausedXmlHandler();
+            SetField(window, "http", new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) });
+            var catalog = new CatalogStore(root);
+            var source = Source(Guid.NewGuid().ToString("N"));
+            source.AutoImport = true;
+            source.IntervalMinutes = 1;
+            catalog.SaveSource(source);
+            var previewReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseImport = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            SetField(window, "beforeScheduledImportHook", (Func<Task>)(async () =>
+            {
+                previewReady.TrySetResult();
+                await releaseImport.Task;
+            }));
+            try
+            {
+                var scheduled = InvokeTask(window, "ScheduledAsync");
+                await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                handler.Resume.TrySetResult();
+                await previewReady.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+                var current = catalog.Sources().Single(item => item.Id == source.Id);
+                current.Enabled = false;
+                catalog.SaveSource(current);
+                releaseImport.TrySetResult();
+                await scheduled;
+
+                Assert.IsFalse(catalog.Sources().Single(item => item.Id == source.Id).Enabled, "A scheduler import must not re-enable a source disabled after preview.");
+                Assert.IsFalse(catalog.Products().Any(item => item.SourceId == source.Id), "A source changed after preview must not write catalog rows.");
+            }
+            finally
+            {
+                handler.Resume.TrySetResult();
+                releaseImport.TrySetResult();
+                window.Close();
+            }
+        });
+    }
+
+    [TestMethod]
+    public void AutoFxPreviewPersistsQuoteAndAllowsFencedImport()
+    {
+        InSta(async root =>
+        {
+            var catalog = new CatalogStore(root);
+            var source = Source(Guid.NewGuid().ToString("N"));
+            source.PriceMode = "Formula";
+            source.Formula = "x * 2";
+            source.CostCurrency = "TRY";
+            source.AutoFx = true;
+            source.FxKind = "ForexSelling";
+            catalog.SaveSource(source);
+            var window = new MainWindow(root);
+            try
+            {
+                SetField(window, "http", new HttpClient(new TcmbHandler()));
+                await PreviewAndSelectFirstAsync(window, source);
+
+                var persisted = catalog.Sources().Single(item => item.Id == source.Id);
+                Assert.AreEqual(34.5m, persisted.TryPerTargetUnit, "An automatic quote must be persisted before import validation.");
+                Assert.IsNotNull(persisted.FxRateDate);
+                Assert.IsNotNull(persisted.FxFetchedUtc);
+
+                var snapshot = GetField<XmlSource>(window, "source");
+                var revision = GetField<string>(window, "previewRevision");
+                Assert.AreEqual(revision, CatalogStore.SourceConfigRevision(persisted));
+                var preview = GetField<System.Windows.Controls.DataGrid>(window, "preview");
+                var rows = preview.SelectedItems.Cast<CatalogProduct>().Select(item => JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(item))!).ToList();
+                var result = catalog.ImportIfSourceCurrent(snapshot, revision, rows);
+                Assert.AreEqual(1, result.Added);
+                Assert.AreEqual(source.Id, catalog.Products().Single().SourceId);
+            }
+            finally { window.Close(); }
         });
     }
 

@@ -66,7 +66,38 @@ public partial class CatalogStore
   var snapshot=JsonSerializer.Deserialize<XmlSource>(JsonSerializer.Serialize(source))!;
   snapshot.LastRunUtc=null;
   snapshot.LastStatus="";
+  snapshot.Fields=snapshot.Fields.OrderBy(pair=>pair.Key,StringComparer.Ordinal).ToDictionary(pair=>pair.Key,pair=>pair.Value,StringComparer.Ordinal);
+  snapshot.CategoryRules=snapshot.CategoryRules.Where(rule=>rule.Enabled==false||!string.Equals(rule.XmlCategory.Trim(),rule.TargetCategory.Trim(),StringComparison.OrdinalIgnoreCase)||rule.Prices.Values.Any(formula=>!string.IsNullOrWhiteSpace(formula.SaleFormula)||!string.IsNullOrWhiteSpace(formula.ListFormula))).ToList();
+  foreach(var rule in snapshot.CategoryRules)rule.Prices=rule.Prices.OrderBy(pair=>pair.Key,StringComparer.Ordinal).ToDictionary(pair=>pair.Key,pair=>pair.Value,StringComparer.Ordinal);
+  if(snapshot.AutoFx)
+  {
+   snapshot.TryPerTargetUnit=0;
+   snapshot.FxRateDate=null;
+   snapshot.FxFetchedUtc=null;
+  }
   return JsonSerializer.Serialize(snapshot);
+ }
+ public bool TryRecordAutoFxQuote(string sourceId,string expectedRevision,FxQuote quote)
+ {
+  if(string.IsNullOrWhiteSpace(sourceId))throw new ArgumentException("Kaynak kimliği gerekli.",nameof(sourceId));
+  if(string.IsNullOrWhiteSpace(expectedRevision))throw new ArgumentException("Kaynak revizyonu gerekli.",nameof(expectedRevision));
+  ArgumentNullException.ThrowIfNull(quote);
+  using var c=Open();using var tx=c.BeginTransaction(System.Data.IsolationLevel.Serializable);
+  using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM Sources WHERE Id=$id";find.Parameters.AddWithValue("$id",sourceId);
+  var json=find.ExecuteScalar() as string;
+  if(json is null)return false;
+  XmlSource persisted;
+  try{persisted=JsonSerializer.Deserialize<XmlSource>(json)??throw new JsonException();}
+  catch(JsonException){return false;}
+  if(!persisted.Enabled||!persisted.AutoFx||!string.Equals(persisted.Currency,quote.Currency,StringComparison.OrdinalIgnoreCase)||!string.Equals(persisted.FxKind,quote.Kind,StringComparison.Ordinal)||SourceConfigRevision(persisted)!=expectedRevision)return false;
+  using var update=c.CreateCommand();update.Transaction=tx;update.CommandText="UPDATE Sources SET Json=json_set(Json,'$.TryPerTargetUnit',CAST($rate AS REAL),'$.FxRateDate',$rateDate,'$.FxFetchedUtc',$fetched) WHERE Id=$id AND json_valid(Json)=1 AND COALESCE(json_extract(Json,'$.Enabled'),1)=1 AND COALESCE(json_extract(Json,'$.AutoFx'),0)=1";
+  update.Parameters.AddWithValue("$rate",quote.TryPerUnit);
+  update.Parameters.AddWithValue("$rateDate",quote.RateDate.ToUniversalTime().ToString("O",System.Globalization.CultureInfo.InvariantCulture));
+  update.Parameters.AddWithValue("$fetched",quote.FetchedUtc.ToUniversalTime().ToString("O",System.Globalization.CultureInfo.InvariantCulture));
+  update.Parameters.AddWithValue("$id",sourceId);
+  if(update.ExecuteNonQuery()!=1)return false;
+  tx.Commit();
+  return true;
  }
  /// Gives a supplier feed a stable, human-readable SKU namespace without changing
  /// the immutable central product Id. The transaction either updates every row of

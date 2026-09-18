@@ -42,7 +42,7 @@ public partial class MainWindow : Window
  readonly ObservableCollection<string> xmlPaths=new();
  readonly TextBox sampleCost=new(){Text="100",Width=130};
  readonly TextBlock calculationStatus=Hint("Alış fiyatını girip hesaplamayı test edebilirsin."),fxStatus=Hint("Kur henüz alınmadı.");
- XmlSource? source; CatalogProduct? edit; EtsyListingTemplate template=new(); EtsyCredentials credentials=new("","","",""); OAuthAttempt? attempt;
+ XmlSource? source; CatalogProduct? edit; EtsyListingTemplate template=new(); EtsyCredentials credentials=new("","","",""); OAuthAttempt? attempt; Func<Task>? beforeScheduledImportHook=null;
  List<MappingEntry> mappings=[]; string xml="",loadedLocation="",previewRevision=""; int listingOffset,listingTotal,productOffset,productTotal,searchRevision,globalSearchRevision; string loadedListingShop="",loadedListingState="";
  public MainWindow():this(null){}
  public MainWindow(string? directory)
@@ -155,7 +155,7 @@ public partial class MainWindow : Window
  {
   if(s.PriceMode!="Formula")return;
   if(!s.AutoFx||s.Currency=="TRY"){fxStatus.Text=RateDescription(s);return;}
-  try{var quote=await new TcmbRates(http).FetchAsync(s.Currency,s.FxKind,lifetime.Token);s.TryPerTargetUnit=quote.TryPerUnit;s.FxRateDate=quote.RateDate;s.FxFetchedUtc=quote.FetchedUtc;fxStatus.Text=RateDescription(s);Log(fxStatus.Text);}
+  try{var revision=CatalogStore.SourceConfigRevision(s);var quote=await new TcmbRates(http).FetchAsync(s.Currency,s.FxKind,lifetime.Token);if(!store.TryRecordAutoFxQuote(s.Id,revision,quote))throw new InvalidOperationException("XML kaynağı silinmiş, devre dışı bırakılmış veya ayarları değişmiş; önizlemeyi yeniden hesaplayın.");s.TryPerTargetUnit=quote.TryPerUnit;s.FxRateDate=quote.RateDate;s.FxFetchedUtc=quote.FetchedUtc;fxStatus.Text=RateDescription(s);Log(fxStatus.Text);}
   catch(InvalidDataException e){throw new InvalidOperationException(e.Message+" Fiyatlar güncellenmedi.");}
   catch(Exception e) when(e is HttpRequestException or OperationCanceledException){throw new InvalidOperationException("TCMB kuru alınamadı. Fiyatlar güncellenmedi; bağlantıyı kontrol edin veya otomatik kuru kapatıp manuel TL karşılığı girin.");}
  }
@@ -261,7 +261,7 @@ public partial class MainWindow : Window
    // XML due=0 must not skip stock/price/health/sync automation jobs that ARE due
    // (and vice versa) - each due list is evaluated independently every tick.
    if(!SchedulerTick.ShouldRun(due,automationDue))return;ModuleTabs.IsEnabled=false;
-   foreach(var s in due){var run=new XmlRunStore(dataDirectory).Start(s.Id);try{var text=await new XmlSourceReader(http).ReadAsync(s.Location,XmlAuthStore.Load(s.Id,dataDirectory),lifetime.Token);await UpdateFxAsync(s);var rows=await Task.Run(()=>XmlCatalog.Preview(text,s,store));var result=await Task.Run(()=>store.Import(s,rows));new XmlRunStore(dataDirectory).Complete(run,result);s.LastStatus=$"Otomatik: {result.Added} yeni / {result.Updated} güncel / {result.Unchanged} aynı";}catch(Exception e){new XmlRunStore(dataDirectory).Fail(run,e.Message);s.LastStatus=Safe(e);}s.LastRunUtc=DateTime.UtcNow;if(store.TryRecordSourceRun(s.Id,s.LastRunUtc.Value,s.LastStatus))Log(s.LastStatus);else Log("XML kaynağı silindi veya devre dışı bırakıldı; eski çalışma durumu kaydedilmedi.");}
+   foreach(var s in due){var run=new XmlRunStore(dataDirectory).Start(s.Id);try{var text=await new XmlSourceReader(http).ReadAsync(s.Location,XmlAuthStore.Load(s.Id,dataDirectory),lifetime.Token);await UpdateFxAsync(s);var expectedRevision=CatalogStore.SourceConfigRevision(s);var rows=await Task.Run(()=>XmlCatalog.Preview(text,s,store));if(beforeScheduledImportHook is not null)await beforeScheduledImportHook();var result=await Task.Run(()=>store.ImportIfSourceCurrent(s,expectedRevision,rows));new XmlRunStore(dataDirectory).Complete(run,result);s.LastStatus=$"Otomatik: {result.Added} yeni / {result.Updated} güncel / {result.Unchanged} aynı";}catch(Exception e){new XmlRunStore(dataDirectory).Fail(run,e.Message);s.LastStatus=Safe(e);}s.LastRunUtc=DateTime.UtcNow;if(store.TryRecordSourceRun(s.Id,s.LastRunUtc.Value,s.LastStatus))Log(s.LastStatus);else Log("XML kaynağı silindi veya devre dışı bırakıldı; eski çalışma durumu kaydedilmedi.");}
    foreach(var job in automationDue){try{var result=await Task.Run(()=>AutomationRunner.RunDue(store,new AutomationStore(dataDirectory),new SyncStore(dataDirectory),job.Id,DateTime.UtcNow));Log($"Otomasyon {job.Channel}/{job.Shop}: {result.Queued} iş kuyruğa alındı, {result.Errors.Count} hata.");}catch(Exception e){Log(Safe(e));}}
    // Do not replace ItemsSource or editor clones: unsaved manual edits must survive timer ticks.
    Log("Otomatik kontrol bitti. Güncel listeyi görmek için Havuzu yenile düğmesini kullan.");
