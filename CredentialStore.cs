@@ -17,6 +17,7 @@ public static class CredentialStore
     public static void Save(EtsyCredentials credentials) => Save(credentials, null);
     public static void Save(EtsyCredentials credentials, string? directory)
     {
+        Validate(credentials);
         var storePath = ResolveStorePath(directory);
         var plain = JsonSerializer.SerializeToUtf8Bytes(credentials);
         try
@@ -47,11 +48,27 @@ public static class CredentialStore
             if (length > MaxEncryptedFileBytes) throw new InvalidOperationException(recoveryMessage);
             plain = Unprotect(File.ReadAllBytes(storePath));
             if (plain.Length > MaxPlaintextBytes) throw new InvalidOperationException(recoveryMessage);
-            return JsonSerializer.Deserialize<EtsyCredentials>(plain);
+            var credentials = JsonSerializer.Deserialize<EtsyCredentials>(plain) ?? throw new JsonException("Credential payload is empty.");
+            Validate(credentials);
+            return credentials;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or JsonException)
         { throw new InvalidOperationException(recoveryMessage); }
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
+    }
+    public static void Validate(EtsyCredentials credentials)
+    {
+        if (credentials is null) throw new ArgumentNullException(nameof(credentials));
+        if (string.IsNullOrWhiteSpace(credentials.ShopId) || credentials.ShopId.Length > 160 ||
+            !credentials.ShopId.All(char.IsAsciiDigit) || !long.TryParse(credentials.ShopId, out var id) || id <= 0 ||
+            credentials.ShopId != id.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            throw new ArgumentException("Etsy mağaza kimliği pozitif sayı olmalı; başında sıfır olmamalı.", nameof(credentials));
+        foreach (var value in new[] { credentials.Key, credentials.Secret, credentials.Token, credentials.RefreshToken, credentials.RedirectUri })
+            if (value.Length > 4096 || value.Any(char.IsControl)) throw new ArgumentException("Etsy bağlantı bilgileri geçersiz.", nameof(credentials));
+        if (string.IsNullOrWhiteSpace(credentials.Key) || string.IsNullOrWhiteSpace(credentials.Secret))
+            throw new ArgumentException("Etsy API anahtarı ve sırrı zorunludur.", nameof(credentials));
+        if (credentials.GrantedScopes is { Count: > 128 } || credentials.GrantedScopes?.Any(x => x is null || x.Length > 256 || x.Any(char.IsControl)) == true)
+            throw new ArgumentException("Etsy yetki kapsamları geçersiz.", nameof(credentials));
     }
     private static string ResolveStorePath(string? directory)
     {

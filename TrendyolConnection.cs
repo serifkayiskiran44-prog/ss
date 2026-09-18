@@ -8,6 +8,8 @@ public sealed record TrendyolSettings(string SupplierId, string ApiKey, string A
 
 public sealed class TrendyolSettingsStore(string? path = null)
 {
+    const int MaxEncryptedFileBytes = 64 * 1024;
+    const int MaxPlaintextBytes = 32 * 1024;
     readonly string storePath = path ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop", "trendyol.bin");
     public void Save(TrendyolSettings settings)
     {
@@ -17,9 +19,23 @@ public sealed class TrendyolSettingsStore(string? path = null)
     }
     public TrendyolSettings? Load()
     {
-        if (!File.Exists(storePath)) return null; var plain = CredentialStore.Unprotect(File.ReadAllBytes(storePath));
-        try { var settings = JsonSerializer.Deserialize<TrendyolSettings>(plain) ?? throw new InvalidDataException("Trendyol ayarları okunamadı."); TrendyolConnection.Validate(settings); return settings; }
-        finally { CryptographicOperations.ZeroMemory(plain); }
+        if (!File.Exists(storePath)) return null;
+        const string recoveryMessage = "Kayıtlı Trendyol bağlantı bilgileri bu Windows kullanıcısı tarafından okunamadı. Bilgileri yeniden girip kaydedin.";
+        byte[]? plain = null;
+        try
+        {
+            var length = new FileInfo(storePath).Length;
+            if (length is <= 0 or > MaxEncryptedFileBytes) throw new InvalidOperationException(recoveryMessage);
+            plain = CredentialStore.Unprotect(File.ReadAllBytes(storePath));
+            if (plain.Length is <= 0 or > MaxPlaintextBytes) throw new InvalidOperationException(recoveryMessage);
+            var settings = JsonSerializer.Deserialize<TrendyolSettings>(plain) ?? throw new InvalidOperationException(recoveryMessage);
+            TrendyolConnection.Validate(settings);
+            return settings;
+        }
+        catch (InvalidOperationException) { throw; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or JsonException or ArgumentException)
+        { throw new InvalidOperationException(recoveryMessage); }
+        finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
     }
     public void Delete() { if (File.Exists(storePath)) File.Delete(storePath); }
 }

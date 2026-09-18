@@ -12,6 +12,13 @@ public static class MarketplaceConnectionsPanel
     public static FrameworkElement Create(string? dataDirectory = null, Action<string>? navigate = null)
     {
         var store = new MarketplaceConnectionStore(dataDirectory);
+        string migrationNotice;
+        try
+        {
+            var imported = new MarketplaceConnectionMigration(dataDirectory).ImportLegacy().Count(x => x.State == MarketplaceConnectionMigrationState.Imported);
+            migrationNotice = imported == 0 ? "" : $"{imported} eski bağlantı güvenli hesap kasasına aktarıldı; eski dosyalar korundu.";
+        }
+        catch (Exception error) { migrationNotice = "Eski bağlantı içe aktarılamadı: " + MarketplaceConnectionStore.Redact(error.Message); }
         var rows = new ObservableCollection<MarketplaceConnection>(store.List());
         var grid = new DataGrid { ItemsSource = rows, AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, MinHeight = 260 };
         grid.Columns.Add(new DataGridTextColumn { Header = "Kanal", Binding = new System.Windows.Data.Binding("Channel"), Width = 100 });
@@ -29,6 +36,8 @@ public static class MarketplaceConnectionsPanel
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
         var capability = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
         var result = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
+        result.Text = migrationNotice;
+        var accountTabs = new TabControl { Name = "MarketplaceAccountTabs", Margin = new Thickness(0, 0, 0, 10), MinHeight = 175 };
         var health = new ApiHealthStore(dataDirectory);
         foreach (var connection in rows) health.EnsureConnection(connection.Channel, connection.ShopId, connection.Status, connection.LastError);
         // AllowAutoRedirect=false: this client sends credential-bearing headers
@@ -64,13 +73,32 @@ public static class MarketplaceConnectionsPanel
         void Reload()
         {
             rows.Clear(); foreach (var item in store.List()) rows.Add(item);
+            RebuildAccountTabs();
             if (selectedId.Length > 0) grid.SelectedItem = rows.FirstOrDefault(x => x.Id == selectedId);
+        }
+        void RebuildAccountTabs()
+        {
+            accountTabs.Items.Clear();
+            var index = 0;
+            foreach (var account in rows)
+            {
+                var tab = BuildAccountTab(account, index++);
+                accountTabs.Items.Add(tab);
+            }
         }
         channel.SelectionChanged += (_, _) => UpdateCapabilities();
         grid.SelectionChanged += (_, _) => Show(grid.SelectedItem as MarketplaceConnection);
-        channel.SelectedIndex = 0; UpdateCapabilities(); Show(null);
+        accountTabs.SelectionChanged += (_, e) =>
+        {
+            if (e.Source != accountTabs || accountTabs.SelectedItem is not TabItem tab || tab.Tag is not string id) return;
+            var account = rows.FirstOrDefault(x => x.Id == id);
+            if (account is not null) { grid.SelectedItem = account; Show(account); }
+        };
+        channel.SelectedIndex = 0; UpdateCapabilities(); Show(null); RebuildAccountTabs();
 
         var form = new StackPanel { Margin = new Thickness(12) };
+        form.Children.Add(new TextBlock { Text = "Hesaplar", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 4, 4, 10) });
+        form.Children.Add(accountTabs);
         form.Children.Add(new TextBlock { Text = "Seçili mağaza bağlantısı", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 4, 4, 10) });
         AddLabel(form, "Kanal", channel); AddLabel(form, "Mağaza kimliği", shop); AddLabel(form, "Görünen ad", display); form.Children.Add(enabled);
         form.Children.Add(capability); form.Children.Add(status);
@@ -106,7 +134,7 @@ public static class MarketplaceConnectionsPanel
             capture.Reset();
             try
             {
-                var message = await ProbeAsync(item, http); health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? new ApiHealthObservation { State = "HEALTHY", AuthStatus = "VALID" });
+                var message = await ProbeAsync(item, http, dataDirectory); health.Observe(item.Channel, item.ShopId, capture.LastObservation ?? new ApiHealthObservation { State = "HEALTHY", AuthStatus = "VALID" });
                 var outcome = store.RecordTest(item.Id, testedRevision, true);
                 result.Text = outcome switch { ConnectionTestApplyResult.Applied => "Bağlantı testi başarılı: " + message, ConnectionTestApplyResult.Disabled => "Bağlantı testi tamamlandı ancak mağaza bu sırada devre dışı bırakıldı; sonuç uygulanmadı.", ConnectionTestApplyResult.Stale => "Bağlantı testi tamamlandı ancak mağaza ayarları bu sırada değişti; sonuç güncelliğini yitirdiği için uygulanmadı.", _ => "Bağlantı testi tamamlandı ancak mağaza artık bulunamıyor." };
                 Reload();
@@ -139,15 +167,28 @@ public static class MarketplaceConnectionsPanel
         return layout;
     }
 
-    static async Task<string> ProbeAsync(MarketplaceConnection item, HttpClient http)
+    public static T? LoadCredentialsForProbe<T>(string? dataDirectory, MarketplaceConnection item)
+    {
+        if (item is null) throw new ArgumentNullException(nameof(item));
+        var stored = new MarketplaceConnectionStore(dataDirectory).Get(item.Id)
+            ?? throw new InvalidOperationException("NOT_CONFIGURED: Mağaza bağlantısı bulunamadı.");
+        if (!string.Equals(stored.Channel, item.Channel, StringComparison.Ordinal) ||
+            !string.Equals(stored.ShopId, item.ShopId, StringComparison.Ordinal))
+            throw new InvalidOperationException("WRONG_ACCOUNT: Mağaza bağlantı kimliği değişti.");
+        return new MarketplaceCredentialVault(dataDirectory).Load<T>(stored.Id, stored.Channel, stored.ShopId);
+    }
+
+    static async Task<string> ProbeAsync(MarketplaceConnection item, HttpClient http, string? dataDirectory)
     {
         switch (item.Channel)
         {
             case "etsy":
-                var etsy = CredentialStore.Load() ?? throw new InvalidOperationException("NOT_CONFIGURED: Etsy şifreli bağlantısı bulunamadı.");
-                if (!string.Equals(etsy.ShopId.Trim(), item.ShopId.Trim(), StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("WRONG_SHOP: Şifreli Etsy credential bu mağaza kimliğiyle eşleşmiyor.");
+                var etsy = LoadCredentialsForProbe<EtsyCredentials>(dataDirectory, item) ?? throw new InvalidOperationException("NOT_CONFIGURED: Etsy şifreli bağlantısı bulunamadı.");
                 return "Etsy mağazası: " + await new EtsyConnector(http).TestAsync(etsy);
+            case "trendyol":
+                var trendyol = LoadCredentialsForProbe<TrendyolSettings>(dataDirectory, item) ?? throw new InvalidOperationException("NOT_CONFIGURED: Trendyol şifreli bağlantısı bulunamadı.");
+                await new TrendyolConnection().TestReadOnlyAsync(trendyol);
+                return "Trendyol satıcı erişimi doğrulandı.";
             case "ebay":
                 var ebay = new EbaySettingsStore().Load() ?? throw new InvalidOperationException("NOT_CONFIGURED: eBay şifreli ayarı bulunamadı.");
                 if (ebay.Tokens is null) throw new InvalidOperationException("NOT_CONFIGURED: eBay OAuth onayı tamamlanmamış.");
@@ -157,6 +198,60 @@ public static class MarketplaceConnectionsPanel
                 return $"Ozon ürün okuma yetkisi doğrulandı ({await new OzonConnection(http).ReadProductCountAsync(ozon)} ürün).";
             default: throw new InvalidOperationException("LIVE_API_BLOCKED: Bu kanal için doğrulanmış salt okunur API bağlantısı yapılandırılmadı.");
         }
+    }
+
+    static TabItem BuildAccountTab(MarketplaceConnection account, int index)
+    {
+        var definition = MarketplaceConnectionCatalog.Get(account.Channel);
+        var body = new StackPanel { Margin = new Thickness(8) };
+        body.Children.Add(new CheckBox
+        {
+            Name = "MarketplaceAccountActive_" + index,
+            Content = "Active / Etkin",
+            IsChecked = account.Active,
+            IsHitTestVisible = false,
+            Focusable = false
+        });
+        body.Children.Add(new TextBlock { Text = $"{definition.Name} · {account.ShopId} · {account.Status}", Margin = new Thickness(2, 5, 2, 8), TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(SettingsSection("Bağlantı", "Hesap kimliği ve şifreli erişim bilgileri bu bağlantıya özeldir."));
+        body.Children.Add(CapabilitySection("Ürün kuralları", definition, index, new[]
+        {
+            (MarketplaceOperation.ProductsRead, "Ürün okuma"),
+            (MarketplaceOperation.PriceWrite, "Fiyat yazma"),
+            (MarketplaceOperation.StockWrite, "Stok yazma")
+        }));
+        body.Children.Add(CapabilitySection("Sipariş kuralları", definition, index, new[] { (MarketplaceOperation.OrdersRead, "Sipariş okuma") }));
+        body.Children.Add(CapabilitySection("Senkronizasyon", definition, index, new[] { (MarketplaceOperation.Shipment, "Kargo") }));
+        return new TabItem { Header = account.DisplayName, Tag = account.Id, Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
+    }
+
+    static GroupBox SettingsSection(string header, string explanation) => new()
+    {
+        Header = header,
+        Margin = new Thickness(2, 3, 2, 3),
+        Padding = new Thickness(6),
+        Content = new TextBlock { Text = explanation, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray }
+    };
+
+    static GroupBox CapabilitySection(string header, MarketplaceConnectionDefinition definition, int index, IEnumerable<(MarketplaceOperation Operation, string Label)> operations)
+    {
+        var panel = new WrapPanel();
+        foreach (var (operation, label) in operations)
+        {
+            var supported = definition.Capabilities.Supports(operation);
+            panel.Children.Add(new CheckBox
+            {
+                Name = $"MarketplaceCapability_{operation}_{index}",
+                Content = supported ? label : label + " · desteklenmiyor",
+                IsChecked = supported,
+                IsEnabled = supported,
+                IsHitTestVisible = false,
+                Focusable = false,
+                ToolTip = supported ? "Bu hesap türü tarafından desteklenir." : "Bu kanal bağdaştırıcısı bu özelliği desteklemiyor.",
+                Margin = new Thickness(6, 4, 6, 4)
+            });
+        }
+        return new GroupBox { Header = header, Margin = new Thickness(2, 3, 2, 3), Padding = new Thickness(4), Content = panel };
     }
 
     static void AddLabel(Panel panel, string label, UIElement control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(4, 7, 4, 0) }); panel.Children.Add(control); }
