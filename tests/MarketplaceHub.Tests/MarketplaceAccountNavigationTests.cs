@@ -146,6 +146,88 @@ public sealed class MarketplaceAccountNavigationTests
         finally { window.Close(); }
     });
 
+    [TestMethod]
+    public void ChannelCompatibilityShortcutWaitsForExactCardSelectionWhenTwoAccountsShareAChannel() => InSta(root =>
+    {
+        var store = new MarketplaceConnectionStore(root);
+        var first = store.Save("trendyol", "101", "Trendyol A", true);
+        var second = store.Save("trendyol", "202", "Trendyol B", true);
+        var window = new MainWindow(root);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "trendyol"));
+
+            Assert.AreEqual(0, Walk(window).OfType<TrendyolWorkspacePanel>().Count(), "A channel shortcut must not choose one of two accounts.");
+            var cards = AccountCards(window);
+            CollectionAssert.AreEquivalent(new[] { first.Id, second.Id }, cards.Select(x => (string)x.Tag).ToArray());
+
+            cards.Single(x => Equals(x.Tag, second.Id)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+            var workspace = Walk(window).OfType<TrendyolWorkspacePanel>().Single();
+            Assert.AreEqual(second.Id, workspace.ConnectionId);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void ConnectionPanelChannelLinkWaitsForExactCardSelectionWhenTwoAccountsShareAChannel() => InSta(root =>
+    {
+        var store = new MarketplaceConnectionStore(root);
+        var first = store.Save("trendyol", "101", "Trendyol A", true);
+        var second = store.Save("trendyol", "202", "Trendyol B", true);
+        var window = new MainWindow(root);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "connections"));
+            Walk(window).OfType<Button>().Single(x => Equals(x.Content, "Trendyol")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+            Assert.AreEqual(0, Walk(window).OfType<TrendyolWorkspacePanel>().Count(), "A channel link must open account selection, not the first account.");
+            var cards = AccountCards(window);
+            CollectionAssert.AreEquivalent(new[] { first.Id, second.Id }, cards.Select(x => (string)x.Tag).ToArray());
+
+            cards.Single(x => Equals(x.Tag, first.Id)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+            Assert.AreEqual(first.Id, Walk(window).OfType<TrendyolWorkspacePanel>().Single().ConnectionId);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void SeededNotConfiguredDefaultsStayOutOfHomeSwitcherAndHost() => InSta(root =>
+    {
+        var store = new MarketplaceConnectionStore(root);
+        var seeded = store.List().Where(x => x.Id == x.Channel + ":default" && x.Status == "NOT_CONFIGURED").ToArray();
+        Assert.IsTrue(seeded.Length > 0);
+
+        var home = new MarketplaceAccountHomePanel(root, _ => { });
+
+        Assert.AreEqual(0, AccountCards(home).Count);
+        foreach (var placeholder in seeded)
+            Assert.ThrowsException<InvalidOperationException>(() => MarketplaceWorkspaceHost.Create(placeholder.Id, root));
+
+        var operational = store.Save("trendyol", "101", "Trendyol A", true);
+        using var host = MarketplaceWorkspaceHost.Create(operational.Id, root);
+        var switcher = Walk(host).OfType<ComboBox>().Single(x => x.Name == "MarketplaceAccountSwitcher");
+        CollectionAssert.AreEqual(new[] { operational.Id }, switcher.Items.Cast<MarketplaceConnection>().Select(x => x.Id).ToArray());
+    });
+
+    [TestMethod]
+    public void MainWindowSeedingAfterHomeConstructionCannotPromoteDefaultPlaceholder() => InSta(root =>
+    {
+        var window = new MainWindow(root);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "trendyol"));
+
+            Assert.AreEqual(0, AccountCards(window).Count);
+            Assert.AreEqual(0, Walk(window).OfType<TrendyolWorkspacePanel>().Count());
+        }
+        finally { window.Close(); }
+    });
+
     static ProductChannelBinding Binding(string productId, string connectionId, string remoteId, string state) =>
         new(productId, connectionId, remoteId, remoteId + "-sku", remoteId + "-barcode", true, true, true, "", "", state, 0, default);
 

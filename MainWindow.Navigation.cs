@@ -22,7 +22,11 @@ public partial class MainWindow
   {
    var page=new TabItem{Tag=key,Header=title,Content=content};routes.Add(key,page);routeTitles[key]=title;ModuleTabs.Items.Add(page);
    var item=new ListBoxItem{Tag=key,Content=label??title,ToolTip=description};NavigationList.Items.Add(item);
-   item.Selected+=(_,_)=>SelectRoute(key, !selectingRoute, title, description);
+   item.Selected+=(_,_)=>
+   {
+    if(!selectingRoute && key=="marketplaces") marketplaceHome.ShowAll();
+    SelectRoute(key, !selectingRoute, title, description);
+   };
   }
   Group("ÇALIŞMA ALANI");
   Page("products","Ürün yönetimi","Tüm ürün bilgilerini yan yana inceleyin, filtreleyin ve düzenleyin.",builtPages["Ürün havuzu"]);
@@ -55,7 +59,7 @@ public partial class MainWindow
   void CompatibilityAccountLink(string channel,string title,string description)
   {
    var item=new ListBoxItem{Tag=channel,Content=title,ToolTip=description};NavigationList.Items.Add(item);
-   item.Selected+=(_,_)=>{if(selectingRoute)return;try{marketplaceHome.OpenFirst(channel);SelectRoute("marketplaces",true,"Pazaryeri hesapları",description);}catch(Exception error){Log(Safe(error));SelectRoute("marketplaces",true);}};
+   item.Selected+=(_,_)=>{if(selectingRoute)return;try{marketplaceHome.ShowChannel(channel);SelectRoute("marketplaces",true,"Pazaryeri hesapları",description);}catch(Exception error){Log(Safe(error));SelectRoute("marketplaces",true);}};
   }
  }
 
@@ -63,7 +67,7 @@ public partial class MainWindow
  {
   if(key is "trendyol" or "etsy")
   {
-   marketplaceHome.OpenFirst(key);
+   marketplaceHome.ShowChannel(key);
    SelectRoute("marketplaces",true);
    return;
   }

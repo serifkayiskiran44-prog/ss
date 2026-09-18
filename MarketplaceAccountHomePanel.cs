@@ -22,6 +22,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
     readonly Action<string> openConnection;
     readonly WrapPanel cards = new() { Name = "MarketplaceAccountCards", Orientation = Orientation.Horizontal };
     readonly ContentControl workspace = new() { Name = "MarketplaceAccountWorkspace" };
+    string? channelFilter;
     readonly TextBlock empty = new()
     {
         Text = "Etkin mağaza bağlantısı yok. Ayarlar → Mağaza bağlantıları bölümünden bir hesap ekleyin.",
@@ -52,7 +53,8 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
 
     public void Refresh()
     {
-        var connections = new MarketplaceConnectionStore(directory).List(false).Where(x => x.Enabled).ToArray();
+        var connectionStore = new MarketplaceConnectionStore(directory);
+        var connections = MarketplaceOperationalAccounts.List(connectionStore, channelFilter).ToArray();
         var bindings = new ProductChannelBindingStore(directory);
         cards.Children.Clear();
         var index = 0;
@@ -95,12 +97,17 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         if (workspace.Content is MarketplaceWorkspaceHost host) host.RefreshAccounts();
     }
 
-    public void OpenFirst(string channel)
+    public void ShowChannel(string channel)
     {
-        var connection = new MarketplaceConnectionStore(directory).List(false)
-            .FirstOrDefault(x => x.Enabled && x.Channel.Equals(channel, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"{MarketplaceConnectionCatalog.Get(channel).Name} için etkin mağaza bağlantısı bulunamadı.");
-        openConnection(connection.Id);
+        channelFilter = MarketplaceConnectionCatalog.Get(channel).Id;
+        CloseWorkspace();
+        Refresh();
+    }
+
+    public void ShowAll()
+    {
+        channelFilter = null;
+        Refresh();
     }
 
     void OpenWorkspace(string connectionId)
@@ -112,6 +119,11 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
     }
 
     public void Dispose()
+    {
+        CloseWorkspace();
+    }
+
+    void CloseWorkspace()
     {
         if (workspace.Content is IDisposable disposable) disposable.Dispose();
         workspace.Content = null;

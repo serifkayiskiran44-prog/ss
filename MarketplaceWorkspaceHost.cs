@@ -52,15 +52,15 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
 
     public void RefreshAccounts()
     {
-        var enabled = connections.List(false).Where(x => x.Enabled).ToArray();
-        var current = enabled.FirstOrDefault(x => x.Id == ConnectionId)
-            ?? throw new InvalidOperationException("Seçili mağaza bağlantısı devre dışı bırakıldı veya kaldırıldı.");
+        var operational = MarketplaceOperationalAccounts.List(connections).ToArray();
+        var current = operational.FirstOrDefault(x => x.Id == ConnectionId)
+            ?? throw new InvalidOperationException("Seçili mağaza bağlantısı operasyonel değil, devre dışı bırakıldı veya kaldırıldı.");
         title.Text = current.DisplayName;
         detail.Text = $"{MarketplaceConnectionCatalog.Get(current.Channel).Name} · {current.ShopId} · {current.Status}";
         selecting = true;
         try
         {
-            switcher.ItemsSource = enabled;
+            switcher.ItemsSource = operational;
             switcher.SelectedValue = ConnectionId;
         }
         finally { selecting = false; }
@@ -69,7 +69,8 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
     void Rebind(string connectionId)
     {
         var connection = connections.Get(connectionId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
-        if (!connection.Enabled) throw new InvalidOperationException("Devre dışı mağaza çalışma alanı açılamaz.");
+        if (!MarketplaceOperationalAccounts.IsEligible(connection, connections))
+            throw new InvalidOperationException("Operasyonel olmayan mağaza çalışma alanı açılamaz.");
         var adapter = registry.Get(connection.Channel);
         var next = CreateWorkspace(connection);
         if (body.Content is IDisposable prior) prior.Dispose();
