@@ -37,6 +37,9 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
     bool loaded;
     public string? ConnectionId => scopedConnection?.Id;
     public string AccountShopId => scopedConnection?.ShopId ?? LoadAccount()?.SupplierId ?? "";
+    public MarketplaceShopSpecialistPreview? AccountSpecialistPreview { get; private set; }
+    public TrendyolOperation? AccountSpecialistOperation => plan?.Operation;
+    public IReadOnlyList<string> AccountSpecialistPlanProductIds => plan?.Rows.Select(row => row.ProductId).ToArray() ?? Array.Empty<string>();
 
     public TrendyolWorkspacePanel(string? directory=null) : this(directory, null, false) { }
 

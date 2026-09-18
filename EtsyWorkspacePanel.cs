@@ -18,7 +18,7 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     readonly EtsyWorkspaceStore store;
     readonly ProductChannelCreationPreviewInbox creationInbox;
     readonly ProductRemoteDeactivationDispatchStore remoteDeactivationDispatches;
-    readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+    readonly HttpClient http;
     readonly CancellationTokenSource lifetime = new();
     readonly TabControl sections = new() { Name = "EtsySections" };
     readonly TabControl settings = new() { Name = "EtsySettingsSections" };
@@ -41,13 +41,21 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     public string? ConnectionId => scopedConnection?.Id;
     public string AccountShopId => scopedConnection?.ShopId ?? credentials?.ShopId ?? "";
     public IReadOnlyList<string> CreationHandoffProductIds { get; private set; } = Array.Empty<string>();
+    public MarketplaceShopSpecialistPreview? AccountSpecialistPreview { get; private set; }
+    public EtsyOperation? AccountSpecialistOperation => plan?.Operation;
+    public IReadOnlyList<string> AccountSpecialistPlanProductIds => plan?.Rows.Select(row => row.ProductId).ToArray() ?? Array.Empty<string>();
+    public Task? AccountSpecialistPreviewTask { get; private set; }
 
-    public EtsyWorkspacePanel(string? directory = null) : this(directory, null, false) { }
+    public EtsyWorkspacePanel(string? directory = null) : this(directory, null, false, null) { }
 
-    public EtsyWorkspacePanel(string connectionId, string? directory) : this(directory, connectionId, true) { }
+    public EtsyWorkspacePanel(string connectionId, string? directory) : this(directory, connectionId, true, null) { }
 
-    EtsyWorkspacePanel(string? directory, string? connectionId, bool accountScoped)
+    public EtsyWorkspacePanel(string connectionId, string? directory, HttpMessageHandler handler)
+        : this(directory, connectionId, true, new HttpClient(handler ?? throw new ArgumentNullException(nameof(handler)), true)) { }
+
+    EtsyWorkspacePanel(string? directory, string? connectionId, bool accountScoped, HttpClient? injectedHttp)
     {
+        http = injectedHttp ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
         if (accountScoped)
         {
             scopedConnection = new MarketplaceConnectionStore(directory).Get(connectionId!)

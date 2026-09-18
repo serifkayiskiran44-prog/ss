@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -36,7 +37,13 @@ public sealed record MarketplaceShopProductRow(
 
 public sealed record MarketplaceShopSelectionSnapshot(
     string Id, string ConnectionId, long ConnectionRevision, DateTime CreatedUtc,
-    IReadOnlyList<string> ProductIds);
+    IReadOnlyList<string> ProductIds, IReadOnlyDictionary<string,long> BindingVersions);
+
+public sealed record MarketplaceShopSpecialistPreviewRow(string ProductId, long BindingVersion);
+public sealed record MarketplaceShopSpecialistPreview(
+    string Id, string ConnectionId, string Channel, string ShopId, long ConnectionRevision,
+    MarketplaceShopBulkOperation Operation, DateTime CreatedUtc,
+    IReadOnlyList<MarketplaceShopSpecialistPreviewRow> Rows);
 
 public sealed record MarketplaceShopBulkEdit(
     bool? ManageContent = null, bool? ManagePrice = null, bool? ManageStock = null,
@@ -79,7 +86,7 @@ public sealed class MarketplaceShopProductsModel
         bindings = new(this.directory);
         catalog = new(this.directory);
         connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(this.directory, "catalog.db"), DefaultTimeout = 15 }.ToString();
-        BulkOperations = OperationsFor(connection.Channel, this.registry.Get(connection.Channel).Capabilities);
+        BulkOperations = OperationsFor(this.registry.Get(connection.Channel).Capabilities);
         Initialize();
     }
 
@@ -124,7 +131,9 @@ public sealed class MarketplaceShopProductsModel
         var ids = productIds?.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToArray() ?? [];
         if (ids.Length == 0) throw new InvalidOperationException("Önce en az bir ürün seçin.");
         connection = RequireOperational(connection.Id);
-        return new(Guid.NewGuid().ToString("N"), connection.Id, connection.Revision, DateTime.UtcNow, Array.AsReadOnly(ids));
+        var currentBindings = bindings.List(connectionId: connection.Id).ToDictionary(x => x.ProductId, x => x.Version, StringComparer.Ordinal);
+        var versions = new ReadOnlyDictionary<string,long>(ids.ToDictionary(id => id, id => currentBindings.GetValueOrDefault(id), StringComparer.Ordinal));
+        return new(Guid.NewGuid().ToString("N"), connection.Id, connection.Revision, DateTime.UtcNow, Array.AsReadOnly(ids), versions);
     }
 
     public IReadOnlyList<string> Resolve(MarketplaceShopSelectionSnapshot snapshot)
@@ -164,6 +173,54 @@ public sealed class MarketplaceShopProductsModel
         command.Parameters.AddWithValue("$json", JsonSerializer.Serialize(preview));
         command.ExecuteNonQuery();
         return preview;
+    }
+
+    public MarketplaceShopSpecialistPreview PreviewSpecialist(MarketplaceShopSelectionSnapshot selection, MarketplaceShopBulkOperation operation)
+    {
+        ValidateSelection(selection);
+        if (operation == MarketplaceShopBulkOperation.Management || !BulkOperations.Contains(operation))
+            throw new InvalidOperationException("Bu uzman önizleme işlemi seçili kanal tarafından desteklenmiyor.");
+        var currentBindings = bindings.List(connectionId: connection.Id).ToDictionary(x => x.ProductId, x => x.Version, StringComparer.Ordinal);
+        var rows = selection.ProductIds.Select(id =>
+        {
+            if (!selection.BindingVersions.TryGetValue(id, out var capturedVersion) || currentBindings.GetValueOrDefault(id) != capturedVersion)
+                throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; seçimi yenileyin.");
+            return new MarketplaceShopSpecialistPreviewRow(id, capturedVersion);
+        }).ToArray();
+        var preview = new MarketplaceShopSpecialistPreview(Guid.NewGuid().ToString("N"), connection.Id, connection.Channel,
+            connection.ShopId, connection.Revision, operation, DateTime.UtcNow, rows);
+        using var database = Open(); using var command = database.CreateCommand();
+        command.CommandText = "INSERT INTO MarketplaceShopSpecialistPreviews(Id,ConnectionId,Json) VALUES($id,$connection,$json)";
+        command.Parameters.AddWithValue("$id", preview.Id); command.Parameters.AddWithValue("$connection", preview.ConnectionId);
+        command.Parameters.AddWithValue("$json", JsonSerializer.Serialize(preview)); command.ExecuteNonQuery();
+        return preview;
+    }
+
+    public void ValidateSpecialistPreview(MarketplaceShopSpecialistPreview supplied)
+    {
+        ArgumentNullException.ThrowIfNull(supplied);
+        using var database = Open(); using var transaction = database.BeginTransaction(deferred: false);
+        string persistedJson;
+        using (var read = database.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = "SELECT Json FROM MarketplaceShopSpecialistPreviews WHERE Id=$id AND ConnectionId=$connection";
+            read.Parameters.AddWithValue("$id", supplied.Id); read.Parameters.AddWithValue("$connection", connection.Id);
+            persistedJson = read.ExecuteScalar() as string ?? throw new InvalidOperationException("Uzman önizleme isteği bulunamadı.");
+        }
+        if (!string.Equals(persistedJson, JsonSerializer.Serialize(supplied), StringComparison.Ordinal))
+            throw new InvalidOperationException("Uzman önizleme isteği değiştirilmiş.");
+        EnsureConnectionCurrent(database, transaction, new(supplied.Id, supplied.ConnectionId, supplied.Channel, supplied.ShopId,
+            supplied.ConnectionRevision, supplied.Operation, supplied.CreatedUtc, []));
+        foreach (var row in supplied.Rows)
+        {
+            using var binding = database.CreateCommand(); binding.Transaction = transaction;
+            binding.CommandText = "SELECT Version FROM ProductChannelBindings WHERE ProductId=$product AND ConnectionId=$connection";
+            binding.Parameters.AddWithValue("$product", row.ProductId); binding.Parameters.AddWithValue("$connection", supplied.ConnectionId);
+            var value = binding.ExecuteScalar(); var currentVersion = value is null ? 0 : Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            if (currentVersion != row.BindingVersion) throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; yeni önizleme alın.");
+        }
+        transaction.Commit();
     }
 
     public MarketplaceShopBulkReceipt Apply(MarketplaceShopBulkPreview supplied, bool explicitlyApproved)
@@ -266,11 +323,32 @@ public sealed class MarketplaceShopProductsModel
     void EnsureConnectionCurrent(SqliteConnection database, SqliteTransaction transaction, MarketplaceShopBulkPreview preview)
     {
         using var command = database.CreateCommand(); command.Transaction = transaction;
-        command.CommandText = "SELECT Channel,ShopId,Enabled,Revision FROM MarketplaceConnections WHERE Id=$id";
+        command.CommandText = "SELECT Channel,ShopId,Enabled,Status,LastTestUtc,Revision FROM MarketplaceConnections WHERE Id=$id";
         command.Parameters.AddWithValue("$id", preview.ConnectionId);
-        using var reader = command.ExecuteReader();
-        if (!reader.Read() || reader.GetInt32(2) != 1 || reader.GetInt64(3) != preview.ConnectionRevision ||
-            reader.GetString(0) != preview.Channel || reader.GetString(1) != preview.ShopId)
+        string channel, shopId, status;
+        DateTime? lastTestUtc = null;
+        using (var reader = command.ExecuteReader())
+        {
+            if (!reader.Read() || reader.GetInt32(2) != 1 || reader.GetInt64(5) != preview.ConnectionRevision ||
+                reader.GetString(0) != preview.Channel || reader.GetString(1) != preview.ShopId)
+                throw new InvalidOperationException("Mağaza hesabı değişti veya devre dışı; yeni önizleme alın.");
+            channel = reader.GetString(0); shopId = reader.GetString(1); status = reader.GetString(3);
+            if (!reader.IsDBNull(4))
+            {
+                if (!DateTime.TryParse(reader.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+                    throw new InvalidOperationException("Mağaza bağlantısı bozuk; yeni önizleme alın.");
+                lastTestUtc = parsed;
+            }
+        }
+        var seededDefault = preview.ConnectionId.Equals(channel + ":default", StringComparison.OrdinalIgnoreCase)
+            && shopId.Equals("default", StringComparison.OrdinalIgnoreCase);
+        if (!seededDefault) return;
+        var verifiedStatus = lastTestUtc.HasValue && (status.Equals("CONNECTED", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase));
+        using var migration = database.CreateCommand(); migration.Transaction = transaction;
+        migration.CommandText = "SELECT 1 FROM MarketplaceCredentialMigrations WHERE Channel=$channel AND ConnectionId=$connection AND ShopId=$shop";
+        migration.Parameters.AddWithValue("$channel", channel); migration.Parameters.AddWithValue("$connection", preview.ConnectionId); migration.Parameters.AddWithValue("$shop", shopId);
+        if (!verifiedStatus && migration.ExecuteScalar() is null)
             throw new InvalidOperationException("Mağaza hesabı değişti veya devre dışı; yeni önizleme alın.");
     }
 
@@ -302,15 +380,24 @@ public sealed class MarketplaceShopProductsModel
         return new Dictionary<string, RemoteValues>();
     }
 
-    static IReadOnlyList<MarketplaceShopBulkOperation> OperationsFor(string channel, MarketplaceCapabilities capabilities)
+    static IReadOnlyList<MarketplaceShopBulkOperation> OperationsFor(MarketplaceCapabilities capabilities)
     {
-        var result = new List<MarketplaceShopBulkOperation> { MarketplaceShopBulkOperation.Management };
-        if (channel == "trendyol") result.AddRange([MarketplaceShopBulkOperation.Category, MarketplaceShopBulkOperation.Brand, MarketplaceShopBulkOperation.Delivery]);
-        if (channel == "etsy") result.AddRange([MarketplaceShopBulkOperation.Taxonomy, MarketplaceShopBulkOperation.Properties, MarketplaceShopBulkOperation.Shipping, MarketplaceShopBulkOperation.Readiness, MarketplaceShopBulkOperation.CreatePreview]);
+        var result = new List<MarketplaceShopBulkOperation>();
+        Add(MarketplaceOperation.ProductManagement, MarketplaceShopBulkOperation.Management);
+        Add(MarketplaceOperation.CategoryWrite, MarketplaceShopBulkOperation.Category);
+        Add(MarketplaceOperation.BrandWrite, MarketplaceShopBulkOperation.Brand);
+        Add(MarketplaceOperation.DeliveryWrite, MarketplaceShopBulkOperation.Delivery);
+        Add(MarketplaceOperation.TaxonomyWrite, MarketplaceShopBulkOperation.Taxonomy);
+        Add(MarketplaceOperation.PropertiesWrite, MarketplaceShopBulkOperation.Properties);
+        Add(MarketplaceOperation.ShippingWrite, MarketplaceShopBulkOperation.Shipping);
+        Add(MarketplaceOperation.ReadinessWrite, MarketplaceShopBulkOperation.Readiness);
+        Add(MarketplaceOperation.ListingCreate, MarketplaceShopBulkOperation.CreatePreview);
         if (capabilities.Supports(MarketplaceOperation.PriceWrite)) result.Add(MarketplaceShopBulkOperation.PricePreview);
         if (capabilities.Supports(MarketplaceOperation.StockWrite)) result.Add(MarketplaceShopBulkOperation.StockPreview);
-        if (capabilities.Supports(MarketplaceOperation.ProductsRead)) result.Add(MarketplaceShopBulkOperation.ContentPreview);
+        Add(MarketplaceOperation.ContentWrite, MarketplaceShopBulkOperation.ContentPreview);
         return result.AsReadOnly();
+        void Add(MarketplaceOperation capability, MarketplaceShopBulkOperation operation)
+        { if (capabilities.Supports(capability)) result.Add(operation); }
     }
 
     static bool IsLocallyApplicable(MarketplaceShopBulkPreview preview) => preview.Operation switch
@@ -327,8 +414,11 @@ public sealed class MarketplaceShopProductsModel
         command.CommandText = """
             CREATE TABLE IF NOT EXISTS MarketplaceShopBulkPreviews(Id TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL,Json TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS MarketplaceShopBulkReceipts(PreviewId TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL,Json TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS MarketplaceShopSpecialistPreviews(Id TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL,Json TEXT NOT NULL);
             CREATE TRIGGER IF NOT EXISTS MarketplaceShopBulkPreviews_NoUpdate BEFORE UPDATE ON MarketplaceShopBulkPreviews BEGIN SELECT RAISE(ABORT,'immutable shop bulk preview'); END;
             CREATE TRIGGER IF NOT EXISTS MarketplaceShopBulkPreviews_NoDelete BEFORE DELETE ON MarketplaceShopBulkPreviews BEGIN SELECT RAISE(ABORT,'immutable shop bulk preview'); END;
+            CREATE TRIGGER IF NOT EXISTS MarketplaceShopSpecialistPreviews_NoUpdate BEFORE UPDATE ON MarketplaceShopSpecialistPreviews BEGIN SELECT RAISE(ABORT,'immutable shop specialist preview'); END;
+            CREATE TRIGGER IF NOT EXISTS MarketplaceShopSpecialistPreviews_NoDelete BEFORE DELETE ON MarketplaceShopSpecialistPreviews BEGIN SELECT RAISE(ABORT,'immutable shop specialist preview'); END;
             """;
         command.ExecuteNonQuery();
     }
@@ -350,7 +440,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
     MarketplaceShopProductFilter filter = new();
 
     public MarketplaceShopSelectionSnapshot? SelectionSnapshot { get; private set; }
-    public event Action<MarketplaceShopBulkOperation, MarketplaceShopSelectionSnapshot>? BulkPreviewRequested;
+    public event Action<MarketplaceShopSpecialistPreview>? BulkPreviewRequested;
 
     public MarketplaceShopProductsPanel(string connectionId, string? directory = null, MarketplaceAdapterRegistry? registry = null)
     {
@@ -370,7 +460,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
             {
                 SelectionSnapshot ??= model.SelectPage(products.SelectedItems.Cast<MarketplaceShopProductRow>().Select(x => x.ProductId));
                 if(captured==MarketplaceShopBulkOperation.Management)OpenManagementPreview(SelectionSnapshot);
-                else if(BulkPreviewRequested is not null)BulkPreviewRequested.Invoke(captured, SelectionSnapshot);
+                else if(BulkPreviewRequested is not null)BulkPreviewRequested.Invoke(model.PreviewSpecialist(SelectionSnapshot, captured));
                 else throw new InvalidOperationException("Bu işlem için kanal önizleme yönlendiricisi bulunamadı.");
             }));
         }

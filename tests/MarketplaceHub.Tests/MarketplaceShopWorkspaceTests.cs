@@ -5,11 +5,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using TrMarketplaceHubDesktop;
 using TrMarketplaceHubDesktop.Catalog;
+using TrMarketplaceHubDesktop.Etsy;
 
 namespace MarketplaceHub.Tests;
 
@@ -80,6 +85,22 @@ public sealed class MarketplaceShopWorkspaceTests
     }
 
     [TestMethod]
+    public void RestrictedInjectedAdaptersExposeNoMutationOrContentPreviewCommands()
+    {
+        var store = new MarketplaceConnectionStore(directory);
+        var trendyol = store.Save("trendyol", "101", "Trendyol", true);
+        var etsy = store.Save("etsy", "202", "Etsy", true);
+        var localOnly = new MarketplaceAdapterRegistry(new[] { new RestrictedAdapter("trendyol", MarketplaceCapabilities.LocalOnly) });
+        var productsReadOnly = new MarketplaceAdapterRegistry(new[]
+        {
+            new RestrictedAdapter("etsy", new(new HashSet<MarketplaceOperation> { MarketplaceOperation.ProductsRead }))
+        });
+
+        Assert.AreEqual(0, new MarketplaceShopProductsModel(trendyol.Id, directory, localOnly).BulkOperations.Count);
+        Assert.AreEqual(0, new MarketplaceShopProductsModel(etsy.Id, directory, productsReadOnly).BulkOperations.Count);
+    }
+
+    [TestMethod]
     public void ManagementAndMappingChangesRequireApprovedRevisionedPreview()
     {
         var (connection, other, product, _, _) = SeedTwoAccounts();
@@ -123,6 +144,25 @@ public sealed class MarketplaceShopWorkspaceTests
             new(ManagePrice: false));
         new MarketplaceConnectionStore(directory).SetEnabled(connection.Id, false);
         Assert.ThrowsException<InvalidOperationException>(() => fresh.Apply(disabledPreview, true));
+    }
+
+    [TestMethod]
+    public void FailedConnectionTestAtTheSameRevisionInvalidatesBulkApplyInsideTheTransaction()
+    {
+        var connections = new MarketplaceConnectionStore(directory);
+        connections.List();
+        var seeded = connections.Get("trendyol:default")!;
+        Assert.AreEqual(ConnectionTestApplyResult.Applied, connections.RecordTest(seeded.Id, seeded.Revision, success: true));
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "TX", Name = "Transaction", Currency = "TRY" });
+        var bindings = new ProductChannelBindingStore(directory);
+        var binding = bindings.Save(Binding(product.Id, seeded.Id, "remote", "Active"), 0);
+        var model = new MarketplaceShopProductsModel(seeded.Id, directory);
+        var preview = model.PreviewBulk(model.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.Management, new(ManageStock: false));
+
+        Assert.AreEqual(ConnectionTestApplyResult.Applied, connections.RecordTest(seeded.Id, seeded.Revision, success: false, error: "offline"));
+
+        Assert.ThrowsException<InvalidOperationException>(() => model.Apply(preview, true));
+        Assert.AreEqual(binding.Version, bindings.Get(product.Id, seeded.Id)!.Version);
     }
 
     [TestMethod]
@@ -235,6 +275,51 @@ public sealed class MarketplaceShopWorkspaceTests
     });
 
     [TestMethod]
+    public void SpecialistButtonPersistsTheExactSelectionAndBindingRevisions() => InSta(() =>
+    {
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", "101", "Shop", true);
+        var catalog = new CatalogStore(directory);
+        var bindings = new ProductChannelBindingStore(directory);
+        var ids = Enumerable.Range(1, 101).Select(index =>
+        {
+            var product = catalog.CreateManual(new() { Sku = $"S-{index}", Name = $"Product {index}", Currency = "TRY" });
+            bindings.Save(Binding(product.Id, connection.Id, $"remote-{index}", "Active"), 0);
+            return product.Id;
+        }).ToArray();
+        var panel = new MarketplaceShopProductsPanel(connection.Id, directory);
+        MarketplaceShopSpecialistPreview? captured = null;
+        panel.BulkPreviewRequested += preview => captured = preview;
+
+        Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceSelectAllFiltered").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceBulk_Category").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.IsNotNull(captured);
+        Assert.AreEqual(connection.Id, captured.ConnectionId);
+        Assert.AreEqual(connection.Revision, captured.ConnectionRevision);
+        CollectionAssert.AreEquivalent(ids, captured.Rows.Select(x => x.ProductId).ToArray());
+        Assert.IsTrue(captured.Rows.All(x => x.BindingVersion == 1));
+    });
+
+    [TestMethod]
+    public void SettingsPanelUsesTheConnectionRevisionCapturedWhenTheFormOpened() => InSta(() =>
+    {
+        var connections = new MarketplaceConnectionStore(directory);
+        var connection = connections.Save("etsy", "202", "Etsy", true);
+        var panel = new MarketplaceShopSettingsPanel(connection.Id, directory);
+        Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Bu hesap için mağaza kuralları etkin")).IsChecked = false;
+        connections.SetEnabled(connection.Id, false);
+        connections.SetEnabled(connection.Id, true);
+
+        Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceSaveShopSettings")
+            .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        var persisted = new MarketplaceShopSettingsStore(directory).Load(connection.Id);
+        Assert.IsTrue(persisted.Active);
+        Assert.AreEqual(0L, persisted.Revision);
+        Assert.IsTrue(Walk(panel).OfType<TextBlock>().Any(x => x.Text.Contains("değişti", StringComparison.OrdinalIgnoreCase)));
+    });
+
+    [TestMethod]
     public void SpecializedTrendyolAndEtsyWorkspacesHostCommonAccountPanelsWithoutLosingControls() => InSta(() =>
     {
         var connections = new MarketplaceConnectionStore(directory);
@@ -253,6 +338,69 @@ public sealed class MarketplaceShopWorkspaceTests
         Assert.IsTrue(Walk(etsyPanel).OfType<TabItem>().Any(x => Equals(x.Header, "Hesap kuralları")));
     });
 
+    [DataTestMethod]
+    [DataRow("Category", TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.UpdateUnapproved)]
+    [DataRow("Brand", TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.UpdateUnapproved)]
+    [DataRow("Delivery", TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Delivery)]
+    public void TrendyolSpecialistHandlersBuildRealExactAccountPreviewsBeyondTheVisiblePage(
+        string operation, TrMarketplaceHubDesktop.Trendyol.TrendyolOperation expected) => InSta(() =>
+    {
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", "101", "Trendyol", true);
+        new MarketplaceCredentialVault(directory).Save(connection.Id, connection.Channel, connection.ShopId,
+            new TrendyolSettings("101", "key", "secret", "tests"));
+        var catalog = new CatalogStore(directory);
+        var bindings = new ProductChannelBindingStore(directory);
+        var ids = Enumerable.Range(1, 101).Select(index =>
+        {
+            var product = catalog.CreateManual(new() { Sku = $"T-{index}", Barcode = $"B-{index}", Name = $"Product {index}", Currency = "TRY" });
+            bindings.Save(Binding(product.Id, connection.Id, $"remote-{index}", "Active"), 0);
+            return product.Id;
+        }).ToArray();
+        var panel = new TrendyolWorkspacePanel(connection.Id, directory);
+        var common = Walk(panel).OfType<MarketplaceShopProductsPanel>().Single();
+
+        Walk(common).OfType<Button>().Single(x => x.Name == "MarketplaceSelectAllFiltered").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Walk(common).OfType<Button>().Single(x => x.Name == $"MarketplaceBulk_{operation}").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.IsNotNull(panel.AccountSpecialistPreview);
+        Assert.AreEqual(connection.Revision, panel.AccountSpecialistPreview.ConnectionRevision);
+        Assert.IsTrue(panel.AccountSpecialistPreview.Rows.All(row => row.BindingVersion == 1));
+        Assert.AreEqual(expected, panel.AccountSpecialistOperation);
+        CollectionAssert.AreEquivalent(ids, panel.AccountSpecialistPlanProductIds.ToArray());
+    });
+
+    [DataTestMethod]
+    [DataRow("Taxonomy")]
+    [DataRow("Properties")]
+    [DataRow("Shipping")]
+    [DataRow("Readiness")]
+    public void EtsySpecialistHandlersRouteTheExactAccountSnapshotToContentPreview(string operation) => InSta(() =>
+    {
+        var connection = new MarketplaceConnectionStore(directory).Save("etsy", "202", "Etsy", true);
+        new MarketplaceCredentialVault(directory).Save(connection.Id, connection.Channel, connection.ShopId,
+            new EtsyCredentials("key", "secret", "88.token", "202", GrantedScopes: new[] { "listings_r", "listings_w" }));
+        var catalog = new CatalogStore(directory);
+        var bindings = new ProductChannelBindingStore(directory);
+        var ids = Enumerable.Range(1, 101).Select(index =>
+        {
+            var product = catalog.CreateManual(new() { Sku = $"E-{index}", Name = $"Product {index}", Currency = "USD" });
+            bindings.Save(Binding(product.Id, connection.Id, $"remote-{index}", "Active"), 0);
+            return product.Id;
+        }).ToArray();
+        using var panel = new EtsyWorkspacePanel(connection.Id, directory, new EtsyShopHandler());
+        var common = Walk(panel).OfType<MarketplaceShopProductsPanel>().Single();
+
+        Walk(common).OfType<Button>().Single(x => x.Name == "MarketplaceSelectAllFiltered").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Walk(common).OfType<Button>().Single(x => x.Name == $"MarketplaceBulk_{operation}").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        WaitFor(panel.AccountSpecialistPreviewTask);
+
+        Assert.IsNotNull(panel.AccountSpecialistPreview);
+        Assert.AreEqual(connection.Revision, panel.AccountSpecialistPreview.ConnectionRevision);
+        Assert.IsTrue(panel.AccountSpecialistPreview.Rows.All(row => row.BindingVersion == 1));
+        Assert.AreEqual(TrMarketplaceHubDesktop.Etsy.EtsyOperation.Content, panel.AccountSpecialistOperation);
+        CollectionAssert.AreEquivalent(ids, panel.AccountSpecialistPlanProductIds.ToArray());
+    });
+
     (MarketplaceConnection first, MarketplaceConnection second, CatalogProduct linked, CatalogProduct error, CatalogProduct unlinked) SeedTwoAccounts()
     {
         var catalog = new CatalogStore(directory);
@@ -265,6 +413,34 @@ public sealed class MarketplaceShopWorkspaceTests
 
     static ProductChannelBinding Binding(string productId, string connectionId, string remoteId, string state) =>
         new(productId, connectionId, remoteId, "remote-sku", "remote-barcode", true, true, true, "", "", state, 0, DateTime.MinValue);
+
+    sealed class RestrictedAdapter(string channel, MarketplaceCapabilities capabilities) : IMarketplaceAdapter
+    {
+        public string Channel { get; } = channel;
+        public MarketplaceCapabilities Capabilities { get; } = capabilities;
+        public Task<IReadOnlyList<RemoteProductIdentity>> ReadProductsAsync(string connectionId, CancellationToken token) =>
+            throw new NotSupportedException();
+        public Task<IReadOnlyList<OrderSnapshot>> ReadOrdersAsync(string connectionId, DateTime fromUtc, CancellationToken token) =>
+            throw new NotSupportedException();
+    }
+
+    sealed class EtsyShopHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"shop_id\":202,\"user_id\":88,\"shop_name\":\"Shop\",\"currency_code\":\"USD\"}", Encoding.UTF8, "application/json")
+            });
+    }
+
+    static void WaitFor(Task? task)
+    {
+        Assert.IsNotNull(task);
+        var frame = new System.Windows.Threading.DispatcherFrame();
+        _ = task.ContinueWith(_ => frame.Continue = false, TaskScheduler.Default);
+        System.Windows.Threading.Dispatcher.PushFrame(frame);
+        task.GetAwaiter().GetResult();
+    }
 
     static void InSta(Action action)
     {

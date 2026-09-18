@@ -216,7 +216,6 @@ public sealed class MarketplaceShopSettingsPanel : UserControl
     {
         try
         {
-            connection = connections.Get(connectionId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
             if (!int.TryParse(interval.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var minutes)) throw new InvalidOperationException("Senkron aralığı sayı olmalı.");
             state = store.SavePatch(connectionId, new(
                 Active: active.IsChecked == true,
@@ -225,6 +224,7 @@ public sealed class MarketplaceShopSettingsPanel : UserControl
                 OrderRules: new(orders.IsChecked == true, acknowledge.IsChecked == true, location.Text),
                 Sync: new(syncProducts.IsChecked == true, syncOrders.IsChecked == true, minutes)),
                 state.Revision, connection.Revision);
+            connection = connections.Get(connectionId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
             status.Text = $"Ayarlar kaydedildi · revision {state.Revision}"; Fill();
         }
         catch (Exception ex) { status.Text = MarketplaceConnectionStore.Redact(ex.Message); }

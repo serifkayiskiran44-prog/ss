@@ -4,7 +4,12 @@ using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
 
-public enum MarketplaceOperation { ProductsRead, OrdersRead, StockWrite, PriceWrite, Shipment }
+public enum MarketplaceOperation
+{
+ ProductsRead, OrdersRead, StockWrite, PriceWrite, Shipment,
+ ProductManagement, ContentWrite, CategoryWrite, BrandWrite, DeliveryWrite,
+ TaxonomyWrite, PropertiesWrite, ShippingWrite, ReadinessWrite, ListingCreate
+}
 public sealed record MarketplaceCapabilities(IReadOnlySet<MarketplaceOperation> Enabled)
 {
  public bool Supports(MarketplaceOperation operation)=>Enabled.Contains(operation);

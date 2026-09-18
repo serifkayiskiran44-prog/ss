@@ -32,13 +32,14 @@ public sealed partial class TrendyolWorkspacePanel
         sections.Items.Add(new TabItem{Header="Trendyol işlemleri",Content=specialized});
         return sections;
     }
-    void HandleAccountBulkPreview(MarketplaceShopBulkOperation operation,MarketplaceShopSelectionSnapshot selection)
+    void HandleAccountBulkPreview(MarketplaceShopSpecialistPreview request)
     {
         var connection=CurrentScopedConnection();
-        if(selection.ConnectionId!=connection.Id||selection.ConnectionRevision!=connection.Revision)
-            throw new InvalidOperationException("Mağaza hesabı değişti; seçimi yenileyin.");
-        if(operation is MarketplaceShopBulkOperation.Category or MarketplaceShopBulkOperation.Brand){tabs.SelectedIndex=1;settingsTabs.SelectedIndex=1;return;}
+        new MarketplaceShopProductsModel(connection.Id,workspaceDirectory).ValidateSpecialistPreview(request);
+        AccountSpecialistPreview=request;
+        var operation=request.Operation;
         var target=operation switch{
+            MarketplaceShopBulkOperation.Category or MarketplaceShopBulkOperation.Brand=>TrendyolOperation.UpdateUnapproved,
             MarketplaceShopBulkOperation.Delivery=>TrendyolOperation.Delivery,
             MarketplaceShopBulkOperation.PricePreview=>TrendyolOperation.Price,
             MarketplaceShopBulkOperation.StockPreview=>TrendyolOperation.Stock,
@@ -46,7 +47,7 @@ public sealed partial class TrendyolWorkspacePanel
             MarketplaceShopBulkOperation.CreatePreview=>TrendyolOperation.Create,
             _=>throw new InvalidOperationException("Bu Trendyol işlemi uzman önizlemeye bağlanmadı.")};
         mode.SelectedItem=mode.Items.Cast<Mode>().Single(m=>m.Value==target);
-        PresentPreview(store.Preview(Account(),selection.ProductIds,target));
+        PresentPreview(store.Preview(Account(),request.Rows.Select(row=>row.ProductId),target));
     }
     static void FilterField(Panel panel,string label,UIElement input)
     {
