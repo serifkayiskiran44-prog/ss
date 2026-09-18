@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace TrMarketplaceHubDesktop;
 public static class CredentialStore
 {
-    private static string StorePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop", "credentials.bin");
+    private static string DefaultDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
     // Purely technical bounds - a DPAPI-wrapped EtsyCredentials JSON blob is
     // normally well under 1KB even encrypted; these budgets give generous
     // headroom for future fields while making an oversized/corrupt file a
@@ -14,24 +14,28 @@ public static class CredentialStore
     // ReadAllBytes/deserialize. See #2644.
     private const int MaxEncryptedFileBytes = 64 * 1024;
     private const int MaxPlaintextBytes = 32 * 1024;
-    public static void Save(EtsyCredentials credentials)
+    public static void Save(EtsyCredentials credentials) => Save(credentials, null);
+    public static void Save(EtsyCredentials credentials, string? directory)
     {
+        var storePath = ResolveStorePath(directory);
         var plain = JsonSerializer.SerializeToUtf8Bytes(credentials);
         try
         {
             var encrypted = Protect(plain);
-            Directory.CreateDirectory(Path.GetDirectoryName(StorePath)!);
-            var temporary = StorePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try { File.WriteAllBytes(temporary, encrypted); File.Move(temporary, StorePath, true); }
+            Directory.CreateDirectory(Path.GetDirectoryName(storePath)!);
+            var temporary = storePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try { File.WriteAllBytes(temporary, encrypted); File.Move(temporary, storePath, true); }
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException)
         { throw new InvalidOperationException("Bağlantı bilgileri Windows kullanıcı profilinde güvenli olarak kaydedilemedi."); }
         finally { CryptographicOperations.ZeroMemory(plain); }
     }
-    public static EtsyCredentials? Load()
+    public static EtsyCredentials? Load() => Load(null);
+    public static EtsyCredentials? Load(string? directory)
     {
-        if (!File.Exists(StorePath)) return null;
+        var storePath = ResolveStorePath(directory);
+        if (!File.Exists(storePath)) return null;
         const string recoveryMessage = "Kayıtlı bağlantı bilgileri bu Windows kullanıcısı tarafından okunamadı. Bilgileri yeniden girip kaydedin.";
         byte[]? plain = null;
         try
@@ -39,15 +43,21 @@ public static class CredentialStore
             // Check the file's length before ever allocating/reading it - an
             // oversized/corrupt file is rejected deterministically without an
             // unbounded ReadAllBytes. Never truncated, deleted, or overwritten.
-            var length = new FileInfo(StorePath).Length;
+            var length = new FileInfo(storePath).Length;
             if (length > MaxEncryptedFileBytes) throw new InvalidOperationException(recoveryMessage);
-            plain = Unprotect(File.ReadAllBytes(StorePath));
+            plain = Unprotect(File.ReadAllBytes(storePath));
             if (plain.Length > MaxPlaintextBytes) throw new InvalidOperationException(recoveryMessage);
             return JsonSerializer.Deserialize<EtsyCredentials>(plain);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or JsonException)
         { throw new InvalidOperationException(recoveryMessage); }
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
+    }
+    private static string ResolveStorePath(string? directory)
+    {
+        if (directory is null) return Path.Combine(DefaultDirectory, "credentials.bin");
+        if (string.IsNullOrWhiteSpace(directory)) throw new ArgumentException("Bağlantı bilgileri dizini boş olamaz.", nameof(directory));
+        return Path.Combine(Path.GetFullPath(directory), "credentials.bin");
     }
     internal static byte[] Protect(byte[] data) => Transform(data, true);
     internal static byte[] Unprotect(byte[] data) => Transform(data, false);

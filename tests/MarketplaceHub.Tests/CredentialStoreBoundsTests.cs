@@ -7,81 +7,70 @@ namespace MarketplaceHub.Tests;
 /// Coverage for #2644: CredentialStore.Load must never read an unbounded
 /// encrypted file or decrypt-then-deserialize an unbounded plaintext blob.
 ///
-/// CredentialStore has no directory-injection parameter (unlike every other
-/// store in this codebase) - it always targets the real per-Windows-user
-/// %LocalAppData%\MonoBridgeDesktop\credentials.bin, because it round-trips
-/// through the real DPAPI CurrentUser boundary. These tests back up and
-/// restore any pre-existing file around each case so a developer's real saved
-/// Etsy credentials (if any) are never lost.
+/// Every test uses a fresh temporary directory while still round-tripping
+/// through the real DPAPI CurrentUser boundary. The user's real LocalAppData
+/// credential file is never inspected, backed up, overwritten, or deleted.
 [TestClass]
 public sealed class CredentialStoreBoundsTests
 {
-    static string StorePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop", "credentials.bin");
-
-    static void WithIsolatedStore(Action test)
+    static void WithIsolatedStore(Action<string, string> test)
     {
-        var path = StorePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        byte[]? backup = File.Exists(path) ? File.ReadAllBytes(path) : null;
-        try { test(); }
-        finally
-        {
-            if (backup is not null) File.WriteAllBytes(path, backup);
-            else if (File.Exists(path)) File.Delete(path);
-        }
+        var directory = Path.Combine(Path.GetTempPath(), "MonoBridgeCredentialTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try { test(directory, Path.Combine(directory, "credentials.bin")); }
+        finally { Directory.Delete(directory, true); }
     }
 
     [TestMethod]
-    public void MissingFileReturnsNull() => WithIsolatedStore(() =>
+    public void MissingFileReturnsNull() => WithIsolatedStore((directory, _) =>
     {
-        if (File.Exists(StorePath)) File.Delete(StorePath);
-        Assert.IsNull(TrMarketplaceHubDesktop.CredentialStore.Load());
+        Assert.IsNull(TrMarketplaceHubDesktop.CredentialStore.Load(directory));
     });
 
     [TestMethod]
-    public void ValidNormalSizeCredentialRoundTrips() => WithIsolatedStore(() =>
+    public void ValidNormalSizeCredentialRoundTrips() => WithIsolatedStore((directory, _) =>
     {
         var credentials = new TrMarketplaceHubDesktop.EtsyCredentials("k", "s", "t", "123");
-        TrMarketplaceHubDesktop.CredentialStore.Save(credentials);
-        var loaded = TrMarketplaceHubDesktop.CredentialStore.Load();
+        TrMarketplaceHubDesktop.CredentialStore.Save(credentials, directory);
+        var loaded = TrMarketplaceHubDesktop.CredentialStore.Load(directory);
         Assert.IsNotNull(loaded);
         Assert.AreEqual("k", loaded!.Key);
         Assert.AreEqual("123", loaded.ShopId);
     });
 
     [TestMethod]
-    public void OversizedEncryptedFileIsRejectedWithoutFullyReadingIt() => WithIsolatedStore(() =>
+    public void OversizedEncryptedFileIsRejectedWithoutFullyReadingIt() => WithIsolatedStore((directory, storePath) =>
     {
         // Far larger than any real DPAPI-wrapped credential blob could ever be -
         // this must be rejected before File.ReadAllBytes ever runs.
-        File.WriteAllBytes(StorePath, new byte[10 * 1024 * 1024]);
-        var error = Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.CredentialStore.Load());
+        File.WriteAllBytes(storePath, new byte[10 * 1024 * 1024]);
+        var error = Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.CredentialStore.Load(directory));
         StringAssert.Contains(error.Message, "okunamadı");
     });
 
     [TestMethod]
-    public void CorruptTruncatedBlobFailsClosedWithTheRecoveryMessage() => WithIsolatedStore(() =>
+    public void CorruptTruncatedBlobFailsClosedWithTheRecoveryMessage() => WithIsolatedStore((directory, storePath) =>
     {
-        File.WriteAllBytes(StorePath, new byte[] { 1, 2, 3, 4, 5 });
-        var error = Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.CredentialStore.Load());
+        File.WriteAllBytes(storePath, new byte[] { 1, 2, 3, 4, 5 });
+        var error = Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.CredentialStore.Load(directory));
         StringAssert.Contains(error.Message, "okunamadı");
     });
 
     [TestMethod]
-    public void ZeroByteFileFailsClosedRatherThanCrashingOrReturningNull() => WithIsolatedStore(() =>
+    public void ZeroByteFileFailsClosedRatherThanCrashingOrReturningNull() => WithIsolatedStore((directory, storePath) =>
     {
-        File.WriteAllBytes(StorePath, Array.Empty<byte>());
-        Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.CredentialStore.Load());
+        File.WriteAllBytes(storePath, Array.Empty<byte>());
+        Assert.ThrowsException<InvalidOperationException>(() => TrMarketplaceHubDesktop.CredentialStore.Load(directory));
     });
 
     [TestMethod]
-    public void RestartPreservesTheFileByteForByteAfterANormalSave() => WithIsolatedStore(() =>
+    public void RestartPreservesTheFileByteForByteAfterANormalSave() => WithIsolatedStore((directory, storePath) =>
     {
         var credentials = new TrMarketplaceHubDesktop.EtsyCredentials("k2", "s2", "t2", "456");
-        TrMarketplaceHubDesktop.CredentialStore.Save(credentials);
-        var bytesAfterSave = File.ReadAllBytes(StorePath);
-        _ = TrMarketplaceHubDesktop.CredentialStore.Load();
-        var bytesAfterLoad = File.ReadAllBytes(StorePath);
+        TrMarketplaceHubDesktop.CredentialStore.Save(credentials, directory);
+        var bytesAfterSave = File.ReadAllBytes(storePath);
+        _ = TrMarketplaceHubDesktop.CredentialStore.Load(directory);
+        var bytesAfterLoad = File.ReadAllBytes(storePath);
         CollectionAssert.AreEqual(bytesAfterSave, bytesAfterLoad, "A normal Load() must never rewrite/truncate the file.");
     });
 }

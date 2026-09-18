@@ -97,7 +97,16 @@ public sealed class EtsyOAuth(HttpClient client)
             if (!string.Equals(root.GetProperty("token_type").GetString(), "Bearer", StringComparison.OrdinalIgnoreCase) || expires <= 0 || expires > 604800)
                 throw new InvalidOperationException();
             EtsyHttp.ValidateValue(access); EtsyHttp.ValidateValue(refresh);
-            return credentials with { Token = access, RefreshToken = refresh, ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expires) };
+            var scopes = credentials.GrantedScopes;
+            if (root.TryGetProperty("scope", out var scopeElement))
+            {
+                if (scopeElement.ValueKind != JsonValueKind.String) throw new InvalidOperationException();
+                var scope = scopeElement.GetString() ?? "";
+                scopes = scope.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Distinct(StringComparer.Ordinal).ToArray();
+                if (scopes.Count == 0) throw new InvalidOperationException();
+            }
+            return credentials with { Token = access, RefreshToken = refresh, ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expires), GrantedScopes = scopes };
         }
         catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or ArgumentException or FormatException or OverflowException)
         { throw new InvalidOperationException("Etsy geçerli bir erişim bilgisi yanıtı döndürmedi."); }
@@ -125,7 +134,17 @@ internal static class EtsyHttp
         try
         {
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Etsy isteği tamamlanamadı. HTTP {(int)response.StatusCode}.");
+            if (!response.IsSuccessStatusCode)
+            {
+                var reason = (int)response.StatusCode switch
+                {
+                    401 => "Kimlik doğrulanamadı. API bilgilerini kontrol edin.",
+                    403 => "Erişim reddedildi. Uygulama ve mağaza izinlerini kontrol edin.",
+                    429 => "İstek sınırına ulaşıldı. Daha sonra tekrar deneyin.",
+                    _ => "Etsy isteği tamamlanamadı."
+                };
+                throw new InvalidOperationException($"{reason} HTTP {(int)response.StatusCode}.");
+            }
             await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
             using var buffer = new MemoryStream();
             var bytes = new byte[8192]; int count;

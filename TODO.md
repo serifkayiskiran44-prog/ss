@@ -1,5 +1,13 @@
 # Devam durumu — 2026-09-11
 
+## Etsy çalışma alanı — 2026-09-18
+- [x] İki Entegra Etsy eğitiminin tam Türkçe altyazısını ve ilgili ekranlarını incele; güncel resmi Etsy API ile karşılaştır.
+- [x] Ayrı Etsy menüsü: geniş kontrol listesi, toplu işlem önizlemeleri, SKU eşleme, ürün kartı, kategori/özellik ve kargo/hazırlık şablonları, işlem geçmişi.
+- [x] Değişmez önizleme, hesap/mağaza ve stale koruması; fiyat/stok ayrımı, döviz kontrolü ve kalıcı tekrar-gönderim engelleri.
+- [x] 1116/1116 Release testi; Windows-Excel-Final self-contained yayın ve masaüstü ekran kontrolü.
+- [x] Mevcut onaylı Mono XML Bridge uygulamasını ve MonoFromTurkiye / 67961639 mağazasını salt okunur doğrula.
+- [x] OAuth bağlantısı tamamlandı ve erişim bilgileri Windows hesabına bağlı şifreli kaydedildi. Gerçek hesaptan 3065 kategori, 1 kargo profili, 2 hazırlık profili, 0 bölüm ve mevcut 1 ilan okundu. Kargo profili sahipliği resmî user_id alanıyla doğrulandı. Ürün gönderimi yapılmadı.
+
 ## Trendyol V2 — 2026-09-18
 - [x] Marka bilgilerini tek tıklamayla aç; seçim değişince üretici alanlarına dön, kayıtlı alan ve marka sayılarını formdaki yeni değerlerden ayrı göster. Çoklu seçim Ctrl/Shift ve tümünü seç ile korunur.
 - [x] T. stok/fiyat sütunlarını açık Trendyol adlarıyla göster. 1076 Release testi geçti; Windows-Excel-Final yayımlandı ve açıldı. AHM'nin üç üretici alanı, 8in1 eksik bilgi durumu ve marka değişiminde formun başa dönmesi ekranda doğrulandı.

@@ -47,7 +47,7 @@ public sealed class SafetyAndStabilityTests
     }
 
     [TestMethod]
-    public void EtsyListingClientUsesShopScopedReadAndExactUpdatePayload()
+    public void EtsyListingClientVerifiesOwnershipAndUsesInventoryUpdatePayload()
     {
         var requests = new List<HttpRequestMessage>();
         using var http = new HttpClient(new RecordingHandler(requests));
@@ -60,11 +60,12 @@ public sealed class SafetyAndStabilityTests
         Assert.AreEqual(456, listing.ListingId);
         Assert.AreEqual(456, updated.ListingId);
         Assert.AreEqual("GET", requests[0].Method.Method);
-        Assert.AreEqual("/v3/application/shops/123/listings/456", requests[0].RequestUri!.AbsolutePath);
-        Assert.AreEqual("PATCH", requests[1].Method.Method);
-        Assert.AreEqual("/v3/application/shops/123/listings/456", requests[1].RequestUri!.AbsolutePath);
-        StringAssert.Contains(requestBodies[1], "quantity=7");
-        StringAssert.Contains(requestBodies[1], "price=12.50");
+        Assert.AreEqual("/v3/application/listings/456", requests[0].RequestUri!.AbsolutePath);
+        Assert.AreEqual("PUT", requests[3].Method.Method);
+        Assert.AreEqual("/v3/application/listings/456/inventory", requests[3].RequestUri!.AbsolutePath);
+        StringAssert.Contains(requestBodies[3], "\"quantity\":7");
+        StringAssert.Contains(requestBodies[3], "\"price\":12.50");
+        StringAssert.Contains(requestBodies[3], "\"sku\":\"SKU-1\"");
     }
 
     [TestMethod]
@@ -234,8 +235,9 @@ public sealed class SafetyAndStabilityTests
         {
             requests.Add(request);
             requestBodies.Add(request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "");
+            if(request.RequestUri!.AbsolutePath.EndsWith("/inventory")) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content=new StringContent("{\"products\":[{\"sku\":\"SKU-1\",\"property_values\":[],\"offerings\":[{\"price\":{\"amount\":1250,\"divisor\":100,\"currency_code\":\"USD\"},\"quantity\":2,\"is_enabled\":true,\"readiness_state_id\":7}]}],\"price_on_property\":[],\"quantity_on_property\":[],\"sku_on_property\":[]}") });
             var json = request.Method == HttpMethod.Get
-                ? "{\"listing_id\":456,\"title\":\"Demo\",\"description\":\"d\",\"state\":\"active\",\"quantity\":2,\"price\":{\"amount\":1250,\"divisor\":100,\"currency_code\":\"USD\"},\"skus\":[\"SKU-1\"]}"
+                ? "{\"listing_id\":456,\"shop_id\":123,\"title\":\"Demo\",\"description\":\"d\",\"state\":\"active\",\"quantity\":2,\"price\":{\"amount\":1250,\"divisor\":100,\"currency_code\":\"USD\"},\"skus\":[\"SKU-1\"]}"
                 : "{\"listing_id\":456}";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) });
         }

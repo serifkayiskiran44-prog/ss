@@ -58,9 +58,11 @@ public sealed class EtsyLiveSafetyTests
         var result = await service.DispatchAsync(credentials, current, preview, true);
 
         Assert.AreEqual(456, result.ListingId);
-        Assert.AreEqual(2, requests.Count);
+        Assert.AreEqual(4, requests.Count);
         Assert.AreEqual("GET", requests[0].Method.Method);
-        Assert.AreEqual("PATCH", requests[1].Method.Method);
+        Assert.AreEqual("/v3/application/listings/456",requests[0].RequestUri!.AbsolutePath);
+        Assert.AreEqual("PUT", requests[3].Method.Method);
+        Assert.AreEqual("/v3/application/listings/456/inventory",requests[3].RequestUri!.AbsolutePath);
     }
 
     [TestMethod]
@@ -78,9 +80,9 @@ public sealed class EtsyLiveSafetyTests
         var result = await service.DispatchAsync(credentials, current, preview, true);
 
         Assert.AreEqual(456, result.ListingId);
-        Assert.AreEqual(2, requests.Count);
-        Assert.AreEqual("PATCH", requests[1].Method.Method);
-        var body = handler.Bodies[1];
+        Assert.AreEqual(3, requests.Count);
+        Assert.AreEqual("PATCH", requests[2].Method.Method);
+        var body = handler.Bodies[2];
         StringAssert.Contains(body, "state=inactive");
         Assert.IsFalse(body.Contains("quantity"), "Deactivation must not also send a stock-out quantity PATCH.");
     }
@@ -123,8 +125,17 @@ public sealed class EtsyLiveSafetyTests
         Assert.AreEqual(1, maxConcurrentInside, "Concurrent callers must never run the refresh action at the same time.");
         Assert.AreEqual(8, runs);
     }
+    [TestMethod] public async Task DirectLifecycleCallsRejectWrongShopBeforeAnyWrite()
+    {
+        foreach(var publish in new[]{true,false})
+        {
+            var requests=new List<HttpRequestMessage>(); using var http=new HttpClient(new FakeEtsyHandler(requests,"USD","active",999)); var client=new EtsyShopClient(http);
+            await Assert.ThrowsExceptionAsync<InvalidOperationException>(async()=> { if(publish)await client.PublishListingAsync(new("k","s","t","123"),456); else await client.DeactivateListingAsync(new("k","s","t","123"),456); });
+            Assert.AreEqual(1,requests.Count); Assert.AreEqual(HttpMethod.Get,requests[0].Method);
+        }
+    }
 
-    sealed class FakeEtsyHandler(List<HttpRequestMessage> requests, string listingCurrency, string listingState) : HttpMessageHandler
+    sealed class FakeEtsyHandler(List<HttpRequestMessage> requests, string listingCurrency, string listingState, long shopId=123) : HttpMessageHandler
     {
         public List<string> Bodies { get; } = [];
 
@@ -132,9 +143,10 @@ public sealed class EtsyLiveSafetyTests
         {
             requests.Add(request);
             Bodies.Add(request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult() ?? "");
+            if(request.RequestUri!.AbsolutePath.EndsWith("/inventory")) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content=new StringContent("{\"products\":[{\"sku\":\"SKU-1\",\"property_values\":[],\"offerings\":[{\"price\":{\"amount\":1000,\"divisor\":100,\"currency_code\":\"USD\"},\"quantity\":5,\"is_enabled\":true,\"readiness_state_id\":7}]}],\"price_on_property\":[],\"quantity_on_property\":[],\"sku_on_property\":[]}") });
             if (request.Method == HttpMethod.Get)
             {
-                var json = $$"""{"listing_id":456,"title":"Demo","description":"d","state":"{{listingState}}","quantity":5,"price":{"amount":1000,"divisor":100,"currency_code":"{{listingCurrency}}"},"skus":["SKU-1"]}""";
+                var json = $$"""{"listing_id":456,"shop_id":{{shopId}},"title":"Demo","description":"d","state":"{{listingState}}","quantity":5,"price":{"amount":1000,"divisor":100,"currency_code":"{{listingCurrency}}"},"skus":["SKU-1"]}""";
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) });
             }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"listing_id\":456}") });

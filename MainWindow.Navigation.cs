@@ -13,7 +13,7 @@ public partial class MainWindow
  UiPreferenceStore uiPreferences = null!;
  string? currentRoute;
  bool selectingRoute;
- TabControl? etsyTabs;
+ EtsyWorkspacePanel? etsyWorkspace;
 
  void BuildNavigation()
  {
@@ -34,6 +34,9 @@ public partial class MainWindow
   Group("ENTEGRASYON");
   var trendyolWorkspace=new TrendyolWorkspacePanel(dataDirectory);
   Page("trendyol","Trendyol","Ürün kontrolü, eşleştirme, mağaza ayarları ve gönderim sonuçları.",trendyolWorkspace);
+  etsyWorkspace=new EtsyWorkspacePanel(dataDirectory);
+  etsyWorkspace.CredentialsChanged+=SetCredentials;
+  Page("etsy","Etsy","Ürün kontrolü, SKU eşleştirme, kategori ve kargo şablonları, gönderim sonuçları.",etsyWorkspace);
   Page("bizimhesap","BizimHesap","Ürün/depo okuma ve XML ürünleri için SKU-barkod eşleştirme önizlemesi.",BizimHesapPanel.Create(dataDirectory));
   Group("YÖNETİM");
   var settings=new StackPanel{Margin=new Thickness(20)};
@@ -41,6 +44,7 @@ public partial class MainWindow
   settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
   settings.Children.Add(Button("BizimHesap bağlantı ayarları",()=>Navigate("bizimhesap")));
   settings.Children.Add(Button("Trendyol bağlantı ayarları",()=>{Navigate("trendyol");trendyolWorkspace.ShowSettings();}));
+  settings.Children.Add(Button("Etsy bağlantı ayarları",()=>{Navigate("etsy");etsyWorkspace.ShowSettings();}));
   settings.Children.Add(Heading("Sürüm, yedek ve taşıma"));settings.Children.Add(DataBackupPanel.Create(dataDirectory));
   settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML otomasyonu / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));
   Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
