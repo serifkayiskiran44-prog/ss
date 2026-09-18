@@ -3,7 +3,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Reflection;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Threading;
+using TrMarketplaceHubDesktop;
 using TrMarketplaceHubDesktop.Catalog;
 
 namespace MarketplaceHub.Tests;
@@ -39,6 +46,68 @@ public sealed class ProductSourceBindingTests
     {
         SqliteConnection.ClearAllPools();
         if (Directory.Exists(root)) Directory.Delete(root, true);
+    }
+
+    sealed class PausedXmlHandler : HttpMessageHandler
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Resume { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            await Resume.Task.WaitAsync(cancellationToken);
+            return new(HttpStatusCode.OK) { Content = new StringContent(Feed) };
+        }
+    }
+
+    static void SetField(object target, string name, object value) =>
+        target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
+
+    static object Invoke(object target, string name, params object[] arguments) =>
+        target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, arguments);
+
+    static Task InvokeTask(object target, string name)
+    {
+        try { return (Task)Invoke(target, name)!; }
+        catch (TargetInvocationException error) when (error.InnerException is not null)
+        {
+            return Task.FromException(error.InnerException);
+        }
+    }
+
+    static void InSta(Func<string, Task> action)
+    {
+        Exception failure = null;
+        var thread = new Thread(() =>
+        {
+            var root = NewRoot();
+            var dispatcher = Dispatcher.CurrentDispatcher;
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
+            try
+            {
+                var task = action(root);
+                _ = task.ContinueWith(_ => dispatcher.BeginInvokeShutdown(DispatcherPriority.Background), TaskScheduler.Default);
+                Dispatcher.Run();
+                task.GetAwaiter().GetResult();
+            }
+            catch (Exception error) { failure = error; }
+            finally
+            {
+                dispatcher.InvokeShutdown();
+                for (var attempt = 0; attempt < 20; attempt++)
+                {
+                    SqliteConnection.ClearAllPools();
+                    try { if (Directory.Exists(root)) Directory.Delete(root, true); break; }
+                    catch (IOException) when (attempt < 19) { Thread.Sleep(50); }
+                    catch (Exception error) { failure ??= error; break; }
+                }
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null) throw failure;
     }
 
     [TestMethod]
@@ -171,5 +240,70 @@ public sealed class ProductSourceBindingTests
             Assert.ThrowsException<InvalidOperationException>(() => XmlCatalog.Preview(Feed, Source("deleted"), catalog));
         }
         finally { Cleanup(root); }
+    }
+
+    [TestMethod]
+    public void MainWindowManualPreviewRejectsSourceDeletedAfterItWasLoaded()
+    {
+        InSta(async root =>
+        {
+            var catalog = new CatalogStore(root);
+            var source = Source(Guid.NewGuid().ToString("N"));
+            catalog.SaveSource(source);
+            var window = new MainWindow(root);
+            try
+            {
+                Invoke(window, "SetSource", source);
+                SetField(window, "xml", Feed);
+                SetField(window, "loadedLocation", source.Location);
+                using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "catalog.db") }.ToString()))
+                {
+                    connection.Open();
+                    using var command = connection.CreateCommand();
+                    command.CommandText = "DELETE FROM Sources WHERE Id=$id";
+                    command.Parameters.AddWithValue("$id", source.Id);
+                    command.ExecuteNonQuery();
+                }
+
+                var error = await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => InvokeTask(window, "PreviewAsync"));
+                StringAssert.Contains(error.Message, "silinmiş");
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [TestMethod]
+    public void MainWindowScheduledRefreshDoesNotReenableSourceDisabledDuringRead()
+    {
+        InSta(async root =>
+        {
+            var window = new MainWindow(root);
+            var handler = new PausedXmlHandler();
+            SetField(window, "http", new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) });
+            var catalog = new CatalogStore(root);
+            var source = Source(Guid.NewGuid().ToString("N"));
+            source.AutoImport = true;
+            source.IntervalMinutes = 1;
+            catalog.SaveSource(source);
+            try
+            {
+                var scheduled = InvokeTask(window, "ScheduledAsync");
+                await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                var current = catalog.Sources().Single(item => item.Id == source.Id);
+                current.Enabled = false;
+                catalog.SaveSource(current);
+                handler.Resume.TrySetResult();
+
+                await scheduled;
+
+                Assert.IsFalse(catalog.Sources().Single(item => item.Id == source.Id).Enabled, "A stale scheduler object must not re-enable the source.");
+                Assert.IsFalse(catalog.Products().Any(item => item.SourceId == source.Id), "A source disabled during read must not reach catalog import.");
+            }
+            finally
+            {
+                handler.Resume.TrySetResult();
+                window.Close();
+            }
+        });
     }
 }
