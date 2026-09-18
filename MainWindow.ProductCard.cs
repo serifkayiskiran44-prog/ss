@@ -74,7 +74,16 @@ public partial class MainWindow
         tabs.Items.Add(new TabItem { Header = "Resimler ve açıklama", Content = Scroll(media) });
         var channels = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, ItemsSource = create ? null : MarketplaceProductPanelModel.Build(product.Id, dataDirectory) };
         foreach (var col in new[] { ("Pazaryeri", "Channel", 150d), ("Mağaza", "ShopId", 130d), ("Durum", "Durum", 180d), ("Eşleştirme", "MappingId", 190d), ("Ne yapılmalı?", "Aciklama", 430d) }) Column(channels, col.Item1, col.Item2, col.Item3);
-        tabs.Items.Add(new TabItem { Header = "Pazaryeri durumları", Content = channels });
+        var channelHost = new System.Windows.Controls.DockPanel();
+        if (!create)
+        {
+            var channelActions = new WrapPanel();
+            channelActions.Children.Add(Button("Mağaza bağlantıları", () => new ProductConnectionsWindow(dataDirectory, new[] { product.Id }) { Owner = this }.ShowDialog()));
+            channelActions.Children.Add(Button("Kaynak ve stok bakiyeleri", () => new ProductSourceWindow(dataDirectory, product.Id) { Owner = this }.ShowDialog()));
+            System.Windows.Controls.DockPanel.SetDock(channelActions, System.Windows.Controls.Dock.Top); channelHost.Children.Add(channelActions);
+        }
+        channelHost.Children.Add(channels);
+        tabs.Items.Add(new TabItem { Header = "Pazaryeri durumları", Content = channelHost });
         Window? dialog = null; var actions = new WrapPanel(); var message = Hint("");
         actions.Children.Add(Button("Kaydet", () =>
         {

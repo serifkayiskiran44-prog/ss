@@ -91,6 +91,31 @@ public sealed class ProductChannelBindingStore
         return saved;
     }
 
+    public void Delete(string productId, string connectionId, long expectedVersion, long expectedConnectionRevision)
+    {
+        if (expectedVersion < 1) throw new ArgumentOutOfRangeException(nameof(expectedVersion));
+        if (expectedConnectionRevision < 1) throw new ArgumentOutOfRangeException(nameof(expectedConnectionRevision));
+        using var connection = Open();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM ProductChannelBindings
+            WHERE ProductId=$product AND ConnectionId=$connection AND Version=$version
+              AND EXISTS(
+                  SELECT 1 FROM MarketplaceConnections
+                  WHERE Id=$connection AND Revision=$connectionRevision
+              )
+            """;
+        command.Parameters.AddWithValue("$product", Required(productId, nameof(productId)));
+        command.Parameters.AddWithValue("$connection", Required(connectionId, nameof(connectionId)));
+        command.Parameters.AddWithValue("$version", expectedVersion);
+        command.Parameters.AddWithValue("$connectionRevision", expectedConnectionRevision);
+        if (command.ExecuteNonQuery() != 1)
+            throw new InvalidOperationException("Mağaza hesabı veya ürün bağlantısı değişti; yeni önizleme alın.");
+        transaction.Commit();
+    }
+
     internal ProductChannelBinding Save(SqliteConnection connection, SqliteTransaction transaction, ProductChannelBinding binding, long expectedVersion)
     {
         long currentVersion;

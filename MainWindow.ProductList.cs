@@ -41,6 +41,9 @@ public partial class MainWindow
         bar.Children.Add(Button("Temizle", () => search.Clear()));
         bar.Children.Add(Button("+ Yeni ürün", () => OpenProductCard(true)));
         bar.Children.Add(Button("Ürün kartı", () => OpenProductCard(false)));
+        bar.Children.Add(Button("Mağazaya bağla", OpenProductConnections));
+        bar.Children.Add(Button("Bağlantılar", OpenSelectedProductConnections));
+        bar.Children.Add(Button("Kaynak ve stok", OpenSelectedProductSource));
         bar.Children.Add(Button("Kolonlar", OpenProductColumnChooser));
         bar.Children.Add(Button("Excel'e aktar", ExportProductList));
         bar.Children.Add(Button("Excel ile güncelle", () => Navigate("excel")));
@@ -82,6 +85,8 @@ public partial class MainWindow
         products.HorizontalGridLinesBrush = Brushes.LightGray; products.VerticalGridLinesBrush = Brushes.LightGray;
         products.FrozenColumnCount = 3; products.CanUserReorderColumns = true; products.CanUserResizeColumns = true;
         products.RowDetailsVisibilityMode = DataGridRowDetailsVisibilityMode.Collapsed;
+        var badgeBinding = new Binding(".") { Converter = new ProductBadgeTextConverter(dataDirectory) };
+        products.Columns.Insert(Math.Min(3, products.Columns.Count), new DataGridTextColumn { Header = "Mağazalar", Binding = badgeBinding, Width = 105, IsReadOnly = true });
         products.CellEditEnding += (_, args) =>
         {
             if (args.EditAction != DataGridEditAction.Commit || args.Row.Item is not CatalogProduct changed) return;
@@ -120,7 +125,10 @@ public partial class MainWindow
             var text = new StackPanel { Width = 650, Margin = new Thickness(12, 0, 0, 0) };
             text.Children.Add(Hint($"ID: {product.ProductIdLabel} • Marka ID: {product.BrandIdLabel} • Kategori ID: {product.CategoryIdLabel}"));
             text.Children.Add(Hint(product.Category));
-            text.Children.Add(Hint(string.Join("\n", MarketplaceProductPanelModel.Build(product.Id, dataDirectory).Select(p => $"{p.Channel} / {p.ShopId}: {p.Status}"))));
+            var connectionDetails = ProductConnectionPresentation.Details(dataDirectory, product.Id);
+            text.Children.Add(Hint(connectionDetails.Count == 0
+                ? "Mağaza bağlantısı yok."
+                : string.Join("\n", connectionDetails.Select(row => $"{row.DisplayName} / {row.ShopId}: {row.State} · içerik {(row.ManageContent ? "açık" : "kapalı")}, fiyat {(row.ManagePrice ? "açık" : "kapalı")}, stok {(row.ManageStock ? "açık" : "kapalı")}"))));
             text.Children.Add(Hint($"Fiyat: {(product.LockPrice ? "kilitli" : "güncellenebilir")} • Stok: {(product.LockStock ? "kilitli" : "güncellenebilir")}"));
             line.Children.Add(text); target.Content = line;
         };
@@ -188,4 +196,36 @@ public partial class MainWindow
     }
 
     static IEnumerable<string> ProductImages(CatalogProduct product) => product.ImageUrls.Split(new[] { '|', '\r', '\n' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct();
+
+    IReadOnlyList<string> SelectedProductIdsForConnection()
+    {
+        var ids = products.SelectedItems.OfType<CatalogProduct>().Select(product => product.Id).Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0)
+            throw new InvalidOperationException("Mağazaya bağlamak için ürün tablosundan en az bir ürünü açıkça seçin. Filtrelenmiş veya sayfadaki ürünler otomatik seçilmez.");
+        return Array.AsReadOnly(ids);
+    }
+
+    void OpenProductConnections()
+    {
+        var dialog = new ProductConnectionsWindow(dataDirectory, SelectedProductIdsForConnection()) { Owner = this };
+        dialog.ShowDialog();
+        RefreshProducts();
+    }
+
+    void OpenSelectedProductConnections()
+    {
+        var selected = SelectedProductIdsForConnection();
+        var dialog = new ProductConnectionsWindow(dataDirectory, selected) { Owner = this };
+        dialog.ShowDialog();
+        RefreshProducts();
+    }
+
+    void OpenSelectedProductSource()
+    {
+        var selected = SelectedProductIdsForConnection();
+        if (selected.Count != 1) throw new InvalidOperationException("Kaynak ve stok ayrıntıları için tam bir ürün seçin.");
+        var dialog = new ProductSourceWindow(dataDirectory, selected[0]) { Owner = this };
+        dialog.ShowDialog();
+        RefreshProducts();
+    }
 }

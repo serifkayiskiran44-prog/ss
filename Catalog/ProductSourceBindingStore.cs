@@ -43,7 +43,17 @@ public sealed class ProductSourceBindingStore
         return result;
     }
 
-    public ProductSourceBinding Save(ProductSourceBinding binding, long expectedVersion)
+    public ProductSourceBinding Save(ProductSourceBinding binding, long expectedVersion) =>
+        SaveCore(binding, expectedVersion, null, null);
+
+    public ProductSourceBinding Save(
+        ProductSourceBinding binding,
+        long expectedVersion,
+        DateTime expectedProductUpdatedUtc,
+        string expectedSourceRevision) =>
+        SaveCore(binding, expectedVersion, expectedProductUpdatedUtc, expectedSourceRevision ?? throw new ArgumentNullException(nameof(expectedSourceRevision)));
+
+    ProductSourceBinding SaveCore(ProductSourceBinding binding, long expectedVersion, DateTime? expectedProductUpdatedUtc, string? expectedSourceRevision)
     {
         if (binding is null) throw new ArgumentNullException(nameof(binding));
         if (expectedVersion < 0) throw new ArgumentOutOfRangeException(nameof(expectedVersion));
@@ -62,8 +72,19 @@ public sealed class ProductSourceBindingStore
 
         using var connection = Open();
         using var transaction = connection.BeginTransaction(deferred: false);
-        RequireProduct(connection, transaction, productId);
-        if (binding.Kind == ProductSourceKind.Xml) RequireXmlSource(connection, transaction, sourceId);
+        var product = RequireProduct(connection, transaction, productId);
+        if (expectedProductUpdatedUtc.HasValue && product.UpdatedUtc != expectedProductUpdatedUtc.Value)
+            throw new InvalidOperationException("Ürün önizlemeden sonra değişti; yeni önizleme alın.");
+        if (binding.Kind == ProductSourceKind.Xml)
+        {
+            var source = RequireXmlSource(connection, transaction, sourceId);
+            if (expectedSourceRevision is not null && (!source.Enabled || CatalogStore.SourceConfigRevision(source) != expectedSourceRevision))
+                throw new InvalidOperationException("XML kaynağı önizlemeden sonra değişti veya devre dışı; yeni önizleme alın.");
+        }
+        else if (!string.IsNullOrEmpty(expectedSourceRevision))
+        {
+            throw new InvalidOperationException("Elle yönetilen kaynak önizlemesi XML revizyonu taşıyamaz.");
+        }
 
         long currentVersion;
         using (var current = connection.CreateCommand())
@@ -152,16 +173,23 @@ public sealed class ProductSourceBindingStore
 
     static bool IsXml(string value) => string.Equals(value, "xml", StringComparison.OrdinalIgnoreCase);
 
-    static void RequireProduct(SqliteConnection connection, SqliteTransaction transaction, string productId)
+    static CatalogProduct RequireProduct(SqliteConnection connection, SqliteTransaction transaction, string productId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "SELECT 1 FROM CatalogProducts WHERE Id=$id AND json_valid(Json)=1";
+        command.CommandText = "SELECT Json FROM CatalogProducts WHERE Id=$id AND json_valid(Json)=1";
         command.Parameters.AddWithValue("$id", productId);
-        if (command.ExecuteScalar() is null) throw new InvalidOperationException("Ürün bulunamadı veya ürün kaydı bozuk.");
+        if (command.ExecuteScalar() is not string json) throw new InvalidOperationException("Ürün bulunamadı veya ürün kaydı bozuk.");
+        try
+        {
+            var product = JsonSerializer.Deserialize<CatalogProduct>(json);
+            if (product is null || !string.Equals(product.Id, productId, StringComparison.Ordinal)) throw new JsonException();
+            return product;
+        }
+        catch (JsonException) { throw new InvalidOperationException("Ürün bulunamadı veya ürün kaydı bozuk."); }
     }
 
-    static void RequireXmlSource(SqliteConnection connection, SqliteTransaction transaction, string sourceId)
+    static XmlSource RequireXmlSource(SqliteConnection connection, SqliteTransaction transaction, string sourceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -170,6 +198,7 @@ public sealed class ProductSourceBindingStore
         if (command.ExecuteScalar() is not string json) throw new InvalidOperationException("XML kaynağı bulunamadı.");
         var source = JsonSerializer.Deserialize<XmlSource>(json);
         if (source is null || !string.Equals(source.Id, sourceId, StringComparison.Ordinal)) throw new InvalidOperationException("XML kaynak kaydı geçersiz.");
+        return source;
     }
 
     static HashSet<string> SourceIds(SqliteConnection connection, SqliteTransaction transaction)
