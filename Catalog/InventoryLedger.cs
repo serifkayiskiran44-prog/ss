@@ -159,6 +159,20 @@ internal static class InventoryLedger
 
     internal static void DeleteCatalogProduct(SqliteConnection connection, SqliteTransaction transaction, string productId)
     {
+        using (var bindingTable = connection.CreateCommand())
+        {
+            bindingTable.Transaction = transaction;
+            bindingTable.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ProductChannelBindings'";
+            if (bindingTable.ExecuteScalar() is not null)
+            {
+                using var binding = connection.CreateCommand();
+                binding.Transaction = transaction;
+                binding.CommandText = "SELECT 1 FROM ProductChannelBindings WHERE ProductId=$product LIMIT 1";
+                binding.Parameters.AddWithValue("$product", productId);
+                if (binding.ExecuteScalar() is not null)
+                    throw new InvalidOperationException("Ürün silinemez: ürünün bir mağaza bağlantısı var. Uzak ilanı korumak için önce bağlantıyı güvenli kaldırma akışını kullanın.");
+            }
+        }
         using (var stock = connection.CreateCommand())
         {
             stock.Transaction = transaction;

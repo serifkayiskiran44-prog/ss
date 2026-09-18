@@ -116,7 +116,8 @@ public sealed class ProductChannelMatchService
     {
         var preview = bindings.Preview(previewId);
         var connection = EnabledConnection(preview.ConnectionId);
-        ProductChannelRemoteSnapshot snapshot = remoteSnapshots?.Read(connection) ?? new(connection.Id, connection.ShopId, preview.RemoteRows);
+        if (remoteSnapshots is null) throw new InvalidOperationException("Uygulama için mağazadan alınmış güncel ürün snapshot'ı gerekli.");
+        var snapshot = remoteSnapshots.Read(connection);
         ValidateSnapshotIdentity(connection, snapshot);
         var currentRemoteHash = ProductChannelBindingStore.RemoteHash(snapshot.Rows);
         bindings.ValidatePreview(preview, currentRemoteHash);

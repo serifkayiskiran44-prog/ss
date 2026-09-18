@@ -151,6 +151,24 @@ public sealed class ProductChannelMatchingTests
     }
 
     [TestMethod]
+    public void ApplyRequiresCurrentSnapshotProviderAndRejectsChangedSnapshot()
+    {
+        var product = Create("SKU-A", "BAR-A");
+        remote.Rows = [Row("r1", "SKU-A", "BAR-A")];
+        var service = Service();
+        var preview = service.PreviewMatch(connection.Id, [product.Id], remote.Rows);
+        var reviewed = service.ReviewMatches(preview.Id, [new(product.Id, "r1")]);
+
+        Assert.ThrowsException<InvalidOperationException>(() => new ProductChannelMatchService(directory, null, handoff).ApplyMatches(reviewed.Id));
+        Assert.IsNull(new ProductChannelBindingStore(directory).Get(product.Id, connection.Id));
+        Assert.AreEqual(0, handoff.ProductIds.Count);
+
+        remote.Rows = [Row("r1", "SKU-A", "BAR-A") with { State = "changed" }];
+        Assert.ThrowsException<InvalidOperationException>(() => service.ApplyMatches(reviewed.Id));
+        Assert.IsNull(new ProductChannelBindingStore(directory).Get(product.Id, connection.Id));
+    }
+
+    [TestMethod]
     public void ReturnedPreviewMutationCannotChangePersistedReviewOrReceipt()
     {
         var product = Create("SKU-A", "BAR-A");

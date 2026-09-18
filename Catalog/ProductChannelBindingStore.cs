@@ -207,7 +207,8 @@ public sealed class ProductChannelBindingStore
     {
         var migrated = 0;
         var catalogIds = new CatalogStore(directory).Products().Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
-        foreach (var connection in new MarketplaceConnectionStore(directory).List(false).Where(x => x.Enabled))
+        var connectionStore = new MarketplaceConnectionStore(directory);
+        foreach (var connection in connectionStore.List(false).Where(x => x.Enabled && HasVerifiedLegacyIdentity(connectionStore, x)))
         {
             if (connection.Channel == "trendyol")
             {
@@ -244,6 +245,26 @@ public sealed class ProductChannelBindingStore
             }
         }
         return migrated;
+    }
+
+    bool HasVerifiedLegacyIdentity(MarketplaceConnectionStore connections, MarketplaceConnection connection)
+    {
+        var marker = connections.CredentialMigration(connection.Channel);
+        if (marker is null || marker.ConnectionId != connection.Id || marker.ShopId != connection.ShopId) return false;
+        var vault = new MarketplaceCredentialVault(directory);
+        try
+        {
+            return connection.Channel switch
+            {
+                "etsy" => vault.Load<EtsyCredentials>(connection.Id, connection.Channel, connection.ShopId)?.ShopId == connection.ShopId,
+                "trendyol" => vault.Load<TrendyolSettings>(connection.Id, connection.Channel, connection.ShopId)?.SupplierId == connection.ShopId,
+                _ => false
+            };
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     internal string CatalogHash(IEnumerable<string> productIds)
