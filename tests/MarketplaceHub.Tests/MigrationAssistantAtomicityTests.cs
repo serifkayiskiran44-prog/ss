@@ -16,8 +16,8 @@ public sealed class MigrationAssistantAtomicityTests
 {
     static string NewRoot() => Path.Combine(Path.GetTempPath(), "migration-atomicity-" + Guid.NewGuid().ToString("N"));
 
-    static CatalogProduct Row(string sku, string brand = "Acme", string category = "Genel", string name = "Ürün") =>
-        new() { Sku = sku, Barcode = "", Name = name, Brand = brand, Category = category, Cost = 10, Price = 20, Currency = "TRY", VatRate = 20, Stock = 5, Active = true };
+    static CatalogProduct Row(string sku, string brand = "Acme", string category = "Genel", string name = "Ürün", int stock = 5) =>
+        new() { Sku = sku, Barcode = "", Name = name, Brand = brand, Category = category, Cost = 10, Price = 20, Currency = "TRY", VatRate = 20, Stock = stock, Active = true };
 
     static MigrationPreview PreviewFor(string operationId, params CatalogProduct[] rows) => new()
     {
@@ -135,7 +135,7 @@ public sealed class MigrationAssistantAtomicityTests
     {
         var root = NewRoot();
         var service = new MigrationAssistantService(root);
-        var preview = PreviewFor(Guid.NewGuid().ToString("N"), Row("SKU-1"));
+        var preview = PreviewFor(Guid.NewGuid().ToString("N"), Row("SKU-1", stock: 0));
         var result = service.Apply(preview, true, "");
         Assert.AreEqual(1, new CatalogStore(root).Products().Count(p => p.Sku == "SKU-1"));
         Assert.AreEqual(1, new TaxonomyStore(root).List(TaxonomyKind.Brand).Count(x => x.Name == "Acme"));
@@ -171,7 +171,7 @@ public sealed class MigrationAssistantAtomicityTests
         // migration operation under test even runs.
         new CatalogStore(root).ApplyMigration([Row("SKU-OTHER", brand: "SharedBrand")], "manual:other");
         var service = new MigrationAssistantService(root);
-        var preview = PreviewFor(Guid.NewGuid().ToString("N"), Row("SKU-1", brand: "SharedBrand"));
+        var preview = PreviewFor(Guid.NewGuid().ToString("N"), Row("SKU-1", brand: "SharedBrand", stock: 0));
         var result = service.Apply(preview, true, "");
 
         service.Undo(result.JournalId);
@@ -184,7 +184,7 @@ public sealed class MigrationAssistantAtomicityTests
     {
         var root = NewRoot();
         var service = new MigrationAssistantService(root);
-        var preview = PreviewFor(Guid.NewGuid().ToString("N"), Row("SKU-1"));
+        var preview = PreviewFor(Guid.NewGuid().ToString("N"), Row("SKU-1", stock: 0));
         var result = service.Apply(preview, true, "");
         var stores = new MarketplaceConnectionStore(root);
         var created = stores.List(false).Single(x => x.ShopId == "shop-a");
@@ -199,7 +199,7 @@ public sealed class MigrationAssistantAtomicityTests
     {
         var root = NewRoot();
         var service = new MigrationAssistantService(root);
-        var preview = PreviewFor(Guid.NewGuid().ToString("N"), Row("SKU-1"));
+        var preview = PreviewFor(Guid.NewGuid().ToString("N"), Row("SKU-1", stock: 0));
         var result = service.Apply(preview, true, "");
         service.Undo(result.JournalId);
         Assert.ThrowsException<InvalidOperationException>(() => service.Apply(preview, true, ""));

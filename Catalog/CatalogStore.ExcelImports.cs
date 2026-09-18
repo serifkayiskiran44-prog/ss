@@ -67,7 +67,7 @@ public partial class CatalogStore
         var before=receipt.Before.ToDictionary(p=>p.Id);var after=receipt.After.ToDictionary(p=>p.Id);
         foreach(var product in receipt.After)
         {
-            if(!before.ContainsKey(product.Id)){using var del=connection.CreateCommand();del.Transaction=tx;del.CommandText="DELETE FROM CatalogProducts WHERE Id=$id";del.Parameters.AddWithValue("$id",product.Id);del.ExecuteNonQuery();}
+            if(!before.ContainsKey(product.Id))InventoryLedger.DeleteCatalogProduct(connection,tx,product.Id);
             else if(JsonSerializer.Serialize(before[product.Id])!=JsonSerializer.Serialize(product))Put(connection,"CatalogProducts",product.Id,before[product.Id],tx);
         }
         using(var update=connection.CreateCommand()){update.Transaction=tx;update.CommandText="UPDATE ExcelImportJournal SET Undone=1 WHERE Id=$id";update.Parameters.AddWithValue("$id",receipt.Id);update.ExecuteNonQuery();}

@@ -83,13 +83,26 @@ internal static class InventoryLedger
             var balances = new List<(string ProductId, int Quantity)>();
             while (reader.Read())
             {
+                var rowId = reader.GetString(0);
+                var json = reader.GetString(1);
+                if (json.Length > CatalogStore.MaxProductJsonBytes)
+                    throw MigrationReviewRequired(rowId, "ürün kaydı boyut sınırını aşıyor");
+                CatalogProduct? product;
                 try
                 {
-                    var product = JsonSerializer.Deserialize<CatalogProduct>(reader.GetString(1));
-                    if (product is not null && product.Id == reader.GetString(0) && product.Stock >= 0)
-                        balances.Add((product.Id, product.Stock));
+                    product = JsonSerializer.Deserialize<CatalogProduct>(json);
                 }
-                catch (JsonException) { }
+                catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException or NotSupportedException)
+                {
+                    throw MigrationReviewRequired(rowId, "ürün kaydı okunamıyor");
+                }
+                if (product is null) throw MigrationReviewRequired(rowId, "ürün kaydı boş");
+                if (string.IsNullOrWhiteSpace(rowId) || rowId.Length > 200 || rowId.Any(char.IsControl))
+                    throw MigrationReviewRequired(rowId, "satır kimliği envanter için geçersiz");
+                if (!string.Equals(product.Id, rowId, StringComparison.Ordinal))
+                    throw MigrationReviewRequired(rowId, "satır kimliği ile ürün kimliği uyuşmuyor");
+                if (product.Stock < 0) throw MigrationReviewRequired(rowId, "stok negatif");
+                balances.Add((product.Id, product.Stock));
             }
             reader.Close();
             foreach (var balance in balances)
@@ -110,6 +123,37 @@ internal static class InventoryLedger
             complete.ExecuteNonQuery();
         }
         transaction.Commit();
+    }
+
+    static InvalidOperationException MigrationReviewRequired(string rowId, string reason)
+    {
+        var safeId = string.Concat((rowId ?? "").Take(80).Select(character => char.IsControl(character) ? '?' : character));
+        if (safeId.Length == 0) safeId = "<empty>";
+        return new InvalidOperationException($"INVENTORY_MIGRATION_REVIEW_REQUIRED: katalog satırı '{safeId}' envantere taşınamadı ({reason}); katalog onarılmadan göç tamamlanmadı.");
+    }
+
+    internal static void DeleteCatalogProduct(SqliteConnection connection, SqliteTransaction transaction, string productId)
+    {
+        using (var stock = connection.CreateCommand())
+        {
+            stock.Transaction = transaction;
+            stock.CommandText = "SELECT 1 FROM InventoryBalances WHERE ProductId=$product AND Quantity<>0 LIMIT 1";
+            stock.Parameters.AddWithValue("$product", productId);
+            if (stock.ExecuteScalar() is not null)
+                throw new InvalidOperationException("Ürün silinemez: çevrimiçi veya fiziksel konumlarda stok var. Önce tüm envanter bakiyelerini sıfırlayın.");
+        }
+        using (var balances = connection.CreateCommand())
+        {
+            balances.Transaction = transaction;
+            balances.CommandText = "DELETE FROM InventoryBalances WHERE ProductId=$product";
+            balances.Parameters.AddWithValue("$product", productId);
+            balances.ExecuteNonQuery();
+        }
+        using var product = connection.CreateCommand();
+        product.Transaction = transaction;
+        product.CommandText = "DELETE FROM CatalogProducts WHERE Id=$product";
+        product.Parameters.AddWithValue("$product", productId);
+        product.ExecuteNonQuery();
     }
 
     internal static void SyncOnlineBalance(SqliteConnection connection, SqliteTransaction? transaction, CatalogProduct product)
