@@ -19,6 +19,7 @@ public sealed class ChannelListingMatrixService
         var catalog = new Catalog.CatalogStore(directory).Products();
         var plans = new ChannelProductsStore(directory).List().ToDictionary(x => (x.ChannelId.ToLowerInvariant(), x.ShopId, x.ProductId));
         var connections = new MarketplaceConnectionStore(directory).List().Where(x => x.Enabled).ToList();
+        var bindings = new Catalog.ProductChannelBindingStore(directory).List().ToDictionary(x => (x.ConnectionId, x.ProductId));
         var sync = new Catalog.SyncStore(directory).List();
         // Indexed once in O(n) instead of re-filtering+re-sorting the whole sync
         // list for every (connection,product) row - same latest-sync semantics
@@ -40,8 +41,10 @@ public sealed class ChannelListingMatrixService
             foreach (var product in catalog)
             {
                 plans.TryGetValue((connection.Channel, connection.ShopId, product.Id), out var plan);
+                bindings.TryGetValue((connection.Id, product.Id), out var binding);
                 var byProduct = LatestFor(connection.Channel, connection.ShopId, product.Id);
-                var byListing = !string.IsNullOrEmpty(plan?.ListingId) ? LatestFor(connection.Channel, connection.ShopId, plan.ListingId) : null;
+                var listingId = binding?.RemoteId ?? plan?.ListingId ?? "";
+                var byListing = !string.IsNullOrEmpty(listingId) ? LatestFor(connection.Channel, connection.ShopId, listingId) : null;
                 // A row can match sync history under two different entity keys
                 // (the catalog product id, or the plan's own listing id) - pick
                 // whichever is newer; on the rare exact-timestamp tie, favor the
@@ -53,10 +56,11 @@ public sealed class ChannelListingMatrixService
                     (null, var b) => b,
                     var (a, b) => a!.UpdatedUtc >= b!.UpdatedUtc ? a : b,
                 };
-                var status = string.IsNullOrWhiteSpace(plan?.ListingId) ? "MISSING" : plan.UpdatedUtc < now.AddDays(-180) ? "STALE" : latest?.Status == Catalog.SyncStatus.Failed ? "ERROR" : latest?.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running ? "PENDING" : latest?.Status == Catalog.SyncStatus.Succeeded ? "SYNCED" : "DRAFT";
+                var bindingUpdated = binding?.UpdatedUtc ?? plan?.UpdatedUtc ?? DateTime.MinValue;
+                var status = string.IsNullOrWhiteSpace(listingId) ? "MISSING" : bindingUpdated < now.AddDays(-180) ? "STALE" : latest?.Status == Catalog.SyncStatus.Failed ? "ERROR" : latest?.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running ? "PENDING" : latest?.Status == Catalog.SyncStatus.Succeeded ? "SYNCED" : "DRAFT";
                 var auth = connection.Status is "FAILED" or "LIVE_API_BLOCKED" or "NOT_CONFIGURED" ? "AUTH_ERROR" : connection.Status;
                 var capabilities = definition.Capabilities.Enabled.Count == 0 ? "Yerel plan" : string.Join(", ", definition.Capabilities.Enabled.Select(x => x.ToString()));
-                result.Add(new(product.Id, product.Sku, product.Name, connection.Channel, definition.Name, connection.ShopId, status, plan?.ListingId ?? "", latest?.Status.ToString() ?? "None", latest?.LastError ?? "", latest?.UpdatedUtc, auth, capabilities));
+                result.Add(new(product.Id, product.Sku, product.Name, connection.Channel, definition.Name, connection.ShopId, status, listingId, latest?.Status.ToString() ?? "None", latest?.LastError ?? "", latest?.UpdatedUtc, auth, capabilities));
             }
         }
         return result;

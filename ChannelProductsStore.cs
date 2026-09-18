@@ -68,6 +68,13 @@ public sealed class ChannelProductsStore
   if(!TryReadPlan(r,out var plan,out var corrupt))throw new ChannelPlanCorruptException(corrupt!.ChannelId,corrupt.ShopId,corrupt.ProductId,corrupt.Reason);
   return plan;
  }
+ public ChannelProductPlan? Find(MarketplaceConnection connection,string product)
+ {
+  if(connection is null)throw new ArgumentNullException(nameof(connection));
+  var current=new MarketplaceConnectionStore(Path.GetDirectoryName(new SqliteConnectionStringBuilder(connectionString).DataSource)).Get(connection.Id)??throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+  if(!current.Enabled||current.Channel!=connection.Channel||current.ShopId!=connection.ShopId)throw new InvalidOperationException("Mağaza bağlantı kimliği değişti veya devre dışı.");
+  return Find(current.Channel,current.ShopId,product);
+ }
  public IReadOnlyList<ChannelProductPlan> List(string? channel=null,string? shop=null,string? product=null)
  {
   using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText=SelectWithIdentity+" WHERE ($channel='' OR ChannelId=$channel) AND ($shop='' OR ShopId=$shop) AND ($product='' OR ProductId=$product) ORDER BY ChannelId,ShopId,ProductId";cmd.Parameters.AddWithValue("$channel",channel?.Trim().ToLowerInvariant()??"");cmd.Parameters.AddWithValue("$shop",shop?.Trim()??"");cmd.Parameters.AddWithValue("$product",product?.Trim()??"");using var r=cmd.ExecuteReader();var result=new List<ChannelProductPlan>();while(r.Read()){if(TryReadPlan(r,out var plan,out _))result.Add(plan!);}return result;
@@ -111,6 +118,14 @@ public sealed class ChannelProductsStore
   using var c=Open();using var tx=c.BeginTransaction();
   SaveWithinTransaction(c,tx,plan);
   tx.Commit();
+ }
+ public void Save(MarketplaceConnection connection,ChannelProductPlan plan)
+ {
+  if(connection is null)throw new ArgumentNullException(nameof(connection));
+  var current=new MarketplaceConnectionStore(Path.GetDirectoryName(new SqliteConnectionStringBuilder(connectionString).DataSource)).Get(connection.Id)??throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+  if(!current.Enabled||current.Channel!=connection.Channel||current.ShopId!=connection.ShopId||plan.ChannelId.Trim().ToLowerInvariant()!=current.Channel||plan.ShopId.Trim()!=current.ShopId)
+   throw new InvalidOperationException("Kanal planı başka bir mağaza hesabına ait.");
+  Save(plan);
  }
  /// All-or-nothing commit for a bulk channel-mapping batch: every plan is
  /// version-checked and written inside one transaction, so a single stale/
