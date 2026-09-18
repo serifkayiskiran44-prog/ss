@@ -31,9 +31,15 @@ public sealed partial class TrendyolWorkspacePanel
     }
     FrameworkElement BuildHistory()
     {
+        ((DataGridTextColumn)history.Columns[1]).Binding=new System.Windows.Data.Binding("Operation"){Converter=new OperationLabelConverter()};history.Columns[1].Width=160;
         var dock=new DockPanel();var top=new StackPanel();var actions=new WrapPanel();actions.Children.Add(B("Geçmişi yenile",ReloadHistory));actions.Children.Add(A("Seçili işlemin API sonucunu sorgula",async()=>{var row=history.SelectedItem as TrendyolReceipt??throw new InvalidOperationException("İşlem seçin.");if(row.BatchId.Length==0)throw new InvalidOperationException("Bu gönderimde batch ID alınamadı; mağazada kontrol edin.");var account=Account();if(account.SupplierId!=row.SellerId)throw new InvalidOperationException("Hesap değişti.");using var client=new TrendyolApiClient(account);var result=await client.GetBatchAsync(row.BatchId,Token);EnsureAccount(account);store.UpdateBatch(row.PlanId,row.SellerId,result);ReloadHistory();status.Text="Toplu işlem sonucu yenilendi. İşlem tamamlanması ürünün yayında olduğunu göstermez; mağaza ürünlerini yeniden çekin.";}));top.Children.Add(actions);
         top.Children.Add(T("API batch sonuçları yaklaşık 4 saat erişilebilir. Kuyrukta / işleniyor / hatalı durumları ayrı izlenir. Belirsiz istekler otomatik tekrarlanmaz.",true));
         var resolve=new WrapPanel();resolve.Children.Add(T("Mağazada yaptığınız kontrol"));resolutionNote.Width=360;resolve.Children.Add(resolutionNote);resolve.Children.Add(B("Mağazada kontrol ettim, kaydet",()=>{var row=history.SelectedItem as TrendyolReceipt??throw new InvalidOperationException("İşlem seçin.");if(MessageBox.Show(Window.GetWindow(this),"Trendyol satıcı panelinde bu işlemin sonucunu kontrol ettiğinizi onaylıyor musunuz? Yeni gönderim ayrıca yeni önizleme gerektirir.","Belirsiz gönderim kontrolü",MessageBoxButton.YesNo)!=MessageBoxResult.Yes)return;store.ResolveUnknown(row.PlanId,Account().SupplierId,resolutionNote.Text);ReloadHistory();}));top.Children.Add(new Expander{Header="Belirsiz gönderim için mağaza kontrolü",Content=resolve,Margin=new(5)});DockPanel.SetDock(top,Dock.Top);dock.Children.Add(top);DockPanel.SetDock(historyDetail,Dock.Bottom);dock.Children.Add(historyDetail);dock.Children.Add(history);history.SelectionChanged+=(_,_)=>historyDetail.Text=(history.SelectedItem as TrendyolReceipt)?.Detail??"";return dock;
     }
     void ReloadHistory(){history.ItemsSource=state.SellerId.Length>0?store.Receipts(state.SellerId):Array.Empty<TrendyolReceipt>();}
+    sealed class OperationLabelConverter:System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value,Type targetType,object parameter,System.Globalization.CultureInfo culture)=>Enum.TryParse<TrendyolOperation>(value as string,out var operation)?ModeLabel(operation):value;
+        public object ConvertBack(object value,Type targetType,object parameter,System.Globalization.CultureInfo culture)=>System.Windows.Data.Binding.DoNothing;
+    }
 }

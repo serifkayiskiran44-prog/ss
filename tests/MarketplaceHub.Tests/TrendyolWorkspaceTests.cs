@@ -64,4 +64,20 @@ public class TrendyolWorkspaceTests
         Assert.ThrowsException<InvalidOperationException>(() => store.Save(state));
         Assert.AreEqual(1, store.Load("10").Brands.Count);
     }
+
+    [TestMethod] public void GtinMatchesRemoteBarcodeWithoutChangingLocalIdentity()
+    {
+        var product=new CatalogProduct{Sku="PTD-175",Barcode="",Gtin="4002064419374"};
+        TrendyolRemoteProduct[] remote=[new("4002064419374","LEGACY-SKU","Treats",1,2,10m,10m,true)];
+        Assert.AreEqual("4002064419374",TrendyolMatching.Product(product,"",remote).Barcode);
+        Assert.AreEqual("",product.Barcode);Assert.AreEqual("PTD-175",product.Sku);
+    }
+    [TestMethod] public void GtinConflictNeverOverridesBarcodeOrSavedIntegration()
+    {
+        var product=new CatalogProduct{Sku="LOCAL",Barcode="A",Gtin="B"};
+        TrendyolRemoteProduct[] remote=[new("A","REMOTE-A","A",1,2,10m,10m,true),new("B","REMOTE-B","B",2,2,10m,10m,true)];
+        Assert.IsNull(TrendyolMatching.Product(product,"",remote).Barcode);
+        Assert.AreEqual("A",TrendyolMatching.Product(product,"A",remote).Barcode);
+        Assert.IsNull(TrendyolMatching.Product(product,"REMOVED",remote).Barcode);
+    }
 }

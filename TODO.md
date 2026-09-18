@@ -1,13 +1,17 @@
 # Devam durumu — 2026-09-11
 
 ## Trendyol V2 — 2026-09-18
+- [x] İlk 15 satırla sınırlı eşleştirme mesajını kaldır; tüm seçili ürünler, sonuç filtreleri, manuel mağaza araması ve sıfır/çakışan eşleşme kayıt engeli.
+- [x] Kullanıcının girdiği barkod mağazada varsa eşleştir, yoksa yeni ürün önizlemesine yönlendir; boş barkodda SKU/GTIN türetme. Satır değişiminde barkod taslağını koru; kontrol edilmemiş taslakları kaydetme.
+- [x] Yerel kimlikleri koruyan atomik kayıt, katalog/mağaza değişikliği ve başka ürüne bağlı barkod kontrolleri; yeni ürün için eski mağaza listesiyle karar verilmesini engelle.
+- [x] Kompakt işlem alanı; stok, fiyat ve yayın durumu önde, sabit ürün kodu/adı sütunları; dar pencere liste yüksekliği regresyon testi.
 - [x] Beş Entegra eğitimini ve güncel resmi V2 belgelerini incele.
 - [x] Gerçek kategori/marka API ID listeleri, otomatik öneri ve manuel eşleştirme; SKU/barkod ürün eşleştirmesi.
 - [x] Ürün oluşturma, fiyat/stok/beraber güncelleme, içerik/onaysız ürün düzeltmesi, teslimat şablonu, rekabet önerisi ve işlem geçmişi.
 - [x] Hesaba bağlı immutable önizleme, stale kontrolü, kalıcı tek gönderim kaydı ve batch sonuç doğrulaması.
 - [x] Entegra referansındaki geniş kontrol listesi, açılır detaylı filtre/toplu işlemler ve ayrı ürün kartı/önizleme ekranı.
 - [x] Teslimat şablonunda kayıt kimliği, ürün seçimi ve eksik API seçeneklerini koru; okunabilir kargo/adres adları, yeni/düzenle formu ve toplu atama.
-- [x] 1038 Release testi geçti; Windows-Excel-Final self-contained win-x64 yayını üretildi ve açıldı.
+- [x] 1050 Release testi geçti; Windows-Excel-Final self-contained win-x64 yayını üretildi ve açıldı. Eşleştirme ekranında 100 seçili satır ve sıfır eşleşmede pasif kayıt düğmesi GUI üzerinden kontrol edildi.
 - [x] Kullanıcı izniyle yalnız PTD-1367 oluşturuldu; batch SUCCESS, sonraki API okumasında onaylı ve yayında.
 - [x] Aynı üründe fiyat, stok ve birleşik güncelleme batch sonuçları SUCCESS; ilk fiyat 90,55 TL ve stok 1 değerlerine dönüldü, profil fiyat istisnaları temizlendi. Diğer ürünlere yazılmadı.
 - [x] Yayınlanan uygulamada Deneme şablonunu kaydet/yenile, yalnız PTD-1367'ye ata; teslimat ve kargo/adres gönderimlerini GUI üzerinden tamamla, iki batch sonucunu doğrula. Son API okumasında ürün yayında, fiyat 90,55 TL, stok 1 ve seçilen aynı gün kargo süresi doğrulandı.

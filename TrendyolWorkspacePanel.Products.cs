@@ -26,7 +26,7 @@ public sealed record TrendyolProductRow(CatalogProduct Product,string Integratio
 }
 public sealed partial class TrendyolWorkspacePanel
 {
-    readonly DataGrid products=Grid("TrendyolProducts",("Kategori ID","CategoryId",82),("Ürün kodu","Sku",115),("Barkod","Barcode",105),("GTIN","Gtin",105),("Ürün adı","Name",365),("Adet","Stock",55),("Marka","Brand",90),("Ürün ekleme / hata mesajı","CreateMessage",240),("Yayın durumu","Listed",145),("Kategori","Category",180),("T. liste fiyatı","RemoteListPrice",105),("T. satış fiyatı","RemotePrice",105),("Ürün güncelleme mesajı","UpdateMessage",240),("T. stok","RemoteStock",65),("Entegrasyon kodu","IntegrationCode",125),("Eşleştirme","MappingSummary",210));
+    readonly DataGrid products=Grid("TrendyolProducts",("Ürün kodu","Sku",90),("Ürün adı","Name",280),("Yayın durumu","Listed",120),("Adet","Stock",45),("T. stok","RemoteStock",55),("T. satış fiyatı","RemotePrice",90),("T. liste fiyatı","RemoteListPrice",90),("Marka","Brand",85),("GTIN","Gtin",110),("Trendyol barkodu","IntegrationCode",120),("Kategori ID","CategoryId",75),("Kategori","Category",180),("Ürün ekleme / hata mesajı","CreateMessage",240),("Ürün güncelleme mesajı","UpdateMessage",240),("Yerel barkod","Barcode",110),("Eşleştirme","MappingSummary",210));
     readonly DataGrid preview=Grid("TrendyolPreview",("SKU","Sku",110),("Ürün","Name",220),("Barkod","Barcode",150),("İşlem","Status",100),("Değişiklik / hata","Detail",600));
     readonly TextBox payload=new(){IsReadOnly=true,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,MaxHeight=180,Margin=new(5)};
     readonly TextBox productSearch=Box();
@@ -49,7 +49,7 @@ public sealed partial class TrendyolWorkspacePanel
     static string ModeLabel(TrendyolOperation mode)=>mode switch{TrendyolOperation.Create=>"Yeni ürün ekle",TrendyolOperation.Price=>"Yalnız fiyat",TrendyolOperation.Stock=>"Yalnız stok",TrendyolOperation.PriceAndStock=>"Fiyat ve stok",TrendyolOperation.Delivery=>"Teslimat süresi",TrendyolOperation.ShippingDetails=>"Kargo ve adresler",TrendyolOperation.UpdateUnapproved=>"Onaysız ürünü düzelt",_=>"Başlık ve açıklama"};
     FrameworkElement BuildProducts()
     {
-        var host=new System.Windows.Controls.Grid();host.Children.Add(productListView);host.Children.Add(productEditorView);host.Children.Add(productPreviewView);
+        var host=new System.Windows.Controls.Grid();host.Children.Add(productListView);host.Children.Add(productEditorView);host.Children.Add(productPreviewView);host.Children.Add(productMatchView);BuildProductMatching();
         var top=BuildControlToolbar();DockPanel.SetDock(top,Dock.Top);productListView.Children.Add(top);
         var bottom=new DockPanel();var paging=new WrapPanel();paging.Children.Add(B("Sayfayı seç",()=>products.SelectAll()));paging.Children.Add(B("Seçimi kaldır",()=>products.UnselectAll()));paging.Children.Add(B("‹",()=>{productOffset=Math.Max(0,productOffset-PageSize);RefreshProducts();}));paging.Children.Add(B("›",()=>{productOffset+=PageSize;RefreshProducts();}));paging.Children.Add(productCount);paging.Children.Add(T("Sayfa limiti"));paging.Children.Add(pageSize);DockPanel.SetDock(paging,Dock.Right);bottom.Children.Add(paging);selectionSummary.MaxHeight=48;bottom.Children.Add(selectionSummary);DockPanel.SetDock(bottom,Dock.Bottom);productListView.Children.Add(bottom);productListView.Children.Add(products);
         ConfigureControlGrid();
@@ -62,7 +62,7 @@ public sealed partial class TrendyolWorkspacePanel
         statusFilter.SelectionChanged+=(_,_)=>{productOffset=0;if(loaded)RefreshProducts();};pageSize.SelectionChanged+=(_,_)=>{productOffset=0;if(loaded)RefreshProducts();};mode.SelectionChanged+=(_,_)=>InvalidatePreview();return host;
     }
     async Task RefreshStoreProducts(){var account=Account();var next=store.Load(account.SupplierId);using var client=new TrendyolApiClient(account);var approved=await client.GetProductsAsync(true,Token);var unapproved=await client.GetProductsAsync(false,Token);EnsureAccount(account);next.Products=approved.Concat(unapproved).ToList();next.ProductsUpdatedUtc=DateTime.UtcNow;store.Save(next);Reload();}
-    void ShowProductView(string view){if(view=="list"&&!DiscardEditorChanges())return;productListView.Visibility=view=="list"?Visibility.Visible:Visibility.Collapsed;productEditorView.Visibility=view=="editor"?Visibility.Visible:Visibility.Collapsed;productPreviewView.Visibility=view=="preview"?Visibility.Visible:Visibility.Collapsed;}
+    void ShowProductView(string view){if(view=="list"&&!DiscardEditorChanges())return;productListView.Visibility=view=="list"?Visibility.Visible:Visibility.Collapsed;productEditorView.Visibility=view=="editor"?Visibility.Visible:Visibility.Collapsed;productPreviewView.Visibility=view=="preview"?Visibility.Visible:Visibility.Collapsed;productMatchView.Visibility=view=="matching"?Visibility.Visible:Visibility.Collapsed;}
     void OpenProductEditor(){if(products.SelectedItem is not TrendyolProductRow row)throw new InvalidOperationException("Ürün listesinden bir ürün seçin.");EditProduct(row);ShowProductView("editor");}
     bool DiscardEditorChanges(){if(!editorDirty)return true;if(MessageBox.Show(Window.GetWindow(this),"Kaydedilmemiş ürün profili değişiklikleri bırakılsın mı?","Ürün kartı",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return false;if(products.SelectedItem is TrendyolProductRow row)EditProduct(row);return true;}
     FrameworkElement BuildProductEditor()
@@ -132,19 +132,12 @@ public sealed partial class TrendyolWorkspacePanel
     }
     static decimal? OptionalDecimal(string text){if(string.IsNullOrWhiteSpace(text))return null;if(!decimal.TryParse(text,NumberStyles.Number,CultureInfo.CurrentCulture,out var value))throw new InvalidOperationException("Sayı biçimi geçersiz.");return value;}
     string[] SelectedProductIds(){var ids=products.SelectedItems.Cast<TrendyolProductRow>().Select(p=>p.Id).ToArray();if(ids.Length==0)throw new InvalidOperationException("Ürünler listesinden en az bir ürün seçin.");return ids;}
-    void MatchProducts()
-    {
-        var selected=products.SelectedItems.Cast<TrendyolProductRow>().ToArray();if(selected.Length==0)throw new InvalidOperationException("Ürün seçin.");if(!state.ProductsUpdatedUtc.HasValue)throw new InvalidOperationException("Önce mağaza ürünlerini alın.");
-        var suggestions=selected.Select(p=>new{Row=p,Match=TrendyolMatching.Product(p.Product,p.IntegrationCode,state.Products)}).ToArray();
-        var candidates=suggestions.Where(s=>s.Match.Barcode!=null).ToArray();
-        if(MessageBox.Show(Window.GetWindow(this),string.Join("\n",suggestions.Take(15).Select(s=>$"{s.Row.Sku} → {s.Match.Barcode??s.Match.Reason}"))+$"\n{candidates.Length} kesin karşılık kaydedilsin mi? Yerel SKU ve barkod değişmez.","Ürün eşleştirme önizlemesi",MessageBoxButton.YesNo)!=MessageBoxResult.Yes)return;
-        foreach(var item in candidates){var profile=state.Profiles.SingleOrDefault(p=>p.ProductId==item.Row.Id);if(profile is null){profile=new(){ProductId=item.Row.Id};state.Profiles.Add(profile);}profile.IntegrationCode=item.Match.Barcode!;}Persist();
-    }
     void BuildPreview()
     {
         if(editorDirty)throw new InvalidOperationException("Önce ürün Trendyol profilindeki değişiklikleri kaydedin.");
-        var selected=SelectedProductIds();var operation=((Mode)mode.SelectedItem).Value;plan=store.Preview(Account(),selected,operation);preview.ItemsSource=plan.Rows;payload.Text=JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(plan.PayloadJson),new JsonSerializerOptions{WriteIndented=true});send.IsEnabled=plan.Rows.Any(r=>r.ItemJson!=null)&&!plan.Rows.Any(r=>r.Status=="Hatalı");status.Text=$"Satıcı {plan.SellerId} · {ModeLabel(operation)} · {plan.Rows.Count(r=>r.ItemJson!=null)} gönderilecek · {plan.Rows.Count(r=>r.Status=="Hatalı")} hatalı · 15 dakika geçerli önizleme";previewSummary.Text=status.Text;ShowProductView("preview");
+        PresentPreview(store.Preview(Account(),SelectedProductIds(),((Mode)mode.SelectedItem).Value));
     }
+    void PresentPreview(TrendyolPlan next){plan=next;preview.ItemsSource=plan.Rows;payload.Text=JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(plan.PayloadJson),new JsonSerializerOptions{WriteIndented=true});send.IsEnabled=plan.Rows.Any(r=>r.ItemJson!=null)&&!plan.Rows.Any(r=>r.Status=="Hatalı");status.Text=$"Satıcı {plan.SellerId} · {ModeLabel(plan.Operation)} · {plan.Rows.Count(r=>r.ItemJson!=null)} gönderilecek · {plan.Rows.Count(r=>r.Status=="Hatalı")} hatalı · 15 dakika geçerli önizleme";previewSummary.Text=status.Text;ShowProductView("preview");}
     void AssignTemplate()=>AssignTemplate(delivery.SelectedItem as TrendyolDeliveryTemplate);
     void AssignTemplate(TrendyolDeliveryTemplate? selectedTemplate)
     {

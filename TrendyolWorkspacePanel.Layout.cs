@@ -6,9 +6,10 @@ namespace TrMarketplaceHubDesktop;
 
 public sealed partial class TrendyolWorkspacePanel
 {
-    static readonly Brush Ink=new SolidColorBrush(Color.FromRgb(32,55,66));
-    static readonly Brush Accent=new SolidColorBrush(Color.FromRgb(23,107,115));
-    static readonly Brush Line=new SolidColorBrush(Color.FromRgb(217,226,230));
+    static readonly Brush Ink=Palette(32,55,66);
+    static readonly Brush Accent=Palette(23,107,115);
+    static readonly Brush Line=Palette(217,226,230);
+    static Brush Palette(byte red,byte green,byte blue){var brush=new SolidColorBrush(Color.FromRgb(red,green,blue));brush.Freeze();return brush;}
     void ApplyWorkspaceStyle()
     {
         var button=new Style(typeof(Button));button.Setters.Add(new Setter(Control.BackgroundProperty,Brushes.White));button.Setters.Add(new Setter(Control.ForegroundProperty,Ink));button.Setters.Add(new Setter(Control.BorderBrushProperty,Line));button.Setters.Add(new Setter(Control.BorderThicknessProperty,new Thickness(1)));button.Setters.Add(new Setter(Control.MinHeightProperty,32d));button.Setters.Add(new Setter(Control.CursorProperty,System.Windows.Input.Cursors.Hand));Resources[typeof(Button)]=button;

@@ -31,8 +31,9 @@ public static class TrendyolMatching
         var rows = remote.ToArray();
         var matches = integrationCode.Length > 0 ? rows.Where(p => p.Barcode == integrationCode).ToArray()
             : rows.Where(p => (product.Barcode.Length > 0 && p.Barcode == product.Barcode) ||
+                (product.Gtin.Length > 0 && p.Barcode == product.Gtin) ||
                 (product.Sku.Length > 0 && p.StockCode.Equals(product.Sku, StringComparison.OrdinalIgnoreCase))).ToArray();
-        return matches.Length == 1 ? new(matches[0].Barcode, "Barkod / stok kodu karşılığı; yerel kimlik değişmez")
-            : new(null, matches.Length == 0 ? "Mağazada karşılık bulunamadı" : "SKU ve barkod birden fazla ürünü gösteriyor; elle eşleyin");
+        return matches.Length == 1 ? new(matches[0].Barcode, integrationCode.Length>0?"Kayıtlı entegrasyon barkodu":matches[0].Barcode==product.Gtin?"GTIN → Trendyol barkodu":matches[0].Barcode==product.Barcode?"Barkod karşılığı":"Stok kodu / SKU karşılığı")
+            : new(null, matches.Length == 0 ? "SKU, barkod ve GTIN karşılığı yok; mağazada adla arayıp elle seçin" : "SKU / barkod / GTIN farklı ürünleri gösteriyor; elle seçin");
     }
 }

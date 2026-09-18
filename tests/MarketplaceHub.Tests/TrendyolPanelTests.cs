@@ -14,6 +14,65 @@ namespace MarketplaceHub.Tests;
 [TestClass]
 public class TrendyolPanelTests
 {
+    [TestMethod] public void EnteredBarcodeRoutesExistingToMatchAndMissingToCreatePreview()
+    {
+        Exception failure=null;var thread=new Thread(()=>{
+            var dir=Path.Combine(Path.GetTempPath(),"trendyol-barcode-route-"+Guid.NewGuid().ToString("N"));
+            try {
+                new TrendyolSettingsStore(Path.Combine(dir,"trendyol.bin")).Save(new("123","key","secret","123 - Self Integration"));
+                var catalog=new TrMarketplaceHubDesktop.Catalog.CatalogStore(dir);catalog.CreateManual(new(){Sku="SKU-REMOTE",Gtin="REMOTE",Name="Blank barcode",Currency="TRY"});catalog.CreateManual(new(){Sku="LOCAL-NEW",Name="New product",Currency="TRY"});
+                var store=new TrendyolWorkspaceStore(dir);var state=store.Load("123");state.Products.Add(new("REMOTE","SKU-REMOTE","Existing remote",1,1,10,10,true));state.ProductsUpdatedUtc=DateTime.UtcNow;store.Save(state);
+                var panel=new TrendyolWorkspacePanel(dir);var products=Walk(panel).OfType<DataGrid>().Single(g=>g.Name=="TrendyolProducts");products.SelectAll();
+                Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolMatchProducts").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var review=Walk(panel).OfType<DataGrid>().Single(g=>g.Name=="TrendyolMatchReview");var save=Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolSaveMatches");Assert.IsFalse(save.IsEnabled,"Blank barcode must not fall back to SKU or GTIN.");
+                var barcode=Walk(panel).OfType<TextBox>().Single(b=>b.Name=="TrendyolMatchBarcode");var check=Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolCheckBarcode");
+                review.SelectedItem=review.Items.Cast<TrendyolMatchReviewRow>().Single(r=>r.Sku=="SKU-REMOTE");barcode.Text="REMOTE";check.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.AreEqual("Hazır",review.Items.Cast<TrendyolMatchReviewRow>().Single(r=>r.Sku=="SKU-REMOTE").Status);
+                review.SelectedItem=review.Items.Cast<TrendyolMatchReviewRow>().Single(r=>r.Sku=="LOCAL-NEW");barcode.Text="USER-NEW";Assert.IsFalse(save.IsEnabled,"An unchecked barcode draft must prevent saving the previous selection.");
+                review.SelectedItem=review.Items.Cast<TrendyolMatchReviewRow>().Single(r=>r.Sku=="SKU-REMOTE");Assert.IsFalse(save.IsEnabled,"Changing rows must not allow saving an older barcode while another draft is unchecked.");
+                review.SelectedItem=review.Items.Cast<TrendyolMatchReviewRow>().Single(r=>r.Sku=="LOCAL-NEW");Assert.AreEqual("USER-NEW",barcode.Text,"Unchecked barcode must survive row changes.");check.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.AreEqual("Yeni açılacak",review.Items.Cast<TrendyolMatchReviewRow>().Single(r=>r.Sku=="LOCAL-NEW").Status);Assert.AreEqual(0,store.Load("123").Profiles.Count);
+                save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Assert.AreEqual(2,store.Load("123").Profiles.Count);Assert.AreEqual(0,store.Receipts("123").Count);
+                var preview=Walk(panel).OfType<DataGrid>().Single(g=>g.Name=="TrendyolPreview");Assert.AreEqual(1,preview.Items.Count);Assert.AreEqual("USER-NEW",((TrendyolPreviewRow)preview.Items[0]).Barcode);
+                Assert.AreEqual("Hatalı",((TrendyolPreviewRow)preview.Items[0]).Status);Assert.IsFalse(Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolSend").IsEnabled);Assert.IsTrue(catalog.Products().All(p=>p.Barcode==""));
+            }catch(Exception ex){failure=ex;}finally{SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
+        });thread.SetApartmentState(ApartmentState.STA);thread.Start();thread.Join();if(failure!=null)throw failure;
+    }
+    [TestMethod] public void ExpandedControlsKeepAtLeastEightProductRowsAtDesktopPanelSize()
+    {
+        Exception failure=null;var thread=new Thread(()=>{
+            var dir=Path.Combine(Path.GetTempPath(),"trendyol-layout-"+Guid.NewGuid().ToString("N"));
+            try {
+                var panel=new TrendyolWorkspacePanel(dir);Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolToggleBulk").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                panel.Measure(new Size(1140,600));panel.Arrange(new Rect(0,0,1140,600));panel.UpdateLayout();
+                var grid=Walk(panel).OfType<DataGrid>().Single(g=>g.Name=="TrendyolProducts");Assert.IsTrue(grid.ActualHeight>=29+8*27,$"Only {grid.ActualHeight} px remain for the product list.");
+                Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolToggleFilters").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));panel.UpdateLayout();
+                Assert.IsTrue(grid.ActualHeight>=29+8*27,"Opening both action panels must preserve the product list.");
+            }catch(Exception ex){failure=ex;}finally{SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
+        });thread.SetApartmentState(ApartmentState.STA);thread.Start();thread.Join();if(failure!=null)throw failure;
+    }
+    [TestMethod] public void MatchingReviewShowsEveryRowAndManualChoiceCannotDuplicateBarcode()
+    {
+        Exception failure=null;var thread=new Thread(()=>{
+            var dir=Path.Combine(Path.GetTempPath(),"trendyol-matching-ui-"+Guid.NewGuid().ToString("N"));
+            try {
+                new TrendyolSettingsStore(Path.Combine(dir,"trendyol.bin")).Save(new("123","test-key","test-secret","123 - Self Integration"));var catalog=new TrMarketplaceHubDesktop.Catalog.CatalogStore(dir);
+                for(var i=0;i<20;i++)catalog.CreateManual(new(){Sku="LOCAL-"+i,Name="Cup "+i,Currency="TRY"});
+                var store=new TrendyolWorkspaceStore(dir);var state=store.Load("123");state.Products.Add(new("REMOTE","OTHER","Remote cup",1,2,10m,10m,true));state.ProductsUpdatedUtc=DateTime.UtcNow;store.Save(state);
+                var panel=new TrendyolWorkspacePanel(dir);var grid=Walk(panel).OfType<DataGrid>().Single(g=>g.Name=="TrendyolProducts");grid.SelectAll();
+                Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolMatchProducts").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var review=Walk(panel).OfType<DataGrid>().Single(g=>g.Name=="TrendyolMatchReview");Assert.AreEqual(20,review.Items.Count,"The old message box truncated to 15 rows.");
+                var save=Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolSaveMatches");Assert.IsFalse(save.IsEnabled,"No matches must not offer to save zero rows.");
+                var search=Walk(panel).OfType<TextBox>().Single(b=>b.Name=="TrendyolMatchSearch");search.Text="REMOTE";Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolSearchMatches").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var candidates=Walk(panel).OfType<DataGrid>().Single(g=>g.Name=="TrendyolMatchCandidates");Assert.AreEqual(1,candidates.Items.Count);candidates.SelectedItem=candidates.Items[0];
+                Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolChooseMatch").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Assert.IsTrue(save.IsEnabled);Assert.AreEqual(0,store.Load("123").Profiles.Count,"A manual choice is only a draft until explicitly saved.");
+                review.SelectedItem=review.Items[1];search.Text="REMOTE";Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolSearchMatches").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));candidates.SelectedItem=candidates.Items[0];
+                Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolChooseMatch").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Assert.IsFalse(save.IsEnabled,"Duplicate targets must be resolved before saving.");
+                Walk(panel).OfType<Button>().Single(b=>b.Name=="TrendyolSkipMatch").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Assert.IsTrue(save.IsEnabled);save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.AreEqual(1,store.Load("123").Profiles.Count);Assert.AreEqual(20,grid.SelectedItems.Count,"Review completion should retain the product selection.");
+            }catch(Exception ex){failure=ex;}finally{SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
+        });thread.SetApartmentState(ApartmentState.STA);thread.Start();thread.Join();if(failure!=null)throw failure;
+    }
     [TestMethod] public void DeliverySaveRetainsIdentityProductSelectionAndReadableChoices()
     {
         Exception failure=null;var thread=new Thread(()=>{

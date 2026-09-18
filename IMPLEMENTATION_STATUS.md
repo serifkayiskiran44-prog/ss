@@ -1,6 +1,9 @@
 # Uygulama durumu — .NET 8 EXE
 
 ## Trendyol product workspace — 2026-09-18
+- Follow-up UI: compact action viewport preserves the grid at desktop sizes; stock, price and publication status precede long messages. Matching now has an all-selected review and explicit remote search/manual choice instead of a first-15 message box. History operations have Turkish labels.
+- Barcode-first follow-up: entered/profile barcode (otherwise local Barcode) is checked exactly against the seller cache. Existing products link locally; missing barcodes route only those rows into the existing immutable Create preview. Blank barcodes do not fall back to SKU/GTIN. Unchecked barcode drafts survive row changes and block applying until checked or skipped. Missing required creation fields still block sending.
+- Reviewed local profile links are applied in one transaction; stale catalog/workspace, duplicate ownership, empty reviews and stale seller cache for a create decision are rejected. The match/review action itself performs no HTTP write; creation retains the separate explicit send, receipt and account guards.
 - Implemented the five supplied Entegra workflows using current official Product V2 endpoints: category/brand IDs and manual matching, product matching/profiles, required attributes, create/update previews, delivery templates, buybox suggestions and persistent batch history.
 - User credentials remain DPAPI-encrypted. No API calls run on startup. Outbound mappings are separate from inbound XML/category mappings; empty local barcode is allowed.
 - Immutable seller/revision/catalog-bound previews, explicit send, persistent claims, uncertain-outcome blocking and response identity validation protect every live write.
@@ -9,7 +12,7 @@
 - Live price-only, stock-only and combined updates on this same barcode all returned SUCCESS. The original 90.55 TRY/quantity 1 and null local price overrides were restored. A final API read verified onSale and these baseline values; no other product was modified.
 - The Entegra-style control grid has collapsible detailed filters/bulk actions, whole-catalog filtering before paging, per-product creation/update messages and separate editor/preview views. Delivery templates retain selected products and edit identity, show readable carrier/address names and preserve missing API references.
 - Published GUI verification: save/refresh the user's Deneme template, assign only PTD-1367, preview/send Delivery and ShippingDetails separately, query both batch results successfully. A final product GET verified the selected same-day delivery option and unchanged baseline inventory/price.
-- 1038 Release tests passed; requested Windows-Excel-Final win-x64 self-contained publish succeeded and EXE launched. Source trace and live test details: docs/TRENDYOL-WORKSPACE.md.
+- 1050 Release tests passed; requested Windows-Excel-Final win-x64 self-contained publish succeeded and EXE launched. Published GUI checked at 1426 px width: 100 selected rows enter the new matching view, all 100 rows are counted and saving zero links is disabled. Source trace and live test details: docs/TRENDYOL-WORKSPACE.md.
 
 ## Category, brand and product-owned media — 2026-09-18
 - Added category/brand navigation, hierarchy and counts, atomic descendant/product rename, per-channel mappings and local content/attribute template previews/Excel export.
