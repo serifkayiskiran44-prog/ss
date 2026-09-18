@@ -15,7 +15,7 @@ public sealed partial class EtsyWorkspacePanel
         var bulk=new Border{Visibility=Visibility.Collapsed};
         var toggleFilters=ActionButton("Detaylı filtreleme",()=>filters.Visibility=filters.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible);toggleFilters.Name="EtsyToggleFilters";
         var toggleBulk=ActionButton("Toplu işlemler",()=>bulk.Visibility=bulk.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible);toggleBulk.Name="EtsyToggleBulk";
-        top.Children.Add(Bar(Field("Arama (ürün adı, stok kodu, barkod)",search),ActionButton("Ara",()=>{page=0;RefreshProducts();}),toggleFilters,toggleBulk,AsyncButton("Etsy kontrol / yenile",PullListings),ActionButton("Ürün kartını aç",OpenProduct)));
+        top.Children.Add(Bar(Field("Arama (ürün adı, stok kodu, barkod)",search),ActionButton("Ara",()=>{page=0;RefreshProducts();}),toggleFilters,toggleBulk,AsyncButton("Etsy kontrol / yenile",PullListings),ActionButton("Ürün kartını aç",OpenProduct),creationHandoffButton,remoteDeactivateHandoffButton));
         top.Children.Add(filters);
         var actions=new WrapPanel();
         foreach(var op in new[]{EtsyOperation.CreateDraft,EtsyOperation.PriceAndStock,EtsyOperation.Price,EtsyOperation.Stock,EtsyOperation.Content,EtsyOperation.Publish,EtsyOperation.Deactivate})
@@ -52,9 +52,14 @@ public sealed partial class EtsyWorkspacePanel
     }
     async Task Preview(EtsyOperation operation)
     {
-        var ids=RequireSelection();ClearPreview();var c=await Authorized();
+        var ids = operation == EtsyOperation.CreateDraft && products.SelectedItems.Count == 0 && CreationHandoffProductIds.Count > 0
+            ? CreationHandoffProductIds
+            : RequireSelection();
+        ClearPreview();var c=await Authorized();
         summary.Text="Seçili ürünler ve Etsy mağazası karşılaştırılıyor…";
-        plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token);send.IsEnabled=true;summary.Text=$"{plan.Rows.Count} satır · {plan.Rows.Count(r=>r.CanSend)} gönderilebilir · {plan.Rows.Count(r=>!r.CanSend)} kontrol gerekli";ShowPreview(plan);
+        plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token);
+        if(operation==EtsyOperation.CreateDraft)CreationHandoffProductIds=Array.Empty<string>();
+        send.IsEnabled=true;summary.Text=$"{plan.Rows.Count} satır · {plan.Rows.Count(r=>r.CanSend)} gönderilebilir · {plan.Rows.Count(r=>!r.CanSend)} kontrol gerekli";ShowPreview(plan);
     }
     void ShowPreview(EtsyOperationPlan preview)
     {

@@ -16,6 +16,7 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
     readonly CatalogStore catalog;
     readonly TaxonomyStore taxonomy;
     readonly TrendyolWorkspaceStore store;
+    readonly ProductChannelCreationPreviewInbox creationInbox;
     readonly TrendyolSettingsStore legacyCredentials;
     readonly MarketplaceCredentialVault? credentialVault;
     readonly MarketplaceConnection? scopedConnection;
@@ -29,6 +30,7 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
     readonly PasswordBox apiKey=new(){MinWidth=250,Margin=new(3)};
     readonly PasswordBox apiSecret=new(){MinWidth=250,Margin=new(3)};
     readonly Button send=new(){Name="TrendyolSend",Content="Önizlemeyi onayla ve gönder",IsEnabled=false,Margin=new(4),Padding=new(12,7,12,7)};
+    readonly Button creationHandoffButton=new(){Name="TrendyolCreationHandoffButton",Content="Merkezden gelen yeni ilanlar",IsEnabled=false,Margin=new(3),Padding=new(9,5,9,5)};
     TrendyolWorkspaceState state=new();
     TrendyolPlan? plan;
     CancellationTokenSource? cancellation;
@@ -51,7 +53,8 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
                 throw new InvalidOperationException("Trendyol çalışma alanı için etkin ve doğru kanal hesabı gerekli.");
             credentialVault = new MarketplaceCredentialVault(directory);
         }
-        catalog=new(directory);taxonomy=new(directory);store=new(directory);contentTemplates=new(directory);legacyCredentials=new(directory is null?null:Path.Combine(directory,"trendyol.bin"));
+        catalog=new(directory);taxonomy=new(directory);store=new(directory);creationInbox=new(directory);contentTemplates=new(directory);legacyCredentials=new(directory is null?null:Path.Combine(directory,"trendyol.bin"));
+        creationHandoffButton.Click+=(_,_)=>{try{AcceptCreationHandoff();}catch(Exception ex){status.Text=Safe(ex);}};
         ApplyWorkspaceStyle();
         var root=new DockPanel{Margin=new(10)};var footer=new DockPanel();var cancel=B("İsteği iptal et",()=>cancellation?.Cancel());DockPanel.SetDock(cancel,Dock.Right);footer.Children.Add(cancel);footer.Children.Add(status);DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
         var header=new DockPanel{Margin=new(0,0,0,8)};var settingsButton=B("Mağaza ayarları",ShowSettings);settingsButton.Name="TrendyolOpenSettings";DockPanel.SetDock(settingsButton,Dock.Right);header.Children.Add(settingsButton);accountBadge.FontWeight=FontWeights.SemiBold;header.Children.Add(accountBadge);DockPanel.SetDock(header,Dock.Top);root.Children.Add(header);root.Children.Add(tabs);Content=root;
@@ -75,8 +78,25 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
         var saved=LoadAccount();var accountShop=scopedConnection?.ShopId??saved?.SupplierId;state=string.IsNullOrWhiteSpace(accountShop)?new():store.Load(accountShop);InvalidatePreview();competition.ItemsSource=null;competitionAccount="";
         accountStatus.Text=saved is null?"API bilgisi yok. Açılışta bağlantı kurulmaz.":$"Satıcı: {saved.SupplierId} · Ürün API V2 · Anahtarlar şifreli kayıtlı";
         accountBadge.Text=scopedConnection is not null?$"{scopedConnection.DisplayName}  /  {scopedConnection.ShopId}     •     {scopedConnection.Status}":saved is null?"Trendyol mağazası · Bağlantı ayarları gerekli":$"Trendyol mağazası  /  {saved.SupplierId}     •     Türkiye · TRY";
-        RefreshMappings();RefreshControlFilterOptions();RefreshProducts();RefreshTemplates();RefreshBrandSafety();ReloadHistory();
+        RefreshMappings();RefreshControlFilterOptions();RefreshProducts();RefreshTemplates();RefreshBrandSafety();ReloadHistory();RefreshCreationHandoff();
         status.Text=$"Kategori: {state.Categories.Count} · Marka: {state.Brands.Count} · Mağaza ürünü: {state.Products.Count} · Sözlük: {Time(state.DictionaryUpdatedUtc)} · Ürünler: {Time(state.ProductsUpdatedUtc)}";
+    }
+    void RefreshCreationHandoff()
+    {
+        if(scopedConnection is null){creationHandoffButton.IsEnabled=false;return;}
+        var pending=creationInbox.Pending(scopedConnection.Id);
+        creationHandoffButton.IsEnabled=pending.Count>0;
+        creationHandoffButton.Content=pending.Count==0?"Merkezden gelen yeni ilanlar":$"Merkezden gelen yeni ilanlar ({pending.Sum(item=>item.ProductIds.Count)})";
+    }
+    void AcceptCreationHandoff()
+    {
+        var connection=CurrentScopedConnection();
+        var request=creationInbox.Pending(connection.Id).FirstOrDefault()??throw new InvalidOperationException("Bu Trendyol hesabı için bekleyen yeni ilan önizlemesi yok.");
+        var next=store.Preview(Account(),request.ProductIds,TrendyolOperation.Create);
+        creationInbox.Recognize(request.Id,connection.Id);
+        PresentPreview(next);
+        RefreshCreationHandoff();
+        status.Text=$"{request.ProductIds.Count} ürün bu hesapta yeni ürün oluşturma önizlemesine alındı. Otomatik gönderim yapılmadı.";
     }
     void Persist(){try{store.Save(state);}catch{state=store.Load(Account().SupplierId);throw;}Reload();}
     void InvalidatePreview(){plan=null;send.IsEnabled=false;preview.ItemsSource=null;payload.Text="";if(productPreviewView.Visibility==Visibility.Visible)ShowProductView("list");}

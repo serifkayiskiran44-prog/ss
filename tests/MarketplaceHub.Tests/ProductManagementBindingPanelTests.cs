@@ -12,6 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using TrMarketplaceHubDesktop;
 using TrMarketplaceHubDesktop.Catalog;
+using TrMarketplaceHubDesktop.Etsy;
 
 namespace MarketplaceHub.Tests;
 
@@ -115,6 +116,30 @@ public sealed class ProductManagementBindingPanelTests
     }
 
     [TestMethod]
+    public void NewListingHandoffIsVisibleAndAcknowledgedOnlyByTheExactAccountWorkspace() => InSta(() =>
+    {
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "A", Name = "A", Currency = "TRY" });
+        var connections = new MarketplaceConnectionStore(directory);
+        var first = Connected(connections, "etsy", "202", "Etsy A");
+        var second = Connected(connections, "etsy", "303", "Etsy B");
+        var requestId = new LocalProductCreationPreviewHandoff(directory).Preview(first, new[] { product.Id });
+        var inbox = new ProductChannelCreationPreviewInbox(directory);
+
+        Assert.AreEqual(requestId, inbox.Pending(first.Id).Single().Id);
+        Assert.AreEqual(0, inbox.Pending(second.Id).Count);
+        var workspace = new EtsyWorkspacePanel(first.Id, directory);
+        try
+        {
+            var handoff = LogicalWalk(workspace).OfType<Button>().Single(button => button.Name == "EtsyCreationHandoffButton");
+            Assert.IsTrue(handoff.IsEnabled);
+            handoff.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.AreEqual(0, inbox.Pending(first.Id).Count, "Only the destination workspace may acknowledge its exact request.");
+            CollectionAssert.AreEqual(new[] { product.Id }, workspace.CreationHandoffProductIds.ToArray());
+        }
+        finally { workspace.Dispose(); }
+    });
+
+    [TestMethod]
     public void StaleRemoteSnapshotBlocksConnectionApply()
     {
         var product = new CatalogStore(directory).CreateManual(new() { Sku = "A", Barcode = "BAR", Name = "A", Currency = "TRY" });
@@ -164,6 +189,57 @@ public sealed class ProductManagementBindingPanelTests
         remoteRouter.Complete(dispatchPreview);
         var remoteReceipt = model.CompleteRemoteDeactivateAndUnlink(dispatchPreview);
         Assert.IsTrue(remoteReceipt.RemoteChanged);
+        Assert.IsNull(bindings.Get(product.Id, connection.Id));
+    }
+
+    [TestMethod]
+    public void ProductionRemoteDeactivateRouterRequiresApprovalAndSuccessfulChannelReceiptBeforeUnlink()
+    {
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "A", Name = "A", Currency = "TRY" });
+        var connection = Connected(new MarketplaceConnectionStore(directory), "etsy", "202", "Etsy");
+        var bindings = new ProductChannelBindingStore(directory);
+        bindings.Save(Binding(product.Id, connection.Id, "456", true, true, true), 0);
+        var model = new ProductConnectionsModel(directory, new[] { product.Id }, new FakeSnapshotProvider(), new FakeCreationHandoff());
+
+        Assert.IsTrue(model.CanPreviewRemoteDeactivate(product.Id, connection.Id));
+        var preview = model.PreviewRemoteDeactivate(product.Id, connection.Id);
+        Assert.ThrowsException<InvalidOperationException>(() => model.CompleteRemoteDeactivateAndUnlink(preview));
+        model.ApproveRemoteDeactivate(preview, true);
+        var dispatches = new ProductRemoteDeactivationDispatchStore(directory);
+        Assert.AreEqual(preview.Id, dispatches.Pending(connection.Id).Single().Id);
+        _ = new EtsyWorkspaceStore(directory);
+        const string channelPlanId = "etsy-plan";
+        var channelReceipt = new EtsyOperationReceipt { PlanId = channelPlanId, ProductId = product.Id, ListingId = 456, Status = "Claimed" };
+        using (var database = new SqliteConnection($"Data Source={Path.Combine(directory, "catalog.db")}"))
+        {
+            database.Open();
+            using var command = database.CreateCommand();
+            command.CommandText = "INSERT INTO EtsyWorkspaceReceipts(PlanId,ProductId,ShopId,Operation,OperationKey,Status,Json) VALUES($plan,$product,$shop,'Deactivate',$key,'Claimed',$json)";
+            command.Parameters.AddWithValue("$plan", channelPlanId);
+            command.Parameters.AddWithValue("$product", product.Id);
+            command.Parameters.AddWithValue("$shop", connection.ShopId);
+            command.Parameters.AddWithValue("$key", Guid.NewGuid().ToString("N"));
+            command.Parameters.AddWithValue("$json", System.Text.Json.JsonSerializer.Serialize(channelReceipt));
+            command.ExecuteNonQuery();
+        }
+        dispatches.AttachChannelPlan(preview.Id, connection.Id, channelPlanId);
+        Assert.ThrowsException<InvalidOperationException>(() => model.CompleteRemoteDeactivateAndUnlink(preview));
+        Assert.IsNotNull(bindings.Get(product.Id, connection.Id), "A claimed/in-flight channel receipt must never unlink.");
+        channelReceipt.Status = "Succeeded";
+        using (var database = new SqliteConnection($"Data Source={Path.Combine(directory, "catalog.db")}"))
+        {
+            database.Open();
+            using var command = database.CreateCommand();
+            command.CommandText = "UPDATE EtsyWorkspaceReceipts SET Status='Succeeded',Json=$json WHERE PlanId=$plan AND ProductId=$product";
+            command.Parameters.AddWithValue("$json", System.Text.Json.JsonSerializer.Serialize(channelReceipt));
+            command.Parameters.AddWithValue("$plan", channelPlanId);
+            command.Parameters.AddWithValue("$product", product.Id);
+            Assert.AreEqual(1, command.ExecuteNonQuery());
+        }
+
+        var receipt = model.CompleteRemoteDeactivateAndUnlink(preview);
+
+        Assert.IsTrue(receipt.RemoteChanged);
         Assert.IsNull(bindings.Get(product.Id, connection.Id));
     }
 
@@ -228,10 +304,29 @@ public sealed class ProductManagementBindingPanelTests
         try
         {
             var grid = GetField<DataGrid>(window, "products");
+            var connect = LogicalWalk((DependencyObject)window.Content).OfType<Button>().Single(button => button.Name == "ProductConnectSelectedButton");
+            var connectionsButton = LogicalWalk((DependencyObject)window.Content).OfType<Button>().Single(button => button.Name == "ProductConnectionsButton");
+            var sourceButton = LogicalWalk((DependencyObject)window.Content).OfType<Button>().Single(button => button.Name == "ProductSourceButton");
+            Assert.IsFalse(connect.IsEnabled);
+            Assert.IsFalse(connectionsButton.IsEnabled);
+            Assert.IsFalse(sourceButton.IsEnabled);
             Assert.ThrowsException<TargetInvocationException>(() => Invoke(window, "SelectedProductIdsForConnection"));
             grid.SelectedItem = grid.Items.Cast<CatalogProduct>().Single(x => x.Id == first.Id);
+            Assert.IsTrue(connect.IsEnabled);
+            Assert.IsTrue(connectionsButton.IsEnabled);
+            Assert.IsTrue(sourceButton.IsEnabled);
             var ids = (IReadOnlyList<string>)Invoke(window, "SelectedProductIdsForConnection")!;
             CollectionAssert.AreEqual(new[] { first.Id }, ids.ToArray());
+
+            grid.SelectAll();
+            Assert.IsTrue(connect.IsEnabled);
+            Assert.IsTrue(connectionsButton.IsEnabled);
+            Assert.IsFalse(sourceButton.IsEnabled);
+            grid.UnselectAll();
+            Assert.IsFalse(connect.IsEnabled);
+            Assert.IsFalse(connectionsButton.IsEnabled);
+            Assert.IsFalse(sourceButton.IsEnabled);
+            grid.SelectedItem = grid.Items.Cast<CatalogProduct>().Single(x => x.Id == first.Id);
 
             var dialog = new ProductConnectionsWindow(directory, ids, remote, new FakeCreationHandoff());
             Assert.IsFalse(dialog.IsApplyEnabled);
@@ -255,7 +350,9 @@ public sealed class ProductManagementBindingPanelTests
         var product = new CatalogStore(directory).CreateManual(new() { Sku = "SKU-A", Barcode = "LOCAL", Name = "A", Currency = "TRY" });
         var connection = Connected(new MarketplaceConnectionStore(directory), "trendyol", "101", "Shop");
         var remote = new FakeSnapshotProvider();
-        remote.Set(connection, new ProductChannelRemoteRow(connection.Id, connection.ShopId, "r1", "SKU-A", "REMOTE"));
+        remote.Set(connection,
+            new ProductChannelRemoteRow(connection.Id, connection.ShopId, "r1", "SKU-A", "REMOTE-1"),
+            new ProductChannelRemoteRow(connection.Id, connection.ShopId, "r2", "SKU-A", "REMOTE-2"));
         var window = new ProductConnectionsWindow(directory, new[] { product.Id }, remote, new FakeCreationHandoff());
         try
         {
@@ -264,13 +361,50 @@ public sealed class ProductManagementBindingPanelTests
             GetField<Button>(window, "previewButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             var grid = GetField<DataGrid>(window, "previewRows");
             var choice = grid.ItemsSource.Cast<ProductConnectionReviewRow>().Single();
-            CollectionAssert.AreEqual(new[] { "r1" }, choice.RemoteOptions.ToArray());
+            CollectionAssert.AreEqual(new[] { "r1", "r2" }, choice.RemoteOptions.ToArray());
             Assert.AreEqual("", choice.SelectedRemoteId, "SKU evidence must never auto-select a remote listing.");
 
             choice.SelectedRemoteId = "r1";
             GetField<Button>(window, "reviewButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-            Assert.IsTrue(grid.ItemsSource.Cast<ProductConnectionReviewRow>().Single().Reviewed);
+            var reviewed = grid.ItemsSource.Cast<ProductConnectionReviewRow>().Single();
+            Assert.IsTrue(reviewed.Reviewed);
+            Assert.IsTrue(GetField<Button>(window, "applyButton").IsEnabled);
+            reviewed.SelectedRemoteId = "r2";
+            Assert.IsFalse(reviewed.Reviewed);
+            Assert.IsFalse(GetField<Button>(window, "applyButton").IsEnabled, "Changing shown identity after review must invalidate apply.");
+            GetField<Button>(window, "reviewButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.IsTrue(GetField<Button>(window, "applyButton").IsEnabled);
+            GetField<Button>(window, "applyButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.AreEqual("r2", new ProductChannelBindingStore(directory).Get(product.Id, connection.Id)!.RemoteId);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void ChangingTargetAccountInvalidatesTheReviewedPreviewAndApply() => InSta(() =>
+    {
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "A", Barcode = "BAR", Name = "A", Currency = "TRY" });
+        var connections = new MarketplaceConnectionStore(directory);
+        var first = Connected(connections, "trendyol", "101", "Shop A");
+        var second = Connected(connections, "trendyol", "202", "Shop B");
+        var remote = new FakeSnapshotProvider();
+        remote.Set(first, new ProductChannelRemoteRow(first.Id, first.ShopId, "r1", "A", "BAR"));
+        remote.Set(second, new ProductChannelRemoteRow(second.Id, second.ShopId, "r2", "A", "BAR"));
+        var window = new ProductConnectionsWindow(directory, new[] { product.Id }, remote, new FakeCreationHandoff());
+        try
+        {
+            var target = GetField<ComboBox>(window, "targets");
+            target.SelectedValue = first.Id;
+            GetField<Button>(window, "previewButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            GetField<Button>(window, "reviewButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.IsTrue(GetField<Button>(window, "applyButton").IsEnabled);
+
+            target.SelectedValue = second.Id;
+
+            Assert.IsFalse(GetField<Button>(window, "applyButton").IsEnabled);
+            Assert.AreEqual(0, GetField<DataGrid>(window, "previewRows").Items.Count);
+            Assert.IsNull(GetField<ProductConnectionsModel>(window, "model").CurrentPreview);
         }
         finally { window.Close(); }
     });
@@ -347,14 +481,19 @@ public sealed class ProductManagementBindingPanelTests
     sealed class FakeRemoteDeactivationRouter : IProductRemoteDeactivationPreviewRouter
     {
         ProductRemoteDeactivationReceipt? receipt;
+        ProductRemoteDeactivationPreview? latest;
         public int PreviewCalls { get; private set; }
         public int RemoteWrites { get; private set; }
         public bool Supports(MarketplaceConnection connection, IMarketplaceAdapter adapter) => true;
         public ProductRemoteDeactivationPreview Preview(MarketplaceConnection connection, ProductChannelBinding binding)
         {
             PreviewCalls++;
-            return new("dispatch-preview", binding.ProductId, connection.Id, binding.RemoteId, binding.Version, connection.Revision, DateTime.UtcNow);
+            return latest = new("dispatch-preview", binding.ProductId, connection.Id, binding.RemoteId, binding.Version, connection.Revision, DateTime.UtcNow);
         }
+        public void Approve(ProductRemoteDeactivationPreview preview, bool explicitlyApproved)
+        { if (!explicitlyApproved) throw new InvalidOperationException("Approval required."); latest = preview; }
+        public ProductRemoteDeactivationPreview? Latest(string productId, string connectionId) =>
+            latest is { } value && value.ProductId == productId && value.ConnectionId == connectionId ? value : null;
         public ProductRemoteDeactivationReceipt? Receipt(string previewId) => receipt?.PreviewId == previewId ? receipt : null;
         public void Complete(ProductRemoteDeactivationPreview preview) => receipt = new(preview.Id, preview.ProductId, preview.ConnectionId, preview.RemoteId, true, "dispatch-receipt", DateTime.UtcNow);
     }

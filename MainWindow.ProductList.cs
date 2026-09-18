@@ -19,6 +19,9 @@ public partial class MainWindow
     readonly ComboBox productBulkChoice = new() { Width = 225, DisplayMemberPath = "Label", SelectedValuePath = "Kind" };
     readonly ComboBox productBulkValue = new() { Width = 230, IsEditable = true };
     readonly ComboBox productBulkScope = new() { Width = 225, ItemsSource = new[] { "Yalnız seçtiğim ürünler", "Filtreye uyan tüm ürünler" }, SelectedIndex = 0 };
+    readonly Button productConnectSelectedButton = new() { Name = "ProductConnectSelectedButton", Content = "Mağazaya bağla", IsEnabled = false };
+    readonly Button productConnectionsButton = new() { Name = "ProductConnectionsButton", Content = "Bağlantılar", IsEnabled = false };
+    readonly Button productSourceButton = new() { Name = "ProductSourceButton", Content = "Kaynak ve stok", IsEnabled = false };
     Expander? productBulkSection;
     record ProductAction(BulkProductOperationKind Kind, string Label);
     static readonly ProductAction[] ProductActions =
@@ -41,9 +44,12 @@ public partial class MainWindow
         bar.Children.Add(Button("Temizle", () => search.Clear()));
         bar.Children.Add(Button("+ Yeni ürün", () => OpenProductCard(true)));
         bar.Children.Add(Button("Ürün kartı", () => OpenProductCard(false)));
-        bar.Children.Add(Button("Mağazaya bağla", OpenProductConnections));
-        bar.Children.Add(Button("Bağlantılar", OpenSelectedProductConnections));
-        bar.Children.Add(Button("Kaynak ve stok", OpenSelectedProductSource));
+        productConnectSelectedButton.Click += (_, _) => OpenProductConnections();
+        productConnectionsButton.Click += (_, _) => OpenSelectedProductConnections();
+        productSourceButton.Click += (_, _) => OpenSelectedProductSource();
+        bar.Children.Add(productConnectSelectedButton);
+        bar.Children.Add(productConnectionsButton);
+        bar.Children.Add(productSourceButton);
         bar.Children.Add(Button("Kolonlar", OpenProductColumnChooser));
         bar.Children.Add(Button("Excel'e aktar", ExportProductList));
         bar.Children.Add(Button("Excel ile güncelle", () => Navigate("excel")));
@@ -106,7 +112,12 @@ public partial class MainWindow
                 }
             }), System.Windows.Threading.DispatcherPriority.Background);
         };
-        products.SelectionChanged += (_, _) => productSelection.Text = $"Seçilen: {products.SelectedItems.Count:N0}";
+        products.SelectionChanged += (_, _) =>
+        {
+            productSelection.Text = $"Seçilen: {products.SelectedItems.Count:N0}";
+            UpdateProductConnectionCommandState();
+        };
+        UpdateProductConnectionCommandState();
         var detail = new FrameworkElementFactory(typeof(Button)); detail.SetValue(ContentControl.ContentProperty, "+"); detail.SetValue(Control.PaddingProperty, new Thickness(0));
         detail.AddHandler(System.Windows.Controls.Button.ClickEvent, new RoutedEventHandler((sender, args) =>
         {
@@ -203,6 +214,14 @@ public partial class MainWindow
         if (ids.Length == 0)
             throw new InvalidOperationException("Mağazaya bağlamak için ürün tablosundan en az bir ürünü açıkça seçin. Filtrelenmiş veya sayfadaki ürünler otomatik seçilmez.");
         return Array.AsReadOnly(ids);
+    }
+
+    void UpdateProductConnectionCommandState()
+    {
+        var count = products.SelectedItems.OfType<CatalogProduct>().Count();
+        productConnectSelectedButton.IsEnabled = count > 0;
+        productConnectionsButton.IsEnabled = count > 0;
+        productSourceButton.IsEnabled = count == 1;
     }
 
     void OpenProductConnections()

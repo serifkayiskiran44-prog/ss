@@ -1,7 +1,6 @@
-using Microsoft.Data.Sqlite;
+using System.ComponentModel;
 using System.Globalization;
-using System.IO;
-using System.Text.Json;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -14,16 +13,21 @@ namespace TrMarketplaceHubDesktop;
 
 public sealed record ProductAccountTarget(string ConnectionId, string Channel, string ShopId, string DisplayName);
 public sealed record ProductAccountBadge(string ProductId, string ConnectionId, string Text, string ToolTip, string State);
-public sealed class ProductConnectionReviewRow
+public sealed class ProductConnectionReviewRow : INotifyPropertyChanged
 {
+    string selectedRemoteId = "";
+    bool reviewed;
     public string ProductId { get; init; } = "";
     public ProductChannelMatchOutcome Outcome { get; init; }
     public string RemoteSku { get; init; } = "";
     public string RemoteBarcode { get; init; } = "";
-    public bool Reviewed { get; init; }
+    public bool Reviewed { get => reviewed; set { if (reviewed == value) return; reviewed = value; Changed(); } }
     public string Detail { get; init; } = "";
     public IReadOnlyList<string> RemoteOptions { get; init; } = Array.Empty<string>();
-    public string SelectedRemoteId { get; set; } = "";
+    public string SelectedRemoteId { get => selectedRemoteId; set { if (selectedRemoteId == value) return; selectedRemoteId = value; Changed(); SelectedRemoteIdChanged?.Invoke(this, EventArgs.Empty); } }
+    public event PropertyChangedEventHandler? PropertyChanged;
+    public event EventHandler? SelectedRemoteIdChanged;
+    void Changed([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new(name));
 }
 public sealed record ProductConnectionDetailRow(
     string ProductId, string ConnectionId, string Channel, string ShopId, string DisplayName,
@@ -90,6 +94,8 @@ public interface IProductRemoteDeactivationPreviewRouter
 {
     bool Supports(MarketplaceConnection connection, IMarketplaceAdapter adapter);
     ProductRemoteDeactivationPreview Preview(MarketplaceConnection connection, ProductChannelBinding binding);
+    void Approve(ProductRemoteDeactivationPreview preview, bool explicitlyApproved);
+    ProductRemoteDeactivationPreview? Latest(string productId, string connectionId);
     ProductRemoteDeactivationReceipt? Receipt(string previewId);
 }
 
@@ -98,6 +104,9 @@ sealed class DisabledProductRemoteDeactivationPreviewRouter : IProductRemoteDeac
     public bool Supports(MarketplaceConnection connection, IMarketplaceAdapter adapter) => false;
     public ProductRemoteDeactivationPreview Preview(MarketplaceConnection connection, ProductChannelBinding binding) =>
         throw new InvalidOperationException("Bu kanal için uzaktan pasife alma önizlemesi bağlı değil; yerel bağlantı korunuyor.");
+    public void Approve(ProductRemoteDeactivationPreview preview, bool explicitlyApproved) =>
+        throw new InvalidOperationException("Bu kanal için uzaktan pasife alma gönderimi desteklenmiyor.");
+    public ProductRemoteDeactivationPreview? Latest(string productId, string connectionId) => null;
     public ProductRemoteDeactivationReceipt? Receipt(string previewId) => null;
 }
 
@@ -128,52 +137,9 @@ public sealed class CachedProductChannelSnapshotProvider(string? directory = nul
 /// <summary>Durably hands candidates to the channel workspace without creating or sending a listing.</summary>
 public sealed class LocalProductCreationPreviewHandoff : IProductChannelCreationPreviewHandoff
 {
-    readonly string connectionString;
-
-    public LocalProductCreationPreviewHandoff(string? directory = null)
-    {
-        directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
-        Directory.CreateDirectory(directory);
-        _ = new CatalogStore(directory);
-        connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "catalog.db"), DefaultTimeout = 15 }.ToString();
-        using var connection = Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = """
-            CREATE TABLE IF NOT EXISTS ProductChannelCreationPreviewRequests(
-                Id TEXT PRIMARY KEY,
-                ConnectionId TEXT NOT NULL,
-                Channel TEXT NOT NULL,
-                ShopId TEXT NOT NULL,
-                ProductIdsJson TEXT NOT NULL,
-                CreatedUtc TEXT NOT NULL
-            );
-            CREATE TRIGGER IF NOT EXISTS ProductChannelCreationPreviewRequests_NoUpdate
-            BEFORE UPDATE ON ProductChannelCreationPreviewRequests BEGIN SELECT RAISE(ABORT,'immutable product creation preview request'); END;
-            CREATE TRIGGER IF NOT EXISTS ProductChannelCreationPreviewRequests_NoDelete
-            BEFORE DELETE ON ProductChannelCreationPreviewRequests BEGIN SELECT RAISE(ABORT,'immutable product creation preview request'); END;
-            """;
-        command.ExecuteNonQuery();
-    }
-
-    SqliteConnection Open() { var connection = new SqliteConnection(connectionString); connection.Open(); return connection; }
-
-    public string Preview(MarketplaceConnection connection, IReadOnlyList<string> productIds)
-    {
-        if (productIds.Count == 0 || productIds.Any(string.IsNullOrWhiteSpace) || productIds.Distinct(StringComparer.Ordinal).Count() != productIds.Count)
-            throw new InvalidOperationException("Yeni ilan önizlemesi için benzersiz ürünler gerekli.");
-        var id = Guid.NewGuid().ToString("N");
-        using var database = Open();
-        using var command = database.CreateCommand();
-        command.CommandText = "INSERT INTO ProductChannelCreationPreviewRequests VALUES($id,$connection,$channel,$shop,$products,$created)";
-        command.Parameters.AddWithValue("$id", id);
-        command.Parameters.AddWithValue("$connection", connection.Id);
-        command.Parameters.AddWithValue("$channel", connection.Channel);
-        command.Parameters.AddWithValue("$shop", connection.ShopId);
-        command.Parameters.AddWithValue("$products", JsonSerializer.Serialize(productIds.ToArray()));
-        command.Parameters.AddWithValue("$created", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-        command.ExecuteNonQuery();
-        return id;
-    }
+    readonly ProductChannelCreationPreviewInbox inbox;
+    public LocalProductCreationPreviewHandoff(string? directory = null) => inbox = new(directory);
+    public string Preview(MarketplaceConnection connection, IReadOnlyList<string> productIds) => inbox.Enqueue(connection, productIds);
 }
 
 public sealed class ProductConnectionsModel
@@ -215,7 +181,7 @@ public sealed class ProductConnectionsModel
         bindings = new(directory);
         this.remoteSnapshots = remoteSnapshots ?? new CachedProductChannelSnapshotProvider(directory);
         this.adapters = adapters ?? MarketplaceAdapterRegistry.Default;
-        this.remoteDeactivation = remoteDeactivation ?? new DisabledProductRemoteDeactivationPreviewRouter();
+        this.remoteDeactivation = remoteDeactivation ?? new ProductRemoteDeactivationDispatchRouter(directory);
         matches = new(directory, this.remoteSnapshots, creationHandoff ?? new LocalProductCreationPreviewHandoff(directory));
         Refresh();
     }
@@ -247,6 +213,8 @@ public sealed class ProductConnectionsModel
         return preview;
     }
 
+    public void InvalidateConnectionPreview() => preview = null;
+
     public ProductChannelBindingPreview Review(IReadOnlyList<ProductChannelMatchReview> selections)
     {
         if (preview is null) throw new InvalidOperationException("Önce güncel bir eşleştirme önizlemesi alın.");
@@ -261,6 +229,22 @@ public sealed class ProductConnectionsModel
         preview = null;
         Refresh();
         return receipt;
+    }
+
+    public bool CanApplyShown(string connectionId, IReadOnlyList<ProductChannelMatchReview> shownSelections)
+    {
+        if (!CanApply || preview is null || preview.ConnectionId != connectionId) return false;
+        var expected = preview.Rows.Where(row => row.Outcome == ProductChannelMatchOutcome.Matched)
+            .OrderBy(row => row.ProductId, StringComparer.Ordinal).Select(row => (row.ProductId, row.RemoteId)).ToArray();
+        var shown = shownSelections.OrderBy(row => row.ProductId, StringComparer.Ordinal).Select(row => (row.ProductId, row.RemoteId)).ToArray();
+        return expected.SequenceEqual(shown);
+    }
+
+    public ProductChannelBindingReceipt Apply(string connectionId, IReadOnlyList<ProductChannelMatchReview> shownSelections)
+    {
+        if (!CanApplyShown(connectionId, shownSelections))
+            throw new InvalidOperationException("Gösterilen mağaza hesabı veya uzak ilan seçimi incelenen önizlemeyle eşleşmiyor; yeniden inceleyin.");
+        return Apply();
     }
 
     public ProductChannelBinding UpdateFlags(string productId, string connectionId, ProductBindingFlagEdit edit, long expectedVersion)
@@ -329,6 +313,26 @@ public sealed class ProductConnectionsModel
         return result;
     }
 
+    public void ApproveRemoteDeactivate(ProductRemoteDeactivationPreview preview, bool explicitlyApproved)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        var connection = connections.Get(preview.ConnectionId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        var binding = RequiredBinding(preview.ProductId, preview.ConnectionId);
+        if (connection.Revision != preview.ConnectionRevision || binding.Version != preview.BindingVersion || binding.RemoteId != preview.RemoteId)
+            throw new InvalidOperationException("Mağaza veya ürün bağlantısı önizlemeden sonra değişti; yeni önizleme alın.");
+        remoteDeactivation.Approve(preview, explicitlyApproved);
+    }
+
+    public ProductRemoteDeactivationPreview? LatestRemoteDeactivate(string productId, string connectionId)
+    {
+        var binding = RequiredBinding(productId, connectionId);
+        var connection = connections.Get(connectionId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        var latest = remoteDeactivation.Latest(productId, connectionId);
+        return latest is not null && latest.ConnectionRevision == connection.Revision && latest.BindingVersion == binding.Version && latest.RemoteId == binding.RemoteId
+            ? latest
+            : null;
+    }
+
     public ProductLocalUnlinkReceipt CompleteRemoteDeactivateAndUnlink(ProductRemoteDeactivationPreview preview)
     {
         ArgumentNullException.ThrowIfNull(preview);
@@ -365,11 +369,14 @@ public sealed class ProductConnectionsWindow : Window
     readonly Button applyButton = new() { Name = "ProductConnectionApplyButton", Content = "Bağlantıları uygula", IsEnabled = false };
     readonly Button localUnlinkButton = new() { Name = "ProductLocalUnlinkPreviewButton", Content = "Yalnız yerel bağlantıyı kaldır", IsEnabled = false };
     readonly Button remoteDeactivateButton = new() { Name = "ProductRemoteDeactivatePreviewButton", Content = "Uzakta pasife alma önizlemesi", IsEnabled = false };
+    readonly Button remoteDeactivateApproveButton = new() { Name = "ProductRemoteDeactivateApproveButton", Content = "Pasife alma gönderimini onayla", IsEnabled = false };
+    readonly Button remoteDeactivateCompleteButton = new() { Name = "ProductRemoteDeactivateCompleteButton", Content = "Makbuzu doğrula ve yerel bağlantıyı kaldır", IsEnabled = false };
     readonly CheckBox manageContentEdit = new() { Name = "ProductManageContentEdit", Content = "İçerik", IsThreeState = true, IsChecked = null, IsEnabled = false };
     readonly CheckBox managePriceEdit = new() { Name = "ProductManagePriceEdit", Content = "Fiyat", IsThreeState = true, IsChecked = null, IsEnabled = false };
     readonly CheckBox manageStockEdit = new() { Name = "ProductManageStockEdit", Content = "Stok", IsThreeState = true, IsChecked = null, IsEnabled = false };
     readonly Button flagsApplyButton = new() { Name = "ProductBindingFlagsApplyButton", Content = "Seçilen yönetim alanlarını uygula", IsEnabled = false };
     readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray, Margin = new Thickness(4) };
+    ProductRemoteDeactivationPreview? pendingRemoteDeactivate;
 
     public IReadOnlyList<string> SelectedProductIds => model.SelectedProductIds;
     public bool IsApplyEnabled => applyButton.IsEnabled;
@@ -389,7 +396,15 @@ public sealed class ProductConnectionsWindow : Window
         Content = Build();
         BindTargets();
         details.ItemsSource = model.Details;
-        targets.SelectionChanged += (_, _) => previewButton.IsEnabled = targets.SelectedValue is string;
+        targets.SelectionChanged += (_, _) =>
+        {
+            model.InvalidateConnectionPreview();
+            previewRows.ItemsSource = null;
+            reviewButton.IsEnabled = false;
+            applyButton.IsEnabled = false;
+            previewButton.IsEnabled = targets.SelectedValue is string;
+            status.Text = targets.SelectedValue is string ? "Hedef hesap değişti; bu hesap için yeni önizleme alın." : "Hedef mağaza hesabını seçin.";
+        };
         details.SelectionChanged += (_, _) => UpdateDetailCommands();
         foreach (var flag in new[] { manageContentEdit, managePriceEdit, manageStockEdit })
         {
@@ -410,10 +425,9 @@ public sealed class ProductConnectionsWindow : Window
         {
             var value = targets.SelectedValue as string ?? throw new InvalidOperationException("Hedef mağaza hesabını seçin.");
             var result = model.PreviewConnection(value);
-            var choices = ReviewRows(result);
-            previewRows.ItemsSource = choices;
+            var choices = ShowReviewRows(result);
             reviewButton.IsEnabled = choices.Any(row => row.Outcome == ProductChannelMatchOutcome.Matched || row.RemoteOptions.Count > 0);
-            applyButton.IsEnabled = model.CanApply;
+            UpdateApplyState();
             status.Text = Summary(result);
         });
         reviewButton.Click += (_, _) => Run(() =>
@@ -426,17 +440,18 @@ public sealed class ProductConnectionsWindow : Window
                 .Select(row => new ProductChannelMatchReview(row.ProductId, row.SelectedRemoteId)).ToArray();
             if (selections.Length == 0) throw new InvalidOperationException("İncelenen uzak ilanı açıkça seçin.");
             var reviewed = model.Review(selections);
-            previewRows.ItemsSource = ReviewRows(reviewed);
-            applyButton.IsEnabled = model.CanApply;
+            ShowReviewRows(reviewed);
+            UpdateApplyState();
             status.Text = Summary(reviewed);
         });
         applyButton.Click += (_, _) => Run(() =>
         {
-            var receipt = model.Apply();
+            var connectionId = targets.SelectedValue as string ?? throw new InvalidOperationException("Hedef mağaza hesabını seçin.");
+            var receipt = model.Apply(connectionId, ShownSelections());
             details.ItemsSource = model.Details;
             applyButton.IsEnabled = false;
             reviewButton.IsEnabled = false;
-            status.Text = $"{receipt.AppliedBindings.Count} bağlantı kaydedildi; {receipt.NewListingCandidates.Count} ürün yalnız yeni ilan önizlemesine aktarıldı.";
+            status.Text = $"{receipt.AppliedBindings.Count} bağlantı kaydedildi; {receipt.NewListingCandidates.Count} ürün hesap çalışma alanında açılacak yeni ilan önizlemesi için bekliyor.";
         });
         localUnlinkButton.Click += (_, _) => Run(() =>
         {
@@ -450,8 +465,28 @@ public sealed class ProductConnectionsWindow : Window
         remoteDeactivateButton.Click += (_, _) => Run(() =>
         {
             var row = (ProductConnectionDetailRow)details.SelectedItem;
-            var dispatch = model.PreviewRemoteDeactivate(row.ProductId, row.ConnectionId);
-            status.Text = $"Uzaktan pasife alma gönderim önizlemesi oluşturuldu: {dispatch.Id}. Kanal makbuzu oluşmadan yerel bağlantı kaldırılmadı.";
+            pendingRemoteDeactivate = model.PreviewRemoteDeactivate(row.ProductId, row.ConnectionId);
+            remoteDeactivateApproveButton.IsEnabled = true;
+            remoteDeactivateCompleteButton.IsEnabled = false;
+            status.Text = $"Uzaktan pasife alma gönderim önizlemesi oluşturuldu: {pendingRemoteDeactivate.Id}. Henüz onaylanmadı ve gönderilmedi.";
+        });
+        remoteDeactivateApproveButton.Click += (_, _) => Run(() =>
+        {
+            var dispatch = pendingRemoteDeactivate ?? throw new InvalidOperationException("Önce uzaktan pasife alma önizlemesi oluşturun.");
+            if (MessageBox.Show(this, "Bu istek ilgili Etsy hesap çalışma alanına gönderim önizlemesi olarak aktarılacak. Kanal çalışma alanında ayrıca önizleyip göndermeniz gerekir. Devam edilsin mi?", "Pasife alma gönderimini onayla", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            model.ApproveRemoteDeactivate(dispatch, true);
+            remoteDeactivateApproveButton.IsEnabled = false;
+            remoteDeactivateCompleteButton.IsEnabled = true;
+            status.Text = "Onay kaydedildi. Etsy hesap çalışma alanında pasife alma önizlemesini açın, gönderin ve başarı makbuzu oluştuktan sonra burada doğrulayın.";
+        });
+        remoteDeactivateCompleteButton.Click += (_, _) => Run(() =>
+        {
+            var dispatch = pendingRemoteDeactivate ?? throw new InvalidOperationException("Onaylanmış uzaktan pasife alma önizlemesi bulunamadı.");
+            model.CompleteRemoteDeactivateAndUnlink(dispatch);
+            pendingRemoteDeactivate = null;
+            details.ItemsSource = model.Details;
+            remoteDeactivateApproveButton.IsEnabled = remoteDeactivateCompleteButton.IsEnabled = false;
+            status.Text = "Kanal başarı makbuzu doğrulandı; yalnız ilgili yerel ürün-mağaza bağlantısı kaldırıldı.";
         });
     }
 
@@ -497,6 +532,7 @@ public sealed class ProductConnectionsWindow : Window
         detailActions.Children.Add(new TextBlock { Text = "Değiştir:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) });
         detailActions.Children.Add(manageContentEdit); detailActions.Children.Add(managePriceEdit); detailActions.Children.Add(manageStockEdit); detailActions.Children.Add(flagsApplyButton);
         detailActions.Children.Add(localUnlinkButton); detailActions.Children.Add(remoteDeactivateButton);
+        detailActions.Children.Add(remoteDeactivateApproveButton); detailActions.Children.Add(remoteDeactivateCompleteButton);
         DockPanel.SetDock(detailActions, Dock.Bottom); detailHost.Children.Add(detailActions); detailHost.Children.Add(details);
         tabs.Items.Add(new TabItem { Header = "Bağlantılar", Content = detailHost });
         root.Children.Add(tabs);
@@ -508,6 +544,9 @@ public sealed class ProductConnectionsWindow : Window
         var row = details.SelectedItem as ProductConnectionDetailRow;
         localUnlinkButton.IsEnabled = row is not null;
         remoteDeactivateButton.IsEnabled = row is not null && model.CanPreviewRemoteDeactivate(row.ProductId, row.ConnectionId);
+        pendingRemoteDeactivate = row is null ? null : model.LatestRemoteDeactivate(row.ProductId, row.ConnectionId);
+        remoteDeactivateApproveButton.IsEnabled = false;
+        remoteDeactivateCompleteButton.IsEnabled = pendingRemoteDeactivate is not null;
         manageContentEdit.IsEnabled = managePriceEdit.IsEnabled = manageStockEdit.IsEnabled = row is not null;
         manageContentEdit.IsChecked = managePriceEdit.IsChecked = manageStockEdit.IsChecked = null;
         if (row is not null)
@@ -521,6 +560,27 @@ public sealed class ProductConnectionsWindow : Window
 
     void UpdateFlagApplyState() => flagsApplyButton.IsEnabled = details.SelectedItem is ProductConnectionDetailRow
         && (manageContentEdit.IsChecked.HasValue || managePriceEdit.IsChecked.HasValue || manageStockEdit.IsChecked.HasValue);
+
+    IReadOnlyList<ProductConnectionReviewRow> ShowReviewRows(ProductChannelBindingPreview value)
+    {
+        var rows = ReviewRows(value);
+        foreach (var row in rows)
+            row.SelectedRemoteIdChanged += (_, _) =>
+            {
+                row.Reviewed = false;
+                applyButton.IsEnabled = false;
+                reviewButton.IsEnabled = rows.Any(item => !string.IsNullOrWhiteSpace(item.SelectedRemoteId));
+            };
+        previewRows.ItemsSource = rows;
+        return rows;
+    }
+
+    ProductChannelMatchReview[] ShownSelections() => (previewRows.ItemsSource?.Cast<ProductConnectionReviewRow>() ?? Enumerable.Empty<ProductConnectionReviewRow>())
+        .Where(row => !string.IsNullOrWhiteSpace(row.SelectedRemoteId))
+        .Select(row => new ProductChannelMatchReview(row.ProductId, row.SelectedRemoteId)).ToArray();
+
+    void UpdateApplyState() => applyButton.IsEnabled = targets.SelectedValue is string connectionId
+        && model.CanApplyShown(connectionId, ShownSelections());
 
     void Run(Action action)
     {

@@ -16,6 +16,8 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     readonly MarketplaceCredentialVault? credentialVault;
     readonly CatalogStore catalog;
     readonly EtsyWorkspaceStore store;
+    readonly ProductChannelCreationPreviewInbox creationInbox;
+    readonly ProductRemoteDeactivationDispatchStore remoteDeactivationDispatches;
     readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
     readonly CancellationTokenSource lifetime = new();
     readonly TabControl sections = new() { Name = "EtsySections" };
@@ -26,6 +28,8 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     readonly ComboBox stateFilter = Choices("Tüm ürünler", "Eşleşenler", "Eşleşmeyenler", "Stokta olanlar");
     readonly ComboBox templateChoice = Select();
     readonly Button send = new() { Name = "EtsySend", Content = "Önizlemeyi aç", IsEnabled = false };
+    readonly Button creationHandoffButton = new() { Name = "EtsyCreationHandoffButton", Content = "Merkezden gelen yeni ilanlar", IsEnabled = false };
+    readonly Button remoteDeactivateHandoffButton = new() { Name = "EtsyRemoteDeactivateHandoffButton", Content = "Onaylı pasife alma istekleri", IsEnabled = false };
     EtsyCredentials? credentials;
     EtsyWorkspaceState state = new();
     EtsyOperationPlan? plan;
@@ -35,6 +39,7 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     public event Action<EtsyCredentials>? CredentialsChanged;
     public string? ConnectionId => scopedConnection?.Id;
     public string AccountShopId => scopedConnection?.ShopId ?? credentials?.ShopId ?? "";
+    public IReadOnlyList<string> CreationHandoffProductIds { get; private set; } = Array.Empty<string>();
 
     public EtsyWorkspacePanel(string? directory = null) : this(directory, null, false) { }
 
@@ -51,6 +56,9 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
             credentialVault = new MarketplaceCredentialVault(directory);
         }
         this.directory = directory; catalog = new(directory); store = new(directory);
+        creationInbox = new(directory); remoteDeactivationDispatches = new(directory);
+        creationHandoffButton.Click += (_, _) => Local(AcceptCreationHandoff);
+        remoteDeactivateHandoffButton.Click += async (_, _) => await Run(OpenRemoteDeactivateHandoff);
         BuildStyle();
         var root = new DockPanel { Margin = new Thickness(12) };
         var top = new DockPanel { Margin = new Thickness(0,0,0,10) };
@@ -64,7 +72,7 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         if(scopedConnection is not null){shop.Text=scopedConnection.ShopId;shop.IsReadOnly=true;summary.Text=$"{scopedConnection.DisplayName} / {scopedConnection.ShopId} · {scopedConnection.Status}";}
         try { credentials = LoadCredentials(); if(credentials is not null) FillCredentials(credentials); if(scopedConnection is not null || credentials is not null) LoadState(); }
         catch(Exception ex) { summary.Text = Safe(ex); }
-        RefreshProducts();
+        RefreshProducts(); RefreshDispatchHandoffs();
         Loaded += (_,_) => { var window=Window.GetWindow(this); if(window is not null) window.Closed += (_,_)=>Dispose(); };
     }
     public void Dispose() { if(disposed)return;disposed=true;lifetime.Cancel();http.Dispose();lifetime.Dispose(); }
@@ -118,6 +126,50 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         if (value is not null && value.ShopId != current.ShopId)
             throw new InvalidOperationException("WRONG_ACCOUNT: Etsy şifreli hesabı seçili mağazayla eşleşmiyor.");
         return value;
+    }
+
+    void RefreshDispatchHandoffs()
+    {
+        if (scopedConnection is null)
+        {
+            creationHandoffButton.IsEnabled = remoteDeactivateHandoffButton.IsEnabled = false;
+            return;
+        }
+        var creation = creationInbox.Pending(scopedConnection.Id);
+        creationHandoffButton.IsEnabled = creation.Count > 0;
+        creationHandoffButton.Content = creation.Count == 0 ? "Merkezden gelen yeni ilanlar" : $"Merkezden gelen yeni ilanlar ({creation.Sum(item => item.ProductIds.Count)})";
+        var deactivations = remoteDeactivationDispatches.Pending(scopedConnection.Id);
+        remoteDeactivateHandoffButton.IsEnabled = deactivations.Count > 0;
+        remoteDeactivateHandoffButton.Content = deactivations.Count == 0 ? "Onaylı pasife alma istekleri" : $"Onaylı pasife alma istekleri ({deactivations.Count})";
+    }
+
+    void AcceptCreationHandoff()
+    {
+        var connection = CurrentScopedConnection();
+        var request = creationInbox.Pending(connection.Id).FirstOrDefault()
+            ?? throw new InvalidOperationException("Bu Etsy hesabı için bekleyen yeni ilan önizlemesi yok.");
+        CreationHandoffProductIds = Array.AsReadOnly(request.ProductIds.ToArray());
+        creationInbox.Recognize(request.Id, connection.Id);
+        summary.Text = $"{CreationHandoffProductIds.Count} ürün bu hesapta tanındı. ‘Taslak oluştur · önizle’ ile değerleri inceleyin; otomatik gönderim yapılmadı.";
+        RefreshDispatchHandoffs();
+    }
+
+    async Task OpenRemoteDeactivateHandoff()
+    {
+        var connection = CurrentScopedConnection();
+        var request = remoteDeactivationDispatches.Pending(connection.Id).FirstOrDefault()
+            ?? throw new InvalidOperationException("Bu Etsy hesabı için onaylı pasife alma isteği yok.");
+        ClearPreview();
+        var c = await Authorized();
+        plan = await new EtsyWorkspaceService(directory, http).PreviewAsync(c, new[] { request.Preview.ProductId }, EtsyOperation.Deactivate, lifetime.Token);
+        var exactRow = plan.Rows.SingleOrDefault(row => row.ProductId == request.Preview.ProductId);
+        if (exactRow is null || !exactRow.CanSend || exactRow.ListingId?.ToString(CultureInfo.InvariantCulture) != request.Preview.RemoteId)
+            throw new InvalidOperationException("Etsy pasife alma önizlemesi onaylanan uzak ilan kimliğiyle eşleşmedi; gönderim bağlanmadı.");
+        remoteDeactivationDispatches.AttachChannelPlan(request.Preview.Id, connection.Id, plan.Id);
+        send.IsEnabled = true;
+        summary.Text = "Onaylı pasife alma isteği Etsy gönderim önizlemesine bağlandı. Gönderim için önizleme penceresinde ayrıca açık onay gerekir.";
+        RefreshDispatchHandoffs();
+        ShowPreview(plan);
     }
 
     internal MarketplaceConnection CurrentScopedConnection()
