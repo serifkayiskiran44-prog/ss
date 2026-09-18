@@ -64,3 +64,17 @@ GUI send evidence on 2026-09-18: Delivery plan `35f83439a38544a09269b04d883c0d07
 - [Manufacturer: Sensibowl Small](https://www.modernaproducts.com/gateway/product/4061/sensibowl-small): 350 ml, white option, plastic, manual bowl.
 - [Matching white 350 ml product](https://zoobonus.ua/catalog/miska-dlja-sobak-i-kotiv-moderna-sensibowl-350ml-bila/p14396) and [matching product country of origin](https://wee.ae/product/moderna-sensibowl-single-plastic-white-350ml-m-40646): Belgium. Required attribute values were selected from the live category API. Existing catalog images were retained; the primary image was visually checked and returned HTTP 200.
 - [Stock and price update contract](https://developers.trendyol.com/docs/stok-ve-fiyat-g%C3%BCncelleme-updatepriceandinventory).
+
+## Barkod, marka denetim ve teslimat düzeltmesi — 2026-09-18
+
+- Yeni ürünün barkodu yalnız `ListingBarcode` veya ürün kartındaki `Barcode` alanından alınır. Eski mağaza bağlantısı (`IntegrationCode`), SKU ve GTIN yeni barkod üretmez. Stok kodu `stockCode`, model kodu `productMainId` olarak ayrı gönderilir.
+- Gönderim barkodu mevcut eşleşmeden farklı kaydedilirse güncellemeler yeniden eşleştirme yapılana kadar durur. Barkodu boş olan eski profillerin mevcut bağlantıları korunur.
+- Teslimat şablonunda termin süresi ve “Ürün kartından al / Gönderme” desi seçimi bulunur. Desi her ürünün kendi `XmlAttributes[Desi]` değerinden alınır; virgüllü ondalık kabul edilir, binlik ayırıcı reddedilir. Yeni/onaysız ürün ve onaylı kargo-adres güncellemesi desteklenir; termin ayrı teslimat isteğinde gönderilir.
+- Marka denetim ekranında çoklu/tüm marka seçimiyle üretici, üç ithalatçı ve kullanım uyarıları bir kez tanımlanır. Dolu alanlar birleştirilir, boş alanlar korunur; açık alan kaldırma işlemi ayrıca bulunur. Ürün özellikleri marka varsayılanlarından önceliklidir.
+- Denetim varsayılanları yeni/onaysız ürün önizlemesinde güncel kategori tanımlarıyla doğrulanır. Mevcut onaylı ürünün içerik özelliklerini topluca değiştirme bu değişikliğin kapsamı değildir; alanlar gönderilmiş gibi gösterilmez.
+- Canlı kategori 1295 metadata GET ile üretici 1198/1294/1296, birincil ithalatçı 1216/1305/1304, ikincil 1297/1298/1299, üçüncül 1300/1301/1302 ve uyarı1116 doğrulandı. 50 karakter sınırı belgede yalnız Renk (47) içindir.
+- Önceki tek canlı denemede PTD-1367, yardımcı tarafından hazırlanan profilde barkod olarak girilmişti. Bu düzeltme mevcut mağaza barkodunu değiştirmez. Onaylı barkod API ile yerinde değiştirilemediğinden doğru barkod ve canlı düzeltme kapsamı kullanıcıyla netleştirilmelidir; bu çalışmada yeni canlı ürün yazımı yapılmadı.
+
+Kaynaklar: [V2 ürün yaratma](https://developers.trendyol.com/tr/docs/%C3%BCr%C3%BCn-yaratma-v2), [V2 onaylı güncelleme](https://developers.trendyol.com/docs/%C3%BCr%C3%BCn-g%C3%BCncelleme-onayl%C4%B1-%C3%BCr%C3%BCn-v2).
+
+Doğrulama: 1074 Release testi geçti (0 hata/atlama); Windows-Excel-Final yayını açıldı. Yayınlanan GUI’de termin/desi kaynağı, PTD-1367 kartında boş gönderim barkodu ile eski mağaza eşleşmesinin ayrımı ve görünür marka listesinde 240 marka / 1738 ürün toplu seçimi kontrol edildi. Alanlara örnek/fiktif üretici bilgisi yazılmadı, canlı gönderim yapılmadı.

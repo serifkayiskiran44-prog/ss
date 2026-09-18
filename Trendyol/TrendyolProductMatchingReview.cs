@@ -22,7 +22,7 @@ public sealed partial class TrendyolWorkspaceStore
             var product=JsonSerializer.Deserialize<CatalogProduct>(read.ExecuteScalar() as string??throw new InvalidOperationException("Yerel ürün silindi; eşleştirmeyi yenileyin."))!;
             if(Hash(JsonSerializer.Serialize(product))!=choice.CatalogHash)throw new InvalidOperationException("Yerel ürün değişti; eşleştirmeyi yeniden inceleyin.");
             if(next.Profiles.Any(p=>p.ProductId!=choice.ProductId&&p.IntegrationCode==choice.Barcode))throw new InvalidOperationException("Trendyol barkodu başka bir yerel ürüne bağlı.");
-            var profile=next.Profiles.SingleOrDefault(p=>p.ProductId==choice.ProductId);if(profile is null){profile=new(){ProductId=choice.ProductId};next.Profiles.Add(profile);}profile.IntegrationCode=choice.Barcode;
+            var profile=next.Profiles.SingleOrDefault(p=>p.ProductId==choice.ProductId);if(profile is null){profile=new(){ProductId=choice.ProductId};next.Profiles.Add(profile);}profile.IntegrationCode=choice.Barcode;profile.ListingBarcode=choice.Barcode;
         }
         Validate(next);next.Revision++;using var write=connection.CreateCommand();write.Transaction=transaction;
         write.CommandText="UPDATE TrendyolWorkspace SET Revision=$revision,Json=$json WHERE SellerId=$seller";write.Parameters.AddWithValue("$revision",next.Revision);write.Parameters.AddWithValue("$json",JsonSerializer.Serialize(next));write.Parameters.AddWithValue("$seller",seller);

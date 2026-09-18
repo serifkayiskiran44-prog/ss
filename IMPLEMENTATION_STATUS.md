@@ -1,6 +1,11 @@
 # Uygulama durumu — .NET 8 EXE
 
 ## Trendyol product workspace — 2026-09-18
+- Barcode correction: separate explicit ListingBarcode from existing remote IntegrationCode; creation never uses legacy link/SKU/GTIN. Updates require re-matching after an explicit barcode change.
+- Brand safety defaults: multi/all-brand selection for producer, three importers and warnings; nonempty merge, explicit removal, product overrides preserved, category metadata validation before create/unapproved update. Published approved content is not bulk-replaced.
+- Delivery templates expose lead time and per-product Desi source. ShippingDetails now sends only the reviewed dimensionalWeight plus selected carrier/address fields; comma decimals are not interpreted as thousands.
+- Validation for this correction: 1074 Release tests passed, zero failures/skips; requested self-contained win-x64 Windows-Excel-Final publish succeeded.
+- The initial single-product helper incorrectly supplied SKU PTD-1367 as its barcode. This revision does not rename that immutable remote barcode; the correct barcode and live remediation remain pending. No additional live writes in this revision.
 - Follow-up UI: compact action viewport preserves the grid at desktop sizes; stock, price and publication status precede long messages. Matching now has an all-selected review and explicit remote search/manual choice instead of a first-15 message box. History operations have Turkish labels.
 - Barcode-first follow-up: entered/profile barcode (otherwise local Barcode) is checked exactly against the seller cache. Existing products link locally; missing barcodes route only those rows into the existing immutable Create preview. Blank barcodes do not fall back to SKU/GTIN. Unchecked barcode drafts survive row changes and block applying until checked or skipped. Missing required creation fields still block sending.
 - Reviewed local profile links are applied in one transaction; stale catalog/workspace, duplicate ownership, empty reviews and stale seller cache for a create decision are rejected. The match/review action itself performs no HTTP write; creation retains the separate explicit send, receipt and account guards.

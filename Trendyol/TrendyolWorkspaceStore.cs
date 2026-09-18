@@ -52,10 +52,12 @@ public sealed partial class TrendyolWorkspaceStore
         Unique(s.Categories,c=>c.Id); Unique(s.Brands,b=>b.Id); Unique(s.Products,p=>p.Barcode); Unique(s.Addresses,a=>a.Id); Unique(s.Carriers,c=>c.Code);
         Unique(s.Mappings,m=>(m.Kind,m.LocalId)); Unique(s.Profiles,p=>p.ProductId); Unique(s.Templates,t=>t.Id);
         Unique(s.Profiles.Where(p=>p.IntegrationCode.Length>0),p=>p.IntegrationCode);
+        Unique(s.BrandSafetyTemplates,t=>TrendyolMatching.Normalize(t.BrandName));
+        foreach(var template in s.BrandSafetyTemplates)TrendyolProductSafety.Validate(template);
         if(s.Categories.Any(c=>c.Id<=0)||s.Brands.Any(b=>b.Id<=0)||s.Revision<0) throw new InvalidDataException("Geçersiz Trendyol kimliği.");
         foreach(var m in s.Mappings) if (m.RemoteId<=0 || m.LocalId.Length==0 || m.Kind is not (TaxonomyKind.Category or TaxonomyKind.Brand)) throw new InvalidOperationException("Geçersiz kategori/marka eşleştirmesi.");
         foreach(var t in s.Templates) if(t.Id.Length==0 || string.IsNullOrWhiteSpace(t.Name) || t.DurationDays is <0 or >30 || t.ShipmentAddressId is <=0 || t.ReturningAddressId is <=0) throw new InvalidOperationException("Teslimat şablonunu kontrol edin.");
-        foreach(var p in s.Profiles) { if(p.ProductId.Length==0 || p.IntegrationCode.Length>40 || p.IntegrationCode.Any(char.IsWhiteSpace) || p.SalePriceTry is <=0 || p.ListPriceTry is <=0) throw new InvalidOperationException("Ürün Trendyol ayarlarını kontrol edin."); Unique(p.Attributes,a=>a.AttributeId); }
+        foreach(var p in s.Profiles) { if(p.ProductId.Length==0 || p.IntegrationCode.Length>40 || p.IntegrationCode.Any(char.IsWhiteSpace) || p.ListingBarcode.Length>40 || p.ListingBarcode.Any(ch=>!char.IsLetterOrDigit(ch)&&ch!='.'&&ch!='-'&&ch!='_') || p.SalePriceTry is <=0 || p.ListPriceTry is <=0) throw new InvalidOperationException("Ürün Trendyol ayarlarını kontrol edin."); Unique(p.Attributes,a=>a.AttributeId); }
     }
     public static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     public static string AccountFingerprint(TrendyolSettings settings) => Hash(JsonSerializer.Serialize(new[]{settings.SupplierId,settings.ApiKey,settings.ApiSecret}));

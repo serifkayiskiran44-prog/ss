@@ -66,7 +66,7 @@ public class TrendyolWorkflowTests
         state.Attributes[1]=[new(3,"Renk",true,false,false,[new(4,"Siyah")])];state.AttributesUpdatedUtc[1]=DateTime.UtcNow;
         var profile=state.Profiles.Single();profile.CategoryId=1;profile.BrandId=2;profile.IntegrationCode="";store.Save(state);
         Assert.AreEqual("Hatalı",store.Preview(account,[product.Id],TrendyolOperation.Create).Rows.Single().Status);
-        state=store.Load("10");profile=state.Profiles.Single();profile.IntegrationCode="NEW";profile.Origin="TR";profile.Attributes.Add(new(3,[4]));store.Save(state);
+        state=store.Load("10");profile=state.Profiles.Single();profile.ListingBarcode="NEW";profile.Origin="TR";profile.Attributes.Add(new(3,[4]));store.Save(state);
         var plan=store.Preview(account,[product.Id],TrendyolOperation.Create);Assert.AreEqual("Eklenecek",plan.Rows.Single().Status);
         Assert.AreEqual("NEW",JsonDocument.Parse(plan.PayloadJson).RootElement.GetProperty("items")[0].GetProperty("barcode").GetString());
     }
@@ -154,7 +154,7 @@ public class TrendyolWorkflowTests
     }
     [TestMethod] public void ManuallyReconciledCreateNeedsFreshRemoteSnapshotThenNewPreview()
     {
-        var state=store.Load("10");state.Products.Clear();state.DictionaryUpdatedUtc=DateTime.UtcNow;state.Categories.Add(new(1,"Kategori","Kategori",true));state.Brands.Add(new(2,"Marka"));state.Attributes[1]=[];state.AttributesUpdatedUtc[1]=DateTime.UtcNow;state.Profiles.Single().CategoryId=1;state.Profiles.Single().BrandId=2;state.Profiles.Single().Origin="TR";store.Save(state);
+        var state=store.Load("10");state.Products.Clear();state.DictionaryUpdatedUtc=DateTime.UtcNow;state.Categories.Add(new(1,"Kategori","Kategori",true));state.Brands.Add(new(2,"Marka"));state.Attributes[1]=[];state.AttributesUpdatedUtc[1]=DateTime.UtcNow;state.Profiles.Single().CategoryId=1;state.Profiles.Single().BrandId=2;state.Profiles.Single().Origin="TR";state.Profiles.Single().ListingBarcode="REMOTE";store.Save(state);
         var plan=store.Preview(account,[product.Id],TrendyolOperation.Create);store.Claim(plan.Id,account,true);store.ResolveUnknown(plan.Id,"10","Mağazada bulunmadığı kontrol edildi.");
         var stale=store.Preview(account,[product.Id],TrendyolOperation.Create);Assert.ThrowsException<InvalidOperationException>(()=>store.Claim(stale.Id,account,true));
         state=store.Load("10");state.ProductsUpdatedUtc=DateTime.UtcNow;store.Save(state);var retry=store.Preview(account,[product.Id],TrendyolOperation.Create);store.Claim(retry.Id,account,true);Assert.AreEqual(2,store.Receipts("10").Count);

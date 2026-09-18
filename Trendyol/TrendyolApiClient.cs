@@ -334,7 +334,7 @@ public sealed class TrendyolApiClient : IDisposable
             var items = Array(payload.RootElement, "items");
             if (items.GetArrayLength() is < 1 or > 1000 || items.EnumerateArray().Any(x => x.ValueKind != JsonValueKind.Object)) throw InvalidResponse();
             if (operation == "details" && items.EnumerateArray().Any(item => item.EnumerateObject().Any(property =>
-                property.Name is not ("barcode" or "cargoProviders" or "shipmentAddressId" or "returningAddressId")))) throw InvalidResponse();
+                property.Name is not ("barcode" or "cargoProviders" or "shipmentAddressId" or "returningAddressId" or "dimensionalWeight")))) throw InvalidResponse();
             if (operation == "unapproved" && items.EnumerateArray().Any(item => item.EnumerateObject().Any(property =>
                 property.Name is not ("barcode" or "title" or "description" or "productMainId" or "brandId" or "categoryId"
                     or "stockCode" or "origin" or "dimensionalWeight" or "vatRate" or "deliveryOption" or "images" or "attributes"

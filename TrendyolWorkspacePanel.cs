@@ -36,7 +36,7 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
         ApplyWorkspaceStyle();
         var root=new DockPanel{Margin=new(10)};var footer=new DockPanel();var cancel=B("İsteği iptal et",()=>cancellation?.Cancel());DockPanel.SetDock(cancel,Dock.Right);footer.Children.Add(cancel);footer.Children.Add(status);DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
         var header=new DockPanel{Margin=new(0,0,0,8)};var settingsButton=B("Mağaza ayarları",ShowSettings);settingsButton.Name="TrendyolOpenSettings";DockPanel.SetDock(settingsButton,Dock.Right);header.Children.Add(settingsButton);accountBadge.FontWeight=FontWeights.SemiBold;header.Children.Add(accountBadge);DockPanel.SetDock(header,Dock.Top);root.Children.Add(header);root.Children.Add(tabs);Content=root;
-        settingsTabs.Items.Add(new TabItem{Header="Bağlantı ve aktarım",Content=BuildConnection()});settingsTabs.Items.Add(new TabItem{Header="Kategori ve marka",Content=BuildMappings()});settingsTabs.Items.Add(new TabItem{Header="Teslimat şablonları",Content=BuildDelivery()});
+        settingsTabs.Items.Add(new TabItem{Header="Bağlantı ve aktarım",Content=BuildConnection()});settingsTabs.Items.Add(new TabItem{Header="Kategori ve marka",Content=BuildMappings()});settingsTabs.Items.Add(new TabItem{Header="Teslimat şablonları",Content=BuildDelivery()});settingsTabs.Items.Add(new TabItem{Header="Marka denetim bilgileri",Content=BuildBrandSafety()});
         AddTab("Trendyol kontrol",BuildProducts());AddTab("Ayarlar",settingsTabs);AddTab("Rekabet analizi",BuildCompetition());AddTab("İşlem geçmişi",BuildHistory());
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&loaded&&editorDirty&&tabs.SelectedIndex!=0&&!DiscardEditorChanges())tabs.SelectedIndex=0;};
         send.Click+=async(_,_)=>await Run(async()=>{
@@ -56,7 +56,7 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
         var saved=credentials.Load();state=saved is null?new():store.Load(saved.SupplierId);InvalidatePreview();competition.ItemsSource=null;competitionAccount="";
         accountStatus.Text=saved is null?"API bilgisi yok. Açılışta bağlantı kurulmaz.":$"Satıcı: {saved.SupplierId} · Ürün API V2 · Anahtarlar şifreli kayıtlı";
         accountBadge.Text=saved is null?"Trendyol mağazası · Bağlantı ayarları gerekli":$"Trendyol mağazası  /  {saved.SupplierId}     •     Türkiye · TRY";
-        RefreshMappings();RefreshControlFilterOptions();RefreshProducts();RefreshTemplates();ReloadHistory();
+        RefreshMappings();RefreshControlFilterOptions();RefreshProducts();RefreshTemplates();RefreshBrandSafety();ReloadHistory();
         status.Text=$"Kategori: {state.Categories.Count} · Marka: {state.Brands.Count} · Mağaza ürünü: {state.Products.Count} · Sözlük: {Time(state.DictionaryUpdatedUtc)} · Ürünler: {Time(state.ProductsUpdatedUtc)}";
     }
     void Persist(){try{store.Save(state);}catch{state=store.Load(Account().SupplierId);throw;}Reload();}
@@ -92,7 +92,7 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
         })));
         actions.Children.Add(A("Bağlantıyı kontrol et",async()=>{var account=Account();using var client=new TrendyolApiClient(account);var addresses=await client.GetAddressesAsync(Token);EnsureAccount(account);accountStatus.Text=$"Bağlantı başarılı · Satıcı {account.SupplierId} · {addresses.Count} adres";status.Text="Mağaza bağlantısı doğrulandı.";}));form.Children.Add(actions);form.Children.Add(accountStatus);
         var setup=new StackPanel();setup.Children.Add(T("Kategori, marka ve mağaza ürünlerini alın; bulunan karşılıkları inceleyip kaydedin.",true));setup.Children.Add(A("Kategori ve marka listesini yenile",RefreshDictionaries));setup.Children.Add(B("Kategori / marka eşleştirmelerini aç",()=>{tabs.SelectedIndex=1;settingsTabs.SelectedIndex=1;}));setup.Children.Add(A("Trendyol ürünlerini yenile",RefreshStoreProducts));setup.Children.Add(B("Teslimat ve kargo şablonlarını aç",()=>{tabs.SelectedIndex=1;settingsTabs.SelectedIndex=2;}));
-        var transfer=new StackPanel();transfer.Children.Add(T("Yeni ürün ekleme, yalnız fiyat, yalnız stok ve diğer işlemler ürün listesindeki İşlem alanından seçilir."));transfer.Children.Add(T("Fiyat: KDV dahil TRY\nÜrün eşleştirme: SKU / entegrasyon barkodu\nGönderim: seçili ürünler → önizleme → onay",true));transfer.Children.Add(Primary(B("Trendyol kontrolü aç",()=>{tabs.SelectedIndex=0;ShowProductView("list");})));
+        var transfer=new StackPanel();transfer.Children.Add(T("Yeni ürün ekleme, yalnız fiyat, yalnız stok ve diğer işlemler ürün listesindeki İşlem alanından seçilir."));transfer.Children.Add(T("Fiyat: KDV dahil TRY\nÜrün eşleştirme: barkod\nStok kodu ayrı korunur\nGönderim: seçili ürünler → önizleme → onay",true));transfer.Children.Add(Primary(B("Trendyol kontrolü aç",()=>{tabs.SelectedIndex=0;ShowProductView("list");})));
         var right=new StackPanel();right.Children.Add(Section("Listeler ve eşleştirme",setup));right.Children.Add(Section("Ürün aktarımı",transfer));
         return Scroll(Columns(Section("API / kullanıcı bilgileri",form),right));
     }

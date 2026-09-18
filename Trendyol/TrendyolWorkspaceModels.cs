@@ -19,6 +19,7 @@ public sealed class TrendyolWorkspaceState
     public List<TrendyolOutboundMapping> Mappings { get; set; } = [];
     public List<TrendyolProductProfile> Profiles { get; set; } = [];
     public List<TrendyolDeliveryTemplate> Templates { get; set; } = [];
+    public List<TrendyolBrandSafetyTemplate> BrandSafetyTemplates { get; set; } = [];
 }
 
 public sealed record TrendyolOutboundMapping(TaxonomyKind Kind, string LocalId, string LocalName, long RemoteId);
@@ -27,6 +28,8 @@ public sealed class TrendyolProductProfile
 {
     public string ProductId { get; set; } = "";
     public string IntegrationCode { get; set; } = "";
+    // User-selected barcode for new listings; a legacy remote link is not a barcode source.
+    public string ListingBarcode { get; set; } = "";
     public long? CategoryId { get; set; }
     public long? BrandId { get; set; }
     public string Origin { get; set; } = "";
@@ -41,7 +44,10 @@ public sealed class TrendyolProductProfile
     public decimal? CompetitionMaximum { get; set; }
     public decimal CompetitionDifference { get; set; } = 0.01m;
 }
-public sealed record TrendyolDeliveryTemplate(string Id, string Name, string CarrierCode, int? DurationDays, long? ShipmentAddressId, long? ReturningAddressId);
+public sealed record TrendyolDeliveryTemplate(string Id, string Name, string CarrierCode, int? DurationDays, long? ShipmentAddressId, long? ReturningAddressId)
+{
+    public bool IncludeProductDesi { get; init; } = true;
+}
 public enum TrendyolOperation { Create, Price, Stock, PriceAndStock, Delivery, ShippingDetails, UpdateUnapproved, Content }
 public sealed record TrendyolPreviewRow(string ProductId, string Sku, string Name, string Barcode, string Status, string Detail, string? ItemJson);
 public sealed record TrendyolPlan(string Id, string SellerId, string AccountFingerprint, long Revision, DateTime CreatedUtc,

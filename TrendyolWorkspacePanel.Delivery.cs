@@ -7,12 +7,14 @@ namespace TrMarketplaceHubDesktop;
 public sealed record TrendyolDeliveryTemplateRow(TrendyolDeliveryTemplate Template,string CarrierName,string DurationLabel,string ShipmentName,string ReturningName,int ProductCount)
 {
     public string Name=>Template.Name;
+    public string DesiSource=>Template.IncludeProductDesi?"Ürün kartından":"Gönderme";
 }
 
 public sealed partial class TrendyolWorkspacePanel
 {
-    readonly DataGrid templates=Grid("TrendyolTemplates",("Şablon adı","Name",170),("Kargo firması","CarrierName",150),("Kargoya teslim","DurationLabel",140),("Sevkiyat adresi","ShipmentName",200),("İade adresi","ReturningName",200),("Ürün","ProductCount",60));
+    readonly DataGrid templates=Grid("TrendyolTemplates",("Şablon adı","Name",170),("Kargo firması","CarrierName",150),("Termin süresi","DurationLabel",140),("Desi kaynağı","DesiSource",120),("Sevkiyat adresi","ShipmentName",200),("İade adresi","ReturningName",200),("Ürün","ProductCount",60));
     readonly TextBox templateName=Box();
+    readonly ComboBox templateDesi=new(){Name="TrendyolTemplateDesi",ItemsSource=new[]{"Ürün kartından al","Gönderme · mevcut desiyi koru"},SelectedIndex=0,Margin=new(3)};
     readonly ComboBox carrier=Combo(),shipment=Combo(),returning=Combo();
     readonly ComboBox duration=new(){ItemsSource=new[]{"Mağaza varsayılanı"}.Concat(Enumerable.Range(0,31).Select(i=>i==0?"0 · Bugün kargoda":i==1?"1 · En geç yarın kargoda":i+" gün")).ToArray(),SelectedIndex=0,Margin=new(3)};
     readonly TextBlock templateHeading=T("Yeni teslimat şablonu"),deliveryCacheStatus=T("",true),templateEmpty=T("Henüz şablon yok. Sağdaki forma bir ad vererek ilk teslimat şablonunuzu kaydedin.",true);
@@ -28,7 +30,7 @@ public sealed partial class TrendyolWorkspacePanel
         top.Children.Add(T("1. Şablonu kaydedin   →   2. Seçili ürünlere atayın   →   3. Değişiklikleri önizleyip gönderin",true));
         var actions=new WrapPanel();actions.Children.Add(B("Yeni şablon",NewDeliveryTemplate));actions.Children.Add(A("Kargo ve adresleri API'den al",RefreshDeliveryOptions));actions.Children.Add(B("Ürünlere atamaya geç",()=>{tabs.SelectedIndex=0;ShowProductView("list");bulkActions.Visibility=Visibility.Visible;}));top.Children.Add(actions);top.Children.Add(deliveryCacheStatus);DockPanel.SetDock(top,Dock.Top);dock.Children.Add(top);
         var editor=new StackPanel();templateHeading.FontWeight=FontWeights.SemiBold;editor.Children.Add(templateHeading);
-        Field(editor,"Şablon adı",templateName);Field(editor,"Kargo firması",carrier);Field(editor,"Kargoya teslim süresi",duration);Field(editor,"Sevkiyat adresi",shipment);Field(editor,"İade adresi",returning);
+        Field(editor,"Şablon adı",templateName);Field(editor,"Kargo firması",carrier);Field(editor,"Termin süresi (gün)",duration);Field(editor,"Desi bilgisi",templateDesi);editor.Children.Add(T("Her ürünün kendi desisi kullanılır. Boş desi gönderilmez; değer ürün kartından, XML veya Excel’den girilir.",true));Field(editor,"Sevkiyat adresi",shipment);Field(editor,"İade adresi",returning);
         editor.Children.Add(T("Mağaza varsayılanı seçilen alanlar gönderilmez. Mevcut kargo ve adres bilgileri korunur.",true));
         var saveActions=new WrapPanel();saveActions.Children.Add(Primary(B("Şablonu kaydet",SaveDeliveryTemplate)));saveActions.Children.Add(B("Seçili şablonu sil",DeleteDeliveryTemplate));editor.Children.Add(saveActions);
         editor.Children.Add(T("Şablonu kaydetmek Trendyol'a gönderim yapmaz. Ürün ataması ve gönderim ayrı adımlardır.",true));
@@ -38,12 +40,12 @@ public sealed partial class TrendyolWorkspacePanel
         return dock;
     }
 
-    TrendyolDeliveryTemplate ReadDeliveryTemplate()=>new(templateId??"",templateName.Text.Trim(),(carrier.SelectedItem as TrendyolCarrier)?.Code??"",duration.SelectedIndex>0?duration.SelectedIndex-1:null,shipment.SelectedItem is TrendyolAddress {Id:>0} s?s.Id:null,returning.SelectedItem is TrendyolAddress {Id:>0} r?r.Id:null);
+    TrendyolDeliveryTemplate ReadDeliveryTemplate()=>new(templateId??"",templateName.Text.Trim(),(carrier.SelectedItem as TrendyolCarrier)?.Code??"",duration.SelectedIndex>0?duration.SelectedIndex-1:null,shipment.SelectedItem is TrendyolAddress {Id:>0} s?s.Id:null,returning.SelectedItem is TrendyolAddress {Id:>0} r?r.Id:null){IncludeProductDesi=templateDesi.SelectedIndex==0};
     void LoadDeliveryTemplate(TrendyolDeliveryTemplate value)
     {
         templateId=value.Id.Length==0?null:value.Id;templateName.Text=value.Name;templateHeading.Text=templateId is null?"Yeni teslimat şablonu":"Şablonu düzenle";
         carrier.SelectedItem=carrier.Items.Cast<TrendyolCarrier>().FirstOrDefault(c=>c.Code==value.CarrierCode);
-        duration.SelectedIndex=value.DurationDays.HasValue?value.DurationDays.Value+1:0;
+        duration.SelectedIndex=value.DurationDays.HasValue?value.DurationDays.Value+1:0;templateDesi.SelectedIndex=value.IncludeProductDesi?0:1;
         shipment.SelectedItem=shipment.Items.Cast<TrendyolAddress>().FirstOrDefault(a=>a.Id==(value.ShipmentAddressId??0));
         returning.SelectedItem=returning.Items.Cast<TrendyolAddress>().FirstOrDefault(a=>a.Id==(value.ReturningAddressId??0));
     }

@@ -21,12 +21,16 @@ public sealed partial class TrendyolWorkspaceStore
             var p=JsonSerializer.Deserialize<CatalogProduct>(json) ?? throw new InvalidOperationException("Ürün okunamadı.");
             if(p.Id!=id) throw new InvalidOperationException("Ürün kimliği tutarsız.");
             var profile=state.Profiles.SingleOrDefault(x=>x.ProductId==id) ?? new(){ProductId=id};
-            var barcode=profile.IntegrationCode.Length>0?profile.IntegrationCode:p.Barcode;
+            var barcode=operation==TrendyolOperation.Create
+                ? (profile.ListingBarcode.Length>0?profile.ListingBarcode:p.Barcode)
+                : profile.IntegrationCode;
             try
             {
                 Fresh(state.ProductsUpdatedUtc,TimeSpan.FromHours(24),"Mağaza ürünlerini yenileyin");
                 if(!p.Active) throw new InvalidOperationException("Yerel ürün pasif.");
-                if(barcode.Length is <1 or >40 || barcode.Any(ch=>!char.IsLetterOrDigit(ch)&&ch!='.'&&ch!='-'&&ch!='_')) throw new InvalidOperationException("Trendyol barkodu / entegrasyon kodu gerekli (en fazla 40 karakter, boşluksuz). Yerel barkod zorunlu değildir.");
+                if(operation!=TrendyolOperation.Create&&profile.ListingBarcode.Length>0&&profile.ListingBarcode!=profile.IntegrationCode)
+                    throw new InvalidOperationException("Gönderilecek barkod mevcut mağaza eşleşmesinden farklı. Eski barkoda güncelleme gönderilmez; ürünü barkoduyla yeniden eşleştirin.");
+                if(barcode.Length is <1 or >40 || barcode.Any(ch=>!char.IsLetterOrDigit(ch)&&ch!='.'&&ch!='-'&&ch!='_')) throw new InvalidOperationException("Ürün barkodu gerekli (en fazla 40 karakter, boşluksuz). Barkod girin; stok kodu, GTIN veya eski eşleşme kodu barkod yerine kullanılmaz.");
                 var remote=state.Products.SingleOrDefault(x=>x.Barcode==barcode);
                 if(operation==TrendyolOperation.Create && remote!=null) throw new InvalidOperationException("Bu barkod mağazada var; ekleme yerine güncelleme seçin.");
                 if(operation==TrendyolOperation.UpdateUnapproved && (profile.IntegrationCode.Length==0 || remote is null || remote.Approved)) throw new InvalidOperationException("Önce onaysız mağaza ürünüyle eşleştirin.");
@@ -65,8 +69,8 @@ public sealed partial class TrendyolWorkspaceStore
                     if(images.Length is <1 or >8 || images.Any(url=>!Uri.TryCreate(url,UriKind.Absolute,out var u)||u.Scheme!="https"||!string.IsNullOrEmpty(u.UserInfo))) throw new InvalidOperationException("1–8 adet erişilebilir HTTPS görseli gerekli. Yerel arşiv yolu gönderilemez.");
                     if(p.VatRate is <0 or >100 || decimal.Truncate(p.VatRate)!=p.VatRate) throw new InvalidOperationException("KDV oranı tam sayı olmalı.");
                     item["title"]=title;item["description"]=description;item["productMainId"]=model;item["stockCode"]=p.Sku;if(origin.Length>0)item["origin"]=origin;item["brandId"]=brand;item["categoryId"]=category;item["vatRate"]=(int)p.VatRate;
-                    item["images"]=images.Select(url=>new{url}).ToArray();item["attributes"]=Attributes(profile,definitions);
-                    if(p.XmlAttributes.TryGetValue("Desi",out var desi) && desi.Length>0) { if(!decimal.TryParse(desi,NumberStyles.Number,CultureInfo.InvariantCulture,out var weight)||weight<0) throw new InvalidOperationException("Desi geçersiz.");item["dimensionalWeight"]=weight; }
+                    item["images"]=images.Select(url=>new{url}).ToArray();item["attributes"]=Attributes(TrendyolProductSafety.Resolve(state,p,profile,definitions),definitions);
+                    if(template?.IncludeProductDesi!=false) AddProductDesi(item,p);
                     if(template!=null) { AddShipping(item,template,state);if(template.DurationDays.HasValue)item["deliveryOption"]=new{deliveryDuration=template.DurationDays.Value}; }
                 }
                 if(operation==TrendyolOperation.Content)
@@ -83,7 +87,7 @@ public sealed partial class TrendyolWorkspaceStore
                 {
                     if(template is null) throw new InvalidOperationException("Teslimat şablonu atayın.");
                     if(operation==TrendyolOperation.Delivery){if(!template.DurationDays.HasValue)throw new InvalidOperationException("Şablonda teslimat süresi seçin.");item["deliveryOptions"]=new{deliveryDuration=template.DurationDays.Value};}
-                    else {AddShipping(item,template,state);if(item.Count==1)throw new InvalidOperationException("Şablonda kargo veya adres seçin.");}
+                    else {AddShipping(item,template,state);if(template.IncludeProductDesi)AddProductDesi(item,p);if(item.Count==1)throw new InvalidOperationException("Ürün kartında desi girin veya şablonda kargo/adres seçin.");}
                 }
                 var unchanged=remote!=null && operation switch
                 {
@@ -92,7 +96,7 @@ public sealed partial class TrendyolWorkspaceStore
                     TrendyolOperation.PriceAndStock=>remote.Quantity==p.Stock && remote.SalePrice==(decimal)item["salePrice"] && remote.ListPrice==(decimal)item["listPrice"],
                     _=>false
                 };
-                var detail=operation switch {TrendyolOperation.Stock=>$"Stok: {remote?.Quantity} → {p.Stock}",TrendyolOperation.Price=>$"Satış: {remote?.SalePrice} → {item["salePrice"]} TRY; liste: {remote?.ListPrice} → {item["listPrice"]} TRY",TrendyolOperation.PriceAndStock=>$"Stok: {remote?.Quantity} → {p.Stock}; satış: {remote?.SalePrice} → {item["salePrice"]} TRY; liste: {remote?.ListPrice} → {item["listPrice"]}",TrendyolOperation.Delivery=>$"Teslimat: {template!.DurationDays} gün",TrendyolOperation.ShippingDetails=>$"Kargo: {template!.CarrierCode}; sevk/iade: {template.ShipmentAddressId}/{template.ReturningAddressId}",TrendyolOperation.UpdateUnapproved=>"Onaysız ürün bilgileri düzeltilecek; fiyat ve stok korunur",TrendyolOperation.Content=>"Dolu başlık/açıklama gönderilecek; diğer alanlar korunur",_=>"Yeni ürün; Trendyol onayına gönderilecek"};
+                var detail=operation switch {TrendyolOperation.Stock=>$"Stok: {remote?.Quantity} → {p.Stock}",TrendyolOperation.Price=>$"Satış: {remote?.SalePrice} → {item["salePrice"]} TRY; liste: {remote?.ListPrice} → {item["listPrice"]} TRY",TrendyolOperation.PriceAndStock=>$"Stok: {remote?.Quantity} → {p.Stock}; satış: {remote?.SalePrice} → {item["salePrice"]} TRY; liste: {remote?.ListPrice} → {item["listPrice"]}",TrendyolOperation.Delivery=>$"Termin: {template!.DurationDays} gün",TrendyolOperation.ShippingDetails=>$"Desi: {item.GetValueOrDefault("dimensionalWeight")??"gönderilmez"}; kargo: {template!.CarrierCode}; sevk/iade: {template.ShipmentAddressId}/{template.ReturningAddressId}",TrendyolOperation.UpdateUnapproved=>"Onaysız ürün bilgileri düzeltilecek; fiyat ve stok korunur",TrendyolOperation.Content=>"Dolu başlık/açıklama gönderilecek; diğer alanlar korunur",_=>$"Yeni ürün; stok kodu: {p.Sku}; barkod: {barcode}; desi: {item.GetValueOrDefault("dimensionalWeight")??"girilmemiş"}; termin: {(template?.DurationDays.HasValue==true?template.DurationDays+" gün":"mağaza varsayılanı")}"};
                 rows.Add(new(id,p.Sku,p.Name,barcode,unchanged?"Atlanacak":operation==TrendyolOperation.Create?"Eklenecek":"Güncellenecek",unchanged?"Mağaza önbelleği ile aynı; değişiklik yok":detail,unchanged?null:JsonSerializer.Serialize(item)));
             }
             catch(InvalidOperationException ex){rows.Add(new(id,p.Sku,p.Name,barcode,"Hatalı",ex.Message,null));}
@@ -104,21 +108,30 @@ public sealed partial class TrendyolWorkspaceStore
         using var save=c.CreateCommand();save.Transaction=tx;save.CommandText="INSERT INTO TrendyolPlans VALUES($id,$seller,$json)";save.Parameters.AddWithValue("$id",plan.Id);save.Parameters.AddWithValue("$seller",plan.SellerId);save.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan));save.ExecuteNonQuery();tx.Commit();return plan;
     }
     static void Fresh(DateTime? time,TimeSpan limit,string message){if(time is null || DateTime.UtcNow-time.Value>limit || time>DateTime.UtcNow.AddMinutes(1))throw new InvalidOperationException(message+"; eski veriye göre gönderim yapılamaz.");}
+    static void AddProductDesi(Dictionary<string,object> item,CatalogProduct product)
+    {
+        var text=product.XmlAttributes.GetValueOrDefault("Desi","").Trim();
+        if(text.Length==0)return;
+        // Accept a decimal comma, but never interpret it as a thousands separator.
+        if(!decimal.TryParse(text.Replace(',','.'),NumberStyles.AllowDecimalPoint|NumberStyles.AllowLeadingSign,CultureInfo.InvariantCulture,out var weight)||weight<0)
+            throw new InvalidOperationException("Desi geçersiz. Ürün kartında sıfır veya pozitif sayı girin (ör. 2,5); binlik ayırıcı kullanmayın.");
+        item["dimensionalWeight"]=weight;
+    }
     static long ResolveMapping(SqliteConnection c,SqliteTransaction tx,TrendyolWorkspaceState state,TaxonomyKind kind,string name)
     {
         var map=state.Mappings.SingleOrDefault(m=>m.Kind==kind&&(kind==TaxonomyKind.Category?TaxonomyStore.SameCategory(m.LocalName,name):TrendyolMatching.Normalize(m.LocalName)==TrendyolMatching.Normalize(name)));if(map is null)return 0;
         using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Name FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind AND Active=1";cmd.Parameters.AddWithValue("$id",map.LocalId);cmd.Parameters.AddWithValue("$kind",(int)kind);
         return cmd.ExecuteScalar() as string==map.LocalName?map.RemoteId:0;
     }
-    static object[] Attributes(TrendyolProductProfile profile,List<TrendyolAttribute> definitions)
+    static object[] Attributes(List<TrendyolAttributeSelection> selections,List<TrendyolAttribute> definitions)
     {
         var result=new List<object>();
-        if(profile.Attributes.Any(a=>!definitions.Any(d=>d.Id==a.AttributeId)))throw new InvalidOperationException("Kategoride bulunmayan özellik seçilmiş.");
+        if(selections.Any(a=>!definitions.Any(d=>d.Id==a.AttributeId)))throw new InvalidOperationException("Kategoride bulunmayan özellik seçilmiş.");
         foreach(var definition in definitions)
         {
-            var selected=profile.Attributes.SingleOrDefault(a=>a.AttributeId==definition.Id);
+            var selected=selections.SingleOrDefault(a=>a.AttributeId==definition.Id);
             if(selected is null || (selected.ValueIds.Length==0 && selected.CustomValue.Length==0)){if(definition.Required)throw new InvalidOperationException("Zorunlu özellik eksik: "+definition.Name);continue;}
-            if(selected.CustomValue.Length>0){if(!definition.AllowCustom||selected.ValueIds.Length>0||selected.CustomValue.Length>50)throw new InvalidOperationException("Serbest özellik değeri geçersiz: "+definition.Name);result.Add(new{attributeId=definition.Id,customAttributeValue=selected.CustomValue});}
+            if(selected.CustomValue.Length>0){if(!definition.AllowCustom||selected.ValueIds.Length>0||(definition.Id==47&&selected.CustomValue.Length>50))throw new InvalidOperationException("Serbest özellik değeri geçersiz: "+definition.Name);result.Add(new{attributeId=definition.Id,customAttributeValue=selected.CustomValue});}
             else {if(selected.ValueIds.Distinct().Count()!=selected.ValueIds.Length||selected.ValueIds.Any(id=>!definition.Values.Any(v=>v.Id==id))||selected.ValueIds.Length>1&&!definition.AllowMultiple)throw new InvalidOperationException("Özellik değeri geçersiz: "+definition.Name);result.Add(selected.ValueIds.Length==1?(object)new{attributeId=definition.Id,attributeValueId=selected.ValueIds[0]}:new{attributeId=definition.Id,attributeValueIds=selected.ValueIds});}
         }
         return result.ToArray();

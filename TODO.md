@@ -1,6 +1,11 @@
 # Devam durumu — 2026-09-11
 
 ## Trendyol V2 — 2026-09-18
+- [x] Yeni gönderim barkodunu eski mağaza eşleşmesinden ayır; SKU/GTIN türetme ve farklı barkodla eski ürüne güncelleme engelleri.
+- [x] Marka bazında toplu üretici/üç ithalatçı/uyarı şablonları; boş alanı ve ürünün özel değerini koru, açık alan kaldırma.
+- [x] Şablonda termin ve ürün kartından desi kaynağı; onaylı desi güncellemesi ve ondalık ayırıcı doğrulaması.
+- [x] Bu düzeltmede 1074 Release testi geçti; istenen Windows-Excel-Final self-contained win-x64 yayını başarıyla üretildi.
+- [ ] PTD-1367 canlı denemesinin yanlış barkodunu kullanıcıdan doğru barkodu alıp ayrı düzeltme kapsamında gider; onaylı barkod yerinde değiştirilemiyor.
 - [x] İlk 15 satırla sınırlı eşleştirme mesajını kaldır; tüm seçili ürünler, sonuç filtreleri, manuel mağaza araması ve sıfır/çakışan eşleşme kayıt engeli.
 - [x] Kullanıcının girdiği barkod mağazada varsa eşleştir, yoksa yeni ürün önizlemesine yönlendir; boş barkodda SKU/GTIN türetme. Satır değişiminde barkod taslağını koru; kontrol edilmemiş taslakları kaydetme.
 - [x] Yerel kimlikleri koruyan atomik kayıt, katalog/mağaza değişikliği ve başka ürüne bağlı barkod kontrolleri; yeni ürün için eski mağaza listesiyle karar verilmesini engelle.
