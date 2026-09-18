@@ -244,6 +244,7 @@ public interface IMarketplaceAdapter
 - Create: `SingleInstanceGuard.cs`
 - Modify: `App.xaml`
 - Modify: `App.xaml.cs`
+- Modify: `TrMarketplaceHubDesktop.csproj` only if the selected tray implementation requires Windows Forms support.
 - Modify: `MainWindow.xaml.cs`
 - Modify: `Catalog/AutomationStore.cs`
 - Test: `tests/MarketplaceHub.Tests/BackgroundAppControllerTests.cs`
