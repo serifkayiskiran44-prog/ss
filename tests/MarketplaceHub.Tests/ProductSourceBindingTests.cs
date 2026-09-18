@@ -64,6 +64,9 @@ public sealed class ProductSourceBindingTests
     static void SetField(object target, string name, object value) =>
         target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
 
+    static T GetField<T>(object target, string name) =>
+        (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
+
     static object Invoke(object target, string name, params object[] arguments) =>
         target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, arguments);
 
@@ -74,6 +77,17 @@ public sealed class ProductSourceBindingTests
         {
             return Task.FromException(error.InnerException);
         }
+    }
+
+    static async Task PreviewAndSelectFirstAsync(MainWindow window, XmlSource source)
+    {
+        Invoke(window, "SetSource", source);
+        SetField(window, "xml", Feed);
+        SetField(window, "loadedLocation", source.Location);
+        await InvokeTask(window, "PreviewAsync");
+        var preview = GetField<System.Windows.Controls.DataGrid>(window, "preview");
+        Assert.IsTrue(preview.Items.Count > 0, "Preview must produce a selectable product row.");
+        preview.SelectedItems.Add(preview.Items[0]);
     }
 
     static void InSta(Func<string, Task> action)
@@ -304,6 +318,86 @@ public sealed class ProductSourceBindingTests
                 handler.Resume.TrySetResult();
                 window.Close();
             }
+        });
+    }
+
+    [TestMethod]
+    public void MainWindowImportRejectsSourceDeletedAfterSuccessfulPreview()
+    {
+        InSta(async root =>
+        {
+            var catalog = new CatalogStore(root);
+            var source = Source(Guid.NewGuid().ToString("N"));
+            catalog.SaveSource(source);
+            var window = new MainWindow(root);
+            try
+            {
+                await PreviewAndSelectFirstAsync(window, source);
+                using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "catalog.db") }.ToString()))
+                {
+                    connection.Open();
+                    using var command = connection.CreateCommand();
+                    command.CommandText = "DELETE FROM Sources WHERE Id=$id";
+                    command.Parameters.AddWithValue("$id", source.Id);
+                    command.ExecuteNonQuery();
+                }
+
+                var error = await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => InvokeTask(window, "ImportAsync"));
+                StringAssert.Contains(error.Message, "silinmiş");
+                Assert.IsFalse(catalog.Sources().Any(item => item.Id == source.Id), "Import must not resurrect a deleted source.");
+                Assert.AreEqual(0, catalog.Products().Count, "A deleted source must not import preview rows.");
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [TestMethod]
+    public void MainWindowImportRejectsSourceDisabledAfterSuccessfulPreview()
+    {
+        InSta(async root =>
+        {
+            var catalog = new CatalogStore(root);
+            var source = Source(Guid.NewGuid().ToString("N"));
+            catalog.SaveSource(source);
+            var window = new MainWindow(root);
+            try
+            {
+                await PreviewAndSelectFirstAsync(window, source);
+                var current = catalog.Sources().Single(item => item.Id == source.Id);
+                current.Enabled = false;
+                catalog.SaveSource(current);
+
+                var error = await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => InvokeTask(window, "ImportAsync"));
+                StringAssert.Contains(error.Message, "devre dışı");
+                Assert.IsFalse(catalog.Sources().Single(item => item.Id == source.Id).Enabled, "Import must not re-enable a disabled source.");
+                Assert.AreEqual(0, catalog.Products().Count, "A disabled source must not import preview rows.");
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [TestMethod]
+    public void MainWindowImportRejectsIndependentSourceEditAfterSuccessfulPreview()
+    {
+        InSta(async root =>
+        {
+            var catalog = new CatalogStore(root);
+            var source = Source(Guid.NewGuid().ToString("N"));
+            catalog.SaveSource(source);
+            var window = new MainWindow(root);
+            try
+            {
+                await PreviewAndSelectFirstAsync(window, source);
+                var current = catalog.Sources().Single(item => item.Id == source.Id);
+                current.MarkupPercent = 25;
+                catalog.SaveSource(current);
+
+                var error = await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => InvokeTask(window, "ImportAsync"));
+                StringAssert.Contains(error.Message, "değişti");
+                Assert.AreEqual(25, catalog.Sources().Single(item => item.Id == source.Id).MarkupPercent, "Import must preserve an independent source edit.");
+                Assert.AreEqual(0, catalog.Products().Count, "A stale preview must not import rows after a source edit.");
+            }
+            finally { window.Close(); }
         });
     }
 }
