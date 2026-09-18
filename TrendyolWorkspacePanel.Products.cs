@@ -26,7 +26,7 @@ public sealed record TrendyolProductRow(CatalogProduct Product,string Integratio
 }
 public sealed partial class TrendyolWorkspacePanel
 {
-    readonly DataGrid products=Grid("TrendyolProducts",("Ürün kodu","Sku",90),("Ürün adı","Name",280),("Yayın durumu","Listed",120),("Adet","Stock",45),("T. stok","RemoteStock",55),("T. satış fiyatı","RemotePrice",90),("T. liste fiyatı","RemoteListPrice",90),("Marka","Brand",85),("GTIN","Gtin",110),("Trendyol barkodu","IntegrationCode",120),("Kategori ID","CategoryId",75),("Kategori","Category",180),("Ürün ekleme / hata mesajı","CreateMessage",240),("Ürün güncelleme mesajı","UpdateMessage",240),("Yerel barkod","Barcode",110),("Eşleştirme","MappingSummary",210));
+    readonly DataGrid products=Grid("TrendyolProducts",("Ürün kodu","Sku",90),("Ürün adı","Name",280),("Yayın durumu","Listed",120),("Adet","Stock",45),("Trendyol stok","RemoteStock",95),("Trendyol satış fiyatı","RemotePrice",135),("Trendyol liste fiyatı","RemoteListPrice",135),("Marka","Brand",85),("GTIN","Gtin",110),("Trendyol barkodu","IntegrationCode",120),("Kategori ID","CategoryId",75),("Kategori","Category",180),("Ürün ekleme / hata mesajı","CreateMessage",240),("Ürün güncelleme mesajı","UpdateMessage",240),("Yerel barkod","Barcode",110),("Eşleştirme","MappingSummary",210));
     readonly DataGrid preview=Grid("TrendyolPreview",("SKU","Sku",110),("Ürün","Name",220),("Barkod","Barcode",150),("İşlem","Status",100),("Değişiklik / hata","Detail",600));
     readonly TextBox payload=new(){IsReadOnly=true,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,MaxHeight=180,Margin=new(5)};
     readonly TextBox productSearch=Box();

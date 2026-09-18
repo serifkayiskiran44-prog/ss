@@ -1,6 +1,8 @@
 # Devam durumu — 2026-09-11
 
 ## Trendyol V2 — 2026-09-18
+- [x] Marka bilgilerini tek tıklamayla aç; seçim değişince üretici alanlarına dön, kayıtlı alan ve marka sayılarını formdaki yeni değerlerden ayrı göster. Çoklu seçim Ctrl/Shift ve tümünü seç ile korunur.
+- [x] T. stok/fiyat sütunlarını açık Trendyol adlarıyla göster. 1076 Release testi geçti; Windows-Excel-Final yayımlandı ve açıldı. AHM'nin üç üretici alanı, 8in1 eksik bilgi durumu ve marka değişiminde formun başa dönmesi ekranda doğrulandı.
 - [x] Yeni gönderim barkodunu eski mağaza eşleşmesinden ayır; SKU/GTIN türetme ve farklı barkodla eski ürüne güncelleme engelleri.
 - [x] Marka bazında toplu üretici/üç ithalatçı/uyarı şablonları; boş alanı ve ürünün özel değerini koru, açık alan kaldırma.
 - [x] Şablonda termin ve ürün kartından desi kaynağı; onaylı desi güncellemesi ve ondalık ayırıcı doğrulaması.

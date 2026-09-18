@@ -180,6 +180,69 @@ public class TrendyolSafetyPanelTests
     }
 
     [TestMethod]
+    public void SelectingBrandShowsManufacturerFieldsAfterScrollingToImporters()
+    {
+        InSta(dir =>
+        {
+            CreateCatalog(dir);
+            var store = new TrendyolWorkspaceStore(dir);
+            store.SaveBrandSafety("123", store.Load("123").Revision, new[] { "Alpha" },
+                new() { [1198] = "Alpha producer", [1294] = "producer@example.test", [1296] = "Factory address" });
+            var panel = new TrendyolWorkspacePanel(dir);
+            Find<TabControl>(panel, "TrendyolSections").SelectedIndex = 1;
+            Find<TabControl>(panel, "TrendyolSettingsSections").SelectedIndex = 3;
+            panel.Measure(new Size(1140, 600));
+            panel.Arrange(new Rect(0, 0, 1140, 600));
+            panel.UpdateLayout();
+            var manufacturer = Find<TextBox>(panel, "TrendyolSafetyField1198");
+            var scroll = Walk(panel).OfType<ScrollViewer>().Single(s => Walk(s).Contains(manufacturer));
+            scroll.ScrollToBottom();
+            panel.UpdateLayout();
+            Assert.IsTrue(scroll.VerticalOffset > 0, "Reproduce the form scrolled to importer fields.");
+
+            Find<ListBox>(panel, "TrendyolSafetyBrands").SelectedItem = "Alpha";
+            panel.UpdateLayout();
+
+            Assert.AreEqual("Alpha producer", manufacturer.Text);
+            Assert.AreEqual(0d, scroll.VerticalOffset, "Selecting a brand must reveal the saved manufacturer fields.");
+            var y = manufacturer.TranslatePoint(new Point(0, 0), scroll).Y;
+            Assert.IsTrue(y >= 0 && y + manufacturer.ActualHeight <= scroll.ViewportHeight,
+                "The saved manufacturer must be inside the visible form.");
+            Assert.AreEqual(0, store.Receipts("123").Count);
+        });
+    }
+
+    [TestMethod]
+    public void SavedBrandCoverageRemainsVisibleWhenEmptyOrMultipleBrandsAreSelected()
+    {
+        InSta(dir =>
+        {
+            CreateCatalog(dir);
+            var store = new TrendyolWorkspaceStore(dir);
+            store.SaveBrandSafety("123", store.Load("123").Revision, new[] { "Alpha" },
+                new() { [1198] = "Alpha producer", [1294] = "producer@example.test" });
+            var panel = new TrendyolWorkspacePanel(dir);
+            var coverage = Walk(panel).OfType<TextBlock>().SingleOrDefault(t => t.Name == "TrendyolSafetyCoverage");
+            Assert.IsNotNull(coverage, "The screen needs a saved-record summary independent of blank bulk inputs.");
+            StringAssert.Contains(coverage.Text, "1 / 3");
+            var brands = Find<ListBox>(panel, "TrendyolSafetyBrands");
+            brands.SelectedItem = "Beta";
+            var heading = Find<TextBlock>(panel, "TrendyolSafetyFormHeading");
+            StringAssert.Contains(heading.Text, "Beta");
+            StringAssert.Contains(heading.Text, "kayıtlı bilgi yok");
+            brands.SelectedItem = "Alpha";
+            StringAssert.Contains(heading.Text, "2 kayıtlı alan");
+            brands.SelectedItems.Add("Beta");
+            StringAssert.Contains(coverage.Text, "1 / 3");
+            Assert.AreEqual("", Find<TextBox>(panel, "TrendyolSafetyField1198").Text,
+                "Saved brand values must not become shared values for unrelated brands.");
+            StringAssert.Contains(heading.Text, "2 marka");
+            Assert.IsFalse(Find<Button>(panel, "TrendyolSaveBrandSafety").IsEnabled);
+            Assert.AreEqual(0, store.Receipts("123").Count);
+        });
+    }
+
+    [TestMethod]
     public void BrandListRemainsFullyVisibleAtDesktopPanelSize()
     {
         InSta(dir =>

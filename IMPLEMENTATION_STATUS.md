@@ -1,6 +1,8 @@
 # Uygulama durumu — .NET 8 EXE
 
 ## Trendyol product workspace — 2026-09-18
+- Brand information visibility: normal single-click selects one brand; Ctrl/Shift and select-all retain bulk editing. Selection resets the form scroll to the manufacturer fields. A fixed heading distinguishes saved fields, missing data and bulk editing; saved-brand coverage remains visible separately from editable field counts.
+- Expanded abbreviated stock and price column headings to Trendyol. Two WPF regression tests reproduce and prevent hidden manufacturer fields and missing saved-data coverage. All 1076 Release tests passed; requested Windows-Excel-Final self-contained win-x64 publish succeeded. Published GUI verified AHM's three saved manufacturer values, 8in1's missing-data message, selection scroll reset and expanded headers. No marketplace write was performed for this UI correction.
 - Barcode correction: separate explicit ListingBarcode from existing remote IntegrationCode; creation never uses legacy link/SKU/GTIN. Updates require re-matching after an explicit barcode change.
 - Brand safety defaults: multi/all-brand selection for producer, three importers and warnings; nonempty merge, explicit removal, product overrides preserved, category metadata validation before create/unapproved update. Published approved content is not bulk-replaced.
 - Delivery templates expose lead time and per-product Desi source. ShippingDetails now sends only the reviewed dimensionalWeight plus selected carrier/address fields; comma decimals are not interpreted as thousands.

@@ -10,13 +10,19 @@ public sealed partial class TrendyolWorkspacePanel
 {
     readonly ListBox safetyBrands = new()
     {
-        Name = "TrendyolSafetyBrands", SelectionMode = SelectionMode.Multiple,
+        Name = "TrendyolSafetyBrands", SelectionMode = SelectionMode.Extended,
         Margin = new(3), MinHeight = 130
     };
     readonly TextBox safetyBrandSearch = Box();
     readonly ComboBox safetyClearField = Combo();
     readonly TextBlock safetySelectionSummary = T("0 marka · 0 ürün");
     readonly TextBlock safetyFormHeading = T("Önce bir veya daha fazla marka seçin.");
+    readonly TextBlock safetyCoverage = T("");
+    readonly ScrollViewer safetyFormScroll = new()
+    {
+        Name = "TrendyolSafetyFormScroll", VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+    };
     readonly DataGrid safetyReview = Grid("TrendyolSafetyReview", ("Seçili marka", "BrandName", 175), ("Ürün", "ProductCount", 65));
     readonly Dictionary<long, TextBox> safetyFields = new();
     readonly Dictionary<string, int> safetyBrandProductCounts = new(StringComparer.Ordinal);
@@ -32,7 +38,9 @@ public sealed partial class TrendyolWorkspacePanel
         safetyBrandSearch.Name = "TrendyolSafetyBrandSearch";
         safetySelectionSummary.Name = "TrendyolSafetySelectionSummary";
         safetySelectionSummary.FontWeight = FontWeights.SemiBold;
+        safetyFormHeading.Name = "TrendyolSafetyFormHeading";
         safetyFormHeading.FontWeight = FontWeights.SemiBold;
+        safetyCoverage.Name = "TrendyolSafetyCoverage";
         safetyReview.MinHeight = 60;
         safetyReview.Height = 70;
         safetyReview.MaxHeight = 110;
@@ -81,7 +89,8 @@ public sealed partial class TrendyolWorkspacePanel
         selectionActions.Children.Add(selectAll);
         selectionActions.Children.Add(clear);
         brandTools.Children.Add(selectionActions);
-        safetyBrands.ToolTip = "Markalara tıklayarak çoklu seçim yapın";
+        brandTools.Children.Add(safetyCoverage);
+        safetyBrands.ToolTip = "Kayıtlı bilgileri görmek için bir markaya tıklayın. Çoklu seçim için Ctrl / Shift kullanın.";
         DockPanel.SetDock(brandTools, Dock.Top);
         brandList.Children.Add(brandTools);
         var review = new StackPanel();
@@ -96,6 +105,8 @@ public sealed partial class TrendyolWorkspacePanel
         brandList.Children.Add(safetyBrands);
 
         var editor = new DockPanel();
+        DockPanel.SetDock(safetyFormHeading, Dock.Top);
+        editor.Children.Add(safetyFormHeading);
         var saveArea = new StackPanel();
         saveArea.Children.Add(T("Dolu alanlar kaydedilir; boş alanlar mevcut değerleri korur.", true));
         saveBrandSafety = Primary(B("Seçili markaların dolu alanlarını kaydet", SaveBrandSafety));
@@ -124,7 +135,6 @@ public sealed partial class TrendyolWorkspacePanel
         DockPanel.SetDock(saveArea, Dock.Bottom);
         editor.Children.Add(saveArea);
         var form = new StackPanel();
-        form.Children.Add(safetyFormHeading);
         form.Children.Add(SafetyFieldSection("Üretici", 1198, 1294, 1296));
         form.Children.Add(SafetyFieldSection("1. ithalatçı / yetkili temsilci / ifa hizmet sağlayıcı", 1216, 1305, 1304));
         form.Children.Add(new Expander
@@ -138,7 +148,8 @@ public sealed partial class TrendyolWorkspacePanel
             Content = SafetyFieldSection("Üçüncü kuruluş", 1300, 1301, 1302)
         });
         form.Children.Add(SafetyFieldSection("Ürün güvenliği", 1116));
-        editor.Children.Add(Scroll(form));
+        safetyFormScroll.Content = form;
+        editor.Children.Add(safetyFormScroll);
 
         var columns = new System.Windows.Controls.Grid();
         columns.ColumnDefinitions.Add(new() { Width = new GridLength(330) });
@@ -183,6 +194,8 @@ public sealed partial class TrendyolWorkspacePanel
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .DistinctBy(TrendyolMatching.Normalize)
             .OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase).ToList();
+        var savedBrands = state.BrandSafetyTemplates.Count(t => t.Values.Values.Any(v => !string.IsNullOrWhiteSpace(v)));
+        safetyCoverage.Text = $"{savedBrands} / {safetyBrandNames.Count} markanın kayıtlı bilgisi var.";
         FilterSafetyBrands(selected);
     }
 
@@ -222,19 +235,24 @@ public sealed partial class TrendyolWorkspacePanel
         {
             foreach (var input in safetyFields.Values) input.Clear();
             var selected = safetyBrands.SelectedItems.Cast<string>().ToArray();
+            var template = selected.Length == 1
+                ? state.BrandSafetyTemplates.SingleOrDefault(t => TrendyolMatching.Normalize(t.BrandName) == TrendyolMatching.Normalize(selected[0]))
+                : null;
+            var savedCount = template?.Values.Values.Count(v => !string.IsNullOrWhiteSpace(v)) ?? 0;
             safetyFormHeading.Text = selected.Length switch
             {
-                0 => "Önce bir veya daha fazla marka seçin.",
-                1 => selected[0] + " · kayıtlı bilgiler",
-                _ => "Yeni ortak değerler · " + selected.Length + " marka"
+                0 => "Kayıtlı bilgileri görmek için soldan bir markaya tıklayın.",
+                1 => selected[0] + (savedCount == 0 ? " · kayıtlı bilgi yok" : $" · {savedCount} kayıtlı alan"),
+                _ => $"{selected.Length} marka · ortak düzenleme\nMarkaların kayıtlı bilgilerini görmek için tek marka seçin. Buraya girilen yeni değerler seçili markalara uygulanır."
             };
             if (selected.Length == 1)
             {
-                var template = state.BrandSafetyTemplates.SingleOrDefault(t => TrendyolMatching.Normalize(t.BrandName) == TrendyolMatching.Normalize(selected[0]));
                 if (template != null)
                     foreach (var field in template.Values)
                         if (safetyFields.TryGetValue(field.Key, out var input)) input.Text = field.Value;
             }
+            safetyFormScroll.IsEnabled = selected.Length > 0;
+            safetyFormScroll.ScrollToTop();
         }
         finally { refreshingSafety = false; }
         UpdateSafetySelectionSummary();
@@ -246,7 +264,7 @@ public sealed partial class TrendyolWorkspacePanel
         var review = selected.Select(name => new TrendyolBrandSafetyReviewRow(name, safetyBrandProductCounts.GetValueOrDefault(TrendyolMatching.Normalize(name)))).ToList();
         var fieldCount = safetyFields.Values.Count(input => !string.IsNullOrWhiteSpace(input.Text));
         safetyReview.ItemsSource = review;
-        safetySelectionSummary.Text = $"{selected.Length} marka · {review.Sum(row => row.ProductCount)} ürün · {fieldCount} dolu alan";
+        safetySelectionSummary.Text = $"{selected.Length} marka · {review.Sum(row => row.ProductCount)} ürün · formda {fieldCount} dolu alan";
         saveBrandSafety.IsEnabled = selected.Length > 0 && fieldCount > 0 && safetySellerId.Length > 0;
         clearBrandSafetyField.IsEnabled = selected.Length > 0 && safetyClearField.SelectedItem is TrendyolSafetyField && safetySellerId.Length > 0;
     }
