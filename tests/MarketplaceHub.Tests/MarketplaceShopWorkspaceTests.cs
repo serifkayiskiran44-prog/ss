@@ -526,6 +526,105 @@ public sealed class MarketplaceShopWorkspaceTests
     }
 
     [TestMethod]
+    public void ScopedTrendyolDirectTabRequiresManagedBindingsAndRevalidatesBeforeSend() => InSta(() =>
+    {
+        var account = new TrendyolSettings("101", "key", "secret", "tests");
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", account.SupplierId, "Trendyol", true);
+        new MarketplaceCredentialVault(directory).Save(connection.Id, connection.Channel, connection.ShopId, account);
+        var catalog = new CatalogStore(directory);
+        var unlinked = catalog.CreateManual(new() { Sku = "T-UNLINKED", Name = "Unlinked", Stock = 5, Currency = "TRY" });
+        var disabled = catalog.CreateManual(new() { Sku = "T-DISABLED", Name = "Disabled", Stock = 5, Currency = "TRY" });
+        var changed = catalog.CreateManual(new() { Sku = "T-CHANGED", Name = "Changed", Stock = 5, Currency = "TRY" });
+        var successful = catalog.CreateManual(new() { Sku = "T-SUCCESS", Name = "Success", Stock = 5, Currency = "TRY" });
+        var products = new[] { (unlinked, "T-B1", 901L), (disabled, "T-B2", 902L), (changed, "T-B3", 903L), (successful, "T-B4", 904L) };
+        var workspace = new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory);
+        var state = workspace.Load(account.SupplierId); state.ProductsUpdatedUtc = DateTime.UtcNow;
+        foreach (var (product, barcode, remoteId) in products)
+        {
+            state.Products.Add(new(barcode, product.Sku, product.Name, remoteId, 1, 10, 10, true));
+            state.Profiles.Add(new() { ProductId = product.Id, IntegrationCode = barcode });
+        }
+        workspace.Save(state);
+        var bindings = new ProductChannelBindingStore(directory);
+        bindings.Save(new(disabled.Id, connection.Id, "902", disabled.Sku, "T-B2", true, true, false, "", "", "Approved", 0, default), 0);
+        bindings.Save(new(changed.Id, connection.Id, "903", changed.Sku, "T-B3", true, true, true, "", "", "Approved", 0, default), 0);
+        bindings.Save(new(successful.Id, connection.Id, "904", successful.Sku, "T-B4", true, true, true, "", "", "Approved", 0, default), 0);
+        var panel = new TrendyolWorkspacePanel(connection.Id, directory);
+        var grid = Walk(panel).OfType<DataGrid>().Single(x => x.Name == "TrendyolProducts");
+        Walk(panel).OfType<ComboBox>().Single(x => x.Name == "TrendyolOperationMode").SelectedIndex = (int)TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Stock;
+        var preview = Walk(panel).OfType<Button>().Single(x => x.Name == "TrendyolBuildPreview");
+        var send = Walk(panel).OfType<Button>().Single(x => x.Name == "TrendyolSend");
+
+        SelectProduct(grid, unlinked.Id); preview.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Assert.IsFalse(send.IsEnabled);
+        SelectProduct(grid, disabled.Id); preview.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Assert.IsFalse(send.IsEnabled);
+
+        SelectProduct(grid, changed.Id); preview.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.IsNotNull(panel.AccountSpecialistPreview); Assert.IsTrue(send.IsEnabled);
+        using (var database = new SqliteConnection("Data Source=" + Path.Combine(directory, "catalog.db")))
+        {
+            database.Open(); using var command = database.CreateCommand();
+            command.CommandText = "UPDATE ProductChannelBindings SET ManageStock=0 WHERE ProductId=$product AND ConnectionId=$connection";
+            command.Parameters.AddWithValue("$product", changed.Id); command.Parameters.AddWithValue("$connection", connection.Id); command.ExecuteNonQuery();
+        }
+        var transport = new CountingTrendyolHandler(); using var http = new HttpClient(transport); using var client = new TrMarketplaceHubDesktop.Trendyol.TrendyolApiClient(account, http);
+        Assert.ThrowsException<InvalidOperationException>(() => WaitFor(workspace.SendAsync(panel.AccountSpecialistPlanId, account, true, client)));
+        Assert.AreEqual(0, transport.Writes);
+
+        SelectProduct(grid, successful.Id); preview.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.IsNotNull(panel.AccountSpecialistPreview); Assert.IsTrue(send.IsEnabled);
+        WaitFor(workspace.SendAsync(panel.AccountSpecialistPlanId, account, true, client));
+        Assert.AreEqual(1, transport.Writes);
+    });
+
+    [TestMethod]
+    public void ScopedEtsyDirectTabRequiresManagedBindingsAndRevalidatesBeforeSend() => InSta(() =>
+    {
+        var credentials = new EtsyCredentials("key", "secret", "88.token", "123", GrantedScopes: new[] { "listings_r", "listings_w" });
+        var connection = new MarketplaceConnectionStore(directory).Save("etsy", credentials.ShopId, "Etsy", true);
+        new MarketplaceCredentialVault(directory).Save(connection.Id, connection.Channel, connection.ShopId, credentials);
+        var catalog = new CatalogStore(directory);
+        var unlinked = catalog.CreateManual(new() { Sku = "E-1", Name = "Unlinked", Stock = 5, Price = 20, Currency = "USD" });
+        var disabled = catalog.CreateManual(new() { Sku = "E-2", Name = "Disabled", Stock = 5, Price = 20, Currency = "USD" });
+        var changed = catalog.CreateManual(new() { Sku = "E-3", Name = "Changed", Stock = 5, Price = 20, Currency = "USD" });
+        var successful = catalog.CreateManual(new() { Sku = "E-4", Name = "Success", Stock = 5, Price = 20, Currency = "USD" });
+        var workspace = new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory);
+        var state = workspace.Load(credentials.ShopId); state.Currency = "USD"; state.ShopName = "Shop";
+        state.Profiles.Add(new() { ProductId = unlinked.Id, ListingId = 451 });
+        state.Profiles.Add(new() { ProductId = disabled.Id, ListingId = 452 });
+        state.Profiles.Add(new() { ProductId = changed.Id, ListingId = 453 });
+        state.Profiles.Add(new() { ProductId = successful.Id, ListingId = 454 });
+        workspace.Save(state);
+        var bindings = new ProductChannelBindingStore(directory);
+        bindings.Save(new(disabled.Id, connection.Id, "452", "", "", true, true, false, "", "", "active", 0, default), 0);
+        bindings.Save(new(changed.Id, connection.Id, "453", "", "", true, true, true, "", "", "active", 0, default), 0);
+        bindings.Save(new(successful.Id, connection.Id, "454", "", "", true, true, true, "", "", "active", 0, default), 0);
+        var transport = new DirectEtsyHandler(); using var panel = new EtsyWorkspacePanel(connection.Id, directory, transport);
+        var grid = Walk(panel).OfType<DataGrid>().Single(x => x.Name == "EtsyProducts");
+        var preview = Walk(panel).OfType<Button>().Single(x => x.Name == "EtsyPreview_Stock");
+        var send = Walk(panel).OfType<Button>().Single(x => x.Name == "EtsySend");
+
+        SelectProduct(grid, unlinked.Id); preview.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); WaitFor(panel.AccountSpecialistPreviewTask); Assert.IsFalse(send.IsEnabled);
+        SelectProduct(grid, disabled.Id); preview.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); WaitFor(panel.AccountSpecialistPreviewTask); Assert.IsFalse(send.IsEnabled);
+
+        SelectProduct(grid, changed.Id); preview.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); WaitFor(panel.AccountSpecialistPreviewTask);
+        Assert.IsNotNull(panel.AccountSpecialistPreview); Assert.IsTrue(send.IsEnabled);
+        using (var database = new SqliteConnection("Data Source=" + Path.Combine(directory, "catalog.db")))
+        {
+            database.Open(); using var command = database.CreateCommand();
+            command.CommandText = "UPDATE ProductChannelBindings SET ManageStock=0 WHERE ProductId=$product AND ConnectionId=$connection";
+            command.Parameters.AddWithValue("$product", changed.Id); command.Parameters.AddWithValue("$connection", connection.Id); command.ExecuteNonQuery();
+        }
+        using var directHttp = new HttpClient(transport, false); var service = new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceService(directory, directHttp);
+        Assert.ThrowsException<InvalidOperationException>(() => WaitFor(service.SendAsync(credentials, panel.AccountSpecialistPlanId, true)));
+        Assert.AreEqual(0, transport.Writes);
+
+        SelectProduct(grid, successful.Id); preview.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); WaitFor(panel.AccountSpecialistPreviewTask);
+        Assert.IsNotNull(panel.AccountSpecialistPreview); Assert.IsTrue(send.IsEnabled);
+        WaitFor(service.SendAsync(credentials, panel.AccountSpecialistPlanId, true));
+        Assert.AreEqual(1, transport.Writes);
+    });
+
+    [TestMethod]
     public void SameRevisionFailedEvidenceInvalidatesAssociatedSpecialistPlan()
     {
         var connections = new MarketplaceConnectionStore(directory); connections.List();
@@ -711,6 +810,40 @@ public sealed class MarketplaceShopWorkspaceTests
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         });
+    }
+
+    sealed class DirectEtsyHandler : HttpMessageHandler
+    {
+        public int Writes;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (request.Method != HttpMethod.Get)
+            {
+                Interlocked.Increment(ref Writes);
+                return Json(path.EndsWith("inventory", StringComparison.Ordinal) ? Inventory() : "{\"listing_id\":454}");
+            }
+            if (path.EndsWith("/shops/123", StringComparison.Ordinal))
+                return Json("{\"shop_id\":123,\"user_id\":88,\"shop_name\":\"Shop\",\"currency_code\":\"USD\"}");
+            if (path.EndsWith("/inventory", StringComparison.Ordinal)) return Json(Inventory());
+            var text = path.Split('/').Last();
+            if (long.TryParse(text, out var listing) && listing is >= 451 and <= 454)
+                return Json($"{{\"listing_id\":{listing},\"shop_id\":123,\"title\":\"Item\",\"description\":\"Description\",\"state\":\"active\",\"quantity\":3,\"last_modified_timestamp\":1,\"price\":{{\"amount\":1000,\"divisor\":100,\"currency_code\":\"USD\"}},\"skus\":[]}}");
+            throw new InvalidOperationException("Unexpected route: " + path);
+        }
+
+        static string Inventory() => "{\"products\":[{\"product_id\":11,\"sku\":\"REMOTE\",\"property_values\":[],\"offerings\":[{\"offering_id\":22,\"price\":{\"amount\":1000,\"divisor\":100,\"currency_code\":\"USD\"},\"quantity\":3,\"is_enabled\":true}]}],\"price_on_property\":[],\"quantity_on_property\":[],\"sku_on_property\":[],\"readiness_state_on_property\":[]}";
+        static Task<HttpResponseMessage> Json(string body) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        });
+    }
+
+    static void SelectProduct(DataGrid grid, string productId)
+    {
+        grid.UnselectAll();
+        grid.SelectedItem = grid.Items.Cast<object>().Single(item =>
+            Equals(item.GetType().GetProperty("Id")?.GetValue(item), productId));
     }
 
     static void WaitFor(Task? task)

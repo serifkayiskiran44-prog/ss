@@ -44,6 +44,7 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     public string AccountShopId => scopedConnection?.ShopId ?? credentials?.ShopId ?? "";
     public IReadOnlyList<string> CreationHandoffProductIds { get; private set; } = Array.Empty<string>();
     public MarketplaceShopSpecialistPreview? AccountSpecialistPreview { get; private set; }
+    public string AccountSpecialistPlanId => accountSpecialistPlanId;
     public EtsyOperation? AccountSpecialistOperation => plan?.Operation;
     public IReadOnlyList<string> AccountSpecialistPlanProductIds => plan?.Rows.Select(row => row.ProductId).ToArray() ?? Array.Empty<string>();
     public Task? AccountSpecialistPreviewTask { get; private set; }
@@ -94,7 +95,7 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         if(busy)return; busy=true; IsEnabled=false;
         try { await action(); }
         catch(OperationCanceledException) { summary.Text="İşlem iptal edildi."; }
-        catch(Exception ex) { summary.Text=Safe(ex); MessageBox.Show(Window.GetWindow(this), Safe(ex),"Etsy",MessageBoxButton.OK,MessageBoxImage.Warning); }
+        catch(Exception ex) { summary.Text=Safe(ex); var owner=Window.GetWindow(this);if(owner is not null)MessageBox.Show(owner, Safe(ex),"Etsy",MessageBoxButton.OK,MessageBoxImage.Warning); }
         finally { busy=false; IsEnabled=true; }
     }
     void Local(Action action) { try { action(); } catch(Exception ex) { summary.Text=Safe(ex);MessageBox.Show(Window.GetWindow(this),Safe(ex),"Etsy",MessageBoxButton.OK,MessageBoxImage.Warning); } }
@@ -193,9 +194,8 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         var connection = CurrentScopedConnection();
         var request = remoteDeactivationDispatches.Pending(connection.Id).FirstOrDefault()
             ?? throw new InvalidOperationException("Bu Etsy hesabı için onaylı pasife alma isteği yok.");
-        ClearPreview();
-        var c = await Authorized();
-        plan = await new EtsyWorkspaceService(directory, http).PreviewAsync(c, new[] { request.Preview.ProductId }, EtsyOperation.Deactivate, lifetime.Token);
+        await Preview(EtsyOperation.Deactivate,new[] { request.Preview.ProductId },false);
+        if(plan is null)throw new InvalidOperationException("Etsy pasife alma önizlemesi oluşturulamadı.");
         var exactRow = plan.Rows.SingleOrDefault(row => row.ProductId == request.Preview.ProductId);
         if (exactRow is null || !exactRow.CanSend || exactRow.ListingId?.ToString(CultureInfo.InvariantCulture) != request.Preview.RemoteId)
             throw new InvalidOperationException("Etsy pasife alma önizlemesi onaylanan uzak ilan kimliğiyle eşleşmedi; gönderim bağlanmadı.");

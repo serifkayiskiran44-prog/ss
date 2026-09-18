@@ -41,7 +41,7 @@ public sealed partial class EtsyWorkspacePanel
         top.Children.Add(filters);
         var actions=new WrapPanel();
         foreach(var op in new[]{EtsyOperation.CreateDraft,EtsyOperation.PriceAndStock,EtsyOperation.Price,EtsyOperation.Stock,EtsyOperation.Content,EtsyOperation.Publish,EtsyOperation.Deactivate})
-        {var captured=op;actions.Children.Add(AsyncButton(OperationLabel(op)+" · önizle",()=>Preview(captured)));}
+        {var captured=op;var button=ActionButton(OperationLabel(op)+" · önizle",()=>AccountSpecialistPreviewTask=Run(()=>Preview(captured,showPreview:false)));button.Name="EtsyPreview_"+op;actions.Children.Add(button);}
         actions.Children.Add(ActionButton("SKU ile eşleştir",MatchProducts));
         actions.Children.Add(templateChoice); actions.Children.Add(ActionButton("Seçililere şablonu ata",AssignTemplate));
         bulk.Child=Scroll(actions);bulk.MaxHeight=115;top.Children.Add(bulk);
@@ -76,6 +76,19 @@ public sealed partial class EtsyWorkspacePanel
     {
         var ids=exactProductIds is null?PreviewProductIds(operation):Array.AsReadOnly(exactProductIds.ToArray());
         ClearPreview();var c=await Authorized();
+        if(specialist is null&&scopedConnection is not null)
+        {
+            var connection=CurrentScopedConnection();var model=new MarketplaceShopProductsModel(connection.Id,directory);
+            specialist=model.PreviewDirectSpecialist(model.SelectPage(ids),operation switch
+            {
+                EtsyOperation.CreateDraft=>MarketplaceShopBulkOperation.CreatePreview,
+                EtsyOperation.Price=>MarketplaceShopBulkOperation.PricePreview,
+                EtsyOperation.Stock=>MarketplaceShopBulkOperation.StockPreview,
+                EtsyOperation.PriceAndStock=>MarketplaceShopBulkOperation.PriceAndStockPreview,
+                EtsyOperation.Content or EtsyOperation.Publish or EtsyOperation.Deactivate=>MarketplaceShopBulkOperation.ContentPreview,
+                _=>throw new InvalidOperationException("Bu Etsy işlemi hesap kapsamlı önizlemeye bağlanmadı.")
+            });
+        }
         summary.Text="Seçili ürünler ve Etsy mağazası karşılaştırılıyor…";
         plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token,specialist?.ConnectionId);
         if(specialist is not null){accountSpecialistModel=new MarketplaceShopProductsModel(specialist.ConnectionId,directory);accountSpecialistModel.AssociateSpecialistPlan(specialist,plan.Id);accountSpecialistPlanId=plan.Id;AccountSpecialistPreview=specialist;}

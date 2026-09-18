@@ -40,6 +40,7 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
     public string? ConnectionId => scopedConnection?.Id;
     public string AccountShopId => scopedConnection?.ShopId ?? LoadAccount()?.SupplierId ?? "";
     public MarketplaceShopSpecialistPreview? AccountSpecialistPreview { get; private set; }
+    public string AccountSpecialistPlanId => accountSpecialistPlanId;
     public TrendyolOperation? AccountSpecialistOperation => plan?.Operation;
     public IReadOnlyList<string> AccountSpecialistPlanProductIds => plan?.Rows.Select(row => row.ProductId).ToArray() ?? Array.Empty<string>();
 
@@ -101,9 +102,10 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
     {
         var connection=CurrentScopedConnection();
         var request=creationInbox.Pending(connection.Id).FirstOrDefault()??throw new InvalidOperationException("Bu Trendyol hesabı için bekleyen yeni ilan önizlemesi yok.");
-        var next=store.Preview(Account(),request.ProductIds,TrendyolOperation.Create);
+        var specialist=DirectSpecialistPreview(request.ProductIds,TrendyolOperation.Create);
+        var next=store.Preview(Account(),request.ProductIds,TrendyolOperation.Create,connection.Id);
+        PresentPreview(next,specialist);
         creationInbox.Recognize(request.Id,connection.Id);
-        PresentPreview(next);
         RefreshCreationHandoff();
         status.Text=$"{request.ProductIds.Count} ürün bu hesapta yeni ürün oluşturma önizlemesine alındı. Otomatik gönderim yapılmadı.";
     }

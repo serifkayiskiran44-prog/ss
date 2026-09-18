@@ -17,7 +17,7 @@ public enum MarketplaceShopManagementFilter { All, Managed, Unmanaged, Content, 
 public enum MarketplaceShopBulkOperation
 {
     Management, Category, Brand, Delivery, Taxonomy, Properties, Shipping, Readiness,
-    CreatePreview, PricePreview, StockPreview, ContentPreview
+    CreatePreview, PricePreview, StockPreview, ContentPreview, PriceAndStockPreview
 }
 
 public sealed record MarketplaceShopProductFilter(
@@ -178,9 +178,18 @@ public sealed class MarketplaceShopProductsModel
     }
 
     public MarketplaceShopSpecialistPreview PreviewSpecialist(MarketplaceShopSelectionSnapshot selection, MarketplaceShopBulkOperation operation)
+        => PreviewSpecialist(selection, operation, directScopedWorkflow: false);
+
+    internal MarketplaceShopSpecialistPreview PreviewDirectSpecialist(MarketplaceShopSelectionSnapshot selection, MarketplaceShopBulkOperation operation)
+        => PreviewSpecialist(selection, operation, directScopedWorkflow: true);
+
+    MarketplaceShopSpecialistPreview PreviewSpecialist(MarketplaceShopSelectionSnapshot selection, MarketplaceShopBulkOperation operation, bool directScopedWorkflow)
     {
         ValidateSelection(selection);
-        if (operation == MarketplaceShopBulkOperation.Management || !BulkOperations.Contains(operation))
+        if (operation == MarketplaceShopBulkOperation.Management ||
+            (!BulkOperations.Contains(operation) && !(directScopedWorkflow && operation == MarketplaceShopBulkOperation.CreatePreview) &&
+             !(directScopedWorkflow && operation == MarketplaceShopBulkOperation.PriceAndStockPreview &&
+               BulkOperations.Contains(MarketplaceShopBulkOperation.PricePreview) && BulkOperations.Contains(MarketplaceShopBulkOperation.StockPreview))))
             throw new InvalidOperationException("Bu uzman önizleme işlemi seçili kanal tarafından desteklenmiyor.");
         var currentBindings = bindings.List(connectionId: connection.Id).ToDictionary(x => x.ProductId, x => x.Version, StringComparer.Ordinal);
         var rows = selection.ProductIds.Select(id =>
@@ -521,6 +530,7 @@ public sealed class MarketplaceShopProductsModel
         MarketplaceShopBulkOperation.CreatePreview => true,
         MarketplaceShopBulkOperation.StockPreview => manageStock,
         MarketplaceShopBulkOperation.PricePreview => managePrice,
+        MarketplaceShopBulkOperation.PriceAndStockPreview => managePrice && manageStock,
         MarketplaceShopBulkOperation.ContentPreview or MarketplaceShopBulkOperation.Category or MarketplaceShopBulkOperation.Brand or
         MarketplaceShopBulkOperation.Delivery or MarketplaceShopBulkOperation.Taxonomy or MarketplaceShopBulkOperation.Properties or
         MarketplaceShopBulkOperation.Shipping or MarketplaceShopBulkOperation.Readiness => manageContent,
