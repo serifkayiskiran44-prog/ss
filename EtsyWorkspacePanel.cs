@@ -33,6 +33,7 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     EtsyCredentials? credentials;
     EtsyWorkspaceState state = new();
     EtsyOperationPlan? plan;
+    string creationHandoffRequestId = "";
     int page;
     bool busy;
     bool disposed;
@@ -148,9 +149,27 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         var connection = CurrentScopedConnection();
         var request = creationInbox.Pending(connection.Id).FirstOrDefault()
             ?? throw new InvalidOperationException("Bu Etsy hesabı için bekleyen yeni ilan önizlemesi yok.");
+        creationHandoffRequestId = request.Id;
         CreationHandoffProductIds = Array.AsReadOnly(request.ProductIds.ToArray());
-        creationInbox.Recognize(request.Id, connection.Id);
-        summary.Text = $"{CreationHandoffProductIds.Count} ürün bu hesapta tanındı. ‘Taslak oluştur · önizle’ ile değerleri inceleyin; otomatik gönderim yapılmadı.";
+        products.UnselectAll();
+        var exact = CreationHandoffProductIds.ToHashSet(StringComparer.Ordinal);
+        foreach (var item in products.Items.Cast<ProductRow>().Where(item => exact.Contains(item.Id))) products.SelectedItems.Add(item);
+        summary.Text = $"{CreationHandoffProductIds.Count} ürünün hesap kapsamlı isteği açıldı. ‘Taslak oluştur · önizle’ yalnız bu ürünleri kullanır; plan kalıcılaşmadan istek tamamlanmaz.";
+    }
+
+    IReadOnlyList<string> PreviewProductIds(EtsyOperation operation) => operation == EtsyOperation.CreateDraft && creationHandoffRequestId.Length > 0
+        ? Array.AsReadOnly(CreationHandoffProductIds.ToArray())
+        : RequireSelection();
+
+    void CompleteCreationHandoff(EtsyOperationPlan persistedPlan)
+    {
+        if (creationHandoffRequestId.Length == 0) return;
+        var connection = CurrentScopedConnection();
+        if (!store.IsPersistedCreationPlan(persistedPlan.Id, connection.ShopId, CreationHandoffProductIds))
+            throw new InvalidOperationException("Etsy yeni ilan planı kalıcı değil veya hesap kapsamlı ürün setiyle eşleşmiyor; istek beklemede tutuldu.");
+        creationInbox.Recognize(creationHandoffRequestId, connection.Id);
+        creationHandoffRequestId = "";
+        CreationHandoffProductIds = Array.Empty<string>();
         RefreshDispatchHandoffs();
     }
 

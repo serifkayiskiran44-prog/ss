@@ -87,14 +87,16 @@ public sealed class ProductChannelCreationPreviewInbox
             ORDER BY r.CreatedUtc,r.Id
             """;
         command.Parameters.AddWithValue("$connection", current.Id);
-        using var reader = command.ExecuteReader();
         var result = new List<ProductChannelCreationPreviewRequest>();
-        while (reader.Read())
         {
-            var products = JsonSerializer.Deserialize<string[]>(reader.GetString(4)) ?? throw new InvalidDataException("Yeni ilan önizleme ürünleri okunamadı.");
-            result.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), Array.AsReadOnly(ExactProductIds(products)), ParseUtc(reader.GetString(5))));
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var products = JsonSerializer.Deserialize<string[]>(reader.GetString(4)) ?? throw new InvalidDataException("Yeni ilan önizleme ürünleri okunamadı.");
+                result.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), Array.AsReadOnly(ExactProductIds(products)), ParseUtc(reader.GetString(5))));
+            }
         }
-        return result;
+        return result.Where(request => HasSuccessfulApply(database, null, request)).ToArray();
     }
 
     public void Recognize(string requestId, string connectionId)
@@ -103,16 +105,22 @@ public sealed class ProductChannelCreationPreviewInbox
         if (!MarketplaceOperationalAccounts.IsEligible(current, connections)) throw new InvalidOperationException("Mağaza bağlantısı operasyonel değil.");
         using var database = Open();
         using var transaction = database.BeginTransaction(deferred: false);
+        ProductChannelCreationPreviewRequest request;
         using (var read = database.CreateCommand())
         {
             read.Transaction = transaction;
-            read.CommandText = "SELECT Channel,ShopId FROM ProductChannelCreationPreviewRequests WHERE Id=$id AND ConnectionId=$connection";
+            read.CommandText = "SELECT Channel,ShopId,ProductIdsJson,CreatedUtc FROM ProductChannelCreationPreviewRequests WHERE Id=$id AND ConnectionId=$connection";
             read.Parameters.AddWithValue("$id", Required(requestId, nameof(requestId)));
             read.Parameters.AddWithValue("$connection", current.Id);
             using var reader = read.ExecuteReader();
             if (!reader.Read() || reader.GetString(0) != current.Channel || reader.GetString(1) != current.ShopId)
                 throw new InvalidOperationException("Yeni ilan önizleme isteği başka mağaza hesabına ait.");
+            var products = JsonSerializer.Deserialize<string[]>(reader.GetString(2)) ?? throw new InvalidDataException("Yeni ilan önizleme ürünleri okunamadı.");
+            request = new ProductChannelCreationPreviewRequest(requestId, current.Id, current.Channel, current.ShopId,
+                Array.AsReadOnly(ExactProductIds(products)), ParseUtc(reader.GetString(3)));
         }
+        if (!HasSuccessfulApply(database, transaction, request))
+            throw new InvalidOperationException("Yeni ilan önizleme isteğinin başarılı bağlantı uygulama makbuzu bulunamadı.");
         using var command = database.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = "INSERT INTO ProductChannelCreationPreviewAcknowledgements(RequestId,ConnectionId,RecognizedUtc) VALUES($id,$connection,$time)";
@@ -122,6 +130,24 @@ public sealed class ProductChannelCreationPreviewInbox
         try { command.ExecuteNonQuery(); }
         catch (SqliteException error) when (error.SqliteErrorCode == 19) { throw new InvalidOperationException("Yeni ilan önizleme isteği daha önce çalışma alanına aktarıldı."); }
         transaction.Commit();
+    }
+
+    static bool HasSuccessfulApply(SqliteConnection database, SqliteTransaction? transaction, ProductChannelCreationPreviewRequest request)
+    {
+        using var command = database.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT Json FROM ProductChannelBindingReceipts WHERE ConnectionId=$connection ORDER BY rowid";
+        command.Parameters.AddWithValue("$connection", request.ConnectionId);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            ProductChannelBindingReceipt receipt;
+            try { receipt = JsonSerializer.Deserialize<ProductChannelBindingReceipt>(reader.GetString(0)) ?? throw new JsonException(); }
+            catch (JsonException) { continue; }
+            if (receipt.NewListingCandidates is not null && receipt.ConnectionId == request.ConnectionId && receipt.CreationPreviewId == request.Id &&
+                receipt.NewListingCandidates.SequenceEqual(request.ProductIds, StringComparer.Ordinal)) return true;
+        }
+        return false;
     }
 
     static string[] ExactProductIds(IReadOnlyList<string> values)

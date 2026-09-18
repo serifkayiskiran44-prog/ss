@@ -116,13 +116,18 @@ public sealed class ProductManagementBindingPanelTests
     }
 
     [TestMethod]
-    public void NewListingHandoffIsVisibleAndAcknowledgedOnlyByTheExactAccountWorkspace() => InSta(() =>
+    public void EtsyCreationHandoffReplacesPriorSelectionAndAcknowledgesOnlyAPersistedExactPlan() => InSta(() =>
     {
-        var product = new CatalogStore(directory).CreateManual(new() { Sku = "A", Name = "A", Currency = "TRY" });
+        var catalog = new CatalogStore(directory);
+        var product = catalog.CreateManual(new() { Sku = "A", Name = "A", Currency = "TRY" });
+        var other = catalog.CreateManual(new() { Sku = "B", Name = "B", Currency = "TRY" });
         var connections = new MarketplaceConnectionStore(directory);
         var first = Connected(connections, "etsy", "202", "Etsy A");
         var second = Connected(connections, "etsy", "303", "Etsy B");
-        var requestId = new LocalProductCreationPreviewHandoff(directory).Preview(first, new[] { product.Id });
+        var model = new ProductConnectionsModel(directory, new[] { product.Id }, new FakeSnapshotProvider());
+        model.PreviewConnection(first.Id);
+        var bindingReceipt = model.Apply();
+        var requestId = bindingReceipt.CreationPreviewId;
         var inbox = new ProductChannelCreationPreviewInbox(directory);
 
         Assert.AreEqual(requestId, inbox.Pending(first.Id).Single().Id);
@@ -130,14 +135,57 @@ public sealed class ProductManagementBindingPanelTests
         var workspace = new EtsyWorkspacePanel(first.Id, directory);
         try
         {
+            var products = LogicalWalk(workspace).OfType<DataGrid>().Single(grid => grid.Name == "EtsyProducts");
+            products.SelectedItem = products.Items.Cast<object>().Single(item => (string)item.GetType().GetProperty("Id")!.GetValue(item)! == other.Id);
             var handoff = LogicalWalk(workspace).OfType<Button>().Single(button => button.Name == "EtsyCreationHandoffButton");
             Assert.IsTrue(handoff.IsEnabled);
             handoff.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Assert.AreEqual(0, inbox.Pending(first.Id).Count, "Only the destination workspace may acknowledge its exact request.");
+            Assert.AreEqual(requestId, inbox.Pending(first.Id).Single().Id, "Opening the handoff must not acknowledge it before a plan is persisted.");
             CollectionAssert.AreEqual(new[] { product.Id }, workspace.CreationHandoffProductIds.ToArray());
+            var exactIds = (IReadOnlyList<string>)Invoke(workspace, "PreviewProductIds", EtsyOperation.CreateDraft)!;
+            CollectionAssert.AreEqual(new[] { product.Id }, exactIds.ToArray(), "The prior B selection must not substitute for handoff product A.");
+
+            var plan = new EtsyOperationPlan
+            {
+                ShopId = first.ShopId,
+                Operation = EtsyOperation.CreateDraft,
+                Rows = new[] { new EtsyPreviewRow { ProductId = product.Id } }
+            };
+            Assert.ThrowsException<TargetInvocationException>(() => InvokeVoid(workspace, "CompleteCreationHandoff", plan));
+            using (var database = new SqliteConnection($"Data Source={Path.Combine(directory, "catalog.db")}"))
+            {
+                database.Open();
+                using var command = database.CreateCommand();
+                command.CommandText = "INSERT INTO EtsyWorkspacePlans(Id,ShopId,Json) VALUES($id,$shop,$json)";
+                command.Parameters.AddWithValue("$id", plan.Id);
+                command.Parameters.AddWithValue("$shop", plan.ShopId);
+                command.Parameters.AddWithValue("$json", System.Text.Json.JsonSerializer.Serialize(plan));
+                command.ExecuteNonQuery();
+            }
+            InvokeVoid(workspace, "CompleteCreationHandoff", plan);
+            Assert.AreEqual(0, inbox.Pending(first.Id).Count);
+            Assert.AreEqual(0, workspace.CreationHandoffProductIds.Count);
         }
         finally { workspace.Dispose(); }
     });
+
+    [TestMethod]
+    public void FailedApplyLeavesNoConsumableCreationRequestAcrossRestart()
+    {
+        var catalog = new CatalogStore(directory);
+        var product = catalog.CreateManual(new() { Sku = "A", Name = "A", Currency = "TRY" });
+        var connection = Connected(new MarketplaceConnectionStore(directory), "etsy", "202", "Etsy");
+        var remote = new FakeSnapshotProvider();
+        remote.Set(connection);
+        var handoff = new StalingCreationHandoff(directory, catalog, product);
+        var model = new ProductConnectionsModel(directory, new[] { product.Id }, remote, handoff);
+        model.PreviewConnection(connection.Id);
+
+        Assert.ThrowsException<InvalidOperationException>(() => model.Apply());
+        Assert.IsFalse(string.IsNullOrWhiteSpace(handoff.RequestId), "The request must have been enqueued before the forced stale apply failure.");
+        Assert.AreEqual(0, new ProductChannelCreationPreviewInbox(directory).Pending(connection.Id).Count);
+        Assert.AreEqual(0, new ProductChannelCreationPreviewInbox(directory).Pending(connection.Id).Count, "A restart must not make the failed apply request consumable.");
+    }
 
     [TestMethod]
     public void StaleRemoteSnapshotBlocksConnectionApply()
@@ -425,6 +473,12 @@ public sealed class ProductManagementBindingPanelTests
     static object? Invoke(object target, string name, params object?[] args) => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(target, args)
         ?? throw new MissingMethodException(target.GetType().Name, name);
 
+    static void InvokeVoid(object target, string name, params object?[] args)
+    {
+        var method = target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new MissingMethodException(target.GetType().Name, name);
+        method.Invoke(target, args);
+    }
+
     static IEnumerable<DependencyObject> Walk(DependencyObject root)
     {
         yield return root;
@@ -475,6 +529,18 @@ public sealed class ProductManagementBindingPanelTests
         {
             ProductIds = productIds.ToArray();
             return "creation-preview";
+        }
+    }
+
+    sealed class StalingCreationHandoff(string directory, CatalogStore catalog, CatalogProduct product) : IProductChannelCreationPreviewHandoff
+    {
+        public string RequestId { get; private set; } = "";
+        public string Preview(MarketplaceConnection connection, IReadOnlyList<string> productIds)
+        {
+            RequestId = new LocalProductCreationPreviewHandoff(directory).Preview(connection, productIds);
+            product.Name += " changed";
+            catalog.SaveProduct(product);
+            return RequestId;
         }
     }
 

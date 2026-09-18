@@ -66,6 +66,14 @@ public sealed class EtsyWorkspaceStore
         using var c=Open(); using var cmd=c.CreateCommand(); cmd.CommandText="SELECT Json FROM EtsyWorkspacePlans WHERE Id=$id"; cmd.Parameters.AddWithValue("$id",id);
         return JsonSerializer.Deserialize<EtsyOperationPlan>(cmd.ExecuteScalar() as string ?? throw new InvalidOperationException("Kaydedilmiş Etsy önizlemesi bulunamadı."))!;
     }
+    public bool IsPersistedCreationPlan(string id,string shopId,IReadOnlyList<string> productIds)
+    {
+        if(string.IsNullOrWhiteSpace(id)||productIds.Count==0||productIds.Any(string.IsNullOrWhiteSpace)||productIds.Distinct(StringComparer.Ordinal).Count()!=productIds.Count)return false;
+        using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT Json FROM EtsyWorkspacePlans WHERE Id=$id AND ShopId=$shop";cmd.Parameters.AddWithValue("$id",id);cmd.Parameters.AddWithValue("$shop",Shop(shopId));
+        if(cmd.ExecuteScalar() is not string json)return false;
+        EtsyOperationPlan value;try{value=JsonSerializer.Deserialize<EtsyOperationPlan>(json)??throw new JsonException();}catch(JsonException){return false;}
+        return value.Id==id&&value.ShopId==shopId&&value.Operation==EtsyOperation.CreateDraft&&value.Rows.Select(row=>row.ProductId).SequenceEqual(productIds,StringComparer.Ordinal);
+    }
     static void ValidateCurrent(SqliteConnection c,SqliteTransaction tx,EtsyOperationPlan plan)
     {
         if(Load(c,tx,plan.ShopId).Revision!=plan.WorkspaceRevision||CatalogHash(c,tx,plan.Rows.Select(r=>r.ProductId))!=plan.CatalogFingerprint)throw new InvalidOperationException("Katalog veya Etsy ayarları değişti; yeni önizleme alın.");

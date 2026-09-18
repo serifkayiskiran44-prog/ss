@@ -52,13 +52,11 @@ public sealed partial class EtsyWorkspacePanel
     }
     async Task Preview(EtsyOperation operation)
     {
-        var ids = operation == EtsyOperation.CreateDraft && products.SelectedItems.Count == 0 && CreationHandoffProductIds.Count > 0
-            ? CreationHandoffProductIds
-            : RequireSelection();
+        var ids=PreviewProductIds(operation);
         ClearPreview();var c=await Authorized();
         summary.Text="Seçili ürünler ve Etsy mağazası karşılaştırılıyor…";
         plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token);
-        if(operation==EtsyOperation.CreateDraft)CreationHandoffProductIds=Array.Empty<string>();
+        if(operation==EtsyOperation.CreateDraft&&creationHandoffRequestId.Length>0)CompleteCreationHandoff(plan);
         send.IsEnabled=true;summary.Text=$"{plan.Rows.Count} satır · {plan.Rows.Count(r=>r.CanSend)} gönderilebilir · {plan.Rows.Count(r=>!r.CanSend)} kontrol gerekli";ShowPreview(plan);
     }
     void ShowPreview(EtsyOperationPlan preview)
