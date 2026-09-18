@@ -12,6 +12,7 @@ namespace MarketplaceHub.Tests;
 [TestClass]
 public sealed class MarketplaceCredentialVaultTests
 {
+    sealed record UnsupportedCredentials(string Value);
     static void WithRoot(Action<string> action)
     {
         var root = Path.Combine(Path.GetTempPath(), "marketplace-vault-" + Guid.NewGuid().ToString("N"));
@@ -101,6 +102,21 @@ public sealed class MarketplaceCredentialVaultTests
         Assert.ThrowsException<ArgumentException>(() =>
             vault.Save("trendyol-invalid", "trendyol", "101", new TrendyolSettings("101", "", "", "")));
         Assert.IsFalse(Directory.Exists(Path.Combine(root, "marketplace-credentials")));
+    });
+
+    [TestMethod]
+    public void UnknownPayloadTypeCannotReadOrReplaceKnownAccountBlob() => WithRoot(root =>
+    {
+        var vault = new MarketplaceCredentialVault(root);
+        vault.Save("etsy-a", "etsy", "303", new EtsyCredentials("key", "secret", "token", "303"));
+        var path = Directory.GetFiles(Path.Combine(root, "marketplace-credentials")).Single();
+        var original = File.ReadAllBytes(path);
+
+        Assert.ThrowsException<ArgumentException>(() => vault.Load<UnsupportedCredentials>("etsy-a", "etsy", "303"));
+        Assert.ThrowsException<ArgumentException>(() => vault.Save("etsy-a", "etsy", "303", new UnsupportedCredentials("unknown")));
+
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(path));
+        Assert.AreEqual("key", vault.Load<EtsyCredentials>("etsy-a", "etsy", "303")!.Key);
     });
 
     [TestMethod]

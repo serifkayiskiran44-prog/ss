@@ -4,13 +4,14 @@ using System.Text.Json;
 
 namespace TrMarketplaceHubDesktop;
 
-public enum MarketplaceConnectionMigrationState { MissingLegacy, Imported, AlreadyImported }
+public enum MarketplaceConnectionMigrationState { MissingLegacy, Imported, AlreadyImported, Failed }
 
 public sealed record MarketplaceConnectionMigrationResult(
     string Channel,
     MarketplaceConnectionMigrationState State,
     string? ConnectionId,
-    string? ShopId);
+    string? ShopId,
+    string Detail = "");
 
 /// <summary>
 /// Imports the two pre-vault credential files without deleting or rewriting
@@ -36,10 +37,20 @@ public sealed class MarketplaceConnectionMigration
     {
         var results = new List<MarketplaceConnectionMigrationResult>(2)
         {
-            ImportOne("etsy", () => CredentialStore.Load(directory), value => value.ShopId, "Etsy"),
-            ImportOne("trendyol", () => new TrendyolSettingsStore(Path.Combine(directory, "trendyol.bin")).Load(), value => value.SupplierId, "Trendyol")
+            Attempt("etsy", () => ImportOne("etsy", () => CredentialStore.Load(directory), value => value.ShopId, "Etsy")),
+            Attempt("trendyol", () => ImportOne("trendyol", () => new TrendyolSettingsStore(Path.Combine(directory, "trendyol.bin")).Load(), value => value.SupplierId, "Trendyol"))
         };
         return results;
+    }
+
+    static MarketplaceConnectionMigrationResult Attempt(string channel, Func<MarketplaceConnectionMigrationResult> import)
+    {
+        try { return import(); }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            return new(channel, MarketplaceConnectionMigrationState.Failed, null, null,
+                "Eski bağlantı içe aktarılamadı; bilgileri yeniden girin. İşlem başarısız.");
+        }
     }
 
     MarketplaceConnectionMigrationResult ImportOne<T>(string channel, Func<T?> loadLegacy, Func<T, string> accountIdentity, string displayName)
@@ -57,7 +68,8 @@ public sealed class MarketplaceConnectionMigration
                 {
                     var existing = vault.Load<T>(marker.ConnectionId, channel, marker.ShopId);
                     if (existing is not null && string.Equals(accountIdentity(existing), marker.ShopId, StringComparison.Ordinal))
-                        return new(channel, MarketplaceConnectionMigrationState.AlreadyImported, marker.ConnectionId, marker.ShopId);
+                        return new(channel, MarketplaceConnectionMigrationState.AlreadyImported, marker.ConnectionId, marker.ShopId,
+                            "Güvenli kasa aktarımı daha önce doğrulandı.");
                 }
             }
             catch (InvalidOperationException)
@@ -73,7 +85,8 @@ public sealed class MarketplaceConnectionMigration
         {
             throw new InvalidOperationException($"Eski {channel} bağlantı bilgisi güvenli biçimde içe aktarılamadı.");
         }
-        if (legacy is null) return new(channel, MarketplaceConnectionMigrationState.MissingLegacy, null, null);
+        if (legacy is null) return new(channel, MarketplaceConnectionMigrationState.MissingLegacy, null, null,
+            "Eski bağlantı dosyası bulunamadı.");
 
         var shopId = accountIdentity(legacy);
         ValidateAccountIdentity(channel, shopId, legacy);
@@ -87,7 +100,8 @@ public sealed class MarketplaceConnectionMigration
             throw new InvalidOperationException("Yeni mağaza bağlantı bilgisi hesap kimliğiyle eşleşmiyor.");
 
         connections.MarkCredentialMigration(channel, connection.Id, shopId);
-        return new(channel, MarketplaceConnectionMigrationState.Imported, connection.Id, shopId);
+        return new(channel, MarketplaceConnectionMigrationState.Imported, connection.Id, shopId,
+            "Eski bağlantı güvenli kasaya aktarıldı; eski dosya korundu.");
     }
 
     static void ValidateAccountIdentity<T>(string channel, string shopId, T payload)

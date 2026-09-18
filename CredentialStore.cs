@@ -10,8 +10,8 @@ public static class CredentialStore
     // Purely technical bounds - a DPAPI-wrapped EtsyCredentials JSON blob is
     // normally well under 1KB even encrypted; these budgets give generous
     // headroom for future fields while making an oversized/corrupt file a
-    // deterministic, bounded-memory reject rather than an unbounded
-    // ReadAllBytes/deserialize. See #2644.
+    // deterministic, bounded-memory reject through one same-handle read rather
+    // than an unbounded read/deserialize. See #2644.
     private const int MaxEncryptedFileBytes = 64 * 1024;
     private const int MaxPlaintextBytes = 32 * 1024;
     public static void Save(EtsyCredentials credentials) => Save(credentials, null);
@@ -22,7 +22,11 @@ public static class CredentialStore
         var plain = JsonSerializer.SerializeToUtf8Bytes(credentials);
         try
         {
+            if (plain.Length is <= 0 or > MaxPlaintextBytes)
+                throw new ArgumentException("Etsy bağlantı bilgisi izin verilen toplam boyutu aşıyor.", nameof(credentials));
             var encrypted = Protect(plain);
+            if (encrypted.Length is <= 0 or > MaxEncryptedFileBytes)
+                throw new ArgumentException("Şifreli Etsy bağlantı bilgisi izin verilen boyutu aşıyor.", nameof(credentials));
             Directory.CreateDirectory(Path.GetDirectoryName(storePath)!);
             var temporary = storePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try { File.WriteAllBytes(temporary, encrypted); File.Move(temporary, storePath, true); }
@@ -41,18 +45,13 @@ public static class CredentialStore
         byte[]? plain = null;
         try
         {
-            // Check the file's length before ever allocating/reading it - an
-            // oversized/corrupt file is rejected deterministically without an
-            // unbounded ReadAllBytes. Never truncated, deleted, or overwritten.
-            var length = new FileInfo(storePath).Length;
-            if (length > MaxEncryptedFileBytes) throw new InvalidOperationException(recoveryMessage);
-            plain = Unprotect(File.ReadAllBytes(storePath));
+            plain = Unprotect(BoundedCredentialFile.ReadBounded(storePath, MaxEncryptedFileBytes));
             if (plain.Length > MaxPlaintextBytes) throw new InvalidOperationException(recoveryMessage);
             var credentials = JsonSerializer.Deserialize<EtsyCredentials>(plain) ?? throw new JsonException("Credential payload is empty.");
             Validate(credentials);
             return credentials;
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or JsonException)
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or CryptographicException or JsonException or ArgumentException)
         { throw new InvalidOperationException(recoveryMessage); }
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
     }

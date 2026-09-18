@@ -15,8 +15,10 @@ public static class MarketplaceConnectionsPanel
         string migrationNotice;
         try
         {
-            var imported = new MarketplaceConnectionMigration(dataDirectory).ImportLegacy().Count(x => x.State == MarketplaceConnectionMigrationState.Imported);
-            migrationNotice = imported == 0 ? "" : $"{imported} eski bağlantı güvenli hesap kasasına aktarıldı; eski dosyalar korundu.";
+            var outcomes = new MarketplaceConnectionMigration(dataDirectory).ImportLegacy()
+                .Where(x => x.State is MarketplaceConnectionMigrationState.Imported or MarketplaceConnectionMigrationState.Failed)
+                .Select(x => $"{MarketplaceConnectionCatalog.Get(x.Channel).Name}: {x.Detail}");
+            migrationNotice = string.Join("\n", outcomes);
         }
         catch (Exception error) { migrationNotice = "Eski bağlantı içe aktarılamadı: " + MarketplaceConnectionStore.Redact(error.Message); }
         var rows = new ObservableCollection<MarketplaceConnection>(store.List());

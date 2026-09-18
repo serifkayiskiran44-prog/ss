@@ -24,16 +24,14 @@ public sealed class TrendyolSettingsStore(string? path = null)
         byte[]? plain = null;
         try
         {
-            var length = new FileInfo(storePath).Length;
-            if (length is <= 0 or > MaxEncryptedFileBytes) throw new InvalidOperationException(recoveryMessage);
-            plain = CredentialStore.Unprotect(File.ReadAllBytes(storePath));
+            plain = CredentialStore.Unprotect(BoundedCredentialFile.ReadBounded(storePath, MaxEncryptedFileBytes));
             if (plain.Length is <= 0 or > MaxPlaintextBytes) throw new InvalidOperationException(recoveryMessage);
             var settings = JsonSerializer.Deserialize<TrendyolSettings>(plain) ?? throw new InvalidOperationException(recoveryMessage);
             TrendyolConnection.Validate(settings);
             return settings;
         }
         catch (InvalidOperationException) { throw; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or JsonException or ArgumentException)
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or CryptographicException or JsonException or ArgumentException)
         { throw new InvalidOperationException(recoveryMessage); }
         finally { if (plain is not null) CryptographicOperations.ZeroMemory(plain); }
     }

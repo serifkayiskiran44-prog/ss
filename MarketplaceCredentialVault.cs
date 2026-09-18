@@ -34,6 +34,7 @@ public sealed class MarketplaceCredentialVault
     {
         var identity = ValidateIdentity(connectionId, channel, shopId);
         if (payload is null) throw new ArgumentNullException(nameof(payload));
+        EnsureAllowedSave(identity.Channel, payload);
         ValidatePayloadIdentity(identity.Channel, identity.ShopId, payload);
         var envelope = new CredentialEnvelope<T>(EnvelopeVersion, identity.ConnectionId, identity.Channel, identity.ShopId, TypeName<T>(), payload);
         byte[]? plain = null;
@@ -64,14 +65,13 @@ public sealed class MarketplaceCredentialVault
     public T? Load<T>(string connectionId, string channel, string shopId)
     {
         var identity = ValidateIdentity(connectionId, channel, shopId);
+        EnsureAllowedLoad<T>(identity.Channel);
         var path = PathFor(identity.ConnectionId);
         if (!File.Exists(path)) return default;
         byte[]? plain = null;
         try
         {
-            var length = new FileInfo(path).Length;
-            if (length is <= 0 or > MaxEncryptedFileBytes) throw new InvalidOperationException(RecoveryMessage);
-            plain = CredentialStore.Unprotect(File.ReadAllBytes(path));
+            plain = CredentialStore.Unprotect(BoundedCredentialFile.ReadBounded(path, MaxEncryptedFileBytes));
             if (plain.Length is <= 0 or > MaxPlaintextBytes) throw new InvalidOperationException(RecoveryMessage);
             var envelope = JsonSerializer.Deserialize<CredentialEnvelope<T>>(plain) ?? throw new InvalidOperationException(RecoveryMessage);
             if (envelope.Version != EnvelopeVersion ||
@@ -84,7 +84,7 @@ public sealed class MarketplaceCredentialVault
             return envelope.Payload;
         }
         catch (InvalidOperationException) { throw; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or JsonException or ArgumentException)
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or CryptographicException or JsonException or ArgumentException)
         {
             throw new InvalidOperationException(RecoveryMessage);
         }
@@ -134,19 +134,39 @@ public sealed class MarketplaceCredentialVault
 
     static string TypeName<T>() => typeof(T).FullName ?? typeof(T).Name;
 
+    static void EnsureAllowedSave<T>(string channel, T payload)
+    {
+        var exactType = payload!.GetType();
+        if (channel == "etsy" && typeof(T) == typeof(EtsyCredentials) && exactType == typeof(EtsyCredentials)) return;
+        if (channel == "trendyol" && typeof(T) == typeof(TrendyolSettings) && exactType == typeof(TrendyolSettings)) return;
+        throw new ArgumentException("Bu kanal için bağlantı bilgisi türü desteklenmiyor.", nameof(payload));
+    }
+
+    static void EnsureAllowedLoad<T>(string channel)
+    {
+        if (channel == "etsy" && typeof(T) == typeof(EtsyCredentials)) return;
+        if (channel == "trendyol" && typeof(T) == typeof(TrendyolSettings)) return;
+        if (typeof(T) == typeof(EtsyCredentials) || typeof(T) == typeof(TrendyolSettings))
+            throw new InvalidOperationException(RecoveryMessage);
+        throw new ArgumentException("Bu kanal için bağlantı bilgisi türü desteklenmiyor.");
+    }
+
     static void ValidatePayloadIdentity<T>(string channel, string shopId, T payload)
     {
-        if (payload is EtsyCredentials etsy)
+        if (payload?.GetType() == typeof(EtsyCredentials))
         {
+            var etsy = (EtsyCredentials)(object)payload;
             CredentialStore.Validate(etsy);
             if (!string.Equals(channel, "etsy", StringComparison.Ordinal) || !string.Equals(etsy.ShopId, shopId, StringComparison.Ordinal))
                 throw new ArgumentException("Etsy bağlantı bilgisi hesap kimliğiyle eşleşmiyor.", nameof(payload));
         }
-        else if (payload is TrendyolSettings trendyol)
+        else if (payload?.GetType() == typeof(TrendyolSettings))
         {
+            var trendyol = (TrendyolSettings)(object)payload;
             TrendyolConnection.Validate(trendyol);
             if (!string.Equals(channel, "trendyol", StringComparison.Ordinal) || !string.Equals(trendyol.SupplierId, shopId, StringComparison.Ordinal))
                 throw new ArgumentException("Trendyol bağlantı bilgisi hesap kimliğiyle eşleşmiyor.", nameof(payload));
         }
+        else throw new ArgumentException("Bağlantı bilgisi türü desteklenmiyor.", nameof(payload));
     }
 }

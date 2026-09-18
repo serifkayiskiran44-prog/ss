@@ -63,6 +63,58 @@ public sealed class MultiAccountConnectionTests
     });
 
     [TestMethod]
+    public void CorruptEtsyDoesNotBlockValidTrendyolMigrationOrWriteEtsyMarker() => WithRoot(root =>
+    {
+        File.WriteAllBytes(Path.Combine(root, "credentials.bin"), new byte[] { 1, 2, 3, 4 });
+        var trendyolPath = Path.Combine(root, "trendyol.bin");
+        new TrendyolSettingsStore(trendyolPath).Save(new TrendyolSettings("101", "trendyol-key", "trendyol-secret", "101 - Test"));
+
+        var results = new MarketplaceConnectionMigration(root).ImportLegacy();
+        var etsy = results.Single(x => x.Channel == "etsy");
+        var trendyol = results.Single(x => x.Channel == "trendyol");
+        var store = new MarketplaceConnectionStore(root);
+
+        Assert.AreEqual(MarketplaceConnectionMigrationState.Failed, etsy.State);
+        Assert.IsTrue(etsy.Detail.Length is > 0 and <= 200);
+        Assert.AreEqual(MarketplaceConnectionMigrationState.Imported, trendyol.State);
+        Assert.IsNull(store.CredentialMigration("etsy"));
+        Assert.IsNotNull(store.CredentialMigration("trendyol"));
+        Assert.IsTrue(File.Exists(Path.Combine(root, "credentials.bin")));
+        Assert.IsTrue(File.Exists(trendyolPath));
+    });
+
+    [TestMethod]
+    public void ConnectionSettingsShowBoundedOutcomeForEachLegacyChannel()
+    {
+        Exception failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                WithRoot(root =>
+                {
+                    File.WriteAllBytes(Path.Combine(root, "credentials.bin"), new byte[] { 1, 2, 3, 4 });
+                    new TrendyolSettingsStore(Path.Combine(root, "trendyol.bin")).Save(new TrendyolSettings("101", "trendyol-key", "trendyol-secret", "101 - Test"));
+
+                    var panel = MarketplaceConnectionsPanel.Create(root);
+                    var text = string.Join(" ", Walk(panel).OfType<TextBlock>().Select(x => x.Text));
+
+                    StringAssert.Contains(text, "Etsy");
+                    StringAssert.Contains(text, "başarısız");
+                    StringAssert.Contains(text, "Trendyol");
+                    StringAssert.Contains(text, "aktarıldı");
+                    Assert.IsTrue(text.Length < 10_000);
+                });
+            }
+            catch (Exception error) { failure = error; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null) throw failure;
+    }
+
+    [TestMethod]
     public void VaultResolutionUsesConnectionIdForAccountsWithTheSameChannel() => WithRoot(root =>
     {
         var store = new MarketplaceConnectionStore(root);
