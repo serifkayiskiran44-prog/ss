@@ -17,6 +17,8 @@ public static class MarketplaceOperationalAccounts
     public static bool IsEligible(MarketplaceConnection connection, MarketplaceConnectionStore store)
     {
         if (!connection.Enabled) return false;
+        if (connection.Status.Equals("FAILED", StringComparison.OrdinalIgnoreCase) ||
+            connection.Status.Equals("LIVE_API_BLOCKED", StringComparison.OrdinalIgnoreCase)) return false;
         if (!IsSeededDefaultIdentity(connection)) return true;
         if (HasVerifiedStatus(connection)) return true;
 

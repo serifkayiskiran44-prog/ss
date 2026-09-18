@@ -36,7 +36,6 @@ public sealed partial class TrendyolWorkspacePanel
     {
         var connection=CurrentScopedConnection();
         new MarketplaceShopProductsModel(connection.Id,workspaceDirectory).ValidateSpecialistPreview(request);
-        AccountSpecialistPreview=request;
         var operation=request.Operation;
         var target=operation switch{
             MarketplaceShopBulkOperation.Category or MarketplaceShopBulkOperation.Brand=>TrendyolOperation.UpdateUnapproved,
@@ -47,7 +46,7 @@ public sealed partial class TrendyolWorkspacePanel
             MarketplaceShopBulkOperation.CreatePreview=>TrendyolOperation.Create,
             _=>throw new InvalidOperationException("Bu Trendyol işlemi uzman önizlemeye bağlanmadı.")};
         mode.SelectedItem=mode.Items.Cast<Mode>().Single(m=>m.Value==target);
-        PresentPreview(store.Preview(Account(),request.Rows.Select(row=>row.ProductId),target));
+        PresentPreview(store.Preview(Account(),request.Rows.Select(row=>row.ProductId),target,connection.Id),request);
     }
     static void FilterField(Panel panel,string label,UIElement input)
     {

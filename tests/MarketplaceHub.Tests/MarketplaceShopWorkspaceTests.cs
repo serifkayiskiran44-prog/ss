@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -99,6 +100,33 @@ public sealed class MarketplaceShopWorkspaceTests
         Assert.AreEqual(0, new MarketplaceShopProductsModel(trendyol.Id, directory, localOnly).BulkOperations.Count);
         Assert.AreEqual(0, new MarketplaceShopProductsModel(etsy.Id, directory, productsReadOnly).BulkOperations.Count);
     }
+
+    [TestMethod]
+    public void RestrictedSettingsCapabilitiesDisableUiAndRejectUnsupportedPatches() => InSta(() =>
+    {
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", "101", "Restricted", true);
+        var registry = new MarketplaceAdapterRegistry(new[]
+        {
+            new RestrictedAdapter("trendyol", new(new HashSet<MarketplaceOperation> { MarketplaceOperation.ProductsRead }))
+        });
+        var store = new MarketplaceShopSettingsStore(directory, registry);
+
+        Assert.ThrowsException<InvalidOperationException>(() => store.SavePatch(connection.Id,
+            new(ProductRules: new(ManagePrice: true)), 0, connection.Revision));
+        Assert.ThrowsException<InvalidOperationException>(() => store.SavePatch(connection.Id,
+            new(ProductRules: new(DefaultCategoryId: "42")), 0, connection.Revision));
+        Assert.ThrowsException<InvalidOperationException>(() => store.SavePatch(connection.Id,
+            new(OrderRules: new(Enabled: true)), 0, connection.Revision));
+        Assert.ThrowsException<InvalidOperationException>(() => store.SavePatch(connection.Id,
+            new(Sync: new(OrdersEnabled: true)), 0, connection.Revision));
+
+        var panel = new MarketplaceShopSettingsPanel(connection.Id, directory, registry);
+        Assert.IsFalse(Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Fiyatı varsayılan olarak yönet")).IsEnabled);
+        Assert.IsFalse(Walk(panel).OfType<TextBox>().Single(x => x.Name == "MarketplaceDefaultCategory").IsEnabled);
+        Assert.IsFalse(Walk(panel).OfType<TabItem>().Single(x => Equals(x.Header, "Order rules")).IsEnabled);
+        Assert.IsTrue(Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Ürün okumayı zamanla")).IsEnabled);
+        Assert.IsFalse(Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Sipariş okumayı zamanla")).IsEnabled);
+    });
 
     [TestMethod]
     public void ManagementAndMappingChangesRequireApprovedRevisionedPreview()
@@ -298,7 +326,122 @@ public sealed class MarketplaceShopWorkspaceTests
         Assert.AreEqual(connection.Revision, captured.ConnectionRevision);
         CollectionAssert.AreEquivalent(ids, captured.Rows.Select(x => x.ProductId).ToArray());
         Assert.IsTrue(captured.Rows.All(x => x.BindingVersion == 1));
+        Assert.IsTrue(captured.Rows.All(x => x.RemoteId.StartsWith("remote-", StringComparison.Ordinal)));
+        Assert.IsTrue(captured.Rows.All(x => x.ManageContent && x.ManagePrice && x.ManageStock));
     });
+
+    [TestMethod]
+    public async Task TrendyolSpecialistPlanUsesTask4BindingAndBlocksChangedBindingBeforeHttp()
+    {
+        var account = new TrendyolSettings("101", "key", "secret", "tests");
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", account.SupplierId, "Trendyol", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "T-ONLY", Name = "Binding only", Stock = 7, Currency = "TRY" });
+        var bindings = new ProductChannelBindingStore(directory);
+        var binding = bindings.Save(new(product.Id, connection.Id, "9001", "REMOTE-SKU", "REMOTE-BARCODE",
+            true, true, true, "", "", "Approved", 0, default), 0);
+        var store = new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory);
+        var state = store.Load(account.SupplierId);
+        state.ProductsUpdatedUtc = DateTime.UtcNow;
+        state.Products.Add(new("REMOTE-BARCODE", "REMOTE-SKU", "Remote", 9001, 2, 10, 10, true));
+        store.Save(state);
+        var model = new MarketplaceShopProductsModel(connection.Id, directory);
+        var specialist = model.PreviewSpecialist(model.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.StockPreview);
+
+        var plan = store.Preview(account, new[] { product.Id }, TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Stock, connection.Id);
+        Assert.IsNotNull(plan.Rows.Single().ItemJson, plan.Rows.Single().Detail);
+        model.AssociateSpecialistPlan(specialist, plan.Id);
+        bindings.Save(binding with { ManageStock = false }, binding.Version);
+        Assert.AreEqual(ConnectionTestApplyResult.Applied, new MarketplaceConnectionStore(directory).RecordTest(connection.Id, connection.Revision, false, "offline"));
+        var transport = new CountingTrendyolHandler();
+        using var http = new HttpClient(transport);
+        using var client = new TrMarketplaceHubDesktop.Trendyol.TrendyolApiClient(account, http);
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => store.SendAsync(plan.Id, account, true, client));
+        Assert.AreEqual(0, transport.Writes);
+        Assert.AreEqual(0, store.Receipts(account.SupplierId).Count);
+    }
+
+    [TestMethod]
+    public async Task EtsySpecialistPlanUsesTask4BindingAndBlocksChangedIdentityBeforeHttp()
+    {
+        var credentials = new EtsyCredentials("key", "secret", "88.token", "123", GrantedScopes: new[] { "listings_r", "listings_w" });
+        var connection = new MarketplaceConnectionStore(directory).Save("etsy", credentials.ShopId, "Etsy", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "E-ONLY", Name = "Binding only", Stock = 8, Price = 20, Currency = "USD" });
+        var bindings = new ProductChannelBindingStore(directory);
+        var binding = bindings.Save(new(product.Id, connection.Id, "456", "E-ONLY", "",
+            true, true, true, "", "", "active", 0, default), 0);
+        new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory).Save(new() { ShopId = credentials.ShopId, Currency = "USD" });
+        var api = new CountingEtsyHandler();
+        using var http = new HttpClient(api);
+        var service = new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceService(directory, http);
+        var model = new MarketplaceShopProductsModel(connection.Id, directory);
+        var specialist = model.PreviewSpecialist(model.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.StockPreview);
+
+        var plan = await service.PreviewAsync(credentials, new[] { product.Id }, TrMarketplaceHubDesktop.Etsy.EtsyOperation.Stock,
+            connectionId: connection.Id);
+        Assert.IsTrue(plan.Rows.Single().CanSend, plan.Rows.Single().Detail);
+        Assert.AreEqual(456L, plan.Rows.Single().ListingId);
+        model.AssociateSpecialistPlan(specialist, plan.Id);
+        using (var database = new SqliteConnection("Data Source=" + Path.Combine(directory, "catalog.db")))
+        {
+            database.Open(); using var command = database.CreateCommand();
+            command.CommandText = "UPDATE ProductChannelBindings SET RemoteId='999' WHERE ProductId=$product AND ConnectionId=$connection";
+            command.Parameters.AddWithValue("$product", product.Id); command.Parameters.AddWithValue("$connection", connection.Id); command.ExecuteNonQuery();
+        }
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => service.SendAsync(credentials, plan.Id, true));
+        Assert.AreEqual(0, api.Writes);
+        Assert.AreEqual(0, new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory).Receipts(credentials.ShopId).Count);
+    }
+
+    [TestMethod]
+    public async Task EtsySpecialistPlanRevalidatesAfterLastMomentChangeBeforeClaim()
+    {
+        var credentials = new EtsyCredentials("key", "secret", "88.token", "123", GrantedScopes: new[] { "listings_r", "listings_w" });
+        var connection = new MarketplaceConnectionStore(directory).Save("etsy", credentials.ShopId, "Etsy", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "E-RACE", Name = "Binding race", Stock = 8, Price = 20, Currency = "USD" });
+        var bindings = new ProductChannelBindingStore(directory);
+        var binding = bindings.Save(new(product.Id, connection.Id, "456", "E-ONLY", "",
+            true, true, true, "", "", "active", 0, default), 0);
+        new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory).Save(new() { ShopId = credentials.ShopId, Currency = "USD" });
+        var api = new CountingEtsyHandler();
+        using var http = new HttpClient(api);
+        var service = new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceService(directory, http);
+        var model = new MarketplaceShopProductsModel(connection.Id, directory);
+        var specialist = model.PreviewSpecialist(model.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.StockPreview);
+        var plan = await service.PreviewAsync(credentials, new[] { product.Id }, TrMarketplaceHubDesktop.Etsy.EtsyOperation.Stock,
+            connectionId: connection.Id);
+        model.AssociateSpecialistPlan(specialist, plan.Id);
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => service.SendAsync(credentials, plan.Id, true,
+            beforeClaim: () =>
+            {
+                using var database = new SqliteConnection("Data Source=" + Path.Combine(directory, "catalog.db"));
+                database.Open(); using var command = database.CreateCommand();
+                command.CommandText = "UPDATE ProductChannelBindings SET ManageStock=0 WHERE ProductId=$product AND ConnectionId=$connection";
+                command.Parameters.AddWithValue("$product", product.Id); command.Parameters.AddWithValue("$connection", connection.Id);
+                command.ExecuteNonQuery();
+            }));
+
+        Assert.AreEqual(0, api.Writes);
+        Assert.AreEqual(0, new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory).Receipts(credentials.ShopId).Count);
+    }
+
+    [TestMethod]
+    public void SameRevisionFailedEvidenceInvalidatesAssociatedSpecialistPlan()
+    {
+        var connections = new MarketplaceConnectionStore(directory); connections.List();
+        var connection = connections.Get("trendyol:default")!;
+        Assert.AreEqual(ConnectionTestApplyResult.Applied, connections.RecordTest(connection.Id, connection.Revision, true));
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "ASSOC", Name = "Associated", Currency = "TRY" });
+        new ProductChannelBindingStore(directory).Save(Binding(product.Id, connection.Id, "remote", "Active"), 0);
+        var model = new MarketplaceShopProductsModel(connection.Id, directory);
+        var preview = model.PreviewSpecialist(model.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.StockPreview);
+        model.AssociateSpecialistPlan(preview, "channel-plan");
+        Assert.AreEqual(ConnectionTestApplyResult.Applied, connections.RecordTest(connection.Id, connection.Revision, false, "offline"));
+
+        Assert.ThrowsException<InvalidOperationException>(() => model.ValidateSpecialistPlan("channel-plan"));
+    }
 
     [TestMethod]
     public void SettingsPanelUsesTheConnectionRevisionCapturedWhenTheFormOpened() => InSta(() =>
@@ -431,6 +574,45 @@ public sealed class MarketplaceShopWorkspaceTests
             {
                 Content = new StringContent("{\"shop_id\":202,\"user_id\":88,\"shop_name\":\"Shop\",\"currency_code\":\"USD\"}", Encoding.UTF8, "application/json")
             });
+    }
+
+    sealed class CountingTrendyolHandler : HttpMessageHandler
+    {
+        public int Writes;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            if (request.Method != HttpMethod.Get) Interlocked.Increment(ref Writes);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"batchRequestId\":\"batch\"}", Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    sealed class CountingEtsyHandler : HttpMessageHandler
+    {
+        public int Writes;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (request.Method != HttpMethod.Get)
+            {
+                Interlocked.Increment(ref Writes);
+                return Json(path.EndsWith("inventory", StringComparison.Ordinal) ? Inventory() : "{\"listing_id\":456}");
+            }
+            if (path.EndsWith("/shops/123", StringComparison.Ordinal))
+                return Json("{\"shop_id\":123,\"user_id\":88,\"shop_name\":\"Shop\",\"currency_code\":\"USD\"}");
+            if (path.EndsWith("/listings/456", StringComparison.Ordinal))
+                return Json("{\"listing_id\":456,\"shop_id\":123,\"title\":\"Item\",\"description\":\"Description\",\"state\":\"active\",\"quantity\":3,\"last_modified_timestamp\":1,\"price\":{\"amount\":1000,\"divisor\":100,\"currency_code\":\"USD\"},\"skus\":[\"E-ONLY\"]}");
+            if (path.EndsWith("/inventory", StringComparison.Ordinal)) return Json(Inventory());
+            throw new InvalidOperationException("Unexpected route: " + path);
+        }
+
+        static string Inventory() => "{\"products\":[{\"product_id\":11,\"sku\":\"E-ONLY\",\"property_values\":[],\"offerings\":[{\"offering_id\":22,\"price\":{\"amount\":1000,\"divisor\":100,\"currency_code\":\"USD\"},\"quantity\":3,\"is_enabled\":true}]}],\"price_on_property\":[],\"quantity_on_property\":[],\"sku_on_property\":[],\"readiness_state_on_property\":[]}";
+        static Task<HttpResponseMessage> Json(string body) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        });
     }
 
     static void WaitFor(Task? task)

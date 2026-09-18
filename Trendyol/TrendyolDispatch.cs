@@ -13,6 +13,7 @@ public sealed partial class TrendyolWorkspaceStore
     public TrendyolPlan Claim(string id,TrendyolSettings account,bool explicitlyApproved)
     {
         if(!explicitlyApproved)throw new InvalidOperationException("Önizlemenin açıkça onaylanması gerekli.");
+        MarketplaceShopProductsModel.ValidateAssociatedSpecialistPlan(id,directory);
         TrendyolConnection.Validate(account);using var c=Open();using var tx=c.BeginTransaction();
         using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="SELECT Json FROM TrendyolPlans WHERE Id=$id AND SellerId=$seller";cmd.Parameters.AddWithValue("$id",id);cmd.Parameters.AddWithValue("$seller",account.SupplierId);
         var plan=JsonSerializer.Deserialize<TrendyolPlan>(cmd.ExecuteScalar() as string??throw new InvalidOperationException("Önizleme bu mağazada bulunamadı."))!;
@@ -41,10 +42,11 @@ public sealed partial class TrendyolWorkspaceStore
         var receipt=new TrendyolReceipt(id,plan.SellerId,DateTime.UtcNow,plan.Operation.ToString(),"Sonuç bekleniyor","","İstek hazırlanıyor; tekrar göndermeyin.");
         using var save=c.CreateCommand();save.Transaction=tx;save.CommandText="INSERT INTO TrendyolReceipts VALUES($id,$seller,$hash,$time,$json)";save.Parameters.AddWithValue("$id",id);save.Parameters.AddWithValue("$seller",plan.SellerId);save.Parameters.AddWithValue("$hash",hash);save.Parameters.AddWithValue("$time",receipt.CreatedUtc.ToString("O"));save.Parameters.AddWithValue("$json",JsonSerializer.Serialize(receipt));save.ExecuteNonQuery();tx.Commit();return plan;
     }
-    public async Task<TrendyolReceipt> SendAsync(string planId,TrendyolSettings account,bool approved,TrendyolApiClient client,CancellationToken cancellationToken=default)
+    public async Task<TrendyolReceipt> SendAsync(string planId,TrendyolSettings account,bool approved,TrendyolApiClient client,CancellationToken cancellationToken=default,Action? beforeClaim=null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if(client.AccountFingerprint!=AccountFingerprint(account))throw new InvalidOperationException("API istemcisi farklı hesaba ait; gönderilmedi.");
+        beforeClaim?.Invoke();
         var plan=Claim(planId,account,approved);
         try
         {
@@ -53,6 +55,7 @@ public sealed partial class TrendyolWorkspaceStore
             return UpdateReceipt(planId,account.SupplierId,"Kuyrukta",batch,"İstek kabul edildi; ürünün yayımlandığı anlamına gelmez. Sonucu sorgulayın.");
         }
         catch { UpdateReceipt(planId,account.SupplierId,"Belirsiz","","Gönderimin sonucu doğrulanamadı. Mağazada kontrol etmeden tekrar göndermeyin.");throw new InvalidOperationException("Gönderim sonucu belirsiz. Ayrıntı için İşlem geçmişi sekmesini açın."); }
+        finally { MarketplaceShopProductsModel.ClearAssociatedSpecialistPlan(planId,directory); }
     }
     public TrendyolReceipt UpdateBatch(string planId,string seller,JsonElement response)
     {

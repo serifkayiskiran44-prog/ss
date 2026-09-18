@@ -7,11 +7,18 @@ namespace TrMarketplaceHubDesktop.Trendyol;
 
 public sealed partial class TrendyolWorkspaceStore
 {
-    public TrendyolPlan Preview(TrendyolSettings account, IEnumerable<string> productIds, TrendyolOperation operation)
+    public TrendyolPlan Preview(TrendyolSettings account, IEnumerable<string> productIds, TrendyolOperation operation, string? connectionId = null)
     {
         TrendyolConnection.Validate(account);
         var ids=productIds.Distinct().ToArray();
         if(ids.Length is <1 or >1000 || !Enum.IsDefined(operation)) throw new InvalidOperationException("Önizleme için 1–1000 ürün seçin.");
+        if(connectionId is not null)
+        {
+            var connections=new MarketplaceConnectionStore(directory);var scoped=connections.Get(connectionId)??throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+            if(scoped.Channel!="trendyol"||scoped.ShopId!=account.SupplierId||!MarketplaceOperationalAccounts.IsEligible(scoped,connections))
+                throw new InvalidOperationException("Hesap kapsamlı Trendyol bağlantısı önizleme hesabıyla eşleşmiyor.");
+        }
+        var accountBindings=connectionId is null?null:new ProductChannelBindingStore(directory);
         using var c=Open();using var tx=c.BeginTransaction();var state=Load(c,tx,account.SupplierId);
         var rows=new List<TrendyolPreviewRow>();
         foreach(var id in ids)
@@ -21,22 +28,29 @@ public sealed partial class TrendyolWorkspaceStore
             var p=JsonSerializer.Deserialize<CatalogProduct>(json) ?? throw new InvalidOperationException("Ürün okunamadı.");
             if(p.Id!=id) throw new InvalidOperationException("Ürün kimliği tutarsız.");
             var profile=state.Profiles.SingleOrDefault(x=>x.ProductId==id) ?? new(){ProductId=id};
+            var accountBinding=connectionId is null?null:accountBindings!.Get(id,connectionId);
+            var integrationCode=profile.IntegrationCode.Length>0?profile.IntegrationCode:accountBinding?.RemoteBarcode??"";
+            var listingBarcode=profile.ListingBarcode.Length>0?profile.ListingBarcode:accountBinding?.RemoteBarcode??"";
             var barcode=operation==TrendyolOperation.Create
-                ? (profile.ListingBarcode.Length>0?profile.ListingBarcode:p.Barcode)
-                : profile.IntegrationCode;
+                ? (listingBarcode.Length>0?listingBarcode:p.Barcode)
+                : integrationCode;
             try
             {
                 Fresh(state.ProductsUpdatedUtc,TimeSpan.FromHours(24),"Mağaza ürünlerini yenileyin");
                 if(!p.Active) throw new InvalidOperationException("Yerel ürün pasif.");
-                if(operation!=TrendyolOperation.Create&&profile.ListingBarcode.Length>0&&profile.ListingBarcode!=profile.IntegrationCode)
+                if(operation!=TrendyolOperation.Create&&profile.ListingBarcode.Length>0&&profile.ListingBarcode!=integrationCode)
                     throw new InvalidOperationException("Gönderilecek barkod mevcut mağaza eşleşmesinden farklı. Eski barkoda güncelleme gönderilmez; ürünü barkoduyla yeniden eşleştirin.");
                 if(barcode.Length is <1 or >40 || barcode.Any(ch=>!char.IsLetterOrDigit(ch)&&ch!='.'&&ch!='-'&&ch!='_')) throw new InvalidOperationException("Ürün barkodu gerekli (en fazla 40 karakter, boşluksuz). Barkod girin; stok kodu, GTIN veya eski eşleşme kodu barkod yerine kullanılmaz.");
                 var remote=state.Products.SingleOrDefault(x=>x.Barcode==barcode);
+                if(accountBinding is not null && remote is not null &&
+                    (accountBinding.RemoteId != remote.ContentId.ToString(CultureInfo.InvariantCulture) ||
+                     (accountBinding.RemoteSku.Length>0 && accountBinding.RemoteSku != remote.StockCode)))
+                    throw new InvalidOperationException("Hesap kapsamlı uzak ürün kimliği mağaza önbelleğiyle eşleşmiyor.");
                 if(operation==TrendyolOperation.Create && remote!=null) throw new InvalidOperationException("Bu barkod mağazada var; ekleme yerine güncelleme seçin.");
-                if(operation==TrendyolOperation.UpdateUnapproved && (profile.IntegrationCode.Length==0 || remote is null || remote.Approved)) throw new InvalidOperationException("Önce onaysız mağaza ürünüyle eşleştirin.");
+                if(operation==TrendyolOperation.UpdateUnapproved && (integrationCode.Length==0 || remote is null || remote.Approved)) throw new InvalidOperationException("Önce onaysız mağaza ürünüyle eşleştirin.");
                 if(operation is not (TrendyolOperation.Create or TrendyolOperation.UpdateUnapproved))
                 {
-                    if(profile.IntegrationCode.Length==0 || remote is null)throw new InvalidOperationException("Önce onaylı mağaza ürünüyle eşleştirin.");
+                    if(integrationCode.Length==0 || remote is null)throw new InvalidOperationException("Önce onaylı mağaza ürünüyle eşleştirin.");
                     if(!remote.Approved)throw new InvalidOperationException("Ürün Trendyol'da henüz onaylı değil; mağaza durumunu kontrol edip ürün listesini yenileyin.");
                 }
                 var item=new Dictionary<string,object>{{"barcode",barcode}};
@@ -50,11 +64,13 @@ public sealed partial class TrendyolWorkspaceStore
                     if(sale is null or <=0 || list<sale || decimal.Round(sale.Value,2)!=sale || decimal.Round(list!.Value,2)!=list) throw new InvalidOperationException("KDV dahil TRY satış/liste fiyatı gerekli; liste satıştan düşük olamaz, en fazla 2 ondalık kullanın.");
                     item["salePrice"]=sale.Value;item["listPrice"]=list!.Value;
                 }
-                var template=state.Templates.SingleOrDefault(t=>t.Id==profile.DeliveryTemplateId);
+                var templateId=profile.DeliveryTemplateId.Length>0?profile.DeliveryTemplateId:accountBinding?.TemplateId??"";
+                var template=state.Templates.SingleOrDefault(t=>t.Id==templateId);
                 if(operation is TrendyolOperation.Create or TrendyolOperation.UpdateUnapproved)
                 {
                     Fresh(state.DictionaryUpdatedUtc,TimeSpan.FromDays(7),"Kategori/marka listesini yenileyin");
-                    var category=profile.CategoryId ?? ResolveMapping(c,tx,state,TaxonomyKind.Category,p.Category);
+                    var bindingCategory=long.TryParse(accountBinding?.CategoryId,NumberStyles.None,CultureInfo.InvariantCulture,out var parsedCategory)?parsedCategory:(long?)null;
+                    var category=profile.CategoryId ?? bindingCategory ?? ResolveMapping(c,tx,state,TaxonomyKind.Category,p.Category);
                     var brand=profile.BrandId ?? ResolveMapping(c,tx,state,TaxonomyKind.Brand,p.Brand);
                     if(!state.Categories.Any(x=>x.Id==category&&x.IsLeaf)) throw new InvalidOperationException("Trendyol'un en alt kategorisini eşleştirin.");
                     if(!state.Brands.Any(x=>x.Id==brand)) throw new InvalidOperationException("Trendyol markasını eşleştirin.");

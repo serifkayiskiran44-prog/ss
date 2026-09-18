@@ -25,8 +25,7 @@ public sealed partial class EtsyWorkspacePanel
             MarketplaceShopBulkOperation.ContentPreview=>EtsyOperation.Content,
             MarketplaceShopBulkOperation.Taxonomy or MarketplaceShopBulkOperation.Properties or MarketplaceShopBulkOperation.Shipping or MarketplaceShopBulkOperation.Readiness=>EtsyOperation.Content,
             _=>throw new InvalidOperationException("Bu Etsy işlemi uzman önizlemeye bağlanmadı.")};
-        AccountSpecialistPreview=request;
-        AccountSpecialistPreviewTask=Run(()=>Preview(target,request.Rows.Select(row=>row.ProductId).ToArray(),false));
+        AccountSpecialistPreviewTask=Run(()=>Preview(target,request.Rows.Select(row=>row.ProductId).ToArray(),false,request));
     }
     UIElement BuildControl()
     {
@@ -73,12 +72,13 @@ public sealed partial class EtsyWorkspacePanel
         var table=Table("EtsyMatchPreview");Column(table,"SKU","Sku",120);Column(table,"Ürün","Title",270);Column(table,"İlan ID","ListingId",110);Column(table,"Durum","Status",100);Column(table,"Açıklama","Detail",320);table.ItemsSource=rows;
         var window=Dialog("SKU eşleştirme önizlemesi",1000,550);var dock=new DockPanel();var apply=ActionButton($"{rows.Count(r=>r.CanMatch)} kesin eşleşmeyi kaydet",()=>{service.ApplyMatches(state,rows.Where(r=>r.CanMatch).ToArray());LoadState();ClearPreview();window.Close();});apply.IsEnabled=rows.Any(r=>r.CanMatch);DockPanel.SetDock(apply,Dock.Bottom);dock.Children.Add(apply);dock.Children.Add(table);window.Content=dock;window.ShowDialog();
     }
-    async Task Preview(EtsyOperation operation,IReadOnlyList<string>? exactProductIds=null,bool showPreview=true)
+    async Task Preview(EtsyOperation operation,IReadOnlyList<string>? exactProductIds=null,bool showPreview=true,MarketplaceShopSpecialistPreview? specialist=null)
     {
         var ids=exactProductIds is null?PreviewProductIds(operation):Array.AsReadOnly(exactProductIds.ToArray());
         ClearPreview();var c=await Authorized();
         summary.Text="Seçili ürünler ve Etsy mağazası karşılaştırılıyor…";
-        plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token);
+        plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token,specialist?.ConnectionId);
+        if(specialist is not null){accountSpecialistModel=new MarketplaceShopProductsModel(specialist.ConnectionId,directory);accountSpecialistModel.AssociateSpecialistPlan(specialist,plan.Id);accountSpecialistPlanId=plan.Id;AccountSpecialistPreview=specialist;}
         if(operation==EtsyOperation.CreateDraft&&creationHandoffRequestId.Length>0)CompleteCreationHandoff(plan);
         send.IsEnabled=true;summary.Text=$"{plan.Rows.Count} satır · {plan.Rows.Count(r=>r.CanSend)} gönderilebilir · {plan.Rows.Count(r=>!r.CanSend)} kontrol gerekli";if(showPreview)ShowPreview(plan);
     }
@@ -93,7 +93,7 @@ public sealed partial class EtsyWorkspacePanel
         {
             if(MessageBox.Show(window,$"{state.ShopName} mağazasında {preview.Rows.Count(r=>r.CanSend)} ürüne ‘{OperationLabel(preview.Operation)}’ işlemi uygulanacak. Onaylıyor musunuz?","Etsy gönderim onayı",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
             approve.IsEnabled=false;
-            try{var c=await Authorized();var receipts=await new EtsyWorkspaceService(directory,http).SendAsync(c,preview.Id,true,lifetime.Token);table.ItemsSource=null;LoadState();ClearPreview();summary.Text=string.Join(" · ",receipts.GroupBy(r=>r.Status).Select(g=>$"{g.Count()} {g.Key}"));window.Close();sections.SelectedIndex=2;}
+            try{var c=await Authorized();var receipts=await new EtsyWorkspaceService(directory,http).SendAsync(c,preview.Id,true,lifetime.Token,beforeClaim:accountSpecialistPlanId==preview.Id?()=>accountSpecialistModel!.ValidateSpecialistPlan(preview.Id):null);table.ItemsSource=null;LoadState();ClearPreview();summary.Text=string.Join(" · ",receipts.GroupBy(r=>r.Status).Select(g=>$"{g.Count()} {g.Key}"));window.Close();sections.SelectedIndex=2;}
             catch(Exception ex){ClearPreview();try{LoadState();}catch{summary.Text="İşlem geçmişi okunamadı; uygulamayı yenileyin.";}MessageBox.Show(window,Safe(ex),"Etsy sonucu",MessageBoxButton.OK,MessageBoxImage.Warning);window.Close();}
         };
         window.ShowDialog();

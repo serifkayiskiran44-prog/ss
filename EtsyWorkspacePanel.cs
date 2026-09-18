@@ -33,6 +33,8 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     EtsyCredentials? credentials;
     EtsyWorkspaceState state = new();
     EtsyOperationPlan? plan;
+    MarketplaceShopProductsModel? accountSpecialistModel;
+    string accountSpecialistPlanId = "";
     string creationHandoffRequestId = "";
     int page;
     bool busy;
@@ -105,7 +107,12 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         history.ItemsSource=store.Receipts(state.ShopId); RefreshProducts();
     }
     void SaveState() { if(string.IsNullOrEmpty(state.ShopId))throw new InvalidOperationException("Önce Etsy mağazasını doğrulayın.");store.Save(state);state=store.Load(state.ShopId);ClearPreview();ReloadChoices();RefreshProducts(); }
-    void ClearPreview() { plan=null;send.IsEnabled=false; }
+    void ClearPreview() { ClearAccountSpecialistAssociation();plan=null;send.IsEnabled=false; }
+    void ClearAccountSpecialistAssociation()
+    {
+        if(accountSpecialistPlanId.Length>0)accountSpecialistModel?.ClearSpecialistPlanAssociation(accountSpecialistPlanId);
+        accountSpecialistPlanId="";accountSpecialistModel=null;AccountSpecialistPreview=null;
+    }
     IReadOnlyList<string> SelectedIds() => products.SelectedItems.Cast<ProductRow>().Select(r=>r.Id).ToArray();
     IReadOnlyList<string> RequireSelection() { var ids=SelectedIds();if(ids.Count==0)throw new InvalidOperationException("Önce ürün listesinden ürün seçin.");return ids; }
     void RefreshProducts()

@@ -33,6 +33,8 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
     readonly Button creationHandoffButton=new(){Name="TrendyolCreationHandoffButton",Content="Merkezden gelen yeni ilanlar",IsEnabled=false,Margin=new(3),Padding=new(9,5,9,5)};
     TrendyolWorkspaceState state=new();
     TrendyolPlan? plan;
+    MarketplaceShopProductsModel? accountSpecialistModel;
+    string accountSpecialistPlanId="";
     CancellationTokenSource? cancellation;
     bool loaded;
     public string? ConnectionId => scopedConnection?.Id;
@@ -68,7 +70,10 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
         send.Click+=async(_,_)=>await Run(async()=>{
             var current=plan??throw new InvalidOperationException("Önce önizleyin.");
             if(MessageBox.Show(Window.GetWindow(this),$"Satıcı: {current.SellerId}\nİşlem: {ModeLabel(current.Operation)}\n{current.Rows.Count(r=>r.ItemJson!=null)} ürün Trendyol'a gönderilecek.\nEkrandaki önizlemeyi onaylıyor musunuz?","Trendyol gönderim onayı",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
-            var account=Account();using var client=new TrendyolApiClient(account);var receipt=await store.SendAsync(current.Id,account,true,client,Token);InvalidatePreview();ReloadHistory();status.Text=receipt.Detail;tabs.SelectedIndex=3;
+            var account=Account();using var client=new TrendyolApiClient(account);TrendyolReceipt receipt;
+            try{receipt=await store.SendAsync(current.Id,account,true,client,Token,beforeClaim:accountSpecialistPlanId==current.Id?()=>accountSpecialistModel!.ValidateSpecialistPlan(current.Id):null);}
+            finally{InvalidatePreview();}
+            ReloadHistory();status.Text=receipt.Detail;tabs.SelectedIndex=3;
         });
         try{var saved=LoadAccount();seller.Text=scopedConnection?.ShopId??saved?.SupplierId??"";seller.IsReadOnly=scopedConnection is not null;Reload();}catch(Exception ex){status.Text=Safe(ex);}
         loaded=true;Unloaded+=(_,_)=>cancellation?.Cancel();
@@ -103,7 +108,8 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
         status.Text=$"{request.ProductIds.Count} ürün bu hesapta yeni ürün oluşturma önizlemesine alındı. Otomatik gönderim yapılmadı.";
     }
     void Persist(){try{store.Save(state);}catch{state=store.Load(Account().SupplierId);throw;}Reload();}
-    void InvalidatePreview(){plan=null;send.IsEnabled=false;preview.ItemsSource=null;payload.Text="";if(productPreviewView.Visibility==Visibility.Visible)ShowProductView("list");}
+    void InvalidatePreview(){ClearAccountSpecialistAssociation();plan=null;send.IsEnabled=false;preview.ItemsSource=null;payload.Text="";if(productPreviewView.Visibility==Visibility.Visible)ShowProductView("list");}
+    void ClearAccountSpecialistAssociation(){if(accountSpecialistPlanId.Length>0)accountSpecialistModel?.ClearSpecialistPlanAssociation(accountSpecialistPlanId);accountSpecialistPlanId="";accountSpecialistModel=null;AccountSpecialistPreview=null;}
     async Task Run(Func<Task> action)
     {
         if(cancellation!=null)return;cancellation=new();tabs.IsEnabled=false;status.Text="İşlem sürüyor…";

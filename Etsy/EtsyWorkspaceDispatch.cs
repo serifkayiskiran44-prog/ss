@@ -7,7 +7,7 @@ namespace TrMarketplaceHubDesktop.Etsy;
 
 public sealed partial class EtsyWorkspaceService
 {
-    public async Task<IReadOnlyList<EtsyOperationReceipt>> SendAsync(EtsyCredentials credentials,string planId,bool approved,CancellationToken cancellationToken=default)
+    public async Task<IReadOnlyList<EtsyOperationReceipt>> SendAsync(EtsyCredentials credentials,string planId,bool approved,CancellationToken cancellationToken=default,Action? beforeClaim=null)
     {
         if(!approved)throw new InvalidOperationException("Etsy gönderimi için bu önizlemeyi açıkça onaylayın.");
         Credentials(credentials); var plan=store.Plan(planId);
@@ -30,7 +30,7 @@ public sealed partial class EtsyWorkspaceService
                 if(InventoryHash(inventory)!=row.InventoryFingerprint)throw new InvalidOperationException("Etsy envanteri önizlemeden sonra değişti; yeni önizleme alın.");
             }
         }
-        cancellationToken.ThrowIfCancellationRequested(); store.Claim(plan);
+        cancellationToken.ThrowIfCancellationRequested(); beforeClaim?.Invoke(); var specialist=MarketplaceShopProductsModel.ValidateAssociatedSpecialistPlan(plan.Id,directory); store.Claim(plan);
         var receipts=new List<EtsyOperationReceipt>();
         foreach(var row in plan.Rows.Where(r=>r.CanSend))
         {
@@ -75,6 +75,7 @@ public sealed partial class EtsyWorkspaceService
             { receipt.Status="Unknown"; receipt.Detail="Gönderim sonucu kesinleşmedi. Etsy mağazasında ilanı kontrol edin; otomatik veya aynı ürün için yeni gönderim engellendi."; }
             store.Complete(receipt);
         }
+        if(specialist)MarketplaceShopProductsModel.ClearAssociatedSpecialistPlan(plan.Id,directory);
         return receipts;
     }
     static string throwIfPlaceholder(string path)=>path.Contains("{listing_id}",StringComparison.Ordinal)?throw new InvalidOperationException("Taslak kimliği eksik."):"";

@@ -33,13 +33,15 @@ public sealed record MarketplaceShopSettingsPatch(
 public sealed class MarketplaceShopSettingsStore
 {
     readonly MarketplaceConnectionStore connections;
+    readonly MarketplaceAdapterRegistry registry;
     readonly string connectionString;
 
-    public MarketplaceShopSettingsStore(string? directory = null)
+    public MarketplaceShopSettingsStore(string? directory = null, MarketplaceAdapterRegistry? registry = null)
     {
         directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
         Directory.CreateDirectory(directory);
         connections = new(directory);
+        this.registry = registry ?? MarketplaceAdapterRegistry.Default;
         connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "catalog.db"), DefaultTimeout = 15 }.ToString();
         using var database = Open(); using var command = database.CreateCommand();
         command.CommandText = "CREATE TABLE IF NOT EXISTS MarketplaceShopSettings(ConnectionId TEXT PRIMARY KEY,Revision INTEGER NOT NULL,Json TEXT NOT NULL);";
@@ -94,6 +96,7 @@ public sealed class MarketplaceShopSettingsStore
         }
         if (!MarketplaceOperationalAccounts.IsEligible(current, connections))
             throw new InvalidOperationException("Operasyonel olmayan mağaza ayarları değiştirilemez.");
+        ValidateCapabilities(proposed, registry.Get(current.Channel).Capabilities);
         long actualRevision;
         using (var revision = database.CreateCommand())
         {
@@ -171,6 +174,32 @@ public sealed class MarketplaceShopSettingsStore
             if (value.Length > 256 || value.Any(char.IsControl)) throw new InvalidOperationException("Mağaza kural değeri geçersiz.");
     }
 
+    static void ValidateCapabilities(MarketplaceShopSettings state, MarketplaceCapabilities capabilities)
+    {
+        var product = state.ProductRules;
+        if (product.ManageContent && !capabilities.Supports(MarketplaceOperation.ContentWrite) ||
+            product.ManagePrice && !capabilities.Supports(MarketplaceOperation.PriceWrite) ||
+            product.ManageStock && !capabilities.Supports(MarketplaceOperation.StockWrite) ||
+            product.DefaultCategoryId.Length > 0 && !SupportsCategory(capabilities) ||
+            product.DefaultBrandId.Length > 0 && !capabilities.Supports(MarketplaceOperation.BrandWrite) ||
+            product.DefaultTemplateId.Length > 0 && !SupportsTemplate(capabilities) ||
+            product.DefaultShippingId.Length > 0 && !SupportsShipping(capabilities) ||
+            product.ContentSource.Length > 0 && !capabilities.Supports(MarketplaceOperation.ContentWrite))
+            throw new InvalidOperationException("Adapter bu ürün kuralını desteklemiyor.");
+        if ((state.OrderRules.Enabled || state.OrderRules.AutoAcknowledge || state.Sync.OrdersEnabled) &&
+            !capabilities.Supports(MarketplaceOperation.OrdersRead))
+            throw new InvalidOperationException("Adapter sipariş kurallarını desteklemiyor.");
+        if (state.Sync.ProductsEnabled && !capabilities.Supports(MarketplaceOperation.ProductsRead))
+            throw new InvalidOperationException("Adapter ürün senkronunu desteklemiyor.");
+    }
+
+    internal static bool SupportsCategory(MarketplaceCapabilities capabilities) =>
+        capabilities.Supports(MarketplaceOperation.CategoryWrite) || capabilities.Supports(MarketplaceOperation.TaxonomyWrite);
+    internal static bool SupportsTemplate(MarketplaceCapabilities capabilities) =>
+        capabilities.Supports(MarketplaceOperation.DeliveryWrite) || capabilities.Supports(MarketplaceOperation.PropertiesWrite) || capabilities.Supports(MarketplaceOperation.ListingCreate);
+    internal static bool SupportsShipping(MarketplaceCapabilities capabilities) =>
+        capabilities.Supports(MarketplaceOperation.ShippingWrite) || capabilities.Supports(MarketplaceOperation.DeliveryWrite);
+
     static MarketplaceShopSettings Default(string connectionId) => new(connectionId, true, new(), new(), new(), 0, DateTime.MinValue);
     static string PreserveBlank(string? proposed, string current) => string.IsNullOrWhiteSpace(proposed) ? current : proposed.Trim();
     SqliteConnection Open() { var database = new SqliteConnection(connectionString); database.Open(); return database; }
@@ -186,7 +215,9 @@ public sealed class MarketplaceShopSettingsPanel : UserControl
     readonly CheckBox content = new() { Content = "İçeriği varsayılan olarak yönet" };
     readonly CheckBox price = new() { Content = "Fiyatı varsayılan olarak yönet" };
     readonly CheckBox stock = new() { Content = "Stoku varsayılan olarak yönet" };
-    readonly TextBox category = new(), brand = new(), template = new(), shipping = new(), source = new();
+    readonly TextBox category = new() { Name = "MarketplaceDefaultCategory" }, brand = new() { Name = "MarketplaceDefaultBrand" },
+        template = new() { Name = "MarketplaceDefaultTemplate" }, shipping = new() { Name = "MarketplaceDefaultShipping" },
+        source = new() { Name = "MarketplaceContentSource" };
     readonly CheckBox orders = new() { Content = "Sipariş kuralları etkin" }, acknowledge = new() { Content = "Siparişi otomatik kabul et" };
     readonly TextBox location = new();
     readonly CheckBox syncProducts = new() { Content = "Ürün okumayı zamanla" }, syncOrders = new() { Content = "Sipariş okumayı zamanla" };
@@ -194,22 +225,24 @@ public sealed class MarketplaceShopSettingsPanel : UserControl
     readonly TextBlock status = new() { Margin = new Thickness(4), TextWrapping = TextWrapping.Wrap };
     MarketplaceShopSettings state;
     MarketplaceConnection connection;
+    readonly MarketplaceCapabilities capabilities;
 
-    public MarketplaceShopSettingsPanel(string connectionId, string? directory = null)
+    public MarketplaceShopSettingsPanel(string connectionId, string? directory = null, MarketplaceAdapterRegistry? registry = null)
     {
-        this.connectionId = connectionId; connections = new(directory); store = new(directory);
+        this.connectionId = connectionId; connections = new(directory); registry ??= MarketplaceAdapterRegistry.Default; store = new(directory, registry);
         connection = connections.Get(connectionId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        capabilities = registry.Get(connection.Channel).Capabilities;
         state = store.Load(connectionId);
         var root = new DockPanel { Margin = new Thickness(6) };
         sections.Items.Add(new TabItem { Header = "Active", Content = Section(active) });
         sections.Items.Add(new TabItem { Header = "Connection", Content = Section(new TextBlock { Text = $"{connection.DisplayName}\n{connection.Channel} / {connection.ShopId}\nDurum: {connection.Status}", TextWrapping = TextWrapping.Wrap }) });
         sections.Items.Add(new TabItem { Header = "Product rules", Content = ProductSection() });
-        sections.Items.Add(new TabItem { Header = "Order rules", Content = OrderSection() });
+        sections.Items.Add(new TabItem { Header = "Order rules", Content = OrderSection(), IsEnabled = capabilities.Supports(MarketplaceOperation.OrdersRead) });
         sections.Items.Add(new TabItem { Header = "Sync", Content = SyncSection() });
         root.Children.Add(sections);
         var footer = new WrapPanel(); var save = new Button { Name = "MarketplaceSaveShopSettings", Content = "Hesap ayarlarını kaydet", Margin = new Thickness(4), Padding = new Thickness(10, 5, 10, 5) };
         save.Click += (_, _) => Save(); footer.Children.Add(save); footer.Children.Add(status); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
-        Content = root; Fill();
+        Content = root; ApplyCapabilities(); Fill();
     }
 
     void Save()
@@ -245,6 +278,20 @@ public sealed class MarketplaceShopSettingsPanel : UserControl
     }
     UIElement OrderSection() { var panel = new StackPanel(); panel.Children.Add(orders); panel.Children.Add(acknowledge); Field(panel, "Stok konumu", location); return Section(panel); }
     UIElement SyncSection() { var panel = new StackPanel(); panel.Children.Add(syncProducts); panel.Children.Add(syncOrders); Field(panel, "Aralık (dakika)", interval); return Section(panel); }
+    void ApplyCapabilities()
+    {
+        content.IsEnabled = source.IsEnabled = capabilities.Supports(MarketplaceOperation.ContentWrite);
+        price.IsEnabled = capabilities.Supports(MarketplaceOperation.PriceWrite);
+        stock.IsEnabled = capabilities.Supports(MarketplaceOperation.StockWrite);
+        category.IsEnabled = MarketplaceShopSettingsStore.SupportsCategory(capabilities);
+        brand.IsEnabled = capabilities.Supports(MarketplaceOperation.BrandWrite);
+        template.IsEnabled = MarketplaceShopSettingsStore.SupportsTemplate(capabilities);
+        shipping.IsEnabled = MarketplaceShopSettingsStore.SupportsShipping(capabilities);
+        orders.IsEnabled = acknowledge.IsEnabled = location.IsEnabled = capabilities.Supports(MarketplaceOperation.OrdersRead);
+        syncProducts.IsEnabled = capabilities.Supports(MarketplaceOperation.ProductsRead);
+        syncOrders.IsEnabled = capabilities.Supports(MarketplaceOperation.OrdersRead);
+        interval.IsEnabled = syncProducts.IsEnabled || syncOrders.IsEnabled;
+    }
     static UIElement Section(UIElement child) => new ScrollViewer { Content = new Border { Padding = new Thickness(12), Child = child } };
     static void Field(Panel panel, string label, TextBox input) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 7, 0, 2) }); input.MinWidth = 220; panel.Children.Add(input); }
 }

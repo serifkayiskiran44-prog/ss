@@ -39,7 +39,9 @@ public sealed record MarketplaceShopSelectionSnapshot(
     string Id, string ConnectionId, long ConnectionRevision, DateTime CreatedUtc,
     IReadOnlyList<string> ProductIds, IReadOnlyDictionary<string,long> BindingVersions);
 
-public sealed record MarketplaceShopSpecialistPreviewRow(string ProductId, long BindingVersion);
+public sealed record MarketplaceShopSpecialistPreviewRow(
+    string ProductId, long BindingVersion, string RemoteId, string RemoteSku, string RemoteBarcode,
+    bool ManageContent, bool ManagePrice, bool ManageStock, string CategoryId, string TemplateId, string State);
 public sealed record MarketplaceShopSpecialistPreview(
     string Id, string ConnectionId, string Channel, string ShopId, long ConnectionRevision,
     MarketplaceShopBulkOperation Operation, DateTime CreatedUtc,
@@ -185,7 +187,11 @@ public sealed class MarketplaceShopProductsModel
         {
             if (!selection.BindingVersions.TryGetValue(id, out var capturedVersion) || currentBindings.GetValueOrDefault(id) != capturedVersion)
                 throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; seçimi yenileyin.");
-            return new MarketplaceShopSpecialistPreviewRow(id, capturedVersion);
+            var binding = bindings.Get(id, connection.Id);
+            if ((binding?.Version ?? 0) != capturedVersion) throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; seçimi yenileyin.");
+            if (binding is null) return new MarketplaceShopSpecialistPreviewRow(id, 0, "", "", "", false, false, false, "", "", "");
+            return new MarketplaceShopSpecialistPreviewRow(id, binding.Version, binding.RemoteId, binding.RemoteSku, binding.RemoteBarcode,
+                binding.ManageContent, binding.ManagePrice, binding.ManageStock, binding.CategoryId, binding.TemplateId, binding.State);
         }).ToArray();
         var preview = new MarketplaceShopSpecialistPreview(Guid.NewGuid().ToString("N"), connection.Id, connection.Channel,
             connection.ShopId, connection.Revision, operation, DateTime.UtcNow, rows);
@@ -200,6 +206,83 @@ public sealed class MarketplaceShopProductsModel
     {
         ArgumentNullException.ThrowIfNull(supplied);
         using var database = Open(); using var transaction = database.BeginTransaction(deferred: false);
+        ValidateSpecialistPreview(database, transaction, supplied);
+        transaction.Commit();
+    }
+
+    public void AssociateSpecialistPlan(MarketplaceShopSpecialistPreview supplied, string planId)
+    {
+        ArgumentNullException.ThrowIfNull(supplied);
+        if (string.IsNullOrWhiteSpace(planId) || planId.Length > 512 || planId.Any(char.IsControl)) throw new ArgumentException("Kanal plan kimliği geçersiz.", nameof(planId));
+        using var database = Open(); using var transaction = database.BeginTransaction(deferred: false);
+        ValidateSpecialistPreview(database, transaction, supplied);
+        using var command = database.CreateCommand(); command.Transaction = transaction;
+        command.CommandText = "INSERT INTO MarketplaceShopSpecialistPlanLinks(PlanId,PreviewId,ConnectionId,Cleared) VALUES($plan,$preview,$connection,0)";
+        command.Parameters.AddWithValue("$plan", planId); command.Parameters.AddWithValue("$preview", supplied.Id); command.Parameters.AddWithValue("$connection", connection.Id);
+        command.ExecuteNonQuery(); transaction.Commit();
+    }
+
+    public MarketplaceShopSpecialistPreview ValidateSpecialistPlan(string planId)
+    {
+        if (string.IsNullOrWhiteSpace(planId)) throw new ArgumentException("Kanal plan kimliği gerekli.", nameof(planId));
+        using var database = Open(); using var transaction = database.BeginTransaction(deferred: false);
+        using var read = database.CreateCommand(); read.Transaction = transaction;
+        read.CommandText = "SELECT p.Json FROM MarketplaceShopSpecialistPlanLinks l JOIN MarketplaceShopSpecialistPreviews p ON p.Id=l.PreviewId AND p.ConnectionId=l.ConnectionId WHERE l.PlanId=$plan AND l.ConnectionId=$connection AND l.Cleared=0";
+        read.Parameters.AddWithValue("$plan", planId); read.Parameters.AddWithValue("$connection", connection.Id);
+        var supplied = JsonSerializer.Deserialize<MarketplaceShopSpecialistPreview>(read.ExecuteScalar() as string
+            ?? throw new InvalidOperationException("Kanal planı hesap kapsamlı uzman önizlemesine bağlı değil."))
+            ?? throw new InvalidDataException("Uzman önizleme bağlantısı okunamadı.");
+        ValidateSpecialistPreview(database, transaction, supplied);
+        transaction.Commit(); return supplied;
+    }
+
+    public static bool ValidateAssociatedSpecialistPlan(string planId, string? directory = null)
+    {
+        directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "catalog.db"), DefaultTimeout = 15 }.ToString();
+        using var database = new SqliteConnection(connectionString); database.Open();
+        using (var table = database.CreateCommand())
+        {
+            table.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='MarketplaceShopSpecialistPlanLinks'";
+            if (table.ExecuteScalar() is null) return false;
+        }
+        string connectionId;bool cleared;
+        using (var read = database.CreateCommand())
+        {
+            read.CommandText = "SELECT ConnectionId,Cleared FROM MarketplaceShopSpecialistPlanLinks WHERE PlanId=$plan";
+            read.Parameters.AddWithValue("$plan", planId);
+            using var reader = read.ExecuteReader(); if (!reader.Read()) return false;
+            connectionId=reader.GetString(0);cleared=reader.GetInt32(1)!=0;
+        }
+        if(cleared)throw new InvalidOperationException("Hesap kapsamlı kanal planı artık etkin değil; yeni önizleme alın.");
+        new MarketplaceShopProductsModel(connectionId, directory).ValidateSpecialistPlan(planId);
+        return true;
+    }
+
+    public static void ClearAssociatedSpecialistPlan(string planId, string? directory = null)
+    {
+        directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "catalog.db"), DefaultTimeout = 15 }.ToString();
+        using var database = new SqliteConnection(connectionString); database.Open();
+        using (var table = database.CreateCommand())
+        {
+            table.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='MarketplaceShopSpecialistPlanLinks'";
+            if (table.ExecuteScalar() is null) return;
+        }
+        using var command = database.CreateCommand(); command.CommandText = "UPDATE MarketplaceShopSpecialistPlanLinks SET Cleared=1 WHERE PlanId=$plan AND Cleared=0";
+        command.Parameters.AddWithValue("$plan", planId); command.ExecuteNonQuery();
+    }
+
+    public void ClearSpecialistPlanAssociation(string planId)
+    {
+        if (string.IsNullOrWhiteSpace(planId)) return;
+        using var database = Open(); using var command = database.CreateCommand();
+        command.CommandText = "UPDATE MarketplaceShopSpecialistPlanLinks SET Cleared=1 WHERE PlanId=$plan AND ConnectionId=$connection AND Cleared=0";
+        command.Parameters.AddWithValue("$plan", planId); command.Parameters.AddWithValue("$connection", connection.Id); command.ExecuteNonQuery();
+    }
+
+    void ValidateSpecialistPreview(SqliteConnection database, SqliteTransaction transaction, MarketplaceShopSpecialistPreview supplied)
+    {
         string persistedJson;
         using (var read = database.CreateCommand())
         {
@@ -215,12 +298,20 @@ public sealed class MarketplaceShopProductsModel
         foreach (var row in supplied.Rows)
         {
             using var binding = database.CreateCommand(); binding.Transaction = transaction;
-            binding.CommandText = "SELECT Version FROM ProductChannelBindings WHERE ProductId=$product AND ConnectionId=$connection";
+            binding.CommandText = "SELECT RemoteId,RemoteSku,RemoteBarcode,ManageContent,ManagePrice,ManageStock,CategoryId,TemplateId,State,Version FROM ProductChannelBindings WHERE ProductId=$product AND ConnectionId=$connection";
             binding.Parameters.AddWithValue("$product", row.ProductId); binding.Parameters.AddWithValue("$connection", supplied.ConnectionId);
-            var value = binding.ExecuteScalar(); var currentVersion = value is null ? 0 : Convert.ToInt64(value, CultureInfo.InvariantCulture);
-            if (currentVersion != row.BindingVersion) throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; yeni önizleme alın.");
+            using var reader = binding.ExecuteReader();
+            if (!reader.Read())
+            {
+                if (row.BindingVersion != 0 || row.RemoteId.Length != 0) throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; yeni önizleme alın.");
+                continue;
+            }
+            if (reader.GetInt64(9) != row.BindingVersion || reader.GetString(0) != row.RemoteId || reader.GetString(1) != row.RemoteSku ||
+                reader.GetString(2) != row.RemoteBarcode || (reader.GetInt32(3) != 0) != row.ManageContent ||
+                (reader.GetInt32(4) != 0) != row.ManagePrice || (reader.GetInt32(5) != 0) != row.ManageStock ||
+                reader.GetString(6) != row.CategoryId || reader.GetString(7) != row.TemplateId || reader.GetString(8) != row.State)
+                throw new InvalidOperationException("Ürün-mağaza bağlantısı veya yönetim durumu değişti; yeni önizleme alın.");
         }
-        transaction.Commit();
     }
 
     public MarketplaceShopBulkReceipt Apply(MarketplaceShopBulkPreview supplied, bool explicitlyApproved)
@@ -342,6 +433,8 @@ public sealed class MarketplaceShopProductsModel
         }
         var seededDefault = preview.ConnectionId.Equals(channel + ":default", StringComparison.OrdinalIgnoreCase)
             && shopId.Equals("default", StringComparison.OrdinalIgnoreCase);
+        if (status.Equals("FAILED", StringComparison.OrdinalIgnoreCase) || status.Equals("LIVE_API_BLOCKED", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Mağaza bağlantı testi başarısız; yeni önizleme alın.");
         if (!seededDefault) return;
         var verifiedStatus = lastTestUtc.HasValue && (status.Equals("CONNECTED", StringComparison.OrdinalIgnoreCase)
             || status.Equals("CONNECTED_READ_ONLY", StringComparison.OrdinalIgnoreCase));
@@ -415,6 +508,7 @@ public sealed class MarketplaceShopProductsModel
             CREATE TABLE IF NOT EXISTS MarketplaceShopBulkPreviews(Id TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL,Json TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS MarketplaceShopBulkReceipts(PreviewId TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL,Json TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS MarketplaceShopSpecialistPreviews(Id TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL,Json TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS MarketplaceShopSpecialistPlanLinks(PlanId TEXT PRIMARY KEY,PreviewId TEXT NOT NULL,ConnectionId TEXT NOT NULL,Cleared INTEGER NOT NULL DEFAULT 0 CHECK(Cleared IN (0,1)));
             CREATE TRIGGER IF NOT EXISTS MarketplaceShopBulkPreviews_NoUpdate BEFORE UPDATE ON MarketplaceShopBulkPreviews BEGIN SELECT RAISE(ABORT,'immutable shop bulk preview'); END;
             CREATE TRIGGER IF NOT EXISTS MarketplaceShopBulkPreviews_NoDelete BEFORE DELETE ON MarketplaceShopBulkPreviews BEGIN SELECT RAISE(ABORT,'immutable shop bulk preview'); END;
             CREATE TRIGGER IF NOT EXISTS MarketplaceShopSpecialistPreviews_NoUpdate BEFORE UPDATE ON MarketplaceShopSpecialistPreviews BEGIN SELECT RAISE(ABORT,'immutable shop specialist preview'); END;
