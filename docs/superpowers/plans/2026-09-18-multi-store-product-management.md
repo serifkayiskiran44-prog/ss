@@ -30,6 +30,7 @@
 - Create: `Catalog/ProductSourceBindingStore.cs`
 - Modify: `Catalog/CatalogStore.cs`
 - Modify: `Catalog/XmlCatalog.Definition.cs`
+- Modify: `MainWindow.xaml.cs`
 - Test: `tests/MarketplaceHub.Tests/ProductSourceBindingTests.cs`
 
 **Interfaces:**
@@ -48,7 +49,7 @@ public sealed record ProductSourceBinding(
     string SourceId, bool Enabled, long Version, DateTime UpdatedUtc);
 ```
 
-- [ ] Store rows under primary key `(ProductId, FieldGroup)`, validate XML IDs against `CatalogStore.Sources()`, use compare-and-swap `Version`, and reject deleted/disabled sources during a refresh preview.
+- [ ] Store rows under primary key `(ProductId, FieldGroup)`, validate XML IDs against `CatalogStore.Sources()`, use compare-and-swap `Version`, and reject deleted/disabled sources in both manual and scheduled production refresh paths.
 - [ ] Migrate existing products deterministically: valid recorded XML source becomes the corresponding binding; otherwise use Manual. Do not rewrite `CatalogProduct` values during migration.
 - [ ] Run the focused tests and existing XML import tests; commit `feat: separate product sources from sales channels`.
 
