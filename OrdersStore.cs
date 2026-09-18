@@ -16,7 +16,7 @@ public sealed class OrderRowCorruptException : Exception
     public OrderRowCorruptException(string marketplace,string shopId,string orderId,string reason)
         : base($"Sipariş kaydı bozuk (REVIEW_REQUIRED): {reason}") { Marketplace=marketplace; ShopId=shopId; OrderId=orderId; }
 }
-public sealed class OrdersStore
+public sealed partial class OrdersStore
 {
  public sealed record OrderPage(IReadOnlyList<OrderSnapshot> Items,int Total);
  readonly string connectionString;

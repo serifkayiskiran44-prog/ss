@@ -42,7 +42,13 @@ public class XmlSourceReader(HttpClient client)
 }
 public static class XmlAuthStore
 {
- private static string PathFor(string id,string? directory=null){if(!Guid.TryParse(id,out var key))throw new InvalidOperationException("Kaynak kimliği geçersiz.");return Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"source-auth",key.ToString("N")+".bin");}
+ private static string PathFor(string id,string? directory=null){
+  // Preserve the original built-in source's ID and its product associations.
+  // No arbitrary path text is admitted to the credentials directory.
+  if(id=="petshoptedarik-amazon")id="f79f221462694392953cd22a7639cb19";
+  if(!Guid.TryParse(id,out var key))throw new InvalidOperationException("Kaynak kimliği geçersiz.");
+  return Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"source-auth",key.ToString("N")+".bin");
+ }
  public static XmlAuth Load(string id,string? directory=null){var path=PathFor(id,directory);if(!File.Exists(path))return new();var plain=CredentialStore.Unprotect(File.ReadAllBytes(path));try{return JsonSerializer.Deserialize<XmlAuth>(plain)??new();}finally{System.Security.Cryptography.CryptographicOperations.ZeroMemory(plain);}}
  public static void Save(string id,XmlAuth auth,string? directory=null){var path=PathFor(id,directory);Directory.CreateDirectory(Path.GetDirectoryName(path)!);var plain=JsonSerializer.SerializeToUtf8Bytes(auth);try{var tmp=path+".tmp";File.WriteAllBytes(tmp,CredentialStore.Protect(plain));File.Move(tmp,path,true);}finally{System.Security.Cryptography.CryptographicOperations.ZeroMemory(plain);}}
 }

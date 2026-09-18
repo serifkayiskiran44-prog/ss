@@ -144,7 +144,7 @@ public sealed class ExcelExportTests
             var headers = sheet.Row(1).CellsUsed().Select(c => c.GetString()).ToList();
             var expectedHeaders = CatalogExcel.ExportColumnKeys.Select(key => key switch
             {
-                "Sku" => "SKU", "Barcode" => "Barkod", "Name" => "Ürün", "Brand" => "Marka", "Category" => "Kategori",
+                "Id" => "Ürün ID", "Sku" => "SKU", "Barcode" => "Barkod", "Name" => "Ürün", "Brand" => "Marka", "Category" => "Kategori",
                 "Description" => "Açıklama", "Cost" => "Alış", "Price" => "Satış", "Currency" => "Döviz", "VatRate" => "KDV %",
                 "Stock" => "Stok", "Active" => "Aktif", "Gtin" => "GTIN", "ImageUrls" => "Görseller", "SourceId" => "XML Kaynağı",
                 "SourceKind" => "Veri kaynağı", "PriceSource" => "Fiyat kaynağı", "StockSource" => "Stok kaynağı", "MediaSource" => "Medya kaynağı",

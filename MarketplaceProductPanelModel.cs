@@ -1,6 +1,40 @@
 namespace TrMarketplaceHubDesktop;
 
-public sealed record MarketplaceProductPanelRow(string Channel, string ShopId, string Status, string MappingId, string Capabilities, string Readiness, string LastError);
+public sealed record MarketplaceProductPanelRow(string Channel, string ShopId, string Status, string MappingId, string Capabilities, string Readiness, string LastError)
+{
+    public string Durum => MarketplaceStatusText.ToTurkish(Status);
+    public string Kontrol => MarketplaceStatusText.ToTurkish(Readiness);
+    public string Aciklama => MarketplaceStatusText.Explain(Status, Readiness, MappingId, LastError);
+}
+
+/// <summary>Teknik kodlar kayıtta değişmeden kalır; masaüstü ekranı Türkçe gösterir.</summary>
+public static class MarketplaceStatusText
+{
+    static readonly IReadOnlyDictionary<string, string> Labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["WORKING"] = "Hazırlık tamam", ["MAPPING_REQUIRED"] = "Ürün eşleştirmesi gerekli",
+        ["LIVE_API_BLOCKED"] = "Canlı API henüz açık değil", ["NOT_SUPPORTED"] = "Desteklenmiyor",
+        ["READY_READ_ONLY"] = "Salt okunur hazır", ["CREDENTIAL_TEST_REQUIRED"] = "Bağlantı testi gerekli",
+        ["AUTH_ERROR"] = "Kimlik doğrulama sorunu", ["NETWORK_ERROR"] = "Ağ bağlantısı sorunu",
+        ["TIMEOUT"] = "Bağlantı zaman aşımı", ["PARTIAL"] = "Kısmi hazır",
+        ["MISSING"] = "İlan eşlemesi yok", ["STALE"] = "Eşleme güncel değil",
+        ["ERROR"] = "İşlem hatası", ["PENDING"] = "İşlem bekliyor",
+        ["SYNCED"] = "Eşitlendi", ["DRAFT"] = "Taslak", ["None"] = "İşlem yok",
+        ["CONNECTED"] = "Bağlı", ["CONNECTED_READ_ONLY"] = "Salt okunur bağlı",
+        ["NOT_CONFIGURED"] = "Ayarlar eksik", ["FAILED"] = "Bağlantı başarısız"
+    };
+
+    public static string ToTurkish(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : Labels.TryGetValue(value, out var label) ? label : value;
+
+    public static string Explain(string status, string readiness, string mappingId, string lastError)
+    {
+        if (!string.IsNullOrWhiteSpace(lastError)) return "Son işlem notu: " + lastError;
+        if (status.Equals("LIVE_API_BLOCKED", StringComparison.OrdinalIgnoreCase) || readiness.Equals("LIVE_API_BLOCKED", StringComparison.OrdinalIgnoreCase)) return "Bu kanal için canlı ürün, stok ve fiyat gönderimi açılmadan önce resmi API erişimi doğrulanmalı.";
+        if (readiness.Equals("MAPPING_REQUIRED", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(mappingId)) return "Bu ürünü pazaryeri ilanına bağlamak için ürün / SKU / barkod eşleştirmesi oluşturun.";
+        if (readiness.Equals("CREDENTIAL_TEST_REQUIRED", StringComparison.OrdinalIgnoreCase)) return "Bağlantı ayarlarında erişim anahtarını kaydedip bağlantı testini çalıştırın.";
+        return "Yerel ürün planı hazır. Yayın ve senkronizasyon adımlarını bağlantı ekranından takip edebilirsiniz.";
+    }
+}
 
 /// <summary>Builds marketplace product panels from shared connection, mapping, capability and health stores.</summary>
 public static class MarketplaceProductPanelModel

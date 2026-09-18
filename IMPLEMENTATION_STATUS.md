@@ -1,6 +1,46 @@
 # Uygulama durumu — .NET 8 EXE
 
-Ana program: Windows-Current/TrMarketplaceHubDesktop.exe. Giriş parolası yoktur.
+## Trendyol product workspace — 2026-09-18
+- Implemented the five supplied Entegra workflows using current official Product V2 endpoints: category/brand IDs and manual matching, product matching/profiles, required attributes, create/update previews, delivery templates, buybox suggestions and persistent batch history.
+- User credentials remain DPAPI-encrypted. No API calls run on startup. Outbound mappings are separate from inbound XML/category mappings; empty local barcode is allowed.
+- Immutable seller/revision/catalog-bound previews, explicit send, persistent claims, uncertain-outcome blocking and response identity validation protect every live write.
+- Live read verified 3,868 categories, 1,021 catalog-brand candidates and 14,553 existing barcode records. Whitespace in live labels/stock codes is handled without changing remote identity.
+- Exactly one user-authorized product create (PTD-1367) returned batch SUCCESS. The product was subsequently approved and onSale; category 1295/brand 11303, price 90.55 TRY, quantity 1.
+- Live price-only, stock-only and combined updates on this same barcode all returned SUCCESS. The original 90.55 TRY/quantity 1 and null local price overrides were restored. A final API read verified onSale and these baseline values; no other product was modified.
+- The Entegra-style control grid has collapsible detailed filters/bulk actions, whole-catalog filtering before paging, per-product creation/update messages and separate editor/preview views. Delivery templates retain selected products and edit identity, show readable carrier/address names and preserve missing API references.
+- Published GUI verification: save/refresh the user's Deneme template, assign only PTD-1367, preview/send Delivery and ShippingDetails separately, query both batch results successfully. A final product GET verified the selected same-day delivery option and unchanged baseline inventory/price.
+- 1038 Release tests passed; requested Windows-Excel-Final win-x64 self-contained publish succeeded and EXE launched. Source trace and live test details: docs/TRENDYOL-WORKSPACE.md.
+
+## Category, brand and product-owned media — 2026-09-18
+- Added category/brand navigation, hierarchy and counts, atomic descendant/product rename, per-channel mappings and local content/attribute template previews/Excel export.
+- Template settings do not claim live marketplace publication or remote category download. Orders redesign was removed from scope by the user.
+- Removed Excel field checkboxes; nonempty mappings/cells update, blanks and XML locks preserve values. Expanded dimensions/logistics/expiry/additional descriptions/image slots.
+- ProductImages contains product-owned local copies; deletion queues clean media records and copies, including orphaned copies after undo. Original source files and other products are preserved.
+- Desi is visible in the product table and editable in the product card.
+- Final validation: 899 Release tests passed, 0 failed. Requested Windows-Excel-Final win-x64 self-contained publish succeeded.
+- Detailed behavior and training sources: docs/TAXONOMY-MEDIA.md.
+
+## Excel workflow revision — 2026-09-18
+
+- Reviewed all five Entegra training transcripts; source links and workflow details are in docs/EXCEL-CENTER.md.
+- Rebuilt Excel as product/price/stock, category and order workflows with letter mapping, SKU identity, VAT and channel prices.
+- Immutable previews, full validation, transactional receipts, stale/wrong-store guards and restart-safe undo preserve unselected and XML-locked fields.
+- Orders remain visible in navigation and refresh local records when opened. Imports do not publish marketplace updates or deduct order stock automatically.
+- Added actual XLSX/temporary SQLite and WPF regression tests; final Release validation: 888 passed, 0 failed, 0 skipped. The requested win-x64 self-contained Windows-Excel-Final publish succeeded and the published application was launched.
+
+Excel son yayını: Windows-Excel-Final/TrMarketplaceHubDesktop.exe. Önceki yayın: Windows-Current/TrMarketplaceHubDesktop.exe. Giriş parolası yoktur.
+
+## XML workspace revision — 2026-09-17
+
+Reference: https://www.youtube.com/watch?v=hawexIrE1BA (complete Turkish transcript plus definition/list frames inspected).
+
+- Replaced the long stacked XML page with a source grid above a category grid. Definition opens in a compact, three-column mapping window; each of seven images has its own dropdown. Product root and decimal separators remain selectable.
+- Category rows contain target-category selection, active state and separate sale/list formulas for nine channels. Rules are serialized with the source, evaluated in XML preview/import and preserved on reload. Calculated channel prices are local values; no marketplace API publication is implied.
+- Source preset initialization no longer replaces saved user mappings or SKU prefixes. The legacy Petshop source ID can save encrypted source authentication without changing product associations.
+- Product double-click opens the editable product card. Existing immutable product IDs remain visible; Excel export includes the localized Product ID header.
+- Validation: 850 Release tests passed, including five new XML regression cases. Release self-contained publish succeeded. Real feed smoke: 1,738 products, 35 fields, 178 categories; importing twice into a temporary database preserved all 1,738 IDs and added zero duplicates on the second run. Live catalog was not changed by the smoke.
+- Windows UI verified: application and definition window opened; live XML download reported 35 fields; preview displayed 1,738 calculated products. Double-clicking a product opened its editable card. Existing source list and category data rendered. Broader Entegra feature parity is not claimed; DEFERRED_BY_USER items remain excluded.
+- BizimHesap live product-write issue from the earlier API response remains separate and unresolved; this revision does not claim automatic external stock/price synchronization.
 
 | İşlev | Durum |
 |---|---|

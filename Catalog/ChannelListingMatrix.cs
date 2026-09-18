@@ -3,6 +3,10 @@ namespace TrMarketplaceHubDesktop;
 public sealed record ChannelListingMatrixRow(string ProductId, string Sku, string ProductName, string Channel, string ChannelName, string ShopId, string MappingStatus, string ListingId, string SyncStatus, string LastError, DateTime? LastSyncUtc, string AuthStatus, string Capabilities)
 {
     public string SearchText => $"{Sku} {ProductName} {Channel} {ChannelName} {ShopId} {ListingId} {MappingStatus} {SyncStatus} {LastError}";
+    public string EslemeDurumu => MarketplaceStatusText.ToTurkish(MappingStatus);
+    public string EsitlemeDurumu => MarketplaceStatusText.ToTurkish(SyncStatus);
+    public string BaglantiDurumu => MarketplaceStatusText.ToTurkish(AuthStatus);
+    public string YapilacakIs => MarketplaceStatusText.Explain(AuthStatus, MappingStatus, ListingId, LastError);
 }
 
 public sealed class ChannelListingMatrixService

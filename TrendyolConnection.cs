@@ -24,18 +24,19 @@ public sealed class TrendyolSettingsStore(string? path = null)
     public void Delete() { if (File.Exists(storePath)) File.Delete(storePath); }
 }
 
-/// <summary>Trendyol connector boundary. No unverified endpoint is invoked.</summary>
+/// <summary>Trendyol Türkiye V2 connection; explicit read-only checks only.</summary>
 public sealed class TrendyolConnection
 {
     public static void Validate(TrendyolSettings settings)
     {
-        if (string.IsNullOrWhiteSpace(settings.SupplierId) || !settings.SupplierId.All(char.IsAsciiDigit) || settings.SupplierId.Length > 32) throw new ArgumentException("Trendyol satıcı ID sayısal olmalı.");
+        if (string.IsNullOrWhiteSpace(settings.SupplierId) || !settings.SupplierId.All(char.IsAsciiDigit) || !long.TryParse(settings.SupplierId,out var sellerId) || sellerId<=0 || settings.SupplierId!=sellerId.ToString(System.Globalization.CultureInfo.InvariantCulture)) throw new ArgumentException("Trendyol satıcı ID pozitif sayı olmalı; başında sıfır olmamalı.");
         foreach (var value in new[] { settings.ApiKey, settings.ApiSecret, settings.UserAgent }) if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl) || value.Length > 512) throw new ArgumentException("Trendyol API kimlik bilgileri geçersiz.");
     }
-    public static string Describe(TrendyolSettings? settings) => settings is null ? "NOT_CONFIGURED" : "Ayarlar şifreli kayıtlı; resmi API sözleşmesi ve mağaza erişimi doğrulanmalı.";
-    public Task TestReadOnlyAsync(TrendyolSettings settings, CancellationToken cancellationToken = default)
+    public static string Describe(TrendyolSettings? settings) => settings is null ? "NOT_CONFIGURED" : "Ayarlar şifreli kayıtlı; Trendyol Türkiye Ürün API V2. Mağaza erişimini test edin.";
+    public async Task TestReadOnlyAsync(TrendyolSettings settings, CancellationToken cancellationToken = default)
     {
         Validate(settings);
-        throw new InvalidOperationException("LIVE_API_BLOCKED: Trendyol resmi endpoint/scope sözleşmesi bu çalışma alanında doğrulanmadı; HTTP isteği gönderilmedi.");
+        using var client=new Trendyol.TrendyolApiClient(settings);
+        await client.GetAddressesAsync(cancellationToken);
     }
 }

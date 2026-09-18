@@ -1,6 +1,19 @@
 namespace TrMarketplaceHubDesktop.Catalog;
 public class XmlSource
 {
+ public decimal DefaultVatRate {get;set;}=20;
+ public string DefaultBrand {get;set;}="";
+ public string FixedBrand {get;set;}="";
+ public string DefaultCategory {get;set;}="";
+ public string FixedCategory {get;set;}="";
+ public bool PriceIncludesVat {get;set;}=true;
+ public bool UseFixedStock {get;set;}
+ public int FixedStock {get;set;}=5;
+ public bool StockIsText {get;set;}
+ public string AvailableStockText {get;set;}="var";
+ public int AvailableStockQuantity {get;set;}=5;
+ public bool UpdateDetails {get;set;}
+ public List<XmlCategoryRule> CategoryRules {get;set;}=[];
  public string PriceMode {get;set;}="Simple";
  public string Formula {get;set;}="";
  public string CostCurrency {get;set;}="TRY";
@@ -11,12 +24,22 @@ public class XmlSource
  public DateTimeOffset? FxFetchedUtc {get;set;}
  public bool AutoImport {get;set;} public DateTime? LastRunUtc {get;set;} public string LastStatus {get;set;}="Henüz çalışmadı";
  public string Id {get;set;}=Guid.NewGuid().ToString("N"); public string Name {get;set;}=""; public string Location {get;set;}=""; public bool Enabled {get;set;}=true;public int IntervalMinutes {get;set;}=30;
- public string ItemPath {get;set;}="";public string DecimalSeparator {get;set;}=".";public Dictionary<string,string> Fields {get;set;}=new();
+ public string ItemPath {get;set;}="";public string DecimalSeparator {get;set;}=".";public string StockDecimalSeparator {get;set;}=".";public string SkuPrefix {get;set;}="";public Dictionary<string,string> Fields {get;set;}=new();
  public decimal ExchangeRate {get;set;}=1;public decimal MarkupPercent {get;set;}=40;public decimal FixedAmount {get;set;}=0;public decimal MinimumPrice {get;set;}=0;public string Currency {get;set;}="USD";
  public int SafetyStock {get;set;}=3;public int MinimumStock {get;set;}=0;public int MaximumStock {get;set;}=20;public string BrandFilter {get;set;}="";public string CategoryFilter {get;set;}="";
  public bool UpdateName {get;set;} public bool UpdateDescription {get;set;} public bool UpdateImages {get;set;}
 }
 public class CatalogProduct {
+ public long LocalNumber {get;set;}
+ public long BrandNumber {get;set;}
+ public long CategoryNumber {get;set;}
+ [System.Text.Json.Serialization.JsonIgnore] public string ProductIdLabel => SourceProductId.Length>0?SourceProductId:LocalNumber>0?LocalNumber.ToString():"Aktarımda üretilecek";
+ [System.Text.Json.Serialization.JsonIgnore] public string BrandIdLabel => XmlAttributes.GetValueOrDefault("BrandId", BrandNumber>0?BrandNumber.ToString():"");
+ [System.Text.Json.Serialization.JsonIgnore] public string CategoryIdLabel => XmlAttributes.GetValueOrDefault("CategoryId1", CategoryNumber>0?CategoryNumber.ToString():"");
+ public string SourceProductId {get;set;}="";
+ public Dictionary<string,string> XmlAttributes {get;set;}=new();
+ public string XmlCategory {get;set;}="";
+ public Dictionary<string,XmlChannelPrice> ChannelPrices {get;set;}=new();
  public string Mpn {get;set;}="";
  public string InvoiceName {get;set;}="";
  public string Subtitle {get;set;}="";

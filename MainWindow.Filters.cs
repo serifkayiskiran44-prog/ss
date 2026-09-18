@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using TrMarketplaceHubDesktop.Catalog;
@@ -7,19 +8,26 @@ public partial class MainWindow {
  void AddProductFilters(Panel host){
   var panel=new WrapPanel();
   var status=new ComboBox{ItemsSource=new[]{"Tümü","Aktif","Pasif"},SelectedIndex=0,Width=100};
-  var brand=new TextBox{Width=130,MaxLength=6000};var category=new TextBox{Width=130,MaxLength=6000};var sku=new TextBox{Width=160,MaxLength=6000};var source=new TextBox{Width=160,MaxLength=6000,ToolTip="XML kaynağı Id'leri (; ile ayır)"};
+  var brand=new ComboBox{Width=150,IsEditable=true,ItemsSource=store.Products().Select(p=>p.Brand).Where(v=>v.Length>0).Distinct().Order().ToList()};var category=new ComboBox{Width=180,IsEditable=true,ItemsSource=store.Products().Select(p=>p.Category).Where(v=>v.Length>0).Distinct().Order().ToList()};var sku=new TextBox{Width=160,MaxLength=6000};var source=new TextBox{Width=160,MaxLength=6000,ToolTip="XML kaynağı Id'leri (; ile ayır)"};
   var description=new ComboBox{ItemsSource=new[]{"Tümü","Dolu","Boş"},SelectedIndex=0,Width=90};
   var image=new ComboBox{ItemsSource=new[]{"Tümü","Var","Yok"},SelectedIndex=0,Width=90};
+  var minStock=new TextBox{Width=75};var maxStock=new TextBox{Width=75};var minPrice=new TextBox{Width=85};var maxPrice=new TextBox{Width=85};var minId=new TextBox{Width=75};var maxId=new TextBox{Width=75};var barcodes=new TextBox{Width=160,MaxLength=6000};
+  var categoryRoot=new ComboBox{Width=190,IsEditable=true,ItemsSource=store.Products().SelectMany(p=>{var parts=p.Category.Split('>',StringSplitOptions.TrimEntries);return Enumerable.Range(1,parts.Length).Select(n=>string.Join(">",parts.Take(n)));}).Where(v=>v.Length>0).Distinct().Order().ToList()};
+  var currency=new ComboBox{Width=90,ItemsSource=new[]{"","TRY","USD","EUR","GBP"},SelectedIndex=0};
+  var priceLock=new ComboBox{Width=105,ItemsSource=new[]{"Tümü","Kilitli","Serbest"},SelectedIndex=0};var stockLock=new ComboBox{Width=105,ItemsSource=new[]{"Tümü","Kilitli","Serbest"},SelectedIndex=0};
+  var sourceChoice=new ComboBox{Width=190,ItemsSource=store.Sources(),DisplayMemberPath="Name"};sourceChoice.SelectionChanged+=(_,_)=>{if(sourceChoice.SelectedItem is XmlSource selected)source.Text=selected.Id;};
   var manualOnly=new CheckBox{Content="Yalnız manuel ürünler",Margin=new Thickness(4)};
   var duplicateOnly=new CheckBox{Content="Yalnız mükerrer SKU/barkod",Margin=new Thickness(4)};
-  foreach(var (title,control) in new (string,Control)[]{("Durum",status),("Marka (; ile ayır)",brand),("Kategori (; ile ayır)",category),("SKU (; ile ayır)",sku),("Kaynak (; ile ayır)",source),("Açıklama",description),("Görsel kaydı",image)}){
+  foreach(var (title,control) in new (string,Control)[]{("Durum",status),("Marka (; ile ayır)",brand),("Kategori (; ile ayır)",category),("SKU (; ile ayır)",sku),("Kaynak (; ile ayır)",source),("Açıklama",description),("Görsel kaydı",image),("Kategori ağacı (altları dahil)",categoryRoot),("Kaynak seç",sourceChoice),("Barkod (; veya alt alta)",barcodes),("Stok en az",minStock),("Stok en çok",maxStock),("Fiyat en az",minPrice),("Fiyat en çok",maxPrice),("ID en az",minId),("ID en çok",maxId),("Para birimi",currency),("Fiyat kilidi",priceLock),("Stok kilidi",stockLock)}){
    var group=new StackPanel{Margin=new Thickness(4)};group.Children.Add(new TextBlock{Text=title});group.Children.Add(control);panel.Children.Add(group);
   }
   panel.Children.Add(manualOnly);panel.Children.Add(duplicateOnly);
   static string[] Values(string text)=>text.Split(new[]{';','\r','\n'},StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Distinct().ToArray();
   static bool? State(ComboBox box)=>box.SelectedIndex==0?null:box.SelectedIndex==1;
-  CatalogFilter Current(){var sourceIds=Values(source.Text).ToList();if(manualOnly.IsChecked==true)sourceIds.Add(CatalogFilter.ManualSource);return new(){Active=State(status),Brands=Values(brand.Text),Categories=Values(category.Text),Skus=Values(sku.Text),SourceIds=sourceIds.ToArray(),DescriptionPresent=State(description),ImagePresent=State(image),DuplicateIdentityOnly=duplicateOnly.IsChecked==true};}
-  void Apply(CatalogFilter filter){status.SelectedIndex=filter.Active is null?0:filter.Active.Value?1:2;description.SelectedIndex=filter.DescriptionPresent is null?0:filter.DescriptionPresent.Value?1:2;image.SelectedIndex=filter.ImagePresent is null?0:filter.ImagePresent.Value?1:2;brand.Text=string.Join(';',filter.Brands);category.Text=string.Join(';',filter.Categories);sku.Text=string.Join(';',filter.Skus);manualOnly.IsChecked=filter.SourceIds.Contains(CatalogFilter.ManualSource);source.Text=string.Join(';',filter.SourceIds.Where(x=>x!=CatalogFilter.ManualSource));duplicateOnly.IsChecked=filter.DuplicateIdentityOnly;}
+  static decimal? Amount(TextBox box){if(string.IsNullOrWhiteSpace(box.Text))return null;if(!decimal.TryParse(box.Text,NumberStyles.Number,CultureInfo.GetCultureInfo("tr-TR"),out var result))throw new InvalidOperationException("Filtrede geçerli bir sayı yazın.");return result;}
+  static long? Whole(TextBox box){if(string.IsNullOrWhiteSpace(box.Text))return null;if(!long.TryParse(box.Text,out var result))throw new InvalidOperationException("Stok ve ID tam sayı olmalı.");return result;}
+  CatalogFilter Current(){var sourceIds=Values(source.Text).ToList();if(manualOnly.IsChecked==true)sourceIds.Add(CatalogFilter.ManualSource);return new(){MinimumStock=checked((int?)Whole(minStock)),MaximumStock=checked((int?)Whole(maxStock)),MinimumPrice=Amount(minPrice),MaximumPrice=Amount(maxPrice),MinimumId=Whole(minId),MaximumId=Whole(maxId),Barcodes=Values(barcodes.Text),CategoryPrefix=categoryRoot.Text,Currency=currency.SelectedItem?.ToString()??"",PriceLocked=State(priceLock),StockLocked=State(stockLock),Active=State(status),Brands=Values(brand.Text),Categories=Values(category.Text),Skus=Values(sku.Text),SourceIds=sourceIds.ToArray(),DescriptionPresent=State(description),ImagePresent=State(image),DuplicateIdentityOnly=duplicateOnly.IsChecked==true};}
+  void Apply(CatalogFilter filter){minStock.Text=filter.MinimumStock?.ToString()??"";maxStock.Text=filter.MaximumStock?.ToString()??"";minPrice.Text=filter.MinimumPrice?.ToString(CultureInfo.GetCultureInfo("tr-TR"))??"";maxPrice.Text=filter.MaximumPrice?.ToString(CultureInfo.GetCultureInfo("tr-TR"))??"";minId.Text=filter.MinimumId?.ToString()??"";maxId.Text=filter.MaximumId?.ToString()??"";barcodes.Text=string.Join(";",filter.Barcodes);categoryRoot.Text=filter.CategoryPrefix;currency.SelectedItem=filter.Currency;priceLock.SelectedIndex=filter.PriceLocked is null?0:filter.PriceLocked.Value?1:2;stockLock.SelectedIndex=filter.StockLocked is null?0:filter.StockLocked.Value?1:2;status.SelectedIndex=filter.Active is null?0:filter.Active.Value?1:2;description.SelectedIndex=filter.DescriptionPresent is null?0:filter.DescriptionPresent.Value?1:2;image.SelectedIndex=filter.ImagePresent is null?0:filter.ImagePresent.Value?1:2;brand.Text=string.Join(';',filter.Brands);category.Text=string.Join(';',filter.Categories);sku.Text=string.Join(';',filter.Skus);manualOnly.IsChecked=filter.SourceIds.Contains(CatalogFilter.ManualSource);source.Text=string.Join(';',filter.SourceIds.Where(x=>x!=CatalogFilter.ManualSource));duplicateOnly.IsChecked=filter.DuplicateIdentityOnly;}
   var filterStore=new CatalogFilterStore(dataDirectory);var saved=new ComboBox{Width=170,DisplayMemberPath="Name"};var filterName=new TextBox{Width=140,ToolTip="Kaydedilecek filtre adı"};
   var corruptWarning=new TextBlock{Foreground=System.Windows.Media.Brushes.DarkRed,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(8,0,2,0)};
   var corruptFilters=new ComboBox{Width=170,DisplayMemberPath="Name",Visibility=Visibility.Collapsed};
@@ -28,7 +36,7 @@ public partial class MainWindow {
   deleteCorrupt.Visibility=Visibility.Collapsed;
   void ReloadSaved(){saved.ItemsSource=filterStore.List();var corrupt=filterStore.CorruptFilters();corruptFilters.ItemsSource=corrupt;var show=corrupt.Count>0?Visibility.Visible:Visibility.Collapsed;corruptFilters.Visibility=show;deleteCorrupt.Visibility=show;corruptWarning.Text=corrupt.Count>0?$"⚠ {corrupt.Count} bozuk kayıtlı filtre":"";}
   panel.Children.Add(Button("Filtreleri uygula",()=>{productFilter=Current();productOffset=0;RefreshProducts();}));
-  panel.Children.Add(Button("Filtreleri temizle",()=>{status.SelectedIndex=description.SelectedIndex=image.SelectedIndex=0;brand.Clear();category.Clear();sku.Clear();source.Clear();manualOnly.IsChecked=false;duplicateOnly.IsChecked=false;productFilter=new();productOffset=0;RefreshProducts();}));
+  panel.Children.Add(Button("Filtreleri temizle",()=>{status.SelectedIndex=description.SelectedIndex=image.SelectedIndex=0;Apply(new());sourceChoice.SelectedItem=null;sku.Clear();source.Clear();manualOnly.IsChecked=false;duplicateOnly.IsChecked=false;productFilter=new();productOffset=0;RefreshProducts();}));
   panel.Children.Add(new TextBlock{Text="Kayıtlı filtre",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(8,0,2,0)});panel.Children.Add(saved);panel.Children.Add(filterName);
   panel.Children.Add(Button("Filtreyi kaydet",()=>{filterStore.Save(filterName.Text,Current());ReloadSaved();filterName.Clear();}));
   panel.Children.Add(Button("Filtreyi yükle",()=>{if(saved.SelectedItem is not SavedCatalogFilter selected)throw new InvalidOperationException("Kayıtlı filtre seçin.");Apply(selected.Filter);productFilter=selected.Filter;productOffset=0;RefreshProducts();}));
@@ -37,7 +45,7 @@ public partial class MainWindow {
   panel.Children.Add(Button("Kolon görünürlüğü",OpenProductColumnChooser));
   ApplyProductColumnPreferences();
   ReloadSaved();
-  host.Children.Add(new Expander{Header="Detaylı ürün arama",Content=panel,HorizontalAlignment=HorizontalAlignment.Stretch});
+  host.Children.Add(new Expander{Header="Detaylı arama",Content=new ScrollViewer{Content=panel,MaxHeight=310,VerticalScrollBarVisibility=ScrollBarVisibility.Auto},HorizontalAlignment=HorizontalAlignment.Stretch});
  }
  void ApplyProductColumnPreferences()
  {

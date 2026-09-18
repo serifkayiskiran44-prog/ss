@@ -6,7 +6,7 @@ using TrMarketplaceHubDesktop.Catalog;
 
 namespace TrMarketplaceHubDesktop;
 
-public enum BulkProductOperationKind { Activate, Deactivate, SetCategory, SetBrand, SetDescription, SetName, SetChannelMapping, SetPrice, AdjustPricePercent, SetStock, AdjustStockDelta }
+public enum BulkProductOperationKind { Activate, Deactivate, SetCategory, SetBrand, SetDescription, SetName, SetChannelMapping, SetPrice, AdjustPricePercent, SetStock, AdjustStockDelta, SetInvoiceName, SetSubtitle, SetShelf, SetGtin, SetMpn, SetPriceLock, SetStockLock, SetNameLock, SetDescriptionLock, SetImageLock }
 public sealed record BulkProductOperationRequest(BulkProductOperationKind Kind, string Value = "", string Channel = "", string ShopId = "", string ListingId = "", string TargetCategory = "");
 /// Explicit, separate-from-the-filter state: whether a bulk operation targets only
 /// the rows the user selected in the grid, or every row the current search/filter
@@ -99,6 +99,17 @@ public sealed class BulkProductOperations
                     else clone.Stock = (int)result;
                 }
             }
+            if (request.Kind == BulkProductOperationKind.SetInvoiceName) clone.InvoiceName=request.Value.Trim();
+            if (request.Kind == BulkProductOperationKind.SetSubtitle) clone.Subtitle=request.Value.Trim();
+            if (request.Kind == BulkProductOperationKind.SetShelf) clone.Shelf=request.Value.Trim();
+            if (request.Kind == BulkProductOperationKind.SetGtin) clone.Gtin=request.Value.Trim();
+            if (request.Kind == BulkProductOperationKind.SetMpn) clone.Mpn=request.Value.Trim();
+            if (request.Kind == BulkProductOperationKind.SetPriceLock) clone.LockPrice=bool.Parse(request.Value);
+            if (request.Kind == BulkProductOperationKind.SetStockLock) clone.LockStock=bool.Parse(request.Value);
+            if (request.Kind == BulkProductOperationKind.SetNameLock) clone.LockName=bool.Parse(request.Value);
+            if (request.Kind == BulkProductOperationKind.SetDescriptionLock) clone.LockDescription=bool.Parse(request.Value);
+            if (request.Kind == BulkProductOperationKind.SetImageLock) clone.LockImages=bool.Parse(request.Value);
+            if(request.Kind==BulkProductOperationKind.SetName && product.LockName){status="SKIP";error="Ürün adı kilitli; değişiklik atlandı.";}
             if (status == "READY") { afterValue = Value(clone, request.Kind); if (beforeValue == afterValue) status = "SKIP"; }
             if (request.Kind == BulkProductOperationKind.SetName && string.IsNullOrWhiteSpace(clone.Name)) { status = "ERROR"; error = "Ürün adı boş olamaz."; }
             if (request.Kind == BulkProductOperationKind.SetDescription && product.LockDescription) { status = "SKIP"; error = "Açıklama kilidi etkin; toplu değişiklik uygulanmadı."; }
@@ -139,10 +150,14 @@ public sealed class BulkProductOperations
         var result = catalog.ApplyBulkSnapshots(ready, cancellationToken, progress); return new(result.Applied, skipped, errors);
     }
 
-    static string Value(CatalogProduct product, BulkProductOperationKind kind) => kind switch { BulkProductOperationKind.Activate or BulkProductOperationKind.Deactivate => product.Active ? "Aktif" : "Pasif", BulkProductOperationKind.SetCategory => product.Category, BulkProductOperationKind.SetBrand => product.Brand, BulkProductOperationKind.SetDescription => product.Description, BulkProductOperationKind.SetName => product.Name, BulkProductOperationKind.SetPrice or BulkProductOperationKind.AdjustPricePercent => product.Price.ToString("0.00", CultureInfo.InvariantCulture) + " " + product.Currency, BulkProductOperationKind.SetStock or BulkProductOperationKind.AdjustStockDelta => product.Stock.ToString(CultureInfo.InvariantCulture), _ => "" };
+    static string Value(CatalogProduct product, BulkProductOperationKind kind) => kind switch { BulkProductOperationKind.Activate or BulkProductOperationKind.Deactivate => product.Active ? "Aktif" : "Pasif", BulkProductOperationKind.SetCategory => product.Category, BulkProductOperationKind.SetBrand => product.Brand, BulkProductOperationKind.SetDescription => product.Description, BulkProductOperationKind.SetName => product.Name, BulkProductOperationKind.SetPrice or BulkProductOperationKind.AdjustPricePercent => product.Price.ToString("0.00", CultureInfo.InvariantCulture) + " " + product.Currency, BulkProductOperationKind.SetStock or BulkProductOperationKind.AdjustStockDelta => product.Stock.ToString(CultureInfo.InvariantCulture), BulkProductOperationKind.SetInvoiceName=>product.InvoiceName, BulkProductOperationKind.SetSubtitle=>product.Subtitle, BulkProductOperationKind.SetShelf=>product.Shelf, BulkProductOperationKind.SetGtin=>product.Gtin, BulkProductOperationKind.SetMpn=>product.Mpn, BulkProductOperationKind.SetPriceLock=>product.LockPrice?"Kilitli":"Serbest", BulkProductOperationKind.SetStockLock=>product.LockStock?"Kilitli":"Serbest", BulkProductOperationKind.SetNameLock=>product.LockName?"Kilitli":"Serbest", BulkProductOperationKind.SetDescriptionLock=>product.LockDescription?"Kilitli":"Serbest", BulkProductOperationKind.SetImageLock=>product.LockImages?"Kilitli":"Serbest", _ => "" };
     static CatalogProduct Clone(CatalogProduct product) => JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(product))!;
     static void ValidateRequest(BulkProductOperationRequest request)
     {
+        if(!Enum.IsDefined(request.Kind))throw new ArgumentException("Geçersiz toplu işlem.");
+        if(request.Kind is BulkProductOperationKind.SetPriceLock or BulkProductOperationKind.SetStockLock or BulkProductOperationKind.SetNameLock or BulkProductOperationKind.SetDescriptionLock or BulkProductOperationKind.SetImageLock)
+            if(!bool.TryParse(request.Value,out _))throw new ArgumentException("Kilit değeri true veya false olmalı.");
+        if(request.Kind==BulkProductOperationKind.SetShelf&&request.Value.Length>100||request.Kind==BulkProductOperationKind.SetMpn&&request.Value.Length>128||request.Kind==BulkProductOperationKind.SetGtin&&request.Value.Length>128||(request.Kind is BulkProductOperationKind.SetInvoiceName or BulkProductOperationKind.SetSubtitle)&&request.Value.Length>300)throw new ArgumentException("Toplu alan değeri izin verilen uzunluğu aşıyor.");
         if (request.Kind == BulkProductOperationKind.SetChannelMapping)
         { if (string.IsNullOrWhiteSpace(request.Channel) || string.IsNullOrWhiteSpace(request.ShopId)) throw new ArgumentException("Kanal ve mağaza zorunlu."); if (string.IsNullOrWhiteSpace(request.ListingId) && string.IsNullOrWhiteSpace(request.TargetCategory)) throw new ArgumentException("İlan ID veya hedef kategori girin."); return; }
         if ((request.Kind is BulkProductOperationKind.SetCategory or BulkProductOperationKind.SetBrand or BulkProductOperationKind.SetName or BulkProductOperationKind.SetDescription) && string.IsNullOrWhiteSpace(request.Value)) throw new ArgumentException("Yeni değer boş olamaz.");

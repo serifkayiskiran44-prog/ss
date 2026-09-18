@@ -59,12 +59,14 @@ public sealed class CatalogFilterStore
             if (values.Any(v => v is null)) { corrupt = new(name, "Null array item", json.Length, DateTime.UtcNow); return false; }
             if (values.Length > MaxArrayItems || values.Sum(v => v.Length) > MaxArrayCharsSum) { corrupt = new(name, "Array payload exceeds bounds", json.Length, DateTime.UtcNow); return false; }
         }
+        try { parsed.ValidateRanges(); } catch(ArgumentException) { corrupt = new(name, "Invalid range or barcode filter", json.Length, DateTime.UtcNow); return false; }
         filter = parsed;
         return true;
     }
 
     static void ValidateBounds(CatalogFilter filter)
     {
+        filter.ValidateRanges();
         foreach (var values in new[] { filter.Brands, filter.Categories, filter.Skus, filter.SourceIds })
         {
             if (values is null) throw new ArgumentException("Filtre alanları null olamaz.");

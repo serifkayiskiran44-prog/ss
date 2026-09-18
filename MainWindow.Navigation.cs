@@ -25,23 +25,29 @@ public partial class MainWindow
    item.Selected+=(_,_)=>SelectRoute(key, !selectingRoute, title, description);
   }
   Group("ÇALIŞMA ALANI");
-  Page("dashboard","Genel bakış","Ürün, XML otomasyonu ve BizimHesap bağlantısının kısa özeti.",DashboardPanel.Create(dataDirectory,key=>Navigate(key)));
   Page("products","Ürün yönetimi","Tüm ürün bilgilerini yan yana inceleyin, filtreleyin ve düzenleyin.",builtPages["Ürün havuzu"]);
-  Page("xml","XML otomasyonu","XML kaynakları, alan eşleme, fiyat formülü, zamanlama ve manuel çalıştırma.",builtPages["XML yönetimi"]);
+  Page("categories","Kategoriler","Kategori ağacı, ürün sayıları, pazaryeri eşlemeleri ve içerik şablonları.",new TaxonomyWorkspacePanel(dataDirectory,Catalog.TaxonomyKind.Category,RefreshProducts));
+  Page("brands","Markalar","Marka listesi, ürün sayıları ve pazaryeri karşılıkları.",new TaxonomyWorkspacePanel(dataDirectory,Catalog.TaxonomyKind.Brand,RefreshProducts));
+  Page("xml","XML otomasyonu","XML kaynakları, alan eşleme, fiyat formülü, zamanlama ve manuel çalıştırma.",builtPages["XML otomasyonu"]);
+  Page("excel","Excel işlemleri","SKU ve sütun harfleriyle ürün, fiyat, stok, kategori ve sipariş aktarımı; önizleme ve geri alma.",BuildExcel());
+  Page("orders","Siparişler","Sipariş listesi, detay, kargo takibi, iade filtresi ve toplu işlem önizlemesi.",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts));
   Group("ENTEGRASYON");
+  var trendyolWorkspace=new TrendyolWorkspacePanel(dataDirectory);
+  Page("trendyol","Trendyol","Ürün kontrolü, eşleştirme, mağaza ayarları ve gönderim sonuçları.",trendyolWorkspace);
   Page("bizimhesap","BizimHesap","Ürün/depo okuma ve XML ürünleri için SKU-barkod eşleştirme önizlemesi.",BizimHesapPanel.Create(dataDirectory));
   Group("YÖNETİM");
   var settings=new StackPanel{Margin=new Thickness(20)};
   settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
   settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
   settings.Children.Add(Button("BizimHesap bağlantı ayarları",()=>Navigate("bizimhesap")));
+  settings.Children.Add(Button("Trendyol bağlantı ayarları",()=>{Navigate("trendyol");trendyolWorkspace.ShowSettings();}));
   settings.Children.Add(Heading("Sürüm, yedek ve taşıma"));settings.Children.Add(DataBackupPanel.Create(dataDirectory));
-  settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML yönetimi / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));
+  settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML otomasyonu / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));
   Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var initial = uiPreferences.Get("last-route");
-  Navigate(routes.ContainsKey(initial ?? "") ? initial! : "dashboard", false);
+  Navigate(routes.ContainsKey(initial ?? "") ? initial! : "products", false);
  }
  void SelectRoute(string key, bool push, string? title = null, string? description = null)
  {

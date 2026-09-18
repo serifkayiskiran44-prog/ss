@@ -10,7 +10,7 @@ public static class ChannelListingMatrixPanel
     {
         var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1450 };
         panel.Children.Add(Heading("Kanal yayın durumu ve ürün matrisi"));
-        panel.Children.Add(Hint("Ürün × kanal × mağaza görünümünde yerel plan, mapping, sync ve bağlantı durumunu karşılaştırın. Bu ekran yalnızca yerel plan/önizleme okur; canlı ürün, stok veya fiyat yazmaz."));
+        panel.Children.Add(Hint("Ürün × kanal × mağaza görünümünde ürün eşleştirmesini, işlem durumunu ve sonraki adımı karşılaştırın. Bu ekran yalnızca yerel plan/önizleme okur; canlı ürün, stok veya fiyat yazmaz."));
         var query = new TextBox { Width = 240, ToolTip = "SKU, ürün, kanal, ilan veya hata ara" };
         var channel = new TextBox { Width = 130, ToolTip = "Kanal filtresi (etsy, ebay...)" };
         var shop = new TextBox { Width = 140, ToolTip = "Mağaza filtresi" };
@@ -18,9 +18,9 @@ public static class ChannelListingMatrixPanel
         var status = Hint("");
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, Height = 560, EnableRowVirtualization = true, EnableColumnVirtualization = false, SelectionMode = DataGridSelectionMode.Single };
         void Column(string header, string path, double width) => grid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new Binding(path), Width = new DataGridLength(width, DataGridLengthUnitType.Star) });
-        Column("Ürün / SKU", "ProductName", 2); Column("Kanal", "ChannelName", 1); Column("Mağaza", "ShopId", 1); Column("Mapping", "MappingStatus", .8); Column("İlan ID", "ListingId", 1); Column("Sync", "SyncStatus", .8); Column("Bağlantı", "AuthStatus", 1); Column("Yetenekler", "Capabilities", 2); Column("Son hata", "LastError", 2);
+        Column("Ürün / SKU", "ProductName", 2); Column("Kanal", "ChannelName", 1); Column("Mağaza", "ShopId", 1); Column("Eşleştirme", "EslemeDurumu", 1.2); Column("İlan ID", "ListingId", 1); Column("İşlem", "EsitlemeDurumu", 1); Column("Bağlantı", "BaglantiDurumu", 1.25); Column("Ne yapılmalı?", "YapilacakIs", 3);
         IReadOnlyList<ChannelListingMatrixRow> all = [];
-        void RefreshGrid() { var filtered = ChannelListingMatrixService.Filter(all, query.Text, statusFilter.SelectedItem?.ToString() ?? "Tümü", channel.Text, shop.Text); grid.ItemsSource = filtered; status.Text = $"{filtered.Count:N0} satır · {filtered.Count(x => x.MappingStatus == "MISSING")} mapping eksik · {filtered.Count(x => x.MappingStatus == "ERROR")} sync hatası · {filtered.Count(x => x.MappingStatus == "AUTH_ERROR")} bağlantı uyarısı"; }
+        void RefreshGrid() { var filtered = ChannelListingMatrixService.Filter(all, query.Text, statusFilter.SelectedItem?.ToString() ?? "Tümü", channel.Text, shop.Text); grid.ItemsSource = filtered; status.Text = $"{filtered.Count:N0} satır · {filtered.Count(x => x.MappingStatus == "MISSING")} eşleştirme eksik · {filtered.Count(x => x.MappingStatus == "ERROR")} işlem hatası · {filtered.Count(x => x.AuthStatus == "AUTH_ERROR")} bağlantı uyarısı"; }
         async Task RefreshAsync() { status.Text = "Matris hazırlanıyor…"; all = await Task.Run(() => new ChannelListingMatrixService(directory).Build()); RefreshGrid(); }
         var refresh = AsyncButton("Matrisi yenile", RefreshAsync);
         var product = Button("Ürün havuzuna git", () => navigate?.Invoke("products"));

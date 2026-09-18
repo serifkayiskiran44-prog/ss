@@ -28,7 +28,7 @@ public sealed record TaxonomyResolutionResult(TaxonomyResolution Status, string?
 public sealed record CorruptTaxonomyEntry(string Id, TaxonomyKind Kind, string Reason, DateTime DetectedUtc);
 public sealed record CorruptTaxonomyHistoryRow(string Id, TaxonomyKind Kind, string Reason, DateTime DetectedUtc);
 
-public sealed class TaxonomyStore
+public sealed partial class TaxonomyStore
 {
     readonly string connectionString;
     public TaxonomyStore(string? directory = null)
@@ -111,9 +111,8 @@ public sealed class TaxonomyStore
         if (kind is not (TaxonomyKind.Brand or TaxonomyKind.Category)) return 0;
         var column = kind == TaxonomyKind.Brand ? "Brand" : "Category";
         using var cmd = c.CreateCommand(); cmd.Transaction = tx;
-        cmd.CommandText = $"SELECT COUNT(*) FROM CatalogProducts WHERE lower(json_extract(Json,'$.{column}'))=lower($name)";
-        cmd.Parameters.AddWithValue("$name", name);
-        return Convert.ToInt32(cmd.ExecuteScalar(), CultureInfo.InvariantCulture);
+        cmd.CommandText = $"SELECT json_extract(Json,'$.{column}') FROM CatalogProducts";
+        using var reader=cmd.ExecuteReader();var count=0;while(reader.Read()){var value=reader.IsDBNull(0)?"":reader.GetString(0);if(kind==TaxonomyKind.Category?SameCategory(value,name):value.Equals(name,StringComparison.OrdinalIgnoreCase))count++;}return count;
     }
     static int CountMappingUsage(SqliteConnection c, SqliteTransaction? tx, TaxonomyKind kind, string id)
     {
@@ -128,15 +127,19 @@ public sealed class TaxonomyStore
     /// serializes the concurrent writer against this transaction rather than losing it.
     public void Delete(TaxonomyKind kind, string id)
     {
-        ValidateKind(kind); using var c = Open(); using var tx = c.BeginTransaction();
+        ValidateKind(kind); using var c = Open(); using var tx = c.BeginTransaction();DeleteWorkspaceEntryCore(c,tx,kind,id);tx.Commit();
+    }
+    static void DeleteWorkspaceEntryCore(SqliteConnection c,SqliteTransaction tx,TaxonomyKind kind,string id)
+    {
         using var find = c.CreateCommand(); find.Transaction = tx; find.CommandText = "SELECT Name FROM TaxonomyEntries WHERE Id=$id AND Kind=$kind"; find.Parameters.AddWithValue("$id", id); find.Parameters.AddWithValue("$kind", (int)kind);
         var name = find.ExecuteScalar() as string ?? throw new InvalidOperationException("Silinecek kayıt bulunamadı.");
+        if(kind==TaxonomyKind.Category){using var children=c.CreateCommand();children.Transaction=tx;children.CommandText="SELECT Name FROM TaxonomyEntries WHERE Kind=0 AND Id<>$id";children.Parameters.AddWithValue("$id",id);using var r=children.ExecuteReader();while(r.Read())if(InCategory(r.GetString(0),name))throw new InvalidOperationException("Alt kategorileri olan kategori silinemez.");}
         var products = CountProductUsage(c, tx, kind, name);
         var mappings = CountMappingUsage(c, tx, kind, id);
         if (products > 0 || mappings > 0) throw new InvalidOperationException($"Bu kayıt kullanımda olduğu için silinemez: {products} üründe, {mappings} kanal eşlemesinde kullanılıyor. Önce bağlantıları kaldırın veya kaydı pasife alın.");
         using var delete = c.CreateCommand(); delete.Transaction = tx; delete.CommandText = "DELETE FROM TaxonomyEntries WHERE Id=$id"; delete.Parameters.AddWithValue("$id", id);
         if (delete.ExecuteNonQuery() != 1) throw new InvalidOperationException("Silinecek kayıt bulunamadı.");
-        tx.Commit();
+        using var template=c.CreateCommand();template.Transaction=tx;template.CommandText="SELECT 1 FROM sqlite_master WHERE type='table' AND name='TaxonomyContentTemplates'";if(template.ExecuteScalar()!=null){template.CommandText="DELETE FROM TaxonomyContentTemplates WHERE EntryId=$id";template.Parameters.AddWithValue("$id",id);template.ExecuteNonQuery();}
     }
     /// A malformed persisted UpdatedUtc must never resolve to DateTime.MinValue and
     /// pass as a normal (if very old) entry - that would let a mapping freshness
@@ -271,14 +274,17 @@ public sealed class TaxonomyStore
     /// was missing a way to delete a channel/shop mapping entirely.
     public void Unmap(TaxonomyKind kind, string externalKey, string marketplace = "local", string shopId = "default")
     {
-        ValidateKind(kind); var market = marketplace.Trim().ToLowerInvariant(); var shop = shopId.Trim(); var key = externalKey.Trim();
-        using var c = Open(); using var tx = c.BeginTransaction();
+        ValidateKind(kind);using var c=Open();using var tx=c.BeginTransaction();UnmapWorkspaceCore(c,tx,kind,externalKey,marketplace,shopId);tx.Commit();
+    }
+    static void UnmapWorkspaceCore(SqliteConnection c,SqliteTransaction tx,TaxonomyKind kind,string externalKey,string marketplace,string shopId)
+    {
+        var market=marketplace.Trim().ToLowerInvariant();var shop=shopId.Trim();var key=externalKey.Trim();
         using var find = c.CreateCommand(); find.Transaction = tx; find.CommandText = "SELECT LocalId FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; find.Parameters.AddWithValue("$kind", (int)kind); find.Parameters.AddWithValue("$market", market); find.Parameters.AddWithValue("$shop", shop); find.Parameters.AddWithValue("$key", key);
         var localId = find.ExecuteScalar() as string ?? throw new InvalidOperationException("Kaldırılacak eşleme bulunamadı.");
         using var delete = c.CreateCommand(); delete.Transaction = tx; delete.CommandText = "DELETE FROM TaxonomyMappings WHERE Kind=$kind AND Marketplace=$market AND ShopId=$shop AND ExternalKey=$key"; delete.Parameters.AddWithValue("$kind", (int)kind); delete.Parameters.AddWithValue("$market", market); delete.Parameters.AddWithValue("$shop", shop); delete.Parameters.AddWithValue("$key", key); delete.ExecuteNonQuery();
         var now = DateTime.UtcNow;
         using var history = c.CreateCommand(); history.Transaction = tx; history.CommandText = "INSERT INTO TaxonomyMappingHistory VALUES($id,$kind,$market,$shop,$key,$local,$action,$at)"; history.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N")); history.Parameters.AddWithValue("$kind", (int)kind); history.Parameters.AddWithValue("$market", market); history.Parameters.AddWithValue("$shop", shop); history.Parameters.AddWithValue("$key", key); history.Parameters.AddWithValue("$local", localId); history.Parameters.AddWithValue("$action", "REMOVE"); history.Parameters.AddWithValue("$at", now.ToString("O", CultureInfo.InvariantCulture)); history.ExecuteNonQuery();
-        tx.Commit();
+
     }
     /// Resolve alone only tells the caller a mapping row exists; it never checked
     /// whether the local target it points to is still usable. ResolveForUse is the

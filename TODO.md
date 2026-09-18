@@ -1,5 +1,42 @@
 # Devam durumu — 2026-09-11
 
+## Trendyol V2 — 2026-09-18
+- [x] Beş Entegra eğitimini ve güncel resmi V2 belgelerini incele.
+- [x] Gerçek kategori/marka API ID listeleri, otomatik öneri ve manuel eşleştirme; SKU/barkod ürün eşleştirmesi.
+- [x] Ürün oluşturma, fiyat/stok/beraber güncelleme, içerik/onaysız ürün düzeltmesi, teslimat şablonu, rekabet önerisi ve işlem geçmişi.
+- [x] Hesaba bağlı immutable önizleme, stale kontrolü, kalıcı tek gönderim kaydı ve batch sonuç doğrulaması.
+- [x] Entegra referansındaki geniş kontrol listesi, açılır detaylı filtre/toplu işlemler ve ayrı ürün kartı/önizleme ekranı.
+- [x] Teslimat şablonunda kayıt kimliği, ürün seçimi ve eksik API seçeneklerini koru; okunabilir kargo/adres adları, yeni/düzenle formu ve toplu atama.
+- [x] 1038 Release testi geçti; Windows-Excel-Final self-contained win-x64 yayını üretildi ve açıldı.
+- [x] Kullanıcı izniyle yalnız PTD-1367 oluşturuldu; batch SUCCESS, sonraki API okumasında onaylı ve yayında.
+- [x] Aynı üründe fiyat, stok ve birleşik güncelleme batch sonuçları SUCCESS; ilk fiyat 90,55 TL ve stok 1 değerlerine dönüldü, profil fiyat istisnaları temizlendi. Diğer ürünlere yazılmadı.
+- [x] Yayınlanan uygulamada Deneme şablonunu kaydet/yenile, yalnız PTD-1367'ye ata; teslimat ve kargo/adres gönderimlerini GUI üzerinden tamamla, iki batch sonucunu doğrula. Son API okumasında ürün yayında, fiyat 90,55 TL, stok 1 ve seçilen aynı gün kargo süresi doğrulandı.
+
+## Kategori / marka / görsel — 2026-09-18
+- [x] Altı kategori/marka eğitimini incele; Sipariş yeniden yapımını kullanıcı isteğiyle kapsamdan çıkar.
+- [x] Kategori ağacı, ürün sayıları, atomik ad/yol güncellemesi ve ayrı Markalar menüsü.
+- [x] Kanal/mağaza eşlemeleri; başlık, açıklama ve özellik şablonu, önizleme ve Excel çıktısı.
+- [x] Tiksiz Excel eşlemeleri; genişletilmiş ürün alanları ve Desi ürün listesi sütunu.
+- [x] Ürün kimliğine bağlı yerel görsel kopyası; ürün silme/geri almada temizlik ve kaynak dosya koruması.
+
+## Excel akışı yenilemesi — 2026-09-18
+- [x] Beş Entegra eğitiminin tam Türkçe altyazısını incele.
+- [x] A/AA sütun eşleme, SKU, beş işlem modu, KDV, pazaryeri fiyatları ve seçili/XML kilitli alan koruması.
+- [x] Gerçek satır numaralı önizleme, atomik uygulama, stale kontrolü ve kalıcı geri alma.
+- [x] Kategori ağacı ve ayrı sipariş Excel aktarımı; Siparişler sol menüsü ve görünürken yenileme.
+- [x] Gerçek XLSX/geçici SQLite regresyon testleri ve WPF ekran kontrolü.
+- [x] 888/888 Release testi geçti; Windows-Excel-Final self-contained win-x64 yayını üretildi ve uygulama açıldı.
+
+## XML ekranı düzeltmesi — 2026-09-17
+- [x] Referans videonun tam altyazısını ve tanım/liste görüntülerini incele.
+- [x] XML kaynak listesi + alt kategori/formül tablosunu kur; tanımı çift tık ile aç.
+- [x] Ayrı görsel açılır listelerini, ürün kökünü, stok/fiyat ayraçlarını ve zamanlayıcıyı tek tanım penceresine bağla.
+- [x] Kategori bazlı aktiflik ve pazaryeri satış/üstü çizili fiyat formüllerini gerçek önizleme/içe aktarma motoruna bağla.
+- [x] Açılışta alan seçimlerini sıfırlayan preset hatasını ve Petshop kaynak ID kaydetme hatasını düzelt.
+- [x] Ürün kartını listeden aç; Excel Ürün ID sütunu testiyle doğrula.
+- [x] 850 Release testi, self-contained Windows-Current yayını ve 1.738 gerçek XML ürünüyle geçici katalogda tekrar aktarım kontrolü.
+- [ ] BizimHesap canlı ürün yazımındaki servis hatası: önceki API sonucu çözümlenmeden tamamlandı sayma.
+
 - [x] Ana proje .NET 8 WPF EXE olarak değiştirildi. CommerceHub korunuyor, login/parola eklenmedi.
 - [x] Mevcut 217 test geçti. Aktif/pasif düzenleme ve Etsy pasif gönderim engeli zaten bulundu, tekrar yazılmadı.
 - [x] Webdeki filtre davranışı masaüstüne uyarlandı: aktif/pasif/tümü, tam marka/kategori/SKU çoklu listeleri, açıklama/görsel var-yok. Parametreli SQLite, AND/OR birleşimi, sayfalama ve toplam aynı filtrede. 100 değer/6000 karakter sınırı.

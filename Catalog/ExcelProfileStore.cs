@@ -7,6 +7,14 @@ namespace TrMarketplaceHubDesktop.Catalog;
 
 public sealed class ExcelImportProfile
 {
+    public string DataKind { get; set; } = "products";
+    public ExcelImportMode ImportMode { get; set; } = ExcelImportMode.UpdateOnly;
+    public Dictionary<string, string> ColumnLetters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool UseColumnLetters { get; set; }
+    public List<string>? SelectedFields { get; set; }
+    public bool PriceIncludesVat { get; set; } = true;
+    public bool AddStock { get; set; }
+
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "Yeni Excel profili";
     public string CultureName { get; set; } = CultureInfo.CurrentCulture.Name;

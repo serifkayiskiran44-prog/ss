@@ -3,6 +3,17 @@ using System.Text.Json.Serialization;
 namespace TrMarketplaceHubDesktop;
 public sealed class OrderSnapshot
 {
+ public string CustomerName {get;set;}="";
+ public string BillingName {get;set;}="";
+ public string BillingAddress {get;set;}="";
+ public string BillingCity {get;set;}="";
+ public string BillingDistrict {get;set;}="";
+ public string ShippingName {get;set;}="";
+ public string ShippingAddress {get;set;}="";
+ public string ShippingCity {get;set;}="";
+ public string ShippingDistrict {get;set;}="";
+ public string TaxNumber {get;set;}="";
+
  public string Marketplace {get;set;}="";
  public string ShopId {get;set;}="";
  public string OrderId {get;set;}="";
@@ -24,7 +35,7 @@ public sealed class OrderSnapshot
  public string SyncLabel=>LastSync==default?"API senkronizasyonu yok":LastSync.ToLocalTime().ToString("g");
  public OrderSnapshot Copy()=>JsonSerializer.Deserialize<OrderSnapshot>(JsonSerializer.Serialize(this))!;
 }
-public sealed class OrderItem {public string Title {get;set;}="";public string Sku {get;set;}="";public int Quantity {get;set;}=1;}
+public sealed class OrderItem {public decimal? UnitPrice {get;set;} public decimal VatRate {get;set;}=20;public string Title {get;set;}="";public string Sku {get;set;}="";public int Quantity {get;set;}=1;}
 public sealed class OrderShipment
 {
  public string Id {get;set;}="";
@@ -68,6 +79,24 @@ public static class OrderFilterCriteria
   if(toUtc.HasValue&&o.UpdatedAt>toUtc.Value)return false;
   return true;
  }
+}
+
+/// <summary>Order workspace counters. Kept independent from WPF so queue
+/// totals remain deterministic in the screen and in automated tests.</summary>
+public sealed record OrderWorkspaceSummary(int Total,int Preparation,int InTransit,int Returns,int Exceptions)
+{
+ public static OrderWorkspaceSummary From(IEnumerable<OrderSnapshot> orders)
+ {
+  var rows=orders.ToList();
+  bool Has(OrderSnapshot order,string state)=>order.Shipments.Any(s=>string.Equals(s.State,state,StringComparison.Ordinal));
+  return new(
+   rows.Count,
+   rows.Count(o=>o.Shipments.Count==0||Has(o,"Preparing")||Has(o,"Unknown")),
+   rows.Count(o=>Has(o,"Shipped")||Has(o,"InTransit")),
+   rows.Count(o=>Has(o,"Returned")),
+   rows.Count(o=>Has(o,"Exception")));
+ }
+ public string Label=>$"Toplam {Total:N0}   •   Hazırlık {Preparation:N0}   •   Yolda {InTransit:N0}   •   İade {Returns:N0}   •   Sorun {Exceptions:N0}";
 }
 public static class OrderNormalizer
 {
