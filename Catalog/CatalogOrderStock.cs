@@ -121,7 +121,7 @@ public partial class CatalogStore
     tx.Commit();return new(true,existing!);
    }
   }
-  var at=DateTime.UtcNow;var movements=new List<OrderStockMovement>();
+  var at=DateTime.UtcNow;var movements=new List<OrderStockMovement>();var inventoryReference=InventoryLedger.OrderReference(marketplace,shopId,orderId);
   foreach(var pair in quantities)
   {
    var matches=new List<CatalogProduct>();
@@ -135,20 +135,30 @@ public partial class CatalogStore
    if(matches.Count!=1)throw new InvalidOperationException($"SKU {pair.Key}: tek bir merkezi ürün eşleşmesi bulunamadı.");
    var product=matches[0];
    if(!product.Active)throw new InvalidOperationException($"SKU {pair.Key}: ürün pasif.");
-   if(product.Stock<pair.Value)throw new InvalidOperationException($"SKU {pair.Key}: stok yetersiz ({product.Stock}/{pair.Value}).");
-   var movement=new OrderStockMovement(product.Id,product.Sku,pair.Value,product.Stock,product.Stock-pair.Value);
+   var balance=InventoryLedger.ReadBalance(c,tx,product.Id,InventoryLedger.OnlineLocationId);
+   if(balance.Version==0||balance.Quantity!=product.Stock)throw new InvalidOperationException($"SKU {pair.Key}: çevrimiçi bakiye ile katalog stoku uyuşmuyor; stok incelemesi gerekli.");
+   if(balance.Quantity<pair.Value)throw new InvalidOperationException($"SKU {pair.Key}: stok yetersiz ({balance.Quantity}/{pair.Value}).");
+   var after=checked(balance.Quantity-pair.Value);
+   InventoryLedger.SetBalance(c,tx,product.Id,InventoryLedger.OnlineLocationId,after,balance.Version);
+   var movement=new OrderStockMovement(product.Id,product.Sku,pair.Value,balance.Quantity,after);
    product.Stock=movement.StockAfter;
    // Preserve local sold stock when supplier XML refreshes its independent stock figure.
    product.LockStock=true;product.UpdatedUtc=at;Put(c,"CatalogProducts",product.Id,product,tx);
    using var cmd=c.CreateCommand();cmd.Transaction=tx;
    cmd.CommandText="INSERT INTO OrderStockMovements VALUES($marketplace,$shop,$order,$product,$sku,$quantity,$before,$after,$at)";
    OrderStockIdentityParams(cmd,marketplace,shopId,orderId);cmd.Parameters.AddWithValue("$product",product.Id);cmd.Parameters.AddWithValue("$sku",pair.Key);cmd.Parameters.AddWithValue("$quantity",pair.Value);cmd.Parameters.AddWithValue("$before",movement.StockBefore);cmd.Parameters.AddWithValue("$after",movement.StockAfter);cmd.Parameters.AddWithValue("$at",at.ToString("O"));cmd.ExecuteNonQuery();movements.Add(movement);
+   InventoryLedger.RecordMovement(c,tx,product.Id,InventoryLedger.OnlineLocationId,balance.Quantity,after,InventoryMovementKind.OnlineOrder,inventoryReference,at);
   }
   var receipt=new OrderStockReceipt(marketplace,shopId,orderId,at,movements);
   using(var cmd=c.CreateCommand())
   {
    cmd.Transaction=tx;cmd.CommandText="INSERT INTO OrderStockReceipts VALUES($marketplace,$shop,$order,$payload,$json)";
    OrderStockIdentityParams(cmd,marketplace,shopId,orderId);cmd.Parameters.AddWithValue("$payload",payload);cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(receipt));cmd.ExecuteNonQuery();
+  }
+  using(var cmd=c.CreateCommand())
+  {
+   cmd.Transaction=tx;cmd.CommandText="INSERT INTO InventoryOrderReceipts(Marketplace,ShopId,OrderId,Payload,AppliedUtc) VALUES($marketplace,$shop,$order,$payload,$at)";
+   OrderStockIdentityParams(cmd,marketplace,shopId,orderId);cmd.Parameters.AddWithValue("$payload",payload);cmd.Parameters.AddWithValue("$at",at.ToString("O"));cmd.ExecuteNonQuery();
   }
   tx.Commit();return new(false,receipt);
  }
