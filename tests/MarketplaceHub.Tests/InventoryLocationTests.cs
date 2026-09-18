@@ -79,6 +79,37 @@ public sealed class InventoryLocationTests
         return (long)command.ExecuteScalar()!;
     }
 
+    static void DowngradeInventoryGenerationSchema(string root)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "catalog.db") }.ToString());
+        connection.Open();
+        using var columns = connection.CreateCommand(); columns.CommandText = "PRAGMA table_info(InventoryTransferPreviews)";
+        using var reader = columns.ExecuteReader(); var hasGeneration = false;
+        while (reader.Read()) hasGeneration |= reader.GetString(1) == "ProductGeneration";
+        reader.Close();
+        if (hasGeneration)
+        {
+            using var rebuild = connection.CreateCommand();
+            rebuild.CommandText = """
+                DROP TRIGGER IF EXISTS InventoryTransferPreviews_NoUpdate;
+                DROP TRIGGER IF EXISTS InventoryTransferPreviews_NoDelete;
+                ALTER TABLE InventoryTransferPreviews RENAME TO InventoryTransferPreviews_WithGeneration;
+                CREATE TABLE InventoryTransferPreviews(
+                    Id TEXT PRIMARY KEY,ProductId TEXT NOT NULL,FromLocationId TEXT NOT NULL,ToLocationId TEXT NOT NULL,
+                    Quantity INTEGER NOT NULL CHECK(Quantity>0),FromVersion INTEGER NOT NULL CHECK(FromVersion>=0),
+                    ToVersion INTEGER NOT NULL CHECK(ToVersion>=0),CreatedUtc TEXT NOT NULL);
+                INSERT INTO InventoryTransferPreviews(Id,ProductId,FromLocationId,ToLocationId,Quantity,FromVersion,ToVersion,CreatedUtc)
+                    SELECT Id,ProductId,FromLocationId,ToLocationId,Quantity,FromVersion,ToVersion,CreatedUtc
+                    FROM InventoryTransferPreviews_WithGeneration;
+                DROP TABLE InventoryTransferPreviews_WithGeneration;
+                """;
+            rebuild.ExecuteNonQuery();
+        }
+        using var dropGeneration = connection.CreateCommand();
+        dropGeneration.CommandText = "DROP TABLE IF EXISTS InventoryProductGenerations";
+        dropGeneration.ExecuteNonQuery();
+    }
+
     static CatalogProduct Clone(CatalogProduct product) => JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(product))!;
 
     static (string Path, ExcelImportProfile Profile) NewProductWorkbook(string root, string sku, int stock)
@@ -424,5 +455,113 @@ public sealed class InventoryLocationTests
             Assert.AreEqual("Ürün UNDO-STOCK", catalog.Products().Single().Name);
             Assert.AreEqual(6, inventory.GetBalance(created.Id, InventoryLocationStore.OnlineLocationId).Quantity);
         });
+    }
+
+    [TestMethod]
+    public void ProductDeletionInvalidatesOldPreviewAndNewPreviewStillApplies()
+    {
+        WithStore((catalog, inventory, _) =>
+        {
+            var product = catalog.CreateManual(Product("GENERATION", 1));
+            inventory.CreatePhysicalStore("shop-floor", "Mağaza");
+            var stale = inventory.PreviewTransfer(product.Id, InventoryLocationStore.OnlineLocationId, "shop-floor", 1);
+            var online = inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId);
+            inventory.SetBalance(product.Id, InventoryLocationStore.OnlineLocationId, 0, online.Version);
+            var removed = Clone(catalog.Products().Single());
+            var restored = Clone(removed); restored.Stock = 1;
+
+            catalog.DeleteProduct(removed);
+            catalog.Undo(new CatalogUndoReceipt("restore-generation", new[] { restored }, Array.Empty<CatalogProduct>()));
+
+            var error = Assert.ThrowsException<InvalidOperationException>(() => inventory.ApplyTransfer(stale));
+            StringAssert.Contains(error.Message, "önizleme");
+            Assert.AreEqual(1, inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+            Assert.AreEqual(0, inventory.GetBalance(product.Id, "shop-floor").Quantity);
+
+            inventory.ApplyTransfer(inventory.PreviewTransfer(product.Id, InventoryLocationStore.OnlineLocationId, "shop-floor", 1));
+            Assert.AreEqual(0, inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+            Assert.AreEqual(1, inventory.GetBalance(product.Id, "shop-floor").Quantity);
+        });
+    }
+
+    [TestMethod]
+    public void ProductInventoryGenerationSurvivesRestartAndSameIdRestore()
+    {
+        var root = TempRoot();
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var inventory = new InventoryLocationStore(root);
+            var product = catalog.CreateManual(Product("GENERATION-RESTART", 1));
+            inventory.CreatePhysicalStore("shop-floor", "Mağaza");
+            var stale = inventory.PreviewTransfer(product.Id, InventoryLocationStore.OnlineLocationId, "shop-floor", 1);
+            var online = inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId);
+            inventory.SetBalance(product.Id, InventoryLocationStore.OnlineLocationId, 0, online.Version);
+            var removed = Clone(catalog.Products().Single());
+            var restored = Clone(removed); restored.Stock = 1;
+            catalog.DeleteProduct(removed);
+
+            catalog = new CatalogStore(root);
+            inventory = new InventoryLocationStore(root);
+            catalog.Undo(new CatalogUndoReceipt("restore-after-restart", new[] { restored }, Array.Empty<CatalogProduct>()));
+
+            Assert.ThrowsException<InvalidOperationException>(() => inventory.ApplyTransfer(stale));
+            Assert.AreEqual(1, inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+            Assert.AreEqual(0, inventory.GetBalance(product.Id, "shop-floor").Quantity);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [TestMethod]
+    public void SameIdentityUndoDoesNotInvalidateTransferPreview()
+    {
+        WithStore((catalog, inventory, _) =>
+        {
+            var product = catalog.CreateManual(Product("GENERATION-IN-PLACE", 2));
+            inventory.CreatePhysicalStore("shop-floor", "Mağaza");
+            var preview = inventory.PreviewTransfer(product.Id, InventoryLocationStore.OnlineLocationId, "shop-floor", 1);
+            var before = Clone(catalog.Products().Single());
+            var edited = catalog.Products().Single(); edited.Name = "Changed"; catalog.SaveProduct(edited);
+            var after = Clone(catalog.Products().Single());
+
+            catalog.Undo(new CatalogUndoReceipt("same-identity", new[] { before }, new[] { after }));
+            inventory.ApplyTransfer(preview);
+
+            Assert.AreEqual(1, inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+            Assert.AreEqual(1, inventory.GetBalance(product.Id, "shop-floor").Quantity);
+        });
+    }
+
+    [TestMethod]
+    public void LegacyPreviewSchemaUpgradeRejectsPreUpgradePreview()
+    {
+        var root = TempRoot();
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var inventory = new InventoryLocationStore(root);
+            var product = catalog.CreateManual(Product("LEGACY-PREVIEW", 1));
+            inventory.CreatePhysicalStore("shop-floor", "Mağaza");
+            var preview = inventory.PreviewTransfer(product.Id, InventoryLocationStore.OnlineLocationId, "shop-floor", 1);
+            var legacyRequest = new InventoryTransferPreview(preview.Id, preview.ProductId, preview.FromLocationId,
+                preview.ToLocationId, preview.Quantity, preview.FromVersion, preview.ToVersion, preview.CreatedUtc);
+
+            SqliteConnection.ClearAllPools();
+            DowngradeInventoryGenerationSchema(root);
+            inventory = new InventoryLocationStore(root);
+
+            Assert.ThrowsException<InvalidOperationException>(() => inventory.ApplyTransfer(legacyRequest));
+            Assert.AreEqual(1, inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+            Assert.AreEqual(0, inventory.GetBalance(product.Id, "shop-floor").Quantity);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 }

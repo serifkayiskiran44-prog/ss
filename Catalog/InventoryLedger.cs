@@ -11,7 +11,8 @@ public sealed record InventoryLocation(string Id, string Name, InventoryLocation
 public sealed record InventoryBalance(string ProductId, string LocationId, int Quantity, long Version);
 
 public sealed record InventoryTransferPreview(string Id, string ProductId, string FromLocationId,
-    string ToLocationId, int Quantity, long FromVersion, long ToVersion, DateTime CreatedUtc);
+    string ToLocationId, int Quantity, long FromVersion, long ToVersion, DateTime CreatedUtc,
+    long ProductGeneration = 0);
 
 public enum InventoryMovementKind { TransferOut, TransferIn, OnlineOrder, ManualSale, OrderRestock, BalanceAdjustment }
 
@@ -35,12 +36,14 @@ internal static class InventoryLedger
                     Id TEXT PRIMARY KEY,Name TEXT NOT NULL,Kind INTEGER NOT NULL,Enabled INTEGER NOT NULL,Version INTEGER NOT NULL CHECK(Version>=1));
                 CREATE TABLE IF NOT EXISTS InventoryBalances(
                     ProductId TEXT NOT NULL,LocationId TEXT NOT NULL,Quantity INTEGER NOT NULL CHECK(Quantity BETWEEN 0 AND 2147483647),Version INTEGER NOT NULL CHECK(Version>=1),PRIMARY KEY(ProductId,LocationId));
+                CREATE TABLE IF NOT EXISTS InventoryProductGenerations(
+                    ProductId TEXT PRIMARY KEY,Generation INTEGER NOT NULL CHECK(Generation>=1));
                 CREATE TABLE IF NOT EXISTS InventoryMovements(
                     Id TEXT PRIMARY KEY,ProductId TEXT NOT NULL,LocationId TEXT NOT NULL,QuantityBefore INTEGER NOT NULL CHECK(QuantityBefore BETWEEN 0 AND 2147483647),QuantityAfter INTEGER NOT NULL CHECK(QuantityAfter BETWEEN 0 AND 2147483647),Kind INTEGER NOT NULL,ReferenceId TEXT NOT NULL,CreatedUtc TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS IX_InventoryMovements_Product ON InventoryMovements(ProductId,CreatedUtc,Id);
                 CREATE UNIQUE INDEX IF NOT EXISTS UX_InventoryMovements_Reference ON InventoryMovements(Kind,ReferenceId,ProductId,LocationId);
                 CREATE TABLE IF NOT EXISTS InventoryTransferPreviews(
-                    Id TEXT PRIMARY KEY,ProductId TEXT NOT NULL,FromLocationId TEXT NOT NULL,ToLocationId TEXT NOT NULL,Quantity INTEGER NOT NULL CHECK(Quantity>0),FromVersion INTEGER NOT NULL CHECK(FromVersion>=0),ToVersion INTEGER NOT NULL CHECK(ToVersion>=0),CreatedUtc TEXT NOT NULL);
+                    Id TEXT PRIMARY KEY,ProductId TEXT NOT NULL,FromLocationId TEXT NOT NULL,ToLocationId TEXT NOT NULL,Quantity INTEGER NOT NULL CHECK(Quantity>0),FromVersion INTEGER NOT NULL CHECK(FromVersion>=0),ToVersion INTEGER NOT NULL CHECK(ToVersion>=0),CreatedUtc TEXT NOT NULL,ProductGeneration INTEGER NOT NULL DEFAULT 0 CHECK(ProductGeneration>=0));
                 CREATE TABLE IF NOT EXISTS InventoryTransferReceipts(PreviewId TEXT PRIMARY KEY,AppliedUtc TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS InventoryOrderReceipts(
                     Marketplace TEXT NOT NULL,ShopId TEXT NOT NULL,OrderId TEXT NOT NULL,Payload TEXT NOT NULL,AppliedUtc TEXT NOT NULL,PRIMARY KEY(Marketplace,ShopId,OrderId));
@@ -59,7 +62,20 @@ internal static class InventoryLedger
             command.ExecuteNonQuery();
         }
 
+        if (!HasColumn(connection, "InventoryTransferPreviews", "ProductGeneration"))
+        {
+            using var upgrade = connection.CreateCommand();
+            upgrade.CommandText = "ALTER TABLE InventoryTransferPreviews ADD COLUMN ProductGeneration INTEGER NOT NULL DEFAULT 0 CHECK(ProductGeneration>=0)";
+            upgrade.ExecuteNonQuery();
+        }
+
         using var transaction = connection.BeginTransaction(deferred: false);
+        using (var generations = connection.CreateCommand())
+        {
+            generations.Transaction = transaction;
+            generations.CommandText = "INSERT OR IGNORE INTO InventoryProductGenerations(ProductId,Generation) SELECT Id,1 FROM CatalogProducts";
+            generations.ExecuteNonQuery();
+        }
         using (var seed = connection.CreateCommand())
         {
             seed.Transaction = transaction;
@@ -125,6 +141,15 @@ internal static class InventoryLedger
         transaction.Commit();
     }
 
+    static bool HasColumn(SqliteConnection connection, string table, string column)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({table})";
+        using var reader = command.ExecuteReader();
+        while (reader.Read()) if (string.Equals(reader.GetString(1), column, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
     static InvalidOperationException MigrationReviewRequired(string rowId, string reason)
     {
         var safeId = string.Concat((rowId ?? "").Take(80).Select(character => char.IsControl(character) ? '?' : character));
@@ -149,16 +174,41 @@ internal static class InventoryLedger
             balances.Parameters.AddWithValue("$product", productId);
             balances.ExecuteNonQuery();
         }
-        using var product = connection.CreateCommand();
-        product.Transaction = transaction;
-        product.CommandText = "DELETE FROM CatalogProducts WHERE Id=$product";
-        product.Parameters.AddWithValue("$product", productId);
-        product.ExecuteNonQuery();
+        using (var generation = connection.CreateCommand())
+        {
+            generation.Transaction = transaction;
+            generation.CommandText = "INSERT OR IGNORE INTO InventoryProductGenerations(ProductId,Generation) VALUES($product,1)";
+            generation.Parameters.AddWithValue("$product", productId);
+            generation.ExecuteNonQuery();
+        }
+        int deleted;
+        using (var product = connection.CreateCommand())
+        {
+            product.Transaction = transaction;
+            product.CommandText = "DELETE FROM CatalogProducts WHERE Id=$product";
+            product.Parameters.AddWithValue("$product", productId);
+            deleted = product.ExecuteNonQuery();
+        }
+        if (deleted > 0)
+        {
+            using var advance = connection.CreateCommand();
+            advance.Transaction = transaction;
+            advance.CommandText = "UPDATE InventoryProductGenerations SET Generation=Generation+1 WHERE ProductId=$product AND Generation<9223372036854775807";
+            advance.Parameters.AddWithValue("$product", productId);
+            if (advance.ExecuteNonQuery() != 1) throw new OverflowException("Ürün envanter nesli sayı sınırına ulaştı.");
+        }
     }
 
     internal static void SyncOnlineBalance(SqliteConnection connection, SqliteTransaction? transaction, CatalogProduct product)
     {
         if (product.Stock < 0) throw new InvalidOperationException("Çevrimiçi stok negatif olamaz.");
+        using (var generation = connection.CreateCommand())
+        {
+            generation.Transaction = transaction;
+            generation.CommandText = "INSERT OR IGNORE INTO InventoryProductGenerations(ProductId,Generation) VALUES($product,1)";
+            generation.Parameters.AddWithValue("$product", product.Id);
+            generation.ExecuteNonQuery();
+        }
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -170,6 +220,17 @@ internal static class InventoryLedger
         command.Parameters.AddWithValue("$location", OnlineLocationId);
         command.Parameters.AddWithValue("$quantity", product.Stock);
         command.ExecuteNonQuery();
+    }
+
+    internal static long ReadProductGeneration(SqliteConnection connection, SqliteTransaction? transaction, string productId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT Generation FROM InventoryProductGenerations WHERE ProductId=$product";
+        command.Parameters.AddWithValue("$product", productId);
+        return command.ExecuteScalar() is long generation
+            ? generation
+            : throw new InvalidOperationException("Ürün envanter nesli bulunamadı.");
     }
 
     internal static InventoryBalance ReadBalance(SqliteConnection connection, SqliteTransaction? transaction, string productId, string locationId)

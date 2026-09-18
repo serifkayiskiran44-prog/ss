@@ -98,10 +98,11 @@ public sealed class InventoryLocationStore
         var to = InventoryLedger.ReadBalance(connection, transaction, productId, toLocationId);
         if (from.Quantity < quantity) throw new InvalidOperationException($"Kaynak konumda stok yetersiz ({from.Quantity}/{quantity}).");
         _ = checked(to.Quantity + quantity);
-        var preview = new InventoryTransferPreview(Guid.NewGuid().ToString("N"), productId, fromLocationId, toLocationId, quantity, from.Version, to.Version, DateTime.UtcNow);
+        var generation = InventoryLedger.ReadProductGeneration(connection, transaction, productId);
+        var preview = new InventoryTransferPreview(Guid.NewGuid().ToString("N"), productId, fromLocationId, toLocationId, quantity, from.Version, to.Version, DateTime.UtcNow, generation);
         using var command = connection.CreateCommand(); command.Transaction = transaction;
-        command.CommandText = "INSERT INTO InventoryTransferPreviews(Id,ProductId,FromLocationId,ToLocationId,Quantity,FromVersion,ToVersion,CreatedUtc) VALUES($id,$product,$from,$to,$quantity,$fromVersion,$toVersion,$at)";
-        command.Parameters.AddWithValue("$id", preview.Id); command.Parameters.AddWithValue("$product", preview.ProductId); command.Parameters.AddWithValue("$from", preview.FromLocationId); command.Parameters.AddWithValue("$to", preview.ToLocationId); command.Parameters.AddWithValue("$quantity", preview.Quantity); command.Parameters.AddWithValue("$fromVersion", preview.FromVersion); command.Parameters.AddWithValue("$toVersion", preview.ToVersion); command.Parameters.AddWithValue("$at", preview.CreatedUtc.ToString("O", CultureInfo.InvariantCulture));
+        command.CommandText = "INSERT INTO InventoryTransferPreviews(Id,ProductId,FromLocationId,ToLocationId,Quantity,FromVersion,ToVersion,CreatedUtc,ProductGeneration) VALUES($id,$product,$from,$to,$quantity,$fromVersion,$toVersion,$at,$generation)";
+        command.Parameters.AddWithValue("$id", preview.Id); command.Parameters.AddWithValue("$product", preview.ProductId); command.Parameters.AddWithValue("$from", preview.FromLocationId); command.Parameters.AddWithValue("$to", preview.ToLocationId); command.Parameters.AddWithValue("$quantity", preview.Quantity); command.Parameters.AddWithValue("$fromVersion", preview.FromVersion); command.Parameters.AddWithValue("$toVersion", preview.ToVersion); command.Parameters.AddWithValue("$at", preview.CreatedUtc.ToString("O", CultureInfo.InvariantCulture)); command.Parameters.AddWithValue("$generation", preview.ProductGeneration);
         command.ExecuteNonQuery(); transaction.Commit(); return preview;
     }
 
@@ -123,6 +124,8 @@ public sealed class InventoryLocationStore
         }
         var fromLocation = EnsureProductAndLocation(connection, transaction, preview.ProductId, preview.FromLocationId, null);
         var toLocation = EnsureProductAndLocation(connection, transaction, preview.ProductId, preview.ToLocationId, null);
+        if (InventoryLedger.ReadProductGeneration(connection, transaction, preview.ProductId) != preview.ProductGeneration)
+            throw new InvalidOperationException("Ürün transfer önizlemesinden sonra silinip yeniden oluşturuldu; yeni önizleme alın.");
         var from = InventoryLedger.ReadBalance(connection, transaction, preview.ProductId, preview.FromLocationId);
         var to = InventoryLedger.ReadBalance(connection, transaction, preview.ProductId, preview.ToLocationId);
         if (from.Version != preview.FromVersion || to.Version != preview.ToVersion) throw new InvalidOperationException("Transfer önizlemesinden sonra stok değişti; yeni önizleme alın.");
@@ -180,9 +183,9 @@ public sealed class InventoryLocationStore
     static InventoryTransferPreview? ReadPreview(SqliteConnection connection, SqliteTransaction transaction, string id)
     {
         using var command = connection.CreateCommand(); command.Transaction = transaction;
-        command.CommandText = "SELECT ProductId,FromLocationId,ToLocationId,Quantity,FromVersion,ToVersion,CreatedUtc FROM InventoryTransferPreviews WHERE Id=$id"; command.Parameters.AddWithValue("$id", id);
+        command.CommandText = "SELECT ProductId,FromLocationId,ToLocationId,Quantity,FromVersion,ToVersion,CreatedUtc,ProductGeneration FROM InventoryTransferPreviews WHERE Id=$id"; command.Parameters.AddWithValue("$id", id);
         using var reader = command.ExecuteReader();
-        return reader.Read() ? new(id, reader.GetString(0), reader.GetString(1), reader.GetString(2), checked((int)reader.GetInt64(3)), reader.GetInt64(4), reader.GetInt64(5), DateTime.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)) : null;
+        return reader.Read() ? new(id, reader.GetString(0), reader.GetString(1), reader.GetString(2), checked((int)reader.GetInt64(3)), reader.GetInt64(4), reader.GetInt64(5), DateTime.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), reader.GetInt64(7)) : null;
     }
 
     static void EnsureProduct(SqliteConnection connection, SqliteTransaction? transaction, string productId)
