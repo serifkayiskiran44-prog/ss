@@ -11,6 +11,14 @@ public static partial class XmlCatalog
     static readonly Regex RelativeFieldPath = new(@"^@?[\w-]+(?:/(?:@?[\w-]+))*$", RegexOptions.CultureInvariant);
     static bool IsImageKey(string key) => key is "ImageUrls" or "Image" or "Images" || Regex.IsMatch(key, @"^Image[1-9]$");
 
+    public static List<CatalogProduct> Preview(string xml, XmlSource source, CatalogStore catalog)
+    {
+        var persisted = catalog.Sources().SingleOrDefault(candidate => string.Equals(candidate.Id, source.Id, StringComparison.Ordinal));
+        if (persisted is null) throw new InvalidOperationException("XML kaynağı silinmiş; yenileme önizlemesi üretilemez.");
+        if (!source.Enabled || !persisted.Enabled) throw new InvalidOperationException("XML kaynağı pasif; yenileme önizlemesi üretilemez.");
+        return PreviewMapped(xml, source);
+    }
+
     public static string SampleValue(IReadOnlyDictionary<string, string> values, string paths) =>
         string.Join(" | ", paths.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(p => values.GetValueOrDefault(p, "")).Where(v => v.Length > 0));
 
@@ -48,6 +56,7 @@ public static partial class XmlCatalog
 
     static List<CatalogProduct> PreviewMapped(string xml, XmlSource source)
     {
+        if (!source.Enabled) throw new InvalidOperationException("XML kaynağı pasif; yenileme önizlemesi üretilemez.");
         Validate(source);
         var calculate = CatalogPricing.Create(source);
         var applyCategory = XmlCategoryRules.Create(source);
