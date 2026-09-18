@@ -12,6 +12,8 @@ namespace TrMarketplaceHubDesktop;
 public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
 {
     readonly string? directory;
+    readonly MarketplaceConnection? scopedConnection;
+    readonly MarketplaceCredentialVault? credentialVault;
     readonly CatalogStore catalog;
     readonly EtsyWorkspaceStore store;
     readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
@@ -31,9 +33,23 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     bool busy;
     bool disposed;
     public event Action<EtsyCredentials>? CredentialsChanged;
+    public string? ConnectionId => scopedConnection?.Id;
+    public string AccountShopId => scopedConnection?.ShopId ?? credentials?.ShopId ?? "";
 
-    public EtsyWorkspacePanel(string? directory = null)
+    public EtsyWorkspacePanel(string? directory = null) : this(directory, null, false) { }
+
+    public EtsyWorkspacePanel(string connectionId, string? directory) : this(directory, connectionId, true) { }
+
+    EtsyWorkspacePanel(string? directory, string? connectionId, bool accountScoped)
     {
+        if (accountScoped)
+        {
+            scopedConnection = new MarketplaceConnectionStore(directory).Get(connectionId!)
+                ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+            if (!scopedConnection.Enabled || scopedConnection.Channel != "etsy")
+                throw new InvalidOperationException("Etsy çalışma alanı için etkin ve doğru kanal hesabı gerekli.");
+            credentialVault = new MarketplaceCredentialVault(directory);
+        }
         this.directory = directory; catalog = new(directory); store = new(directory);
         BuildStyle();
         var root = new DockPanel { Margin = new Thickness(12) };
@@ -45,7 +61,8 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         sections.Items.Add(new TabItem { Header = "Ayarlar", Content = BuildSettings() });
         sections.Items.Add(new TabItem { Header = "İşlem geçmişi", Content = BuildHistory() });
         root.Children.Add(sections); Content = root;
-        try { credentials = CredentialStore.Load(directory); if(credentials is not null) { FillCredentials(credentials); LoadState(); } }
+        if(scopedConnection is not null){shop.Text=scopedConnection.ShopId;shop.IsReadOnly=true;summary.Text=$"{scopedConnection.DisplayName} / {scopedConnection.ShopId} · {scopedConnection.Status}";}
+        try { credentials = LoadCredentials(); if(credentials is not null) FillCredentials(credentials); if(scopedConnection is not null || credentials is not null) LoadState(); }
         catch(Exception ex) { summary.Text = Safe(ex); }
         RefreshProducts();
         Loaded += (_,_) => { var window=Window.GetWindow(this); if(window is not null) window.Closed += (_,_)=>Dispose(); };
@@ -64,8 +81,9 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     void Local(Action action) { try { action(); } catch(Exception ex) { summary.Text=Safe(ex);MessageBox.Show(Window.GetWindow(this),Safe(ex),"Etsy",MessageBoxButton.OK,MessageBoxImage.Warning); } }
     void LoadState()
     {
-        if(credentials is null || string.IsNullOrWhiteSpace(credentials.ShopId))return;
-        state=store.Load(credentials.ShopId); ReloadChoices();
+        var accountShop = scopedConnection?.ShopId ?? credentials?.ShopId;
+        if(string.IsNullOrWhiteSpace(accountShop))return;
+        state=store.Load(accountShop); ReloadChoices();
         summary.Text=$"{(state.ShopName.Length>0?state.ShopName:"Etsy mağazası")}  /  {state.ShopId}  ·  {state.Currency}  ·  {state.Listings.Count:N0} ilan";
         history.ItemsSource=store.Receipts(state.ShopId); RefreshProducts();
     }
@@ -91,6 +109,25 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         string storeMessage(string id)=>history.ItemsSource is IReadOnlyList<EtsyOperationReceipt> receipts?receipts.FirstOrDefault(r=>r.ProductId==id)?.Detail??"":"";
     }
     static string StateLabel(string value)=>value switch {"active"=>"Yayında","draft"=>"Taslak","inactive"=>"Pasif","sold_out"=>"Tükendi","expired"=>"Süresi doldu",_=>value};
+
+    EtsyCredentials? LoadCredentials()
+    {
+        if (scopedConnection is null) return CredentialStore.Load(directory);
+        var current = CurrentScopedConnection();
+        var value = credentialVault!.Load<EtsyCredentials>(current.Id, current.Channel, current.ShopId);
+        if (value is not null && value.ShopId != current.ShopId)
+            throw new InvalidOperationException("WRONG_ACCOUNT: Etsy şifreli hesabı seçili mağazayla eşleşmiyor.");
+        return value;
+    }
+
+    internal MarketplaceConnection CurrentScopedConnection()
+    {
+        var current = new MarketplaceConnectionStore(directory).Get(scopedConnection!.Id)
+            ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        if (!current.Enabled || current.Channel != "etsy" || current.ShopId != scopedConnection.ShopId)
+            throw new InvalidOperationException("WRONG_ACCOUNT: Mağaza bağlantısı devre dışı veya değiştirilmiş.");
+        return current;
+    }
     sealed record ProductRow(string Id,string Sku,string Title,string Barcode,int Stock,decimal Price,string Currency,long? ListingId,int? EtsyStock,decimal? EtsyPrice,string EtsyCurrency,string State,string Category,string Brand,string Detail,string TemplateId);
     sealed record Option(string Id,string Name) { public override string ToString()=>Name; }
     static void SetOptions(ComboBox combo,IEnumerable<Option> values,string? selected=null)

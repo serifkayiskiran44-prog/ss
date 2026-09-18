@@ -9,7 +9,7 @@ namespace TrMarketplaceHubDesktop;
 
 public static class MarketplaceConnectionsPanel
 {
-    public static FrameworkElement Create(string? dataDirectory = null, Action<string>? navigate = null)
+    public static FrameworkElement Create(string? dataDirectory = null, Action<string>? navigate = null, Action? connectionsChanged = null)
     {
         var store = new MarketplaceConnectionStore(dataDirectory);
         string migrationNotice;
@@ -77,6 +77,7 @@ public static class MarketplaceConnectionsPanel
             rows.Clear(); foreach (var item in store.List()) rows.Add(item);
             RebuildAccountTabs();
             if (selectedId.Length > 0) grid.SelectedItem = rows.FirstOrDefault(x => x.Id == selectedId);
+            connectionsChanged?.Invoke();
         }
         void RebuildAccountTabs()
         {

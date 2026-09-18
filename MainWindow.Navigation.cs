@@ -13,7 +13,7 @@ public partial class MainWindow
  UiPreferenceStore uiPreferences = null!;
  string? currentRoute;
  bool selectingRoute;
- EtsyWorkspacePanel? etsyWorkspace;
+ MarketplaceAccountHomePanel marketplaceHome = null!;
 
  void BuildNavigation()
  {
@@ -32,26 +32,42 @@ public partial class MainWindow
   Page("excel","Excel işlemleri","SKU ve sütun harfleriyle ürün, fiyat, stok, kategori ve sipariş aktarımı; önizleme ve geri alma.",BuildExcel());
   Page("orders","Siparişler","Sipariş listesi, detay, kargo takibi, iade filtresi ve toplu işlem önizlemesi.",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts));
   Group("ENTEGRASYON");
-  var trendyolWorkspace=new TrendyolWorkspacePanel(dataDirectory);
-  Page("trendyol","Trendyol","Ürün kontrolü, eşleştirme, mağaza ayarları ve gönderim sonuçları.",trendyolWorkspace);
-  etsyWorkspace=new EtsyWorkspacePanel(dataDirectory);
-  etsyWorkspace.CredentialsChanged+=SetCredentials;
-  Page("etsy","Etsy","Ürün kontrolü, SKU eşleştirme, kategori ve kargo şablonları, gönderim sonuçları.",etsyWorkspace);
+  marketplaceHome=new MarketplaceAccountHomePanel(dataDirectory);
+  Page("marketplaces","Pazaryeri hesapları","Etkin mağazaları ayrı kartlar halinde açın; ürün ve işlem verileri seçili hesaba bağlı kalır.",marketplaceHome);
+  CompatibilityAccountLink("trendyol","Trendyol","Kayıtlı bir Trendyol hesabını açar.");
+  CompatibilityAccountLink("etsy","Etsy","Kayıtlı bir Etsy hesabını açar.");
   Page("bizimhesap","BizimHesap","Ürün/depo okuma ve XML ürünleri için SKU-barkod eşleştirme önizlemesi.",BizimHesapPanel.Create(dataDirectory));
   Group("YÖNETİM");
+  Page("connections","Mağaza bağlantıları","Hesap metadatası, etkinlik, bağlantı durumu ve desteklenen yetenekler.",MarketplaceConnectionsPanel.Create(dataDirectory,OpenMarketplaceRoute,marketplaceHome.Refresh));
   var settings=new StackPanel{Margin=new Thickness(20)};
   settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
   settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
   settings.Children.Add(Button("BizimHesap bağlantı ayarları",()=>Navigate("bizimhesap")));
-  settings.Children.Add(Button("Trendyol bağlantı ayarları",()=>{Navigate("trendyol");trendyolWorkspace.ShowSettings();}));
-  settings.Children.Add(Button("Etsy bağlantı ayarları",()=>{Navigate("etsy");etsyWorkspace.ShowSettings();}));
+  settings.Children.Add(Button("Mağaza bağlantılarını yönet",()=>Navigate("connections")));
   settings.Children.Add(Heading("Sürüm, yedek ve taşıma"));settings.Children.Add(DataBackupPanel.Create(dataDirectory));
   settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML otomasyonu / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));
   Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var initial = uiPreferences.Get("last-route");
-  Navigate(routes.ContainsKey(initial ?? "") ? initial! : "products", false);
+  Navigate(routes.ContainsKey(initial ?? "") ? initial! : initial is "trendyol" or "etsy" ? "marketplaces" : "products", false);
+
+  void CompatibilityAccountLink(string channel,string title,string description)
+  {
+   var item=new ListBoxItem{Tag=channel,Content=title,ToolTip=description};NavigationList.Items.Add(item);
+   item.Selected+=(_,_)=>{if(selectingRoute)return;try{marketplaceHome.OpenFirst(channel);SelectRoute("marketplaces",true,"Pazaryeri hesapları",description);}catch(Exception error){Log(Safe(error));SelectRoute("marketplaces",true);}};
+  }
+ }
+
+ void OpenMarketplaceRoute(string key)
+ {
+  if(key is "trendyol" or "etsy")
+  {
+   marketplaceHome.OpenFirst(key);
+   SelectRoute("marketplaces",true);
+   return;
+  }
+  Navigate(key);
  }
  void SelectRoute(string key, bool push, string? title = null, string? description = null)
  {
