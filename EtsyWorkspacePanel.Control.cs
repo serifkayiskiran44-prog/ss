@@ -5,6 +5,29 @@ using TrMarketplaceHubDesktop.Etsy;
 namespace TrMarketplaceHubDesktop;
 public sealed partial class EtsyWorkspacePanel
 {
+    UIElement BuildAccountShopProducts(UIElement specialized)
+    {
+        if(scopedConnection is null)return specialized;
+        var tabs=new TabControl{Name="EtsyAccountProductSections"};
+        var common=new MarketplaceShopProductsPanel(scopedConnection.Id,directory);common.BulkPreviewRequested+=HandleAccountBulkPreview;
+        tabs.Items.Add(new TabItem{Header="Hesap ürünleri",Content=common});
+        tabs.Items.Add(new TabItem{Header="Etsy işlemleri",Content=specialized});
+        return tabs;
+    }
+    void HandleAccountBulkPreview(MarketplaceShopBulkOperation operation,MarketplaceShopSelectionSnapshot selection)
+    {
+        var connection=CurrentScopedConnection();
+        if(selection.ConnectionId!=connection.Id||selection.ConnectionRevision!=connection.Revision)
+            throw new InvalidOperationException("Mağaza hesabı değişti; seçimi yenileyin.");
+        if(operation is MarketplaceShopBulkOperation.Taxonomy or MarketplaceShopBulkOperation.Properties or MarketplaceShopBulkOperation.Shipping or MarketplaceShopBulkOperation.Readiness){sections.SelectedIndex=1;settings.SelectedIndex=1;return;}
+        var target=operation switch{
+            MarketplaceShopBulkOperation.CreatePreview=>EtsyOperation.CreateDraft,
+            MarketplaceShopBulkOperation.PricePreview=>EtsyOperation.Price,
+            MarketplaceShopBulkOperation.StockPreview=>EtsyOperation.Stock,
+            MarketplaceShopBulkOperation.ContentPreview=>EtsyOperation.Content,
+            _=>throw new InvalidOperationException("Bu Etsy işlemi uzman önizlemeye bağlanmadı.")};
+        _=Run(()=>Preview(target,selection.ProductIds));
+    }
     UIElement BuildControl()
     {
         var grid=new Grid{Margin=new Thickness(6)};
@@ -50,9 +73,9 @@ public sealed partial class EtsyWorkspacePanel
         var table=Table("EtsyMatchPreview");Column(table,"SKU","Sku",120);Column(table,"Ürün","Title",270);Column(table,"İlan ID","ListingId",110);Column(table,"Durum","Status",100);Column(table,"Açıklama","Detail",320);table.ItemsSource=rows;
         var window=Dialog("SKU eşleştirme önizlemesi",1000,550);var dock=new DockPanel();var apply=ActionButton($"{rows.Count(r=>r.CanMatch)} kesin eşleşmeyi kaydet",()=>{service.ApplyMatches(state,rows.Where(r=>r.CanMatch).ToArray());LoadState();ClearPreview();window.Close();});apply.IsEnabled=rows.Any(r=>r.CanMatch);DockPanel.SetDock(apply,Dock.Bottom);dock.Children.Add(apply);dock.Children.Add(table);window.Content=dock;window.ShowDialog();
     }
-    async Task Preview(EtsyOperation operation)
+    async Task Preview(EtsyOperation operation,IReadOnlyList<string>? exactProductIds=null)
     {
-        var ids=PreviewProductIds(operation);
+        var ids=exactProductIds is null?PreviewProductIds(operation):Array.AsReadOnly(exactProductIds.ToArray());
         ClearPreview();var c=await Authorized();
         summary.Text="Seçili ürünler ve Etsy mağazası karşılaştırılıyor…";
         plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token);

@@ -35,7 +35,9 @@ public sealed partial class EtsyWorkspacePanel
         var templates=new DockPanel{Margin=new Thickness(8)};var templateTop=new StackPanel();templateTop.Children.Add(Note("Kargo ve hazırlık süresi Etsy'deki mağaza profillerinden seçilir. Şablonu ürün listesinden seçili ürünlere atayın."));templateList.MinWidth=280;
         templateTop.Children.Add(Bar(templateList,ActionButton("Yeni şablon",()=>OpenTemplate(null)),ActionButton("Şablonu düzenle",()=>OpenTemplate(state.Templates.FirstOrDefault(t=>t.Id==Selected(templateList))??throw new InvalidOperationException("Şablon seçin."))),AsyncButton("Mağaza profillerini yenile",PullMetadata)));
         templateTop.Children.Add(Note("Hazırlayan, üretim zamanı ve ürünün malzeme/tedarik niteliği gerçek ürüne uygun seçilmelidir. Döviz dönüşümü otomatik varsayılmaz; Etsy fiyatı mağaza dövizinde girilir."));DockPanel.SetDock(templateTop,Dock.Top);templates.Children.Add(templateTop);templates.Children.Add(new TextBlock{Text="Kargo profillerini Etsy mağazanızda oluşturup buradan alın.\nHer ürün kendi başlık, açıklama, kategori ve özellikleriyle şablonu tamamlayabilir.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(12)});
-        settings.Items.Add(new TabItem{Header="İlan ve kargo şablonları",Content=templates});return settings;
+        settings.Items.Add(new TabItem{Header="İlan ve kargo şablonları",Content=templates});
+        if(scopedConnection is not null)settings.Items.Add(new TabItem{Header="Hesap kuralları",Content=new MarketplaceShopSettingsPanel(scopedConnection.Id,directory)});
+        return settings;
     }
     EtsyCredentials ReadCredentials()
     {

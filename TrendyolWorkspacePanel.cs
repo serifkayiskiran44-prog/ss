@@ -59,7 +59,8 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
         var root=new DockPanel{Margin=new(10)};var footer=new DockPanel();var cancel=B("İsteği iptal et",()=>cancellation?.Cancel());DockPanel.SetDock(cancel,Dock.Right);footer.Children.Add(cancel);footer.Children.Add(status);DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
         var header=new DockPanel{Margin=new(0,0,0,8)};var settingsButton=B("Mağaza ayarları",ShowSettings);settingsButton.Name="TrendyolOpenSettings";DockPanel.SetDock(settingsButton,Dock.Right);header.Children.Add(settingsButton);accountBadge.FontWeight=FontWeights.SemiBold;header.Children.Add(accountBadge);DockPanel.SetDock(header,Dock.Top);root.Children.Add(header);root.Children.Add(tabs);Content=root;
         settingsTabs.Items.Add(new TabItem{Header="Bağlantı ve aktarım",Content=BuildConnection()});settingsTabs.Items.Add(new TabItem{Header="Kategori ve marka",Content=BuildMappings()});settingsTabs.Items.Add(new TabItem{Header="Teslimat şablonları",Content=BuildDelivery()});settingsTabs.Items.Add(new TabItem{Header="Marka denetim bilgileri",Content=BuildBrandSafety()});
-        AddTab("Trendyol kontrol",BuildProducts());AddTab("Ayarlar",settingsTabs);AddTab("Rekabet analizi",BuildCompetition());AddTab("İşlem geçmişi",BuildHistory());
+        if(scopedConnection is not null)settingsTabs.Items.Add(new TabItem{Header="Hesap kuralları",Content=BuildAccountShopSettings()});
+        AddTab("Trendyol kontrol",BuildAccountShopProducts(BuildProducts()));AddTab("Ayarlar",settingsTabs);AddTab("Rekabet analizi",BuildCompetition());AddTab("İşlem geçmişi",BuildHistory());
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&loaded&&editorDirty&&tabs.SelectedIndex!=0&&!DiscardEditorChanges())tabs.SelectedIndex=0;};
         send.Click+=async(_,_)=>await Run(async()=>{
             var current=plan??throw new InvalidOperationException("Önce önizleyin.");

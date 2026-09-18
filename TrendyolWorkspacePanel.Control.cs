@@ -23,6 +23,31 @@ public sealed partial class TrendyolWorkspacePanel
     int PageSize=>pageSize.SelectedItem is int size?size:100;
     static ComboBox FilterChoice(string name,params string[] items)=>new(){Name=name,ItemsSource=items,SelectedIndex=0,MinWidth=125,Margin=new(3),VerticalContentAlignment=VerticalAlignment.Center};
     static FrameworkElement ControlGroup(string title,UIElement content,double width)=>new GroupBox{Header=title,Content=content,Width=width,Margin=new(4),Padding=new(5),BorderBrush=Line,BorderThickness=new(1)};
+    UIElement BuildAccountShopProducts(UIElement specialized)
+    {
+        if(scopedConnection is null)return specialized;
+        var sections=new TabControl{Name="TrendyolAccountProductSections"};
+        var common=new MarketplaceShopProductsPanel(scopedConnection.Id,workspaceDirectory);common.BulkPreviewRequested+=HandleAccountBulkPreview;
+        sections.Items.Add(new TabItem{Header="Hesap ürünleri",Content=common});
+        sections.Items.Add(new TabItem{Header="Trendyol işlemleri",Content=specialized});
+        return sections;
+    }
+    void HandleAccountBulkPreview(MarketplaceShopBulkOperation operation,MarketplaceShopSelectionSnapshot selection)
+    {
+        var connection=CurrentScopedConnection();
+        if(selection.ConnectionId!=connection.Id||selection.ConnectionRevision!=connection.Revision)
+            throw new InvalidOperationException("Mağaza hesabı değişti; seçimi yenileyin.");
+        if(operation is MarketplaceShopBulkOperation.Category or MarketplaceShopBulkOperation.Brand){tabs.SelectedIndex=1;settingsTabs.SelectedIndex=1;return;}
+        var target=operation switch{
+            MarketplaceShopBulkOperation.Delivery=>TrendyolOperation.Delivery,
+            MarketplaceShopBulkOperation.PricePreview=>TrendyolOperation.Price,
+            MarketplaceShopBulkOperation.StockPreview=>TrendyolOperation.Stock,
+            MarketplaceShopBulkOperation.ContentPreview=>TrendyolOperation.Content,
+            MarketplaceShopBulkOperation.CreatePreview=>TrendyolOperation.Create,
+            _=>throw new InvalidOperationException("Bu Trendyol işlemi uzman önizlemeye bağlanmadı.")};
+        mode.SelectedItem=mode.Items.Cast<Mode>().Single(m=>m.Value==target);
+        PresentPreview(store.Preview(Account(),selection.ProductIds,target));
+    }
     static void FilterField(Panel panel,string label,UIElement input)
     {
         var row=new DockPanel();var caption=new TextBlock{Text=label,Width=85,VerticalAlignment=VerticalAlignment.Center,Margin=new(2),TextWrapping=TextWrapping.Wrap};DockPanel.SetDock(caption,Dock.Left);row.Children.Add(caption);row.Children.Add(input);panel.Children.Add(row);

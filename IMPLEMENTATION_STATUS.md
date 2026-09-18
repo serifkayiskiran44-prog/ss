@@ -1,5 +1,11 @@
 # Uygulama durumu — .NET 8 EXE
 
+## Multi-store shop product workspace — 2026-09-19
+- Added an account-scoped wide product table over exact `ConnectionId`, including local/remote stock and price, category/brand, state/error, management flags, detailed filters and immutable whole-filter selection snapshots.
+- Bulk commands are channel/capability-derived and hand exact product snapshots to the retained Trendyol/Etsy specialist preview flows. Local management/category/template edits use immutable SQLite previews, explicit approval, connection revision, catalog timestamp and binding CAS; this feature performs no remote API write.
+- Added revisioned per-account Active, Connection, Product rules, Order rules and Sync settings. Empty patch fields preserve stored values and another account's rules cannot be read or changed through the selected account.
+- Existing Trendyol category/brand/delivery/safety controls and Etsy taxonomy/properties/shipping/readiness controls remain available beside the common panels.
+
 ## Etsy workspace — 2026-09-18
 - Reviewed both supplied Entegra Etsy tutorials through their complete Turkish transcripts and relevant connection/product-card frames. Current official Etsy API reference overrides obsolete tutorial/API details.
 - Added the Etsy integration route with control/settings/history tabs, a wide product grid, collapsible bulk actions and filters, SKU matching review, manual listing matching, separate product and preview windows, category mapping, required properties and named shipping/processing templates.

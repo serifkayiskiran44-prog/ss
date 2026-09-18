@@ -66,7 +66,7 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         var open = ActionButton("Mağaza ayarları", ShowSettings); open.Name = "EtsyOpenSettings";
         DockPanel.SetDock(open,Dock.Right); top.Children.Add(open); top.Children.Add(summary);
         DockPanel.SetDock(top,Dock.Top); root.Children.Add(top);
-        sections.Items.Add(new TabItem { Header = "Etsy kontrol", Content = BuildControl() });
+        sections.Items.Add(new TabItem { Header = "Etsy kontrol", Content = BuildAccountShopProducts(BuildControl()) });
         sections.Items.Add(new TabItem { Header = "Ayarlar", Content = BuildSettings() });
         sections.Items.Add(new TabItem { Header = "İşlem geçmişi", Content = BuildHistory() });
         root.Children.Add(sections); Content = root;

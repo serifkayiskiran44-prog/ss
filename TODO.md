@@ -1,5 +1,11 @@
 # Devam durumu — 2026-09-11
 
+## Çoklu mağaza ürün çalışma alanı — 2026-09-19
+- [x] Exact `ConnectionId` ile hesap kapsamlı geniş ürün tablosu; bağlı/yeni aday/hata ve yönetim filtreleri; sayfa veya tüm filtre sonucu için değişmez seçim snapshot'ı.
+- [x] Kanal capability'lerine göre Trendyol kategori/marka/teslimat/fiyat/stok/içerik ve Etsy taksonomi/özellik/kargo/hazırlık/yeni ilan önizleme yönlendirmeleri; mevcut uzman kontroller korunuyor.
+- [x] İçerik/fiyat/stok yönetim anahtarları ile kategori/şablon değerleri immutable önizleme, açık onay, connection revision, catalog timestamp ve binding CAS korumasıyla yalnız seçili hesapta uygulanıyor; uzak API yazımı yapılmıyor.
+- [x] Active, Connection, Product rules, Order rules ve Sync bölümleri exact hesap altında monotonic revision/CAS ile saklanıyor; boş alanlar kayıtlı kuralları koruyor.
+
 ## Etsy çalışma alanı — 2026-09-18
 - [x] İki Entegra Etsy eğitiminin tam Türkçe altyazısını ve ilgili ekranlarını incele; güncel resmi Etsy API ile karşılaştır.
 - [x] Ayrı Etsy menüsü: geniş kontrol listesi, toplu işlem önizlemeleri, SKU eşleme, ürün kartı, kategori/özellik ve kargo/hazırlık şablonları, işlem geçmişi.

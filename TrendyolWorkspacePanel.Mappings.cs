@@ -7,6 +7,9 @@ namespace TrMarketplaceHubDesktop;
 public sealed record TrendyolMappingRow(string LocalId,string LocalName,long? RemoteId,string RemoteName,string Reason);
 public sealed partial class TrendyolWorkspacePanel
 {
+    UIElement BuildAccountShopSettings() => scopedConnection is null
+        ? new TextBlock{Text="Hesap kapsamlı ayarlar yalnız seçili bağlantıda açılır."}
+        : new MarketplaceShopSettingsPanel(scopedConnection.Id,workspaceDirectory);
     readonly ComboBox mappingKind=new(){ItemsSource=new[]{"Kategori","Marka"},SelectedIndex=0,Width=120,Margin=new(3)};
     readonly TextBox mappingSearch=Box();
     readonly TextBox remoteSearch=Box();
