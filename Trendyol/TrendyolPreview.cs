@@ -29,6 +29,9 @@ public sealed partial class TrendyolWorkspaceStore
             if(p.Id!=id) throw new InvalidOperationException("Ürün kimliği tutarsız.");
             var profile=state.Profiles.SingleOrDefault(x=>x.ProductId==id) ?? new(){ProductId=id};
             var accountBinding=connectionId is null?null:accountBindings!.Get(id,connectionId);
+            if(connectionId is not null && operation!=TrendyolOperation.Create &&
+                (accountBinding is null || !MarketplaceShopProductsModel.IsActiveBinding(accountBinding) || !AllowsAccountOperation(accountBinding,operation)))
+                throw new InvalidOperationException("Hesap kapsamlı Trendyol güncellemesi için yönetime açık ürün bağlantısı gerekli.");
             var integrationCode=profile.IntegrationCode.Length>0?profile.IntegrationCode:accountBinding?.RemoteBarcode??"";
             var listingBarcode=profile.ListingBarcode.Length>0?profile.ListingBarcode:accountBinding?.RemoteBarcode??"";
             var barcode=operation==TrendyolOperation.Create
@@ -123,6 +126,15 @@ public sealed partial class TrendyolWorkspaceStore
         var plan=new TrendyolPlan(Guid.NewGuid().ToString("N"),account.SupplierId,AccountFingerprint(account),state.Revision,DateTime.UtcNow,operation,CatalogFingerprint(c,tx,ids),rows,payload);
         using var save=c.CreateCommand();save.Transaction=tx;save.CommandText="INSERT INTO TrendyolPlans VALUES($id,$seller,$json)";save.Parameters.AddWithValue("$id",plan.Id);save.Parameters.AddWithValue("$seller",plan.SellerId);save.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan));save.ExecuteNonQuery();tx.Commit();return plan;
     }
+    static bool AllowsAccountOperation(ProductChannelBinding binding,TrendyolOperation operation)=>operation switch
+    {
+        TrendyolOperation.Stock=>binding.ManageStock,
+        TrendyolOperation.Price=>binding.ManagePrice,
+        TrendyolOperation.PriceAndStock=>binding.ManagePrice&&binding.ManageStock,
+        TrendyolOperation.Delivery or TrendyolOperation.ShippingDetails or TrendyolOperation.UpdateUnapproved or TrendyolOperation.Content=>binding.ManageContent,
+        TrendyolOperation.Create=>true,
+        _=>false
+    };
     static void Fresh(DateTime? time,TimeSpan limit,string message){if(time is null || DateTime.UtcNow-time.Value>limit || time>DateTime.UtcNow.AddMinutes(1))throw new InvalidOperationException(message+"; eski veriye göre gönderim yapılamaz.");}
     static void AddProductDesi(Dictionary<string,object> item,CatalogProduct product)
     {

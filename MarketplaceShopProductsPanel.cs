@@ -189,7 +189,15 @@ public sealed class MarketplaceShopProductsModel
                 throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; seçimi yenileyin.");
             var binding = bindings.Get(id, connection.Id);
             if ((binding?.Version ?? 0) != capturedVersion) throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; seçimi yenileyin.");
-            if (binding is null) return new MarketplaceShopSpecialistPreviewRow(id, 0, "", "", "", false, false, false, "", "", "");
+            if (binding is null)
+            {
+                if (operation != MarketplaceShopBulkOperation.CreatePreview)
+                    throw new InvalidOperationException("Uzak mağaza güncellemesi için etkin ürün bağlantısı gerekli.");
+                return new MarketplaceShopSpecialistPreviewRow(id, 0, "", "", "", false, false, false, "", "", "");
+            }
+            if (operation != MarketplaceShopBulkOperation.CreatePreview &&
+                (!IsActiveBinding(binding) || !AllowsSpecialistOperation(binding.ManageContent, binding.ManagePrice, binding.ManageStock, operation)))
+                throw new InvalidOperationException("Ürün bağlantısı bu uzak mağaza işlemi için yönetime açık değil.");
             return new MarketplaceShopSpecialistPreviewRow(id, binding.Version, binding.RemoteId, binding.RemoteSku, binding.RemoteBarcode,
                 binding.ManageContent, binding.ManagePrice, binding.ManageStock, binding.CategoryId, binding.TemplateId, binding.State);
         }).ToArray();
@@ -303,7 +311,8 @@ public sealed class MarketplaceShopProductsModel
             using var reader = binding.ExecuteReader();
             if (!reader.Read())
             {
-                if (row.BindingVersion != 0 || row.RemoteId.Length != 0) throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; yeni önizleme alın.");
+                if (supplied.Operation != MarketplaceShopBulkOperation.CreatePreview || row.BindingVersion != 0 || row.RemoteId.Length != 0)
+                    throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; yeni önizleme alın.");
                 continue;
             }
             if (reader.GetInt64(9) != row.BindingVersion || reader.GetString(0) != row.RemoteId || reader.GetString(1) != row.RemoteSku ||
@@ -311,6 +320,9 @@ public sealed class MarketplaceShopProductsModel
                 (reader.GetInt32(4) != 0) != row.ManagePrice || (reader.GetInt32(5) != 0) != row.ManageStock ||
                 reader.GetString(6) != row.CategoryId || reader.GetString(7) != row.TemplateId || reader.GetString(8) != row.State)
                 throw new InvalidOperationException("Ürün-mağaza bağlantısı veya yönetim durumu değişti; yeni önizleme alın.");
+            if (supplied.Operation != MarketplaceShopBulkOperation.CreatePreview &&
+                (!IsActiveBinding(row.RemoteId, row.State) || !AllowsSpecialistOperation(row.ManageContent, row.ManagePrice, row.ManageStock, supplied.Operation)))
+                throw new InvalidOperationException("Ürün bağlantısı bu uzak mağaza işlemi için yönetime açık değil; yeni önizleme alın.");
         }
     }
 
@@ -498,6 +510,20 @@ public sealed class MarketplaceShopProductsModel
         MarketplaceShopBulkOperation.Management => preview.Rows.Any(row => row.ManageContent.HasValue || row.ManagePrice.HasValue || row.ManageStock.HasValue || row.CategoryId is not null || row.TemplateId is not null),
         MarketplaceShopBulkOperation.Category or MarketplaceShopBulkOperation.Taxonomy => preview.Rows.All(row => row.CategoryId is not null),
         MarketplaceShopBulkOperation.Delivery or MarketplaceShopBulkOperation.Shipping => preview.Rows.All(row => row.TemplateId is not null),
+        _ => false
+    };
+
+    internal static bool IsActiveBinding(ProductChannelBinding binding) => IsActiveBinding(binding.RemoteId, binding.State);
+    internal static bool IsActiveBinding(string remoteId, string state) =>
+        !string.IsNullOrWhiteSpace(remoteId) && !IsError(state, "");
+    internal static bool AllowsSpecialistOperation(bool manageContent, bool managePrice, bool manageStock, MarketplaceShopBulkOperation operation) => operation switch
+    {
+        MarketplaceShopBulkOperation.CreatePreview => true,
+        MarketplaceShopBulkOperation.StockPreview => manageStock,
+        MarketplaceShopBulkOperation.PricePreview => managePrice,
+        MarketplaceShopBulkOperation.ContentPreview or MarketplaceShopBulkOperation.Category or MarketplaceShopBulkOperation.Brand or
+        MarketplaceShopBulkOperation.Delivery or MarketplaceShopBulkOperation.Taxonomy or MarketplaceShopBulkOperation.Properties or
+        MarketplaceShopBulkOperation.Shipping or MarketplaceShopBulkOperation.Readiness => manageContent,
         _ => false
     };
 

@@ -350,8 +350,12 @@ public sealed class MarketplaceShopWorkspaceTests
         var plan = store.Preview(account, new[] { product.Id }, TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Stock, connection.Id);
         Assert.IsNotNull(plan.Rows.Single().ItemJson, plan.Rows.Single().Detail);
         model.AssociateSpecialistPlan(specialist, plan.Id);
-        bindings.Save(binding with { ManageStock = false }, binding.Version);
-        Assert.AreEqual(ConnectionTestApplyResult.Applied, new MarketplaceConnectionStore(directory).RecordTest(connection.Id, connection.Revision, false, "offline"));
+        using (var database = new SqliteConnection("Data Source=" + Path.Combine(directory, "catalog.db")))
+        {
+            database.Open(); using var command = database.CreateCommand();
+            command.CommandText = "UPDATE ProductChannelBindings SET ManageStock=0 WHERE ProductId=$product AND ConnectionId=$connection";
+            command.Parameters.AddWithValue("$product", product.Id); command.Parameters.AddWithValue("$connection", connection.Id); command.ExecuteNonQuery();
+        }
         var transport = new CountingTrendyolHandler();
         using var http = new HttpClient(transport);
         using var client = new TrMarketplaceHubDesktop.Trendyol.TrendyolApiClient(account, http);
@@ -425,6 +429,100 @@ public sealed class MarketplaceShopWorkspaceTests
 
         Assert.AreEqual(0, api.Writes);
         Assert.AreEqual(0, new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory).Receipts(credentials.ShopId).Count);
+    }
+
+    [TestMethod]
+    public void TrendyolAccountUpdateRejectsUnboundLegacyProfileBeforePlan()
+    {
+        var account = new TrendyolSettings("101", "key", "secret", "tests");
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", account.SupplierId, "Trendyol", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "T-LEGACY", Name = "Legacy only", Stock = 5, Currency = "TRY" });
+        var store = new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory);
+        var state = store.Load(account.SupplierId);
+        state.ProductsUpdatedUtc = DateTime.UtcNow;
+        state.Products.Add(new("LEGACY-BARCODE", "LEGACY-SKU", "Remote", 9001, 2, 10, 10, true));
+        state.Profiles.Add(new() { ProductId = product.Id, IntegrationCode = "LEGACY-BARCODE" });
+        store.Save(state);
+        var transport = new CountingTrendyolHandler();
+
+        Assert.ThrowsException<InvalidOperationException>(() => store.Preview(account, new[] { product.Id },
+            TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Stock, connection.Id));
+
+        Assert.AreEqual(0, transport.Writes);
+    }
+
+    [TestMethod]
+    public async Task EtsyAccountUpdateRejectsUnboundLegacyProfileBeforePlan()
+    {
+        var credentials = new EtsyCredentials("key", "secret", "88.token", "123", GrantedScopes: new[] { "listings_r", "listings_w" });
+        var connection = new MarketplaceConnectionStore(directory).Save("etsy", credentials.ShopId, "Etsy", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "E-ONLY", Name = "Legacy only", Stock = 5, Price = 20, Currency = "USD" });
+        var workspace = new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory);
+        var state = workspace.Load(credentials.ShopId);
+        state.Currency = "USD";
+        state.Profiles.Add(new() { ProductId = product.Id, ListingId = 456 });
+        workspace.Save(state);
+        var api = new CountingEtsyHandler();
+        using var http = new HttpClient(api);
+        var service = new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceService(directory, http);
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => service.PreviewAsync(credentials, new[] { product.Id },
+            TrMarketplaceHubDesktop.Etsy.EtsyOperation.Stock, connectionId: connection.Id));
+
+        Assert.AreEqual(0, api.Writes);
+    }
+
+    [TestMethod]
+    public void TrendyolStockPreviewRejectsInitiallyDisabledManagementFlag()
+    {
+        var account = new TrendyolSettings("101", "key", "secret", "tests");
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", account.SupplierId, "Trendyol", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "T-DISABLED", Name = "Disabled", Stock = 5, Currency = "TRY" });
+        new ProductChannelBindingStore(directory).Save(new(product.Id, connection.Id, "9001", "REMOTE-SKU", "REMOTE-BARCODE",
+            true, true, false, "", "", "Approved", 0, default), 0);
+        var model = new MarketplaceShopProductsModel(connection.Id, directory);
+        var selection = model.SelectPage(new[] { product.Id });
+        var store = new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory);
+        var transport = new CountingTrendyolHandler();
+
+        Assert.ThrowsException<InvalidOperationException>(() => model.PreviewSpecialist(selection, MarketplaceShopBulkOperation.StockPreview));
+        Assert.ThrowsException<InvalidOperationException>(() => store.Preview(account, new[] { product.Id },
+            TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Stock, connection.Id));
+        Assert.AreEqual(0, transport.Writes);
+    }
+
+    [TestMethod]
+    public async Task EtsyStockPreviewRejectsInitiallyDisabledManagementFlag()
+    {
+        var credentials = new EtsyCredentials("key", "secret", "88.token", "123", GrantedScopes: new[] { "listings_r", "listings_w" });
+        var connection = new MarketplaceConnectionStore(directory).Save("etsy", credentials.ShopId, "Etsy", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "E-ONLY", Name = "Disabled", Stock = 5, Price = 20, Currency = "USD" });
+        new ProductChannelBindingStore(directory).Save(new(product.Id, connection.Id, "456", "E-ONLY", "",
+            true, true, false, "", "", "active", 0, default), 0);
+        new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory).Save(new() { ShopId = credentials.ShopId, Currency = "USD" });
+        var model = new MarketplaceShopProductsModel(connection.Id, directory);
+        var selection = model.SelectPage(new[] { product.Id });
+        var api = new CountingEtsyHandler();
+        using var http = new HttpClient(api);
+        var service = new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceService(directory, http);
+
+        Assert.ThrowsException<InvalidOperationException>(() => model.PreviewSpecialist(selection, MarketplaceShopBulkOperation.StockPreview));
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => service.PreviewAsync(credentials, new[] { product.Id },
+            TrMarketplaceHubDesktop.Etsy.EtsyOperation.Stock, connectionId: connection.Id));
+        Assert.AreEqual(0, api.Writes);
+    }
+
+    [TestMethod]
+    public void CreatePreviewRetainsIntentionalUnboundSelectionPath()
+    {
+        var connection = new MarketplaceConnectionStore(directory).Save("etsy", "123", "Etsy", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "CREATE", Name = "Create", Stock = 1, Price = 10, Currency = "USD" });
+        var model = new MarketplaceShopProductsModel(connection.Id, directory);
+
+        var preview = model.PreviewSpecialist(model.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.CreatePreview);
+
+        Assert.AreEqual(0L, preview.Rows.Single().BindingVersion);
+        Assert.AreEqual("", preview.Rows.Single().RemoteId);
     }
 
     [TestMethod]
