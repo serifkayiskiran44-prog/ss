@@ -19,16 +19,23 @@ public sealed class HepsiburadaApiClient : IDisposable
     readonly string productBaseUrl;
     readonly string listingBaseUrl;
     readonly string authorization;
+    readonly IHepsiburadaDelay delay;
     bool disposed;
 
     sealed record ProductPage(IReadOnlyList<HepsiburadaMerchantProduct> Rows, int Number, int TotalPages);
 
-    public HepsiburadaApiClient(HepsiburadaCredentials credentials, HttpClient? httpClient = null)
+    sealed class SystemDelay : IHepsiburadaDelay
+    {
+        public Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken) => Task.Delay(delay, cancellationToken);
+    }
+
+    public HepsiburadaApiClient(HepsiburadaCredentials credentials, HttpClient? httpClient = null, IHepsiburadaDelay? delay = null)
     {
         ArgumentNullException.ThrowIfNull(credentials);
         global::TrMarketplaceHubDesktop.HepsiburadaConnection.Validate(credentials);
         if (credentials.MerchantId.Contains(':')) throw new ArgumentException("Hepsiburada merchant ID geçersiz.", nameof(credentials));
         this.credentials = credentials;
+        this.delay = delay ?? new SystemDelay();
         var sit = credentials.Environment == HepsiburadaEnvironment.Sit ? "-sit" : "";
         productBaseUrl = $"https://mpop{sit}.hepsiburada.com/product";
         listingBaseUrl = $"https://listing-external{sit}.hepsiburada.com";
@@ -38,6 +45,103 @@ public sealed class HepsiburadaApiClient : IDisposable
         {
             Timeout = TimeSpan.FromSeconds(60)
         };
+    }
+
+    public async Task<IReadOnlyList<HepsiburadaCategory>> GetCategoriesAsync(CancellationToken cancellationToken = default)
+    {
+        const int categoryPageSize = 2000;
+        var result = new List<HepsiburadaCategory>();
+        var byId = new Dictionary<long, HepsiburadaCategory>();
+        int? expectedPages = null;
+        for (var page = 0; page < MaxPages; page++)
+        {
+            using var document = await RequestAsync($"{productBaseUrl}/api/categories/get-all-categories?page={page}&size={categoryPageSize}", cancellationToken);
+            var root = document.RootElement;
+            var pages = NonnegativeInt(root, "totalPages");
+            var number = NonnegativeInt(root, "number", "page");
+            if (number != page || pages > MaxPages || (expectedPages.HasValue && expectedPages != pages)) throw InvalidResponse();
+            expectedPages = pages;
+            var data = ReadArray(root, "data", "content");
+            if (data.GetArrayLength() > categoryPageSize) throw InvalidResponse();
+            foreach (var item in data.EnumerateArray())
+            {
+                var category = new HepsiburadaCategory(PositiveLong(item, "categoryId"), Text(item, "name"), CategoryPath(item),
+                    Boolean(item, "leaf"), Boolean(item, "available"), IsActive(Text(item, "status")));
+                if (byId.TryGetValue(category.Id, out var existing))
+                {
+                    if (existing != category) throw InvalidResponse();
+                    continue;
+                }
+                if (result.Count >= MaxRows) throw InvalidResponse();
+                byId.Add(category.Id, category);
+                result.Add(category);
+            }
+            if (pages == 0 || page + 1 >= pages) return result.AsReadOnly();
+        }
+        throw InvalidResponse();
+    }
+
+    public async Task<IReadOnlyList<HepsiburadaAttribute>> GetCategoryAttributesAsync(long categoryId, CancellationToken cancellationToken = default)
+    {
+        if (categoryId <= 0) throw new ArgumentException("Hepsiburada kategori kimliği geçersiz.", nameof(categoryId));
+        using var document = await RequestAsync($"{productBaseUrl}/api/categories/{categoryId}/attributes", cancellationToken);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object) throw InvalidResponse();
+        var result = new List<HepsiburadaAttribute>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var group in new[] { "baseAttributes", "attributes", "variantAttributes" })
+        {
+            if (!data.TryGetProperty(group, out var rows) || rows.ValueKind == JsonValueKind.Null) continue;
+            if (rows.ValueKind != JsonValueKind.Array) throw InvalidResponse();
+            foreach (var item in rows.EnumerateArray())
+            {
+                var id = IdentifierText(item, "id");
+                if (!ids.Add(id)) throw InvalidResponse();
+                var values = ReadOptionalValues(item);
+                result.Add(new(id, Text(item, "name"), Boolean(item, "mandatory"), OptionalBoolean(item, "multiValue") ?? false,
+                    ParseKind(OptionalText(item, "type"), values.Count), values));
+            }
+        }
+        return result.AsReadOnly();
+    }
+
+    public async Task<IReadOnlyList<HepsiburadaAttributeValue>> GetAttributeValuesAsync(long categoryId, string attributeId, CancellationToken cancellationToken = default)
+    {
+        if (categoryId <= 0 || string.IsNullOrWhiteSpace(attributeId) || attributeId.Length > 256 || attributeId.Any(char.IsControl))
+            throw new ArgumentException("Hepsiburada özellik kimliği geçersiz.");
+        using var document = await RequestAsync($"{productBaseUrl}/api/categories/{categoryId}/attribute/{Uri.EscapeDataString(attributeId)}/values", cancellationToken);
+        var array = ReadArray(document.RootElement, "data", "values");
+        return ParseValues(array);
+    }
+
+    public async Task<IReadOnlyList<HepsiburadaBuybox>> GetBuyboxAsync(IReadOnlyCollection<string> hepsiburadaSkus, CancellationToken cancellationToken = default)
+    {
+        var skus = ValidateSkuList(hepsiburadaSkus);
+        var query = string.Join(",", skus.Select(Uri.EscapeDataString));
+        using var document = await RequestAsync($"{listingBaseUrl}/buybox-orders/merchantid/{Uri.EscapeDataString(credentials.MerchantId)}?skuList={query}", cancellationToken);
+        var array = ReadRootArray(document.RootElement, "data", "items");
+        var result = new List<HepsiburadaBuybox>(array.GetArrayLength());
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in array.EnumerateArray())
+        {
+            var sku = FirstText(item, "hbSku", "hepsiburadaSku");
+            if (!ids.Add(sku)) throw InvalidResponse();
+            result.Add(new(sku, OptionalText(item, "merchantSku"), FirstNullableInt(item, "rank", "buyboxOrder"),
+                FirstNullableDecimal(item, "winningPrice", "buyboxPrice"), OptionalNullableDecimal(item, "ownPrice"), DateTime.UtcNow));
+        }
+        return result.AsReadOnly();
+    }
+
+    public async Task<IReadOnlyList<HepsiburadaCommission>> GetCommissionsAsync(IReadOnlyCollection<string> hepsiburadaSkus, CancellationToken cancellationToken = default)
+    {
+        var skus = ValidateSkuList(hepsiburadaSkus);
+        var query = string.Join(",", skus.Select(Uri.EscapeDataString));
+        using var document = await RequestAsync($"{listingBaseUrl}/commissions/merchantid/{Uri.EscapeDataString(credentials.MerchantId)}?skuList={query}", cancellationToken);
+        var array = ReadRootArray(document.RootElement, "data", "items");
+        var result = new List<HepsiburadaCommission>(array.GetArrayLength());
+        foreach (var item in array.EnumerateArray())
+            result.Add(new(FirstText(item, "hbSku", "hepsiburadaSku"), OptionalText(item, "merchantSku"), NonnegativeDecimal(item, "rate", "commissionRate"), OptionalText(item, "currency")));
+        return result.AsReadOnly();
     }
 
     public async Task<IReadOnlyList<HepsiburadaMerchantProduct>> GetMerchantProductsAsync(CancellationToken cancellationToken = default)
@@ -120,13 +224,20 @@ public sealed class HepsiburadaApiClient : IDisposable
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        using var request = new HttpRequestMessage(HttpMethod.Get, absoluteUrl);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authorization);
-        request.Headers.UserAgent.ParseAdd(credentials.UserAgent);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        try
+        for (var attempt = 0; attempt < 3; attempt++)
         {
+          using var request = new HttpRequestMessage(HttpMethod.Get, absoluteUrl);
+          request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authorization);
+          request.Headers.UserAgent.ParseAdd(credentials.UserAgent);
+          request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+          try
+          {
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < 2)
+            {
+                await delay.DelayAsync(ReadRetryDelay(response, attempt), cancellationToken);
+                continue;
+            }
             if ((int)response.StatusCode is >= 300 and < 400)
                 throw new InvalidOperationException($"Hepsiburada isteği yönlendirme yanıtı verdi ({(int)response.StatusCode}); istek uygulanmadı.");
             if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
@@ -146,9 +257,109 @@ public sealed class HepsiburadaApiClient : IDisposable
             }
             buffer.Position = 0;
             return await JsonDocument.ParseAsync(buffer, new JsonDocumentOptions { MaxDepth = 64 }, cancellationToken);
+          }
+          catch (JsonException) { throw InvalidResponse(); }
+          catch (IOException) { throw InvalidResponse(); }
         }
-        catch (JsonException) { throw InvalidResponse(); }
-        catch (IOException) { throw InvalidResponse(); }
+        throw new InvalidOperationException("Hepsiburada hız sınırı aşıldı (429); daha sonra tekrar deneyin.");
+    }
+
+    static TimeSpan ReadRetryDelay(HttpResponseMessage response, int attempt)
+    {
+        var seconds = Math.Pow(2, attempt);
+        if (response.Headers.RetryAfter?.Delta is { } delta) seconds = delta.TotalSeconds;
+        else if (response.Headers.TryGetValues("Retry-After", out var values) && double.TryParse(values.FirstOrDefault(), out var parsed)) seconds = parsed;
+        if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds <= 0) seconds = Math.Pow(2, attempt);
+        return TimeSpan.FromSeconds(Math.Clamp(seconds, 0.1, 30));
+    }
+
+    static IReadOnlyList<string> ValidateSkuList(IReadOnlyCollection<string> skus)
+    {
+        ArgumentNullException.ThrowIfNull(skus);
+        if (skus.Count is < 1 or > 1000) throw new ArgumentException("Hepsiburada SKU listesi geçersiz.", nameof(skus));
+        var result = new List<string>(skus.Count);
+        var unique = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var sku in skus)
+        {
+            if (string.IsNullOrWhiteSpace(sku) || sku != sku.Trim() || sku.Length > 256 || sku.Any(char.IsControl) || !unique.Add(sku))
+                throw new ArgumentException("Hepsiburada SKU listesi geçersiz.", nameof(skus));
+            result.Add(sku);
+        }
+        return result.AsReadOnly();
+    }
+
+    static IReadOnlyList<HepsiburadaAttributeValue> ReadOptionalValues(JsonElement item)
+    {
+        if (!item.TryGetProperty("values", out var values) || values.ValueKind == JsonValueKind.Null) return Array.Empty<HepsiburadaAttributeValue>();
+        if (values.ValueKind != JsonValueKind.Array) throw InvalidResponse();
+        return ParseValues(values);
+    }
+
+    static IReadOnlyList<HepsiburadaAttributeValue> ParseValues(JsonElement values)
+    {
+        var result = new List<HepsiburadaAttributeValue>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in values.EnumerateArray())
+        {
+            var id = FirstText(item, "id", "valueId");
+            if (!ids.Add(id)) throw InvalidResponse();
+            result.Add(new(id, FirstText(item, "name", "value")));
+        }
+        return result.AsReadOnly();
+    }
+
+    static HepsiburadaAttributeKind ParseKind(string type, int valueCount) => type.ToLowerInvariant() switch
+    {
+        "enum" or "list" or "select" or "singleselect" or "multiselect" => HepsiburadaAttributeKind.List,
+        "number" or "integer" or "decimal" => HepsiburadaAttributeKind.Number,
+        "boolean" or "bool" => HepsiburadaAttributeKind.Boolean,
+        "text" or "string" => HepsiburadaAttributeKind.Text,
+        _ when valueCount > 0 => HepsiburadaAttributeKind.List,
+        _ => HepsiburadaAttributeKind.Unknown
+    };
+
+    static bool IsActive(string status) => status.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase) || status.Equals("AKTİF", StringComparison.OrdinalIgnoreCase);
+
+    static long PositiveLong(JsonElement item, string name) => item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var result) && result > 0 ? result : throw InvalidResponse();
+
+    static bool Boolean(JsonElement item, string name) => OptionalBoolean(item, name) ?? throw InvalidResponse();
+
+    static bool? OptionalBoolean(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        return value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : throw InvalidResponse();
+    }
+
+    static int? OptionalNullableInt(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var result) && result >= 0 ? result : throw InvalidResponse();
+    }
+
+    static int? FirstNullableInt(JsonElement item, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var value = OptionalNullableInt(item, name);
+            if (value.HasValue) return value;
+        }
+        return null;
+    }
+
+    static decimal? OptionalNullableDecimal(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        return value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var result) && result >= 0 ? result : throw InvalidResponse();
+    }
+
+    static decimal? FirstNullableDecimal(JsonElement item, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var value = OptionalNullableDecimal(item, name);
+            if (value.HasValue) return value;
+        }
+        return null;
     }
 
     static JsonElement ReadArray(JsonElement root, params string[] names)
@@ -156,6 +367,35 @@ public sealed class HepsiburadaApiClient : IDisposable
         if (root.ValueKind != JsonValueKind.Object) throw InvalidResponse();
         foreach (var name in names)
             if (root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array) return value;
+        throw InvalidResponse();
+    }
+
+    static JsonElement ReadRootArray(JsonElement root, params string[] names) =>
+        root.ValueKind == JsonValueKind.Array ? root : ReadArray(root, names);
+
+    static string CategoryPath(JsonElement item)
+    {
+        if (item.TryGetProperty("paths", out var paths))
+        {
+            if (paths.ValueKind == JsonValueKind.String) return paths.GetString()?.Trim() ?? "";
+            if (paths.ValueKind == JsonValueKind.Array)
+            {
+                var parts = paths.EnumerateArray()
+                    .Select(value => value.ValueKind == JsonValueKind.String ? value.GetString()?.Trim() ?? "" : throw InvalidResponse())
+                    .Where(value => value.Length > 0);
+                return string.Join(" > ", parts);
+            }
+            throw InvalidResponse();
+        }
+        return OptionalText(item, "path");
+    }
+
+    static string IdentifierText(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value)) throw InvalidResponse();
+        if (value.ValueKind == JsonValueKind.String) return Text(item, name);
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number) && number >= 0)
+            return number.ToString(System.Globalization.CultureInfo.InvariantCulture);
         throw InvalidResponse();
     }
 
