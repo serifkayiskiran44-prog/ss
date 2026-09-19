@@ -698,7 +698,7 @@ Expected: PASS with zero failed/skipped tests unless an explicitly documented pl
 
 ```powershell
 git diff --check
-rg -n -S "Rmyqs|504e6b79" . -g "!bin/**" -g "!obj/**" -g "!Windows-Excel-Final/**" -g "!*.zip"
+rg -n -S "ServiceKey\s*=|MerchantId\s*=" . -g "!bin/**" -g "!obj/**" -g "!Windows-Excel-Final/**" -g "!*.zip"
 git status --short
 ```
 
