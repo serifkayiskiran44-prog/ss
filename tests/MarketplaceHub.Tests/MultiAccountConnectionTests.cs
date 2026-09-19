@@ -84,7 +84,7 @@ public sealed class MultiAccountConnectionTests
     });
 
     [TestMethod]
-    public void ConnectionSettingsShowBoundedOutcomeForEachLegacyChannel()
+    public void ConnectionSettingsCannotBypassTheStartupMigrationGate()
     {
         Exception failure = null;
         var thread = new Thread(() =>
@@ -96,14 +96,13 @@ public sealed class MultiAccountConnectionTests
                     File.WriteAllBytes(Path.Combine(root, "credentials.bin"), new byte[] { 1, 2, 3, 4 });
                     new TrendyolSettingsStore(Path.Combine(root, "trendyol.bin")).Save(new TrendyolSettings("101", "trendyol-key", "trendyol-secret", "101 - Test"));
 
-                    var panel = MarketplaceConnectionsPanel.Create(root);
-                    var text = string.Join(" ", Walk(panel).OfType<TextBlock>().Select(x => x.Text));
+                    _ = MarketplaceConnectionsPanel.Create(root);
+                    var store = new MarketplaceConnectionStore(root);
 
-                    StringAssert.Contains(text, "Etsy");
-                    StringAssert.Contains(text, "başarısız");
-                    StringAssert.Contains(text, "Trendyol");
-                    StringAssert.Contains(text, "aktarıldı");
-                    Assert.IsTrue(text.Length < 10_000);
+                    Assert.IsNull(store.CredentialMigration("etsy"));
+                    Assert.IsNull(store.CredentialMigration("trendyol"), "The settings panel must never import credentials outside the approved startup migration.");
+                    Assert.IsTrue(File.Exists(Path.Combine(root, "credentials.bin")));
+                    Assert.IsTrue(File.Exists(Path.Combine(root, "trendyol.bin")));
                 });
             }
             catch (Exception error) { failure = error; }

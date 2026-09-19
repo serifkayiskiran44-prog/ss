@@ -2,6 +2,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace TrMarketplaceHubDesktop;
@@ -28,6 +30,25 @@ public partial class App : Application
         if (singleInstance is null)
         {
             Shutdown(0);
+            return;
+        }
+
+        try
+        {
+            if (!MultiStoreMigrationStartupGate.EnsureReady(dataDirectory, RequestMigrationConfirmation))
+            {
+                Shutdown(0);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Çoklu mağaza veri geçişi tamamlanamadı. Hiçbir pazaryeri çağrısı yapılmadı. Ayrıntı: " + AuditStore.Sanitize(ex.Message),
+                "MarketplaceHub — veri geçişi engellendi",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(-1);
             return;
         }
 
@@ -110,6 +131,45 @@ public partial class App : Application
                 MessageBoxImage.Error);
             _ = ExitAsync(-1);
         }
+    }
+
+    static string? RequestMigrationConfirmation(MultiStoreMigrationDryRun report)
+    {
+        var token = new TextBox { Margin = new Thickness(0, 8, 0, 12), MinWidth = 440 };
+        var confirm = new Button { Content = "Yedeği oluştur ve geçişi başlat", IsDefault = true, MinWidth = 220, Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "İptal", IsCancel = true, MinWidth = 90 };
+        var window = new Window
+        {
+            Title = "MarketplaceHub — çoklu mağaza veri geçişi",
+            Width = 620,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ResizeMode = ResizeMode.NoResize,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Children =
+                {
+                    new TextBlock { Text = "Mevcut yerel veriler çoklu mağaza modeline geçirilecek. İşlemden önce doğrulanmış bir geri dönüş yedeği oluşturulur; pazaryeri HTTP çağrısı yapılmaz.", TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold },
+                    new TextBlock { Margin = new Thickness(0, 12, 0, 0), TextWrapping = TextWrapping.Wrap,
+                        Text = $"Kaynak bağları: {report.SourceBindings} · Çevrimiçi bakiye: {report.OnlineBalances} · Fiziksel bakiye: {report.PhysicalBalances}\nBağlantı: {report.Connections} · Ürün bağlantısı: {report.ProductBindings} · Sipariş: {report.Orders} · Otomasyon: {report.AutomationSettings}" },
+                    new TextBlock { Margin = new Thickness(0, 12, 0, 0), Text = "Onaylamak için aşağıdaki yerel tokenı aynen yazın:", TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Margin = new Thickness(0, 4, 0, 0), Text = report.ConfirmationToken, FontFamily = new FontFamily("Consolas"), FontWeight = FontWeights.Bold },
+                    token,
+                    new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Children = { confirm, cancel } }
+                }
+            }
+        };
+        confirm.Click += (_, _) =>
+        {
+            if (!string.Equals(token.Text.Trim(), report.ConfirmationToken, StringComparison.Ordinal))
+            {
+                MessageBox.Show(window, "Onay tokenı eşleşmiyor; veri geçişi başlatılmadı.", "MarketplaceHub — onay gerekli", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            window.DialogResult = true;
+        };
+        return window.ShowDialog() == true ? token.Text.Trim() : null;
     }
 
     void ActivateMainWindow()

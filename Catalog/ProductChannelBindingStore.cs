@@ -228,7 +228,7 @@ public sealed class ProductChannelBindingStore
         transaction.Commit();
     }
 
-    public int MigrateVerifiedProfiles()
+    public int MigrateVerifiedProfiles(Action<int>? afterBindingSaved = null)
     {
         var migrated = 0;
         var catalogIds = new CatalogStore(directory).Products().Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
@@ -250,6 +250,7 @@ public sealed class ProductChannelBindingStore
                         true, true, true, profile.CategoryId?.ToString(CultureInfo.InvariantCulture) ?? "", profile.DeliveryTemplateId,
                         remote.Approved ? "Approved" : "Pending", 0, default), 0);
                     migrated++;
+                    afterBindingSaved?.Invoke(migrated);
                 }
             }
             else if (connection.Channel == "etsy")
@@ -266,6 +267,7 @@ public sealed class ProductChannelBindingStore
                         true, true, true, profile.TaxonomyId?.ToString(CultureInfo.InvariantCulture) ?? "", profile.TemplateId,
                         remote.State, 0, default), 0);
                     migrated++;
+                    afterBindingSaved?.Invoke(migrated);
                 }
             }
         }

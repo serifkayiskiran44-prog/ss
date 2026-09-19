@@ -46,7 +46,7 @@ try {
 finally {
     if ($process -and -not $process.HasExited) {
         $process.CloseMainWindow() | Out-Null
-        if (-not $process.WaitForExit(5000)) { $process.Kill($true) }
+        if (-not $process.WaitForExit(5000)) { $process.Kill() }
     }
     if (Test-Path -LiteralPath $smokeDataDirectory) { Remove-Item -LiteralPath $smokeDataDirectory -Recurse -Force -ErrorAction SilentlyContinue }
 }

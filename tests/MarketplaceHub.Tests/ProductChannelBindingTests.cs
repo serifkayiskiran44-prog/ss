@@ -161,6 +161,21 @@ public sealed class ProductChannelBindingTests
         Assert.AreEqual(0, store.List().Count);
     }
 
+    [TestMethod]
+    public void CompensatingConnectionDeleteCannotOrphanAProductBinding()
+    {
+        var connections = new MarketplaceConnectionStore(directory);
+        var connection = connections.Save("trendyol", "101", "Trendyol", true);
+        var bindings = new ProductChannelBindingStore(directory);
+        bindings.Save(NewBinding(connection.Id, "11", "REMOTE", "REMOTE-BAR"), 0);
+
+        var deleted = connections.DeleteIfUntouchedSinceCreate(connection.Id, connection.Revision);
+
+        Assert.IsFalse(deleted, "A compensation path must not delete connection metadata once a product binding depends on it.");
+        Assert.IsNotNull(connections.Get(connection.Id));
+        Assert.IsNotNull(bindings.Get(product.Id, connection.Id));
+    }
+
     ProductChannelBinding NewBinding(string connectionId, string remoteId, string remoteSku, string remoteBarcode) =>
         new(product.Id, connectionId, remoteId, remoteSku, remoteBarcode, true, true, true, "", "", "Active", 0, default);
 

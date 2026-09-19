@@ -250,6 +250,57 @@ public sealed class ProductSourceBindingTests
     }
 
     [TestMethod]
+    public void SourceRevisionDetectsCaseOnlyTargetCategoryChanges()
+    {
+        var source = Source("xml-a");
+        source.CategoryRules.Add(new XmlCategoryRule
+        {
+            XmlCategory = "Pet Food",
+            TargetCategory = "Pet Food",
+            Enabled = true
+        });
+        var before = CatalogStore.SourceConfigRevision(source);
+
+        source.CategoryRules[0].TargetCategory = "PET FOOD";
+
+        Assert.AreNotEqual(before, CatalogStore.SourceConfigRevision(source),
+            "A case-only target category edit changes the applied category and must invalidate an old preview.");
+    }
+
+    [TestMethod]
+    public void SourceRevisionUsesCanonicalSemanticCategoryRuleOrdering()
+    {
+        var source = Source("xml-a");
+        source.CategoryRules.Add(new XmlCategoryRule
+        {
+            XmlCategory = "Food",
+            TargetCategory = "Pet > Food",
+            Prices = new()
+            {
+                ["Trendyol"] = new() { SaleFormula = "x+1" },
+                ["Etsy"] = new() { ListFormula = "x+2" }
+            }
+        });
+        source.CategoryRules.Add(new XmlCategoryRule
+        {
+            XmlCategory = "Toys",
+            TargetCategory = "Pet > Toys",
+            Enabled = false
+        });
+        var before = CatalogStore.SourceConfigRevision(source);
+
+        source.CategoryRules.Reverse();
+        source.CategoryRules.Single(rule => rule.XmlCategory == "Food").Prices = new()
+        {
+            ["Etsy"] = new() { ListFormula = "x+2" },
+            ["Trendyol"] = new() { SaleFormula = "x+1" }
+        };
+
+        Assert.AreEqual(before, CatalogStore.SourceConfigRevision(source),
+            "Harmless list/dictionary reordering must not force a new XML preview.");
+    }
+
+    [TestMethod]
     public void RefreshPreviewRejectsDeletedOrDisabledXmlSources()
     {
         var root = NewRoot();

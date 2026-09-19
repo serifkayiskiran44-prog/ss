@@ -12,15 +12,6 @@ public static class MarketplaceConnectionsPanel
     public static FrameworkElement Create(string? dataDirectory = null, Action<string>? navigate = null, Action? connectionsChanged = null)
     {
         var store = new MarketplaceConnectionStore(dataDirectory);
-        string migrationNotice;
-        try
-        {
-            var outcomes = new MarketplaceConnectionMigration(dataDirectory).ImportLegacy()
-                .Where(x => x.State is MarketplaceConnectionMigrationState.Imported or MarketplaceConnectionMigrationState.Failed)
-                .Select(x => $"{MarketplaceConnectionCatalog.Get(x.Channel).Name}: {x.Detail}");
-            migrationNotice = string.Join("\n", outcomes);
-        }
-        catch (Exception error) { migrationNotice = "Eski bağlantı içe aktarılamadı: " + MarketplaceConnectionStore.Redact(error.Message); }
         var rows = new ObservableCollection<MarketplaceConnection>(store.List());
         var grid = new DataGrid { ItemsSource = rows, AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, MinHeight = 260 };
         grid.Columns.Add(new DataGridTextColumn { Header = "Kanal", Binding = new System.Windows.Data.Binding("Channel"), Width = 100 });
@@ -38,7 +29,6 @@ public static class MarketplaceConnectionsPanel
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
         var capability = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
         var result = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
-        result.Text = migrationNotice;
         var accountTabs = new TabControl { Name = "MarketplaceAccountTabs", Margin = new Thickness(0, 0, 0, 10), MinHeight = 175 };
         var health = new ApiHealthStore(dataDirectory);
         foreach (var connection in rows) health.EnsureConnection(connection.Channel, connection.ShopId, connection.Status, connection.LastError);

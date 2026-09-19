@@ -68,8 +68,9 @@ public partial class CatalogStore
   snapshot.LastRunUtc=null;
   snapshot.LastStatus="";
   snapshot.Fields=snapshot.Fields.OrderBy(pair=>pair.Key,StringComparer.Ordinal).ToDictionary(pair=>pair.Key,pair=>pair.Value,StringComparer.Ordinal);
-  snapshot.CategoryRules=snapshot.CategoryRules.Where(rule=>rule.Enabled==false||!string.Equals(rule.XmlCategory.Trim(),rule.TargetCategory.Trim(),StringComparison.OrdinalIgnoreCase)||rule.Prices.Values.Any(formula=>!string.IsNullOrWhiteSpace(formula.SaleFormula)||!string.IsNullOrWhiteSpace(formula.ListFormula))).ToList();
+  snapshot.CategoryRules=snapshot.CategoryRules.Where(rule=>rule.Enabled==false||!string.Equals(rule.XmlCategory.Trim(),rule.TargetCategory.Trim(),StringComparison.Ordinal)||rule.Prices.Values.Any(formula=>!string.IsNullOrWhiteSpace(formula.SaleFormula)||!string.IsNullOrWhiteSpace(formula.ListFormula))).ToList();
   foreach(var rule in snapshot.CategoryRules)rule.Prices=rule.Prices.OrderBy(pair=>pair.Key,StringComparer.Ordinal).ToDictionary(pair=>pair.Key,pair=>pair.Value,StringComparer.Ordinal);
+  snapshot.CategoryRules=snapshot.CategoryRules.OrderBy(rule=>rule.XmlCategory.Trim(),StringComparer.OrdinalIgnoreCase).ThenBy(rule=>rule.XmlCategory.Trim(),StringComparer.Ordinal).ToList();
   if(snapshot.AutoFx)
   {
    snapshot.TryPerTargetUnit=0;

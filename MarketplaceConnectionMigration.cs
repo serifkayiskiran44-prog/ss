@@ -1,5 +1,6 @@
 using System.IO;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace TrMarketplaceHubDesktop;
@@ -33,14 +34,20 @@ public sealed class MarketplaceConnectionMigration
         vault = new(this.directory);
     }
 
-    public IReadOnlyList<MarketplaceConnectionMigrationResult> ImportLegacy()
+    public IReadOnlyList<MarketplaceConnectionMigrationResult> ImportLegacy() =>
+        [ImportLegacyChannel("etsy"), ImportLegacyChannel("trendyol")];
+
+    internal MarketplaceConnectionMigrationResult ImportLegacyChannel(string channel) => channel switch
     {
-        var results = new List<MarketplaceConnectionMigrationResult>(2)
-        {
-            Attempt("etsy", () => ImportOne("etsy", () => CredentialStore.Load(directory), value => value.ShopId, "Etsy")),
-            Attempt("trendyol", () => ImportOne("trendyol", () => new TrendyolSettingsStore(Path.Combine(directory, "trendyol.bin")).Load(), value => value.SupplierId, "Trendyol"))
-        };
-        return results;
+        "etsy" => Attempt("etsy", () => ImportOne("etsy", () => CredentialStore.Load(directory), value => value.ShopId, "Etsy")),
+        "trendyol" => Attempt("trendyol", () => ImportOne("trendyol", () => new TrendyolSettingsStore(Path.Combine(directory, "trendyol.bin")).Load(), value => value.SupplierId, "Trendyol")),
+        _ => throw new ArgumentException("Eski bağlantı kanalı desteklenmiyor.", nameof(channel))
+    };
+
+    public static string LegacyConnectionId(string channel, string shopId)
+    {
+        var identity = Encoding.UTF8.GetBytes("legacy\0" + channel.ToLowerInvariant() + "\0" + shopId);
+        return "legacy-" + Convert.ToHexString(SHA256.HashData(identity)).ToLowerInvariant()[..32];
     }
 
     static MarketplaceConnectionMigrationResult Attempt(string channel, Func<MarketplaceConnectionMigrationResult> import)
@@ -91,7 +98,7 @@ public sealed class MarketplaceConnectionMigration
         var shopId = accountIdentity(legacy);
         ValidateAccountIdentity(channel, shopId, legacy);
         var connection = connections.Find(channel, shopId) ??
-            connections.Save(channel, shopId, displayName + " " + shopId, true, marker?.ConnectionId);
+            connections.Save(channel, shopId, displayName + " " + shopId, true, marker?.ConnectionId ?? LegacyConnectionId(channel, shopId));
 
         vault.Save(connection.Id, channel, shopId, legacy);
         var roundTrip = vault.Load<T>(connection.Id, channel, shopId)

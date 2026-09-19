@@ -223,10 +223,24 @@ public sealed class MarketplaceConnectionStore
     public bool DeleteIfUntouchedSinceCreate(string id, long expectedRevision)
     {
         using var connection = Open();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        using var table = connection.CreateCommand();
+        table.Transaction = transaction;
+        table.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ProductChannelBindings'";
+        var hasBindingTables = table.ExecuteScalar() is not null;
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM MarketplaceConnections WHERE Id=$id AND Revision=$revision";
+        command.Transaction = transaction;
+        command.CommandText = "DELETE FROM MarketplaceConnections WHERE Id=$id AND Revision=$revision " +
+            "AND NOT EXISTS(SELECT 1 FROM MarketplaceCredentialMigrations WHERE ConnectionId=$id)" +
+            (hasBindingTables
+                ? " AND NOT EXISTS(SELECT 1 FROM ProductChannelBindings WHERE ConnectionId=$id)" +
+                  " AND NOT EXISTS(SELECT 1 FROM ProductChannelBindingPreviews WHERE ConnectionId=$id)" +
+                  " AND NOT EXISTS(SELECT 1 FROM ProductChannelBindingReceipts WHERE ConnectionId=$id)"
+                : "");
         command.Parameters.AddWithValue("$id", id); command.Parameters.AddWithValue("$revision", expectedRevision);
-        return command.ExecuteNonQuery() == 1;
+        var deleted = command.ExecuteNonQuery() == 1;
+        transaction.Commit();
+        return deleted;
     }
 
     public MarketplaceCredentialMigrationMarker? CredentialMigration(string channel)
