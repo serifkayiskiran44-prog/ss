@@ -239,14 +239,14 @@ public partial class MainWindow
         RefreshProducts();
     }
 
-    void OpenProductConnections(string connectionId)
+    void OpenProductConnections(string connectionId, bool showConnections)
     {
-        var dialog = new ProductConnectionsWindow(dataDirectory, SelectedProductIdsForConnection(), initialConnectionId: connectionId) { Owner = this };
+        var dialog = new ProductConnectionsWindow(dataDirectory, SelectedProductIdsForConnection(), initialConnectionId: connectionId, showConnections: showConnections) { Owner = this };
         dialog.ShowDialog();
         RefreshProducts();
     }
 
-    MenuItem BuildMarketplaceBindingMenu(Action<string> openConnection)
+    MenuItem BuildMarketplaceBindingMenu(Action<string, bool> openConnection)
     {
         var selectedCount = products.SelectedItems.OfType<CatalogProduct>().Count();
         var root = new MenuItem
@@ -272,22 +272,28 @@ public partial class MainWindow
             foreach (var connection in channelGroup)
             {
                 var account = new MenuItem { Header = $"{connection.DisplayName} · {connection.ShopId}" };
-                var connect = new MenuItem
+                if (!bindable.Contains(connection.Id))
                 {
-                    Header = bindable.Contains(connection.Id) ? "Seçili ürünleri bağla" : "Önce mağaza ayarlarını tamamla",
-                    IsEnabled = bindable.Contains(connection.Id),
-                    Tag = connection.Id
-                };
-                connect.Click += (_, _) =>
+                    account.Items.Add(new MenuItem { Header = "Bu kanal için ürün bağlantısı hazır değil", IsEnabled = false });
+                    channel.Items.Add(account);
+                    continue;
+                }
+                void Action(string label, bool showConnections)
                 {
-                    try { openConnection(connection.Id); }
-                    catch (Exception error)
+                    var item = new MenuItem { Header = label, Tag = connection.Id };
+                    item.Click += (_, _) =>
                     {
-                        Log(Safe(error));
-                        MessageBox.Show(this, Safe(error), "Mağazaya bağla", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    }
-                };
-                account.Items.Add(connect);
+                        try { openConnection(connection.Id, showConnections); }
+                        catch (Exception error)
+                        {
+                            Log(Safe(error));
+                            MessageBox.Show(this, Safe(error), "Mağazaya bağla", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    };
+                    account.Items.Add(item);
+                }
+                Action("Seçili ürünleri bağla / eşleştir", false);
+                Action("Bağlantıyı ve yönetimi güncelle", true);
                 channel.Items.Add(account);
             }
             root.Items.Add(channel);

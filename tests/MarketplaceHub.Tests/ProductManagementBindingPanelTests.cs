@@ -50,13 +50,14 @@ public sealed class ProductManagementBindingPanelTests
         var trendyol = Connected(connections, "trendyol", "101", "Trendyol A");
         var etsy = Connected(connections, "etsy", "202", "Etsy A");
         connections.Save("trendyol", "303", "Disabled", false);
-        connections.Save("etsy", "404", "Not configured", true);
+        var pending = connections.Save("etsy", "404", "Not configured", true);
 
         var model = new ProductConnectionsModel(directory, selected, new FakeSnapshotProvider(), new FakeCreationHandoff());
         selected.Clear();
 
         CollectionAssert.AreEqual(new[] { first.Id, second.Id }, model.SelectedProductIds.ToArray());
-        CollectionAssert.AreEquivalent(new[] { trendyol.Id, etsy.Id }, model.Targets.Select(x => x.ConnectionId).ToArray());
+        CollectionAssert.AreEquivalent(new[] { trendyol.Id, etsy.Id, pending.Id }, model.Targets.Select(x => x.ConnectionId).ToArray(),
+            "Açıkça kaydedilmiş etkin mağaza, API ayarı tamamlanmadan da yerel ürün atama hedefi olmalıdır.");
         Assert.ThrowsException<InvalidOperationException>(() => new ProductConnectionsModel(directory, Array.Empty<string>(), new FakeSnapshotProvider(), new FakeCreationHandoff()));
     }
 
@@ -407,26 +408,35 @@ public sealed class ProductManagementBindingPanelTests
         var connections = new MarketplaceConnectionStore(directory);
         var firstStore = Connected(connections, "trendyol", "101", "Trendyol Ana Mağaza");
         var secondStore = Connected(connections, "trendyol", "202", "Trendyol İkinci Mağaza");
+        var pendingStore = connections.Save("trendyol", "303", "Trendyol Yeni Mağaza", true);
         var window = new MainWindow(directory);
         try
         {
             var grid = GetField<DataGrid>(window, "products");
             grid.SelectedItems.Add(grid.Items.Cast<CatalogProduct>().Single(product => product.Id == firstProduct.Id));
             grid.SelectedItems.Add(grid.Items.Cast<CatalogProduct>().Single(product => product.Id == secondProduct.Id));
-            string? openedConnection = null;
-            var menu = (MenuItem)Invoke(window, "BuildMarketplaceBindingMenu", new Action<string>(id => openedConnection = id))!;
+            (string ConnectionId, bool Details)? opened = null;
+            var menu = (MenuItem)Invoke(window, "BuildMarketplaceBindingMenu", new Action<string, bool>((id, details) => opened = (id, details)))!;
 
             Assert.AreEqual("Bağlantı sağlanacak mağazalar", menu.Header);
             Assert.IsTrue(menu.IsEnabled);
             var trendyol = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Trendyol"));
             var accounts = trendyol.Items.OfType<MenuItem>().ToArray();
-            CollectionAssert.AreEqual(new[] { "Trendyol Ana Mağaza · 101", "Trendyol İkinci Mağaza · 202" }, accounts.Select(item => item.Header?.ToString()).ToArray());
-            var connect = accounts[1].Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Seçili ürünleri bağla"));
+            CollectionAssert.AreEqual(new[] { "Trendyol Ana Mağaza · 101", "Trendyol İkinci Mağaza · 202", "Trendyol Yeni Mağaza · 303" }, accounts.Select(item => item.Header?.ToString()).ToArray());
+            var connect = accounts[2].Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Seçili ürünleri bağla / eşleştir"));
+            Assert.IsTrue(connect.IsEnabled);
             connect.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            Assert.AreEqual(secondStore.Id, openedConnection);
+            Assert.AreEqual((pendingStore.Id, false), opened);
+            var update = accounts[1].Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Bağlantıyı ve yönetimi güncelle"));
+            update.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.AreEqual((secondStore.Id, true), opened);
 
-            var dialog = new ProductConnectionsWindow(directory, new[] { firstProduct.Id, secondProduct.Id }, initialConnectionId: firstStore.Id);
-            try { Assert.AreEqual(firstStore.Id, dialog.SelectedConnectionId); }
+            var dialog = new ProductConnectionsWindow(directory, new[] { firstProduct.Id, secondProduct.Id }, initialConnectionId: pendingStore.Id, showConnections: true);
+            try
+            {
+                Assert.AreEqual(pendingStore.Id, dialog.SelectedConnectionId);
+                Assert.AreEqual(1, dialog.SelectedTabIndex);
+            }
             finally { dialog.Close(); }
         }
         finally { window.Close(); }

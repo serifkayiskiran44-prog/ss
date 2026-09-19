@@ -189,7 +189,6 @@ public sealed class ProductConnectionsModel
     public void Refresh()
     {
         Targets = MarketplaceOperationalAccounts.List(connections)
-            .Where(connection => !connection.Status.Equals("NOT_CONFIGURED", StringComparison.OrdinalIgnoreCase))
             .Where(connection => adapters.Get(connection.Channel).Capabilities.Supports(MarketplaceOperation.ProductsRead))
             .Select(connection => new ProductAccountTarget(connection.Id, connection.Channel, connection.ShopId, connection.DisplayName))
             .ToArray();
@@ -364,6 +363,7 @@ public sealed class ProductConnectionsWindow : Window
     readonly ComboBox targets = new() { Name = "ProductConnectionTarget", MinWidth = 280, DisplayMemberPath = nameof(ProductAccountTarget.DisplayName), SelectedValuePath = nameof(ProductAccountTarget.ConnectionId) };
     readonly DataGrid previewRows = new() { Name = "ProductConnectionPreviewRows", AutoGenerateColumns = false, IsReadOnly = false, CanUserAddRows = false, Height = 260 };
     readonly DataGrid details = new() { Name = "ProductConnectionDetails", AutoGenerateColumns = false, IsReadOnly = true, Height = 220 };
+    readonly TabControl tabs = new() { Name = "ProductConnectionTabs" };
     readonly Button previewButton = new() { Name = "ProductConnectionPreviewButton", Content = "Eşleştirmeyi önizle", IsEnabled = false };
     readonly Button reviewButton = new() { Name = "ProductConnectionReviewButton", Content = "Eşleşmeleri inceledim", IsEnabled = false };
     readonly Button applyButton = new() { Name = "ProductConnectionApplyButton", Content = "Bağlantıları uygula", IsEnabled = false };
@@ -381,6 +381,7 @@ public sealed class ProductConnectionsWindow : Window
     public IReadOnlyList<string> SelectedProductIds => model.SelectedProductIds;
     public bool IsApplyEnabled => applyButton.IsEnabled;
     public string? SelectedConnectionId => targets.SelectedValue as string;
+    public int SelectedTabIndex => tabs.SelectedIndex;
 
     public ProductConnectionsWindow(
         string? directory,
@@ -389,7 +390,8 @@ public sealed class ProductConnectionsWindow : Window
         IProductChannelCreationPreviewHandoff? creationHandoff = null,
         MarketplaceAdapterRegistry? adapters = null,
         IProductRemoteDeactivationPreviewRouter? remoteDeactivation = null,
-        string? initialConnectionId = null)
+        string? initialConnectionId = null,
+        bool showConnections = false)
     {
         model = new(directory, selectedProductIds, remoteSnapshots, creationHandoff, adapters, remoteDeactivation);
         Title = "Ürün mağaza bağlantıları";
@@ -496,6 +498,7 @@ public sealed class ProductConnectionsWindow : Window
                 throw new InvalidOperationException("Seçilen mağaza hesabı ürün bağlama hedefi olarak hazır değil; mağaza ayarlarını ve bağlantı testini tamamlayın.");
             targets.SelectedValue = initialConnectionId;
         }
+        if (showConnections) tabs.SelectedIndex = 1;
     }
 
     void BindTargets()
@@ -516,7 +519,6 @@ public sealed class ProductConnectionsWindow : Window
         actions.Children.Add(targets); actions.Children.Add(previewButton); actions.Children.Add(reviewButton); actions.Children.Add(applyButton);
         header.Children.Add(actions); header.Children.Add(status);
         DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
-        var tabs = new TabControl();
         AddColumn(previewRows, "Ürün", nameof(ProductChannelMatchRow.ProductId), 180);
         AddColumn(previewRows, "Sonuç", nameof(ProductChannelMatchRow.Outcome), 150);
         var remoteChoice = new FrameworkElementFactory(typeof(ComboBox));
