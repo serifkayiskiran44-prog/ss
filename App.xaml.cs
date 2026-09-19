@@ -13,12 +13,23 @@ public partial class App : Application
 {
     StartupCrashGuard? crashGuard;
     string? dataDirectory;
+    SingleInstanceGuard? singleInstance;
+    BackgroundAppController? backgroundController;
+    MonoBridgeTrayIcon? trayIcon;
+    bool exitStarted;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
         dataDirectory = ResolveDataDirectory();
+
+        singleInstance = SingleInstanceGuard.TryAcquire(dataDirectory, ActivateMainWindow);
+        if (singleInstance is null)
+        {
+            Shutdown(0);
+            return;
+        }
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
@@ -70,8 +81,11 @@ public partial class App : Application
 
         try
         {
-            var window = new MainWindow(dataDirectory);
+            backgroundController = new BackgroundAppController(dataDirectory, BackgroundJobFactory.Create(dataDirectory));
+            var window = new MainWindow(dataDirectory, backgroundController);
             window.ContentRendered += (_, _) => crashGuard?.MarkReachedUi();
+            window.FirstHiddenToTray += (_, _) => trayIcon?.ShowBackgroundNotice();
+            window.ExitRequested += async (_, _) => await ExitAsync();
             // The 1440x900 default is larger than common laptop work areas (e.g. 1366x720):
             // clamp the restore size and start maximized so nothing opens off-screen.
             var work = SystemParameters.WorkArea;
@@ -83,6 +97,8 @@ public partial class App : Application
             }
             MainWindow = window;
             window.Show();
+            trayIcon = new MonoBridgeTrayIcon(backgroundController, Dispatcher, ActivateMainWindow, () => ExitAsync());
+            backgroundController.Start();
         }
         catch (Exception ex)
         {
@@ -92,7 +108,38 @@ public partial class App : Application
                 "MarketplaceHub — başlatma hatası",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            Shutdown(-1);
+            _ = ExitAsync(-1);
+        }
+    }
+
+    void ActivateMainWindow()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (MainWindow is not Window window) return;
+            if (!window.IsVisible) window.Show();
+            if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+            window.Activate();
+        });
+    }
+
+    async Task ExitAsync(int exitCode = 0)
+    {
+        if (exitStarted) return;
+        exitStarted = true;
+        try
+        {
+            if (backgroundController is not null)
+            {
+                backgroundController.RequestExplicitExit();
+                await backgroundController.ShutdownAsync();
+            }
+        }
+        finally
+        {
+            trayIcon?.Dispose();
+            if (MainWindow is Window window) window.Close();
+            Shutdown(exitCode);
         }
     }
 
@@ -114,7 +161,7 @@ public partial class App : Application
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         e.Handled = true;
-        Shutdown(-1);
+        _ = ExitAsync(-1);
     }
 
     void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
@@ -132,5 +179,17 @@ public partial class App : Application
             File.AppendAllText(Path.Combine(directory, "operations.log"), line);
         }
         catch { }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        trayIcon?.Dispose();
+        if (backgroundController is not null)
+        {
+            backgroundController.RequestExplicitExit();
+            backgroundController.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        singleInstance?.Dispose();
+        base.OnExit(e);
     }
 }

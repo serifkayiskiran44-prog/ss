@@ -19,7 +19,6 @@ public partial class MainWindow : Window
  readonly CatalogStore store;
  readonly HttpClient http=new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(60)};
  readonly SemaphoreSlim gate=new(1,1);
- readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMinutes(1)};
  readonly AsyncSingleFlight<EtsyCredentials> authFlight=new();
  readonly DispatcherTimer searchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
  readonly DispatcherTimer globalSearchTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
@@ -30,6 +29,7 @@ public partial class MainWindow : Window
  readonly ObservableCollection<string> logs=[];
  readonly string logPath;
  readonly string? dataDirectory;
+ readonly BackgroundAppController? backgroundController;
  readonly DataGrid products=new(), preview=new(){SelectionMode=DataGridSelectionMode.Extended}, mapping=new(){IsReadOnly=false}, listings=new();
  readonly DataGrid sources=new(){SelectionMode=DataGridSelectionMode.Single};
  readonly ListBox paths=new();
@@ -44,10 +44,13 @@ public partial class MainWindow : Window
  readonly TextBlock calculationStatus=Hint("Alış fiyatını girip hesaplamayı test edebilirsin."),fxStatus=Hint("Kur henüz alınmadı.");
  XmlSource? source; CatalogProduct? edit; EtsyListingTemplate template=new(); EtsyCredentials credentials=new("","","",""); OAuthAttempt? attempt; Func<Task>? beforeScheduledImportHook=null;
  List<MappingEntry> mappings=[]; string xml="",loadedLocation="",previewRevision=""; int listingOffset,listingTotal,productOffset,productTotal,searchRevision,globalSearchRevision; string loadedListingShop="",loadedListingState="";
- public MainWindow():this(null){}
- public MainWindow(string? directory)
+ public event EventHandler? FirstHiddenToTray;
+ public event EventHandler? ExitRequested;
+ public MainWindow():this(null,null){}
+ public MainWindow(string? directory):this(directory,null){}
+ public MainWindow(string? directory, BackgroundAppController? backgroundController)
  {
-  dataDirectory=directory;startupRecovery=new StartupRecovery(directory);store=new CatalogStore(directory);globalSearchIndex=new GlobalSearchIndexService(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
+  dataDirectory=directory;this.backgroundController=backgroundController;startupRecovery=new StartupRecovery(directory);store=new CatalogStore(directory);globalSearchIndex=new GlobalSearchIndexService(directory);logPath=Path.Combine(directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop"),"operations.log");
   InitializeComponent();uiPreferences=new UiPreferenceStore(directory);PetshopTedarikXmlSource.Ensure(store);Language=System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
   PreviewKeyDown += MainWindow_PreviewKeyDown;
   GlobalSearchBox.KeyDown += GlobalSearchBox_KeyDown;
@@ -56,8 +59,8 @@ public partial class MainWindow : Window
   try{if(File.Exists(logPath))foreach(var line in File.ReadLines(logPath).TakeLast(100))logs.Insert(0,line);}catch(IOException){}
   BuildProducts();BuildSources();BuildApi();BuildListings();BuildTemplate();BuildNavigation();
   try{template=TemplateStore.Load(directory);templateEditor.DataContext=template;var saved=directory==null?CredentialStore.Load():null;if(saved!=null)SetCredentials(saved);}catch(Exception e){Log(Safe(e));}
-  RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};globalSearchTimer.Tick+=SearchTimer_Tick;_ = WarmGlobalSearchAsync();
-  Log("Global masaüstü hazır. XML otomasyonu yalnız program açıkken çalışır.");
+  RefreshSources();RefreshProducts();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};globalSearchTimer.Tick+=SearchTimer_Tick;_ = WarmGlobalSearchAsync();
+  Log(backgroundController is null?"Global masaüstü hazır.":"Global masaüstü hazır. Salt okunur senkron ve XML otomasyonu bildirim alanında çalışır.");
   if (startupRecovery.State.UncleanExit) Log("Önceki çalışma normal kapanmamış; yerel recovery kontrolleri uygulandı.");
  }
  void GlobalSearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -270,8 +273,17 @@ public partial class MainWindow : Window
  async Task RunAsync(Func<Task> action){if(!await gate.WaitAsync(0)){Log("Önceki işlem sürüyor.");return;}ModuleTabs.IsEnabled=false;if(xmlDefinitionDialog!=null)xmlDefinitionDialog.IsEnabled=false;try{await action();}catch(Exception e){Log(Safe(e));apiStatus.Text=Safe(e);}finally{ModuleTabs.IsEnabled=true;if(xmlDefinitionDialog!=null)xmlDefinitionDialog.IsEnabled=true;gate.Release();}}
  static string Safe(Exception e)=>e is InvalidOperationException or ArgumentException?e.Message:"İşlem tamamlanamadı. Dosya biçimini, erişim izinlerini ve bağlantıyı kontrol et.";
  void Log(string text){var safeText=AuditStore.Sanitize(text);StatusText.Text=safeText;var line=$"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {safeText.Replace('\r',' ').Replace('\n',' ')}";logs.Insert(0,line);while(logs.Count>200)logs.RemoveAt(logs.Count-1);try{Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);File.AppendAllText(logPath,line+Environment.NewLine);new AuditStore(dataDirectory).Append(new(){Module="UI",Action="log",Outcome="Info",Detail=safeText});}catch(IOException){}catch(Exception){ } }
- protected override void OnClosing(System.ComponentModel.CancelEventArgs e){lifetime.Cancel();globalSearchCts?.Cancel();base.OnClosing(e);}
- protected override void OnClosed(EventArgs e){marketplaceHome?.Dispose();lifetime.Cancel();timer.Stop();searchTimer.Stop();globalSearchTimer.Stop();globalSearchCts?.Dispose();startupRecovery.Complete();http.Dispose();base.OnClosed(e);}
+ protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+ {
+  if(backgroundController is not null)
+  {
+   var decision=backgroundController.DecideWindowClose();
+   if(decision.CancelClose){e.Cancel=true;if(decision.HideWindow)Hide();if(decision.ShowBackgroundNotification)FirstHiddenToTray?.Invoke(this,EventArgs.Empty);return;}
+   if(backgroundController.State!=BackgroundAppState.Stopped){e.Cancel=true;ExitRequested?.Invoke(this,EventArgs.Empty);return;}
+  }
+  lifetime.Cancel();globalSearchCts?.Cancel();base.OnClosing(e);
+ }
+ protected override void OnClosed(EventArgs e){marketplaceHome?.Dispose();lifetime.Cancel();searchTimer.Stop();globalSearchTimer.Stop();globalSearchCts?.Dispose();startupRecovery.Complete();http.Dispose();base.OnClosed(e);}
 }
 
 

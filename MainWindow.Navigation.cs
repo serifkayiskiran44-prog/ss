@@ -48,8 +48,15 @@ public partial class MainWindow
   settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
   settings.Children.Add(Button("BizimHesap bağlantı ayarları",()=>Navigate("bizimhesap")));
   settings.Children.Add(Button("Mağaza bağlantılarını yönet",()=>Navigate("connections")));
+  if(backgroundController is not null)
+  {
+   var closeToTray=new CheckBox{Content="Pencereyi kapatınca MonoBridge'i bildirim alanında çalıştır",IsChecked=backgroundController.CloseToTray,Margin=new Thickness(4,10,4,4)};
+   closeToTray.Checked+=(_,_)=>backgroundController.CloseToTray=true;
+   closeToTray.Unchecked+=(_,_)=>backgroundController.CloseToTray=false;
+   settings.Children.Add(closeToTray);
+  }
   settings.Children.Add(Heading("Sürüm, yedek ve taşıma"));settings.Children.Add(DataBackupPanel.Create(dataDirectory));
-  settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML otomasyonu / Ürün yönetimi ekranlarından düzenlenir. Zamanlı XML yenilemesi yalnız uygulama açıkken çalışır. İşlem geçmişi pencerenin altındadır."));
+  settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML otomasyonu / Ürün yönetimi ekranlarından düzenlenir. Zamanlı salt okunur işler MonoBridge bildirim alanında çalışırken devam eder. İşlem geçmişi pencerenin altındadır."));
   Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
