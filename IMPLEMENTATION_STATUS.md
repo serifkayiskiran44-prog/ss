@@ -7,6 +7,7 @@
 - Selected products can create immutable account-scoped Stock, Price, Price+Stock and New Listing previews. Explicit approval, connection/catalog/binding/workspace fences, durable pre-HTTP receipts, duplicate suppression and uncertain-result replay blocking are implemented. Production writes remain disabled until read access and the exact write permission/endpoints are verified.
 - The provided credentials are stored only in the Windows-user-bound encrypted vault. Production probes returned authorization failures: products/categories `403`, listings/orders `401`. No remote product, stock, price or order data was changed. A new service key assigned to this integration (or the missing API permissions) is required.
 - Competition-analysis Excel bulk settings requested for Trendyol, Hepsiburada and Amazon are recorded as the next module in `docs/superpowers/specs/2026-09-19-competition-excel-backlog.md`.
+- Validation: the complete Release suite passed **1400/1400**, with zero failures and skips. Focused Hepsiburada UI/dispatch tests passed **6/6**.
 
 ## Multi-store shop product workspace — 2026-09-19
 - Added an account-scoped wide product table over exact `ConnectionId`, including local/remote stock and price, category/brand, state/error, management flags, detailed filters and immutable whole-filter selection snapshots.
