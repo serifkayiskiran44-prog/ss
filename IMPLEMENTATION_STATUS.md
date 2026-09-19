@@ -1,5 +1,13 @@
 # Uygulama durumu — .NET 8 EXE
 
+## Hepsiburada account workspace — 2026-09-19
+- Added account-scoped DPAPI-protected Merchant ID/service-key settings, production/SIT separation, required User-Agent and redirect-free bounded HTTP reads.
+- Added merchant products, listings, categories, required attributes, Buybox, commission and order reads with strict account/response validation. Remote product snapshots and manual matches are isolated by `ConnectionId`; barcode wins and contradictory/duplicate identities require review.
+- Added the Hepsiburada store workspace with Turkish settings, products, product-card routing, protected Buybox suggestions and unified-order adapter support.
+- Selected products can create immutable account-scoped Stock, Price, Price+Stock and New Listing previews. Explicit approval, connection/catalog/binding/workspace fences, durable pre-HTTP receipts, duplicate suppression and uncertain-result replay blocking are implemented. Production writes remain disabled until read access and the exact write permission/endpoints are verified.
+- The provided credentials are stored only in the Windows-user-bound encrypted vault. Production probes returned authorization failures: products/categories `403`, listings/orders `401`. No remote product, stock, price or order data was changed. A new service key assigned to this integration (or the missing API permissions) is required.
+- Competition-analysis Excel bulk settings requested for Trendyol, Hepsiburada and Amazon are recorded as the next module in `docs/superpowers/specs/2026-09-19-competition-excel-backlog.md`.
+
 ## Multi-store shop product workspace — 2026-09-19
 - Added an account-scoped wide product table over exact `ConnectionId`, including local/remote stock and price, category/brand, state/error, management flags, detailed filters and immutable whole-filter selection snapshots.
 - Bulk commands are channel/capability-derived and hand exact product snapshots to the retained Trendyol/Etsy specialist preview flows. Local management/category/template edits use immutable SQLite previews, explicit approval, connection revision, catalog timestamp and binding CAS; this feature performs no remote API write.

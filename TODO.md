@@ -660,3 +660,12 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Scheduled product reads remain explicitly unsupported because the current account adapter contract has no safe implementation; the stored true state is rejected and the UI control is disabled with an explanation.
 - [x] No live HTTP or marketplace write was used. All seven `DEFERRED_BY_USER` areas remain unchanged.
 - [x] Final verification: exact Release suite **1353/1353** passed; clean self-contained `Windows-Excel-Final` package and visible MainWindow smoke passed (package SHA-256 `5b2fe3036b0a2171db1813048e5bf2e0efdf422b657b6a8a2ea70f7125fb2d00`).
+# Hepsiburada / sonraki iş — 2026-09-19
+
+- [x] Hesap bazlı şifreli Merchant ID + servis anahtarı ayarları.
+- [x] Ürün, listing, kategori, zorunlu özellik, Buybox, komisyon ve sipariş salt okunur istemcileri.
+- [x] Barkod öncelikli ürün eşleştirme, hesap izolasyonu ve Hepsiburada mağaza çalışma alanı.
+- [x] Seçili ürünler için değişmez stok/fiyat/fiyat+stok/yeni ilan önizlemeleri ve kalıcı işlem kaydı.
+- [ ] Hepsiburada panelinden bu entegrasyona atanmış yeni servis anahtarı alınmalı; mevcut canlı denemede ürün/kategori 403, listing/sipariş 401 döndü.
+- [ ] Salt okunur doğrulama başarılı olduktan sonra resmî yazma izinleri ve takip uçları gerçek test ürünüyle doğrulanmalı; o zamana kadar canlı gönderim kapalı kalacak.
+- [ ] Sonraki modül: Trendyol + Hepsiburada + Amazon ortak rekabet analizi; Excel ile min/max/barem fiyatı, aktiflik ve rakip bağlantısını toplu önizleme/onay ile güncelleme.
