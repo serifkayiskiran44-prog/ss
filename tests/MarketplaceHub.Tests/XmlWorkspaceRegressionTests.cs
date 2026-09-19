@@ -44,7 +44,7 @@ public class XmlWorkspaceRegressionTests
     }
 
     [TestMethod]
-    public void StartupDoesNotOverwriteUserMappingOrSkuPrefix()
+    public void StartupDoesNotOverwriteUserMappingOrSourcePrefixes()
     {
         var directory = Path.Combine(Path.GetTempPath(), "xml-preset-" + Guid.NewGuid().ToString("N"));
         var store = new CatalogStore(directory);
@@ -53,12 +53,18 @@ public class XmlWorkspaceRegressionTests
         source.Fields["Name"] = "satisAd";
         source.Fields.Remove("Image2");
         source.SkuPrefix = "MY-";
+        source.BarcodePrefix = "BAR-";
+        source.GtinPrefix = "GTIN-";
+        source.ImageUrlPrefix = "https://images.example/catalog/";
         store.SaveSource(source);
         PetshopTedarikXmlSource.Ensure(store);
         var reopened = store.Sources().Single();
         Assert.AreEqual("satisAd", reopened.Fields["Name"]);
         Assert.IsFalse(reopened.Fields.ContainsKey("Image2"));
         Assert.AreEqual("MY-", reopened.SkuPrefix);
+        Assert.AreEqual("BAR-", reopened.BarcodePrefix);
+        Assert.AreEqual("GTIN-", reopened.GtinPrefix);
+        Assert.AreEqual("https://images.example/catalog/", reopened.ImageUrlPrefix);
     }
 
     [TestMethod]

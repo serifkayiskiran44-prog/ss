@@ -24,7 +24,9 @@ public class XmlSource
  public DateTimeOffset? FxFetchedUtc {get;set;}
  public bool AutoImport {get;set;} public DateTime? LastRunUtc {get;set;} public string LastStatus {get;set;}="Henüz çalışmadı";
  public string Id {get;set;}=Guid.NewGuid().ToString("N"); public string Name {get;set;}=""; public string Location {get;set;}=""; public bool Enabled {get;set;}=true;public int IntervalMinutes {get;set;}=30;
- public string ItemPath {get;set;}="";public string DecimalSeparator {get;set;}=".";public string StockDecimalSeparator {get;set;}=".";public string SkuPrefix {get;set;}="";public Dictionary<string,string> Fields {get;set;}=new();
+ public string ItemPath {get;set;}="";public string DecimalSeparator {get;set;}=".";public string StockDecimalSeparator {get;set;}=".";
+ public string SkuPrefix {get;set;}="";public string BarcodePrefix {get;set;}="";public string GtinPrefix {get;set;}="";public string ImageUrlPrefix {get;set;}="";
+ public Dictionary<string,string> Fields {get;set;}=new();
  public decimal ExchangeRate {get;set;}=1;public decimal MarkupPercent {get;set;}=40;public decimal FixedAmount {get;set;}=0;public decimal MinimumPrice {get;set;}=0;public string Currency {get;set;}="USD";
  public int SafetyStock {get;set;}=3;public int MinimumStock {get;set;}=0;public int MaximumStock {get;set;}=20;public string BrandFilter {get;set;}="";public string CategoryFilter {get;set;}="";
  public bool UpdateName {get;set;} public bool UpdateDescription {get;set;} public bool UpdateImages {get;set;}

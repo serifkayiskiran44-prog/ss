@@ -78,6 +78,26 @@ public class XmlDefinitionOptionsTests
     }
 
     [TestMethod]
+    public void SourcePrefixesApplyToMappedIdentifiersAndRelativeImages()
+    {
+        const string feed = "<Items><Item><id>ref-2</id><sku>A1</sku><barcode>123</barcode><gtin>456</gtin><name>Food</name><price>100</price><qty>10</qty><image>products/a.jpg | https://cdn.example/b.jpg</image></Item></Items>";
+        var source = Source();
+        source.Fields["Barcode"] = "barcode";
+        source.Fields["Gtin"] = "gtin";
+        source.SkuPrefix = "SKU-";
+        source.BarcodePrefix = "BAR-";
+        source.GtinPrefix = "GTIN-";
+        source.ImageUrlPrefix = "https://images.example/catalog/";
+
+        var row = XmlCatalog.Preview(feed, source).Single();
+
+        Assert.AreEqual("SKU-A1", row.Sku);
+        Assert.AreEqual("BAR-123", row.Barcode);
+        Assert.AreEqual("GTIN-456", row.Gtin);
+        Assert.AreEqual("https://images.example/catalog/products/a.jpg | https://cdn.example/b.jpg", row.ImageUrls);
+    }
+
+    [TestMethod]
     public void ConflictingXmlIdentityRollsBackWholeImport()
     {
         var source = Source();

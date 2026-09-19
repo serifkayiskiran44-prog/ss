@@ -11,6 +11,15 @@ public static partial class XmlCatalog
     static readonly Regex RelativeFieldPath = new(@"^@?[\w-]+(?:/(?:@?[\w-]+))*$", RegexOptions.CultureInvariant);
     static bool IsImageKey(string key) => key is "ImageUrls" or "Image" or "Images" || Regex.IsMatch(key, @"^Image[1-9]$");
 
+    static string PrefixIdentifier(string prefix, string value) => value.Length == 0 ? "" : prefix.Trim() + value;
+
+    static string PrefixImageUrl(string prefix, string value)
+    {
+        if (value.Length == 0 || string.IsNullOrWhiteSpace(prefix)) return value;
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute) && absolute.Scheme is "http" or "https") return value;
+        return prefix.Trim().TrimEnd('/') + "/" + value.TrimStart('/');
+    }
+
     public static List<CatalogProduct> Preview(string xml, XmlSource source, CatalogStore catalog)
     {
         var persisted = catalog.Sources().SingleOrDefault(candidate => string.Equals(candidate.Id, source.Id, StringComparison.Ordinal));
@@ -52,6 +61,9 @@ public static partial class XmlCatalog
             throw new InvalidOperationException("Varsayılan KDV, sabit stok veya stok ayracı geçersiz.");
         if (source.StockIsText && string.IsNullOrWhiteSpace(source.AvailableStockText)) throw new InvalidOperationException("Stok var kabul edilecek metni yazın.");
         if (new[] { source.DefaultCategory, source.FixedCategory, source.DefaultBrand, source.FixedBrand }.Any(v => v.Length > 200)) throw new InvalidOperationException("Kategori ve marka en fazla 200 karakter olabilir.");
+        if (new[] { source.SkuPrefix, source.BarcodePrefix, source.GtinPrefix }.Any(v => v.Length > 200 || v.Any(char.IsControl))) throw new InvalidOperationException("Ürün kodu, barkod ve GTIN ön ekleri en fazla 200 karakter olabilir.");
+        if (source.ImageUrlPrefix.Length > 2048 || source.ImageUrlPrefix.Any(char.IsControl)) throw new InvalidOperationException("Görsel URL ön eki geçersiz.");
+        if (source.ImageUrlPrefix.Length > 0 && (!Uri.TryCreate(source.ImageUrlPrefix.Trim(), UriKind.Absolute, out var prefixUri) || prefixUri.Scheme is not ("http" or "https"))) throw new InvalidOperationException("Görsel URL ön eki http veya https adresi olmalı.");
     }
 
     static List<CatalogProduct> PreviewMapped(string xml, XmlSource source)
@@ -96,12 +108,12 @@ public static partial class XmlCatalog
             var category = string.Join(" > ", new[] { "Category", "Category2", "Category3", "Category4", "Category5" }.Select(Field).Where(v => v.Length > 0));
             var brand = source.FixedBrand.Length > 0 ? source.FixedBrand : Field("Brand");
             if (brand.Length == 0) brand = source.DefaultBrand;
-            var images = source.Fields.Keys.Where(IsImageKey).Select(Field).SelectMany(v => v.Split(" | ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)).Distinct(StringComparer.Ordinal);
+            var images = source.Fields.Keys.Where(IsImageKey).Select(Field).SelectMany(v => v.Split(" | ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)).Select(image => PrefixImageUrl(source.ImageUrlPrefix, image)).Distinct(StringComparer.Ordinal);
             var row = new CatalogProduct
             {
                 SourceId = source.Id, SourceProductId = Field("SourceProductId"), SourceKind = "xml", PriceSource = "xml", StockSource = "xml", MediaSource = "xml", SourceUpdatedUtc = DateTime.UtcNow,
-                Sku = Field("Sku").Length == 0 ? "" : source.SkuPrefix + Field("Sku"), Barcode = Field("Barcode"), Name = Field("Name"), Description = Field("Description"),
-                Gtin = Field("Gtin"), Mpn = Field("Mpn"), InvoiceName = Field("InvoiceName"), Subtitle = Field("Subtitle"), Shelf = Field("Shelf"),
+                Sku = PrefixIdentifier(source.SkuPrefix, Field("Sku")), Barcode = PrefixIdentifier(source.BarcodePrefix, Field("Barcode")), Name = Field("Name"), Description = Field("Description"),
+                Gtin = PrefixIdentifier(source.GtinPrefix, Field("Gtin")), Mpn = Field("Mpn"), InvoiceName = Field("InvoiceName"), Subtitle = Field("Subtitle"), Shelf = Field("Shelf"),
                 Cost = cost, VatRate = vat, CostCurrency = currency, Currency = source.Currency, Brand = brand, Category = category, ImageUrls = string.Join(" | ", images)
             };
             var expiry = Field("ExpiresOn");
