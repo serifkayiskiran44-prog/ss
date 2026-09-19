@@ -19,7 +19,7 @@ public sealed class MarketplaceAdapterRegistry
     public static MarketplaceAdapterRegistry Default { get; } = CreateDefault();
 
     public static MarketplaceAdapterRegistry CreateDefault(string? directory = null, Func<HttpClient>? httpFactory = null) => new(
-        MarketplaceConnectionCatalog.All.Select(definition => definition.Id is "etsy" or "trendyol"
+        MarketplaceConnectionCatalog.All.Select(definition => definition.Id is "etsy" or "trendyol" or "hepsiburada"
             ? (IMarketplaceAdapter)new AccountScopedMarketplaceAdapter(definition, directory, httpFactory)
             : new CatalogMarketplaceAdapter(definition)));
 
@@ -78,10 +78,25 @@ public sealed class MarketplaceAdapterRegistry
         public string Channel { get; } = definition.Id;
         public MarketplaceCapabilities Capabilities { get; } = definition.Capabilities;
 
-        public Task<IReadOnlyList<RemoteProductIdentity>> ReadProductsAsync(string connectionId, CancellationToken token)
+        public async Task<IReadOnlyList<RemoteProductIdentity>> ReadProductsAsync(string connectionId, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            throw new InvalidOperationException("Ürün okuma, seçili hesabın uzman çalışma alanından başlatılmalıdır.");
+            if (!Capabilities.Supports(MarketplaceOperation.ProductsRead))
+                throw new InvalidOperationException($"{Channel}/ProductsRead: capability desteklenmiyor; HTTP isteği oluşturulmadı.");
+            var store = new MarketplaceConnectionStore(directory);
+            var connection = store.Get(connectionId) ?? throw new InvalidOperationException("Ürün hesabı bulunamadı.");
+            if (!connection.Channel.Equals(Channel, StringComparison.OrdinalIgnoreCase) || !MarketplaceOperationalAccounts.IsEligible(connection, store))
+                throw new InvalidOperationException("Ürün hesabı etkin veya operasyonel değil.");
+            if (Channel != "hepsiburada")
+                throw new InvalidOperationException("Ürün okuma, seçili hesabın uzman çalışma alanından başlatılmalıdır.");
+            var vault = new MarketplaceCredentialVault(directory);
+            var credentials = vault.Load<Hepsiburada.HepsiburadaCredentials>(connection.Id, connection.Channel, connection.ShopId)
+                ?? throw new InvalidOperationException("Hepsiburada bağlantı bilgileri bu hesap için bulunamadı.");
+            using var http = httpFactory?.Invoke() ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(60) };
+            using var client = new Hepsiburada.HepsiburadaApiClient(credentials, http);
+            var products = await client.GetMerchantProductsAsync(token).ConfigureAwait(false);
+            new Hepsiburada.HepsiburadaWorkspaceStore(directory).ReplaceProducts(connection.Id, connection.ShopId, products);
+            return products.Select(row => new RemoteProductIdentity(connection.Id, row.HepsiburadaSku, row.MerchantSku, row.Barcode)).ToArray();
         }
 
         public async Task<IReadOnlyList<OrderSnapshot>> ReadOrdersAsync(string connectionId, DateTime fromUtc, CancellationToken token)

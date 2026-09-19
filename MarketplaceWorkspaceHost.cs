@@ -89,6 +89,7 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
     {
         "trendyol" => new TrendyolWorkspacePanel(connection.Id, directory),
         "etsy" => new EtsyWorkspacePanel(connection.Id, directory),
+        "hepsiburada" => new HepsiburadaWorkspacePanel(connection.Id, directory),
         _ => new Border
         {
             Padding = new Thickness(18),

@@ -541,6 +541,12 @@ public sealed class MarketplaceShopProductsModel
             return state.Listings.ToDictionary(x => x.ListingId.ToString(CultureInfo.InvariantCulture),
                 x => new RemoteValues(x.Quantity, x.Price, x.Currency), StringComparer.Ordinal);
         }
+        if (connection.Channel == "hepsiburada")
+        {
+            var state = new Hepsiburada.HepsiburadaWorkspaceStore(directory).Read(connection.Id);
+            return state.Products.ToDictionary(x => x.HepsiburadaSku,
+                _ => new RemoteValues(null, null, "TRY"), StringComparer.Ordinal);
+        }
         return new Dictionary<string, RemoteValues>();
     }
 

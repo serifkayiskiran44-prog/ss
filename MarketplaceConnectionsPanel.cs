@@ -172,11 +172,13 @@ public static class MarketplaceConnectionsPanel
         {
             "trendyol" => new TrendyolWorkspacePanel(connection.Id, dataDirectory),
             "etsy" => new EtsyWorkspacePanel(connection.Id, dataDirectory),
+            "hepsiburada" => new HepsiburadaWorkspacePanel(connection.Id, dataDirectory),
             _ => null
         };
         if (content is null) { navigate?.Invoke(connection.Channel); return; }
         if (content is TrendyolWorkspacePanel trendyol) trendyol.ShowSettings();
         if (content is EtsyWorkspacePanel etsy) etsy.ShowSettings();
+        if (content is HepsiburadaWorkspacePanel hepsiburada) hepsiburada.ShowSettings();
         var window = new Window { Title = connection.DisplayName + " — API bağlantısı", Content = content, Width = 1180, Height = 780, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(item => item.IsActive);
         if (owner is not null) window.Owner = owner;
@@ -205,6 +207,10 @@ public static class MarketplaceConnectionsPanel
                 var trendyol = LoadCredentialsForProbe<TrendyolSettings>(dataDirectory, item) ?? throw new InvalidOperationException("NOT_CONFIGURED: Trendyol şifreli bağlantısı bulunamadı.");
                 await new TrendyolConnection().TestReadOnlyAsync(trendyol);
                 return "Trendyol satıcı erişimi doğrulandı.";
+            case "hepsiburada":
+                var hepsiburada = LoadCredentialsForProbe<Hepsiburada.HepsiburadaCredentials>(dataDirectory, item) ?? throw new InvalidOperationException("NOT_CONFIGURED: Hepsiburada şifreli bağlantısı bulunamadı.");
+                var identity = await new HepsiburadaConnection().TestReadOnlyAsync(hepsiburada, http);
+                return $"Hepsiburada mağazası doğrulandı: {identity.MerchantId}.";
             case "ebay":
                 var ebay = new EbaySettingsStore().Load() ?? throw new InvalidOperationException("NOT_CONFIGURED: eBay şifreli ayarı bulunamadı.");
                 if (ebay.Tokens is null) throw new InvalidOperationException("NOT_CONFIGURED: eBay OAuth onayı tamamlanmamış.");
