@@ -694,6 +694,8 @@ public sealed class MarketplaceShopProductsPanel : UserControl
         var rows = model.Filter(filter); products.ItemsSource = rows; summary.Text = $"{rows.Count} ürün · Hesap: {model.ConnectionId}";
     }
 
+    public void Reload() => Refresh();
+
     void AddColumns()
     {
         Column("SKU", "Sku", 105); Column("GTIN", "Gtin", 120); Column("Barkod", "Barcode", 120); Column("Ürün", "Name", 230);

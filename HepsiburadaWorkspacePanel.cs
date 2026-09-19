@@ -24,6 +24,12 @@ public sealed class HepsiburadaWorkspacePanel : UserControl, IDisposable
     readonly TextBox minimumPrice = new() { Name = "HepsiburadaMinimumPrice", Width = 100, Text = "1" };
     readonly TextBox maximumDecrease = new() { Name = "HepsiburadaMaximumDecrease", Width = 100, Text = "0" };
     readonly TextBox undercut = new() { Name = "HepsiburadaUndercut", Width = 100, Text = "0,01" };
+    readonly ComboBox previewOperation = new()
+    {
+        Name = "HepsiburadaPreviewOperation", MinWidth = 180,
+        ItemsSource = new[] { "Stok", "Fiyat", "Fiyat ve stok", "Yeni ilan" }, SelectedIndex = 0
+    };
+    readonly DataGrid history = new() { Name = "HepsiburadaHistory", AutoGenerateColumns = true, IsReadOnly = true };
     CancellationTokenSource? cancellation;
 
     public string ConnectionId => connection.Id;
@@ -51,7 +57,7 @@ public sealed class HepsiburadaWorkspacePanel : UserControl, IDisposable
         sections.Items.Add(new TabItem { Header = "Hepsiburada kontrol", Content = BuildControl() });
         sections.Items.Add(new TabItem { Header = "Ayarlar", Content = BuildSettings() });
         sections.Items.Add(new TabItem { Header = "Rekabet analizi", Content = BuildCompetition() });
-        sections.Items.Add(new TabItem { Header = "İşlem geçmişi", Content = Text("Hepsiburada işlemleri hesap bazında burada tutulur.") });
+        sections.Items.Add(new TabItem { Header = "İşlem geçmişi", Content = history });
         root.Children.Add(sections); Content = root;
         LoadCredentials();
     }
@@ -61,10 +67,13 @@ public sealed class HepsiburadaWorkspacePanel : UserControl, IDisposable
         var root = new DockPanel();
         var toolbar = new WrapPanel { Margin = new Thickness(4) };
         toolbar.Children.Add(Button("Hepsiburada ürünlerini oku", "HepsiburadaReadProducts", ReadProductsAsync));
+        toolbar.Children.Add(previewOperation);
+        toolbar.Children.Add(Button("Seçili ürünleri önizle", "HepsiburadaCreateDispatchPreview", PreviewSelected));
         DockPanel.SetDock(toolbar, Dock.Top); root.Children.Add(toolbar);
         productsPanel = new MarketplaceShopProductsPanel(connection.Id, directory);
         productsPanel.ProductCardRequested += id => ProductCardRequested?.Invoke(id);
         root.Children.Add(productsPanel);
+        RefreshHistory();
         return root;
     }
 
@@ -132,8 +141,37 @@ public sealed class HepsiburadaWorkspacePanel : UserControl, IDisposable
         status.Text = "Hepsiburada ürünleri okunuyor…";
         using var http = SafeHttp(); using var client = new HepsiburadaApiClient(credentials, http);
         var state = await new HepsiburadaWorkspaceService(new HepsiburadaWorkspaceStore(directory)).RefreshProductsAsync(connection.Id, credentials, client, Token);
+        productsPanel?.Reload();
         status.Text = $"{state.Products.Count:N0} Hepsiburada ürünü okundu. Eşleştirme barkoda, ardından çelişmeyen SKU'ya göre yapılır.";
     }
+
+    void PreviewSelected()
+    {
+        var selection = productsPanel?.SelectionSnapshot ?? throw new InvalidOperationException("Önce Sayfayı seç veya Filtrelenenlerin tümünü seç düğmesiyle ürünleri seçin.");
+        var operation = previewOperation.SelectedIndex switch
+        {
+            1 => HepsiburadaOperation.Price,
+            2 => HepsiburadaOperation.PriceAndStock,
+            3 => HepsiburadaOperation.ListingCreate,
+            _ => HepsiburadaOperation.Stock
+        };
+        var plan = new HepsiburadaDispatchStore(directory).Preview(connection.Id, selection.ProductIds, operation);
+        var errors = plan.Rows.Count(row => row.Status == "Hatalı");
+        var ready = plan.Rows.Count - errors;
+        MessageBox.Show($"Mağaza: {connection.DisplayName}\nİşlem: {OperationLabel(operation)}\nHazır: {ready}\nHatalı: {errors}\n\nBu yalnızca değişmez önizleme kaydıdır. Canlı API yazımı, mağaza okuma yetkisi doğrulanana kadar kapalıdır.",
+            "Hepsiburada gönderim önizlemesi", MessageBoxButton.OK, errors > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        status.Text = $"{OperationLabel(operation)} önizlemesi kaydedildi · {ready} hazır · {errors} hatalı · Canlı gönderim kapalı.";
+    }
+
+    void RefreshHistory() => history.ItemsSource = new HepsiburadaDispatchStore(directory).Receipts(connection.Id);
+    static string OperationLabel(HepsiburadaOperation operation) => operation switch
+    {
+        HepsiburadaOperation.Stock => "Stok",
+        HepsiburadaOperation.Price => "Fiyat",
+        HepsiburadaOperation.PriceAndStock => "Fiyat ve stok",
+        HepsiburadaOperation.ListingCreate => "Yeni ilan",
+        _ => operation.ToString()
+    };
 
     async Task ReadCompetitionAsync()
     {

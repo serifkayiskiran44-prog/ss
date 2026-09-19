@@ -28,6 +28,8 @@ public sealed class HepsiburadaPanelTests
         Assert.IsNotNull(controls.OfType<DataGrid>().SingleOrDefault(x => x.Name == "MarketplaceShopProducts"));
         Assert.IsNotNull(controls.OfType<Button>().SingleOrDefault(x => x.Name == "MarketplaceOpenProductCard"));
         Assert.IsNotNull(controls.OfType<Button>().SingleOrDefault(x => x.Name == "HepsiburadaReadProducts"));
+        Assert.IsNotNull(controls.OfType<Button>().SingleOrDefault(x => x.Name == "HepsiburadaCreateDispatchPreview"));
+        Assert.IsNotNull(controls.OfType<ComboBox>().SingleOrDefault(x => x.Name == "HepsiburadaPreviewOperation"));
         Assert.IsFalse(VisibleText(host).Contains("test-secret", StringComparison.Ordinal));
         CollectionAssert.IsSubsetOf(new[] { "Hepsiburada kontrol", "Ayarlar", "Rekabet analizi", "İşlem geçmişi" },
             controls.OfType<TabItem>().Select(x => x.Header?.ToString() ?? "").ToArray());
