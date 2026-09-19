@@ -494,6 +494,26 @@ public sealed class MarketplaceShopWorkspaceTests
     }
 
     [TestMethod]
+    public void TrendyolWorkspaceRowsResolveSharedContentVariantsByRemoteBarcode()
+    {
+        var account = new TrendyolSettings("101", "key", "secret", "tests");
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", account.SupplierId, "Trendyol", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "LOCAL-2", Barcode = "LOCAL-BARCODE", Name = "Variant two", Stock = 5, Price = 20, Currency = "TRY" });
+        new ProductChannelBindingStore(directory).Save(new(product.Id, connection.Id, "9001", "REMOTE-2", "BARCODE-2",
+            true, true, true, "", "", "Approved", 0, default), 0);
+        var workspace = new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory);
+        var state = workspace.Load(account.SupplierId);
+        state.Products.Add(new("BARCODE-1", "REMOTE-1", "Variant one", 9001, 2, 10, 12, true));
+        state.Products.Add(new("BARCODE-2", "REMOTE-2", "Variant two", 9001, 7, 30, 35, true));
+        workspace.Save(state);
+
+        var row = new MarketplaceShopProductsModel(connection.Id, directory).Filter(new()).Single(x => x.ProductId == product.Id);
+
+        Assert.AreEqual(7, row.RemoteStock);
+        Assert.AreEqual(30m, row.RemotePrice);
+    }
+
+    [TestMethod]
     public async Task EtsyStockPreviewRejectsInitiallyDisabledManagementFlag()
     {
         var credentials = new EtsyCredentials("key", "secret", "88.token", "123", GrantedScopes: new[] { "listings_r", "listings_w" });

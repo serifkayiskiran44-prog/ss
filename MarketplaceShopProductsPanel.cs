@@ -508,7 +508,9 @@ public sealed class MarketplaceShopProductsModel
     MarketplaceShopProductRow Row(CatalogProduct product, ProductChannelBinding? binding, IReadOnlyDictionary<string, RemoteValues> remote)
     {
         var key = binding?.RemoteId ?? "";
-        var remoteValue = key.Length > 0 ? remote.GetValueOrDefault(key) : null;
+        var variantKey = binding is null ? "" : RemoteVariantKey(binding.RemoteId, binding.RemoteBarcode);
+        var remoteValue = variantKey.Length > 0 ? remote.GetValueOrDefault(variantKey) : null;
+        remoteValue ??= key.Length > 0 ? remote.GetValueOrDefault(key) : null;
         var error = binding is not null && IsError(binding.State, "") ? binding.State : "";
         return new(product.Id, product.Sku, product.Gtin, product.Barcode, product.Name, product.Stock, product.Price, product.Currency,
             remoteValue?.Stock, remoteValue?.Price, remoteValue?.Currency ?? "", product.Category, product.Brand,
@@ -521,8 +523,16 @@ public sealed class MarketplaceShopProductsModel
         if (connection.Channel == "trendyol")
         {
             var state = new TrendyolWorkspaceStore(directory).Load(connection.ShopId);
-            return state.Products.ToDictionary(x => x.ContentId.ToString(CultureInfo.InvariantCulture),
-                x => new RemoteValues(x.Quantity, x.SalePrice, "TRY"), StringComparer.Ordinal);
+            var result = new Dictionary<string, RemoteValues>(StringComparer.Ordinal);
+            foreach (var product in state.Products)
+            {
+                var remoteId = product.ContentId.ToString(CultureInfo.InvariantCulture);
+                var values = new RemoteValues(product.Quantity, product.SalePrice, "TRY");
+                result.TryAdd(remoteId, values);
+                var variantKey = RemoteVariantKey(remoteId, product.Barcode);
+                if (variantKey.Length > 0) result[variantKey] = values;
+            }
+            return result;
         }
         if (connection.Channel == "etsy")
         {
@@ -532,6 +542,9 @@ public sealed class MarketplaceShopProductsModel
         }
         return new Dictionary<string, RemoteValues>();
     }
+
+    static string RemoteVariantKey(string remoteId, string remoteBarcode) =>
+        remoteId.Length == 0 || remoteBarcode.Length == 0 ? "" : remoteId + "\u001f" + remoteBarcode;
 
     static IReadOnlyList<MarketplaceShopBulkOperation> OperationsFor(MarketplaceCapabilities capabilities)
     {
