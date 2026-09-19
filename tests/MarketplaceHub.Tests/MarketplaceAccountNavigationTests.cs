@@ -239,6 +239,24 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
+    public void ProductRouteUsesTheFullHeightWithoutTheSharedHeaderOrSummaryStrip() => InSta(root =>
+    {
+        var window = new MainWindow(root);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "products"));
+
+            Assert.AreEqual(Visibility.Collapsed, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
+            Assert.AreEqual(Visibility.Collapsed, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "ProductSummaryBar").Visibility);
+
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "categories"));
+            Assert.AreEqual(Visibility.Visible, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
     public void MainWindowSeedingAfterHomeConstructionCannotPromoteDefaultPlaceholder() => InSta(root =>
     {
         var window = new MainWindow(root);

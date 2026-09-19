@@ -52,6 +52,24 @@ public sealed class UnifiedOrdersPanelTests
     });
 
     [TestMethod]
+    public void ProductSourceViewExplainsThatSourcesAreNotMarketplaceBindingsAndHidesImpossibleTransfer() => InSta(root =>
+    {
+        var catalog = new CatalogStore(root);
+        var product = catalog.CreateManual(new() { Sku = "SKU", Name = "Product", Stock = 4, Currency = "TRY" });
+        var window = new ProductSourceWindow(root, product.Id);
+        try
+        {
+            window.Show(); window.UpdateLayout();
+            var controls = Walk(window).ToArray();
+            Assert.IsTrue(controls.OfType<TextBlock>().Any(text => text.Text.Contains("pazaryeri bağlantısı değildir", StringComparison.CurrentCultureIgnoreCase)));
+            var labels = controls.OfType<ComboBox>().Single(combo => combo.Name == "ProductSourceGroup").Items.Cast<object>().Select(item => item.ToString()).ToArray();
+            CollectionAssert.AreEqual(new[] { "Ürün bilgileri", "Fiyat", "Satılabilir stok" }, labels);
+            Assert.AreEqual(Visibility.Collapsed, controls.OfType<StackPanel>().Single(panel => panel.Children.OfType<TextBlock>().Any(text => text.Text == "Stok transferi")).Visibility);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
     public void AccountFilterUsesConnectionIdWhileShowingDuplicateDisplayNames() => InSta(root =>
     {
         var store = new OrdersStore(root);
