@@ -204,6 +204,8 @@ public sealed class MarketplaceShopProductsModel
                     throw new InvalidOperationException("Uzak mağaza güncellemesi için etkin ürün bağlantısı gerekli.");
                 return new MarketplaceShopSpecialistPreviewRow(id, 0, "", "", "", false, false, false, "", "", "");
             }
+            if (operation == MarketplaceShopBulkOperation.CreatePreview)
+                throw new InvalidOperationException("Yeni ilan önizlemesi yalnız mağazaya bağlı olmayan ürünler için oluşturulabilir.");
             if (operation != MarketplaceShopBulkOperation.CreatePreview &&
                 (!IsActiveBinding(binding) || !AllowsSpecialistOperation(binding.ManageContent, binding.ManagePrice, binding.ManageStock, operation)))
                 throw new InvalidOperationException("Ürün bağlantısı bu uzak mağaza işlemi için yönetime açık değil.");
@@ -258,22 +260,57 @@ public sealed class MarketplaceShopProductsModel
         directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
         var connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "catalog.db"), DefaultTimeout = 15 }.ToString();
         using var database = new SqliteConnection(connectionString); database.Open();
+        var scopedConnectionId = ScopedPlanConnection(database, planId);
         using (var table = database.CreateCommand())
         {
             table.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='MarketplaceShopSpecialistPlanLinks'";
-            if (table.ExecuteScalar() is null) return false;
+            if (table.ExecuteScalar() is null)
+            {
+                if (scopedConnectionId is not null) throw new InvalidOperationException("Hesap kapsamlı kanal planı uzman önizlemesine bağlanmadı; gönderim engellendi.");
+                return false;
+            }
         }
         string connectionId;bool cleared;
         using (var read = database.CreateCommand())
         {
             read.CommandText = "SELECT ConnectionId,Cleared FROM MarketplaceShopSpecialistPlanLinks WHERE PlanId=$plan";
             read.Parameters.AddWithValue("$plan", planId);
-            using var reader = read.ExecuteReader(); if (!reader.Read()) return false;
+            using var reader = read.ExecuteReader(); if (!reader.Read())
+            {
+                if (scopedConnectionId is not null) throw new InvalidOperationException("Hesap kapsamlı kanal planı uzman önizlemesine bağlanmadı; gönderim engellendi.");
+                return false;
+            }
             connectionId=reader.GetString(0);cleared=reader.GetInt32(1)!=0;
         }
+        if (scopedConnectionId is not null && !string.Equals(scopedConnectionId, connectionId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Hesap kapsamlı kanal planının mağaza bağlantısı tutarsız; gönderim engellendi.");
         if(cleared)throw new InvalidOperationException("Hesap kapsamlı kanal planı artık etkin değil; yeni önizleme alın.");
         new MarketplaceShopProductsModel(connectionId, directory).ValidateSpecialistPlan(planId);
         return true;
+    }
+
+    internal static void MarkScopedPlan(SqliteConnection database, SqliteTransaction transaction, string planId, string connectionId)
+    {
+        using (var table = database.CreateCommand())
+        {
+            table.Transaction = transaction;
+            table.CommandText = "CREATE TABLE IF NOT EXISTS MarketplaceShopScopedPlans(PlanId TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL)";
+            table.ExecuteNonQuery();
+        }
+        using var command = database.CreateCommand(); command.Transaction = transaction;
+        command.CommandText = "INSERT INTO MarketplaceShopScopedPlans(PlanId,ConnectionId) VALUES($plan,$connection)";
+        command.Parameters.AddWithValue("$plan", planId); command.Parameters.AddWithValue("$connection", connectionId); command.ExecuteNonQuery();
+    }
+
+    static string? ScopedPlanConnection(SqliteConnection database, string planId)
+    {
+        using (var table = database.CreateCommand())
+        {
+            table.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='MarketplaceShopScopedPlans'";
+            if (table.ExecuteScalar() is null) return null;
+        }
+        using var command = database.CreateCommand(); command.CommandText = "SELECT ConnectionId FROM MarketplaceShopScopedPlans WHERE PlanId=$plan";
+        command.Parameters.AddWithValue("$plan", planId); return command.ExecuteScalar() as string;
     }
 
     public static void ClearAssociatedSpecialistPlan(string planId, string? directory = null)
@@ -324,6 +361,8 @@ public sealed class MarketplaceShopProductsModel
                     throw new InvalidOperationException("Ürün-mağaza bağlantısı değişti; yeni önizleme alın.");
                 continue;
             }
+            if (supplied.Operation == MarketplaceShopBulkOperation.CreatePreview)
+                throw new InvalidOperationException("Ürün artık mağazaya bağlı; yeni ilan gönderimi engellendi.");
             if (reader.GetInt64(9) != row.BindingVersion || reader.GetString(0) != row.RemoteId || reader.GetString(1) != row.RemoteSku ||
                 reader.GetString(2) != row.RemoteBarcode || (reader.GetInt32(3) != 0) != row.ManageContent ||
                 (reader.GetInt32(4) != 0) != row.ManagePrice || (reader.GetInt32(5) != 0) != row.ManageStock ||
@@ -545,6 +584,7 @@ public sealed class MarketplaceShopProductsModel
             CREATE TABLE IF NOT EXISTS MarketplaceShopBulkReceipts(PreviewId TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL,Json TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS MarketplaceShopSpecialistPreviews(Id TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL,Json TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS MarketplaceShopSpecialistPlanLinks(PlanId TEXT PRIMARY KEY,PreviewId TEXT NOT NULL,ConnectionId TEXT NOT NULL,Cleared INTEGER NOT NULL DEFAULT 0 CHECK(Cleared IN (0,1)));
+            CREATE TABLE IF NOT EXISTS MarketplaceShopScopedPlans(PlanId TEXT PRIMARY KEY,ConnectionId TEXT NOT NULL);
             CREATE TRIGGER IF NOT EXISTS MarketplaceShopBulkPreviews_NoUpdate BEFORE UPDATE ON MarketplaceShopBulkPreviews BEGIN SELECT RAISE(ABORT,'immutable shop bulk preview'); END;
             CREATE TRIGGER IF NOT EXISTS MarketplaceShopBulkPreviews_NoDelete BEFORE DELETE ON MarketplaceShopBulkPreviews BEGIN SELECT RAISE(ABORT,'immutable shop bulk preview'); END;
             CREATE TRIGGER IF NOT EXISTS MarketplaceShopSpecialistPreviews_NoUpdate BEFORE UPDATE ON MarketplaceShopSpecialistPreviews BEGIN SELECT RAISE(ABORT,'immutable shop specialist preview'); END;

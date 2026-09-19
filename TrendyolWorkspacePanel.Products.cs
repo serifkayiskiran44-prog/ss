@@ -138,6 +138,7 @@ public sealed partial class TrendyolWorkspacePanel
     void BuildPreview()
     {
         if(editorDirty)throw new InvalidOperationException("Önce ürün Trendyol profilindeki değişiklikleri kaydedin.");
+        InvalidatePreview();
         var ids=SelectedProductIds();var operation=((Mode)mode.SelectedItem).Value;var specialist=DirectSpecialistPreview(ids,operation);
         PresentPreview(store.Preview(Account(),ids,operation,specialist?.ConnectionId),specialist);
     }
@@ -155,7 +156,19 @@ public sealed partial class TrendyolWorkspacePanel
             _=>throw new InvalidOperationException("Bu Trendyol işlemi hesap kapsamlı önizlemeye bağlanmadı.")
         });
     }
-    void PresentPreview(TrendyolPlan next,MarketplaceShopSpecialistPreview? specialist=null){ClearAccountSpecialistAssociation();plan=next;if(specialist is not null){accountSpecialistModel=new MarketplaceShopProductsModel(specialist.ConnectionId,workspaceDirectory);accountSpecialistModel.AssociateSpecialistPlan(specialist,next.Id);accountSpecialistPlanId=next.Id;AccountSpecialistPreview=specialist;}preview.ItemsSource=plan.Rows;payload.Text=JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(plan.PayloadJson),new JsonSerializerOptions{WriteIndented=true});send.IsEnabled=plan.Rows.Any(r=>r.ItemJson!=null)&&!plan.Rows.Any(r=>r.Status=="Hatalı");status.Text=$"Satıcı {plan.SellerId} · {ModeLabel(plan.Operation)} · {plan.Rows.Count(r=>r.ItemJson!=null)} gönderilecek · {plan.Rows.Count(r=>r.Status=="Hatalı")} hatalı · 15 dakika geçerli önizleme";previewSummary.Text=status.Text;ShowProductView("preview");}
+    void PresentPreview(TrendyolPlan next,MarketplaceShopSpecialistPreview? specialist=null)
+    {
+        InvalidatePreview();
+        MarketplaceShopProductsModel? nextSpecialistModel=null;
+        if(specialist is not null)
+        {
+            nextSpecialistModel=new MarketplaceShopProductsModel(specialist.ConnectionId,workspaceDirectory);
+            nextSpecialistModel.AssociateSpecialistPlan(specialist,next.Id);
+        }
+        plan=next;
+        if(specialist is not null){accountSpecialistModel=nextSpecialistModel;accountSpecialistPlanId=next.Id;AccountSpecialistPreview=specialist;}
+        preview.ItemsSource=plan.Rows;payload.Text=JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(plan.PayloadJson),new JsonSerializerOptions{WriteIndented=true});send.IsEnabled=plan.Rows.Any(r=>r.ItemJson!=null)&&!plan.Rows.Any(r=>r.Status=="Hatalı");status.Text=$"Satıcı {plan.SellerId} · {ModeLabel(plan.Operation)} · {plan.Rows.Count(r=>r.ItemJson!=null)} gönderilecek · {plan.Rows.Count(r=>r.Status=="Hatalı")} hatalı · 15 dakika geçerli önizleme";previewSummary.Text=status.Text;ShowProductView("preview");
+    }
     void AssignTemplate()=>AssignTemplate(delivery.SelectedItem as TrendyolDeliveryTemplate);
     void AssignTemplate(TrendyolDeliveryTemplate? selectedTemplate)
     {

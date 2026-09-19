@@ -523,7 +523,119 @@ public sealed class MarketplaceShopWorkspaceTests
 
         Assert.AreEqual(0L, preview.Rows.Single().BindingVersion);
         Assert.AreEqual("", preview.Rows.Single().RemoteId);
+
+        new ProductChannelBindingStore(directory).Save(Binding(product.Id, connection.Id, "appeared-after-preview", "active"), 0);
+        Assert.ThrowsException<InvalidOperationException>(() => model.AssociateSpecialistPlan(preview, "late-create-plan"));
     }
+
+    [TestMethod]
+    public async Task ScopedCreatePreviewRejectsAnExistingBindingAcrossCommonAndChannelWorkspaces()
+    {
+        var trendyolAccount = new TrendyolSettings("101", "key", "secret", "tests");
+        var trendyolConnection = new MarketplaceConnectionStore(directory).Save("trendyol", trendyolAccount.SupplierId, "Trendyol", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "BOUND-CREATE", Barcode = "BOUND-BARCODE", Name = "Bound", Stock = 1, Price = 10, Currency = "TRY" });
+        new ProductChannelBindingStore(directory).Save(Binding(product.Id, trendyolConnection.Id, "501", "Active"), 0);
+        var common = new MarketplaceShopProductsModel(trendyolConnection.Id, directory);
+
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            common.PreviewSpecialist(common.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.CreatePreview));
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory).Preview(
+                trendyolAccount, new[] { product.Id }, TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Create, trendyolConnection.Id));
+
+        var etsyConnection = new MarketplaceConnectionStore(directory).Save("etsy", "123", "Etsy", true);
+        new ProductChannelBindingStore(directory).Save(Binding(product.Id, etsyConnection.Id, "601", "active"), 0);
+        new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceStore(directory).Save(new() { ShopId = "123", Currency = "USD" });
+        using var http = new HttpClient(new EtsyShopHandler());
+        var etsy = new TrMarketplaceHubDesktop.Etsy.EtsyWorkspaceService(directory, http);
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => etsy.PreviewAsync(
+            new EtsyCredentials("key", "secret", "88.token", "123", GrantedScopes: new[] { "listings_r", "listings_w" }),
+            new[] { product.Id }, TrMarketplaceHubDesktop.Etsy.EtsyOperation.CreateDraft, connectionId: etsyConnection.Id));
+    }
+
+    [TestMethod]
+    public void ScopedTrendyolCreatePreviewRejectsAStaleWorkspaceRemoteIdentity()
+    {
+        var account = new TrendyolSettings("101", "key", "secret", "tests");
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", account.SupplierId, "Trendyol", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "STALE-CREATE", Barcode = "NEW-BARCODE", Name = "Stale", Stock = 1, Price = 10, Currency = "TRY" });
+        var workspace = new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory);
+        var state = workspace.Load(account.SupplierId);
+        state.ProductsUpdatedUtc = DateTime.UtcNow;
+        state.Products.Add(new("OLD-BARCODE", product.Sku, product.Name, 901, 1, 10, 10, true));
+        state.Profiles.Add(new() { ProductId = product.Id, IntegrationCode = "OLD-BARCODE" });
+        workspace.Save(state);
+
+        var error = Assert.ThrowsException<InvalidOperationException>(() => workspace.Preview(
+            account, new[] { product.Id }, TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Create, connection.Id));
+
+        StringAssert.Contains(error.Message, "bağlı olmayan");
+    }
+
+    [TestMethod]
+    public void ScopedTrendyolPlanWithoutACompletedSpecialistAssociationCannotClaimOrWrite()
+    {
+        var account = new TrendyolSettings("101", "key", "secret", "tests");
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", account.SupplierId, "Trendyol", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "SCOPED", Barcode = "SCOPED-B", Name = "Scoped", Stock = 8, Price = 10, Currency = "TRY" });
+        new ProductChannelBindingStore(directory).Save(new(product.Id, connection.Id, "701", product.Sku, product.Barcode, true, true, true, "", "", "Approved", 0, default), 0);
+        var workspace = new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory);
+        var state = workspace.Load(account.SupplierId);
+        state.ProductsUpdatedUtc = DateTime.UtcNow;
+        state.Products.Add(new(product.Barcode, product.Sku, product.Name, 701, 1, 10, 10, true));
+        state.Profiles.Add(new() { ProductId = product.Id, IntegrationCode = product.Barcode });
+        workspace.Save(state);
+        var plan = workspace.Preview(account, new[] { product.Id }, TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Stock, connection.Id);
+        var transport = new CountingTrendyolHandler();
+        using var http = new HttpClient(transport);
+        using var client = new TrMarketplaceHubDesktop.Trendyol.TrendyolApiClient(account, http);
+
+        Assert.ThrowsException<InvalidOperationException>(() => WaitFor(workspace.SendAsync(plan.Id, account, true, client)));
+
+        Assert.AreEqual(0, transport.Writes);
+        Assert.AreEqual(0, workspace.Receipts(account.SupplierId).Count);
+    }
+
+    [TestMethod]
+    public void FailedTrendyolSpecialistAssociationClearsThePreviousVisiblePlanAndDisablesSend() => InSta(() =>
+    {
+        var account = new TrendyolSettings("101", "key", "secret", "tests");
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", account.SupplierId, "Trendyol", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "RACE", Barcode = "RACE-B", Name = "Race", Stock = 9, Price = 10, Currency = "TRY" });
+        var bindings = new ProductChannelBindingStore(directory);
+        bindings.Save(new(product.Id, connection.Id, "801", product.Sku, product.Barcode, true, true, true, "", "", "Approved", 0, default), 0);
+        var workspace = new TrMarketplaceHubDesktop.Trendyol.TrendyolWorkspaceStore(directory);
+        var state = workspace.Load(account.SupplierId);
+        state.ProductsUpdatedUtc = DateTime.UtcNow;
+        state.Products.Add(new(product.Barcode, product.Sku, product.Name, 801, 1, 10, 10, true));
+        state.Profiles.Add(new() { ProductId = product.Id, IntegrationCode = product.Barcode });
+        workspace.Save(state);
+        var panel = new TrendyolWorkspacePanel(connection.Id, directory);
+        var model = new MarketplaceShopProductsModel(connection.Id, directory);
+        var firstSpecialist = model.PreviewSpecialist(model.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.StockPreview);
+        var first = workspace.Preview(account, new[] { product.Id }, TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Stock, connection.Id);
+        var present = typeof(TrendyolWorkspacePanel).GetMethod("PresentPreview", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        present.Invoke(panel, new object?[] { first, firstSpecialist });
+        var send = Walk(panel).OfType<Button>().Single(x => x.Name == "TrendyolSend");
+        Assert.IsTrue(send.IsEnabled, "The first associated plan establishes the stale enabled-send state.");
+
+        var specialist = model.PreviewSpecialist(model.SelectPage(new[] { product.Id }), MarketplaceShopBulkOperation.StockPreview);
+        var next = workspace.Preview(account, new[] { product.Id }, TrMarketplaceHubDesktop.Trendyol.TrendyolOperation.Stock, connection.Id);
+        using (var database = new SqliteConnection("Data Source=" + Path.Combine(directory, "catalog.db")))
+        {
+            database.Open(); using var command = database.CreateCommand();
+            command.CommandText = "UPDATE ProductChannelBindings SET ManageStock=0 WHERE ProductId=$product AND ConnectionId=$connection";
+            command.Parameters.AddWithValue("$product", product.Id); command.Parameters.AddWithValue("$connection", connection.Id); command.ExecuteNonQuery();
+        }
+        Assert.ThrowsException<System.Reflection.TargetInvocationException>(() => present.Invoke(panel, new object?[] { next, specialist }));
+
+        Assert.IsFalse(send.IsEnabled);
+        Assert.AreEqual("", panel.AccountSpecialistPlanId);
+        Assert.IsNull(panel.AccountSpecialistPreview);
+        Assert.AreEqual(0, panel.AccountSpecialistPlanProductIds.Count);
+        send.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.AreEqual(0, workspace.Receipts(account.SupplierId).Count);
+    });
 
     [TestMethod]
     public void ScopedTrendyolDirectTabRequiresManagedBindingsAndRevalidatesBeforeSend() => InSta(() =>

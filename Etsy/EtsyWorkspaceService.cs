@@ -53,6 +53,8 @@ public sealed partial class EtsyWorkspaceService(string? directory, HttpClient h
         {
             cancellationToken.ThrowIfCancellationRequested(); var row=new EtsyPreviewRow { ProductId=id,Action=operation.ToString() }; rows.Add(row);
             var accountBinding=connectionId is null?null:new ProductChannelBindingStore(directory).Get(id,connectionId);
+            if(connectionId is not null && operation==EtsyOperation.CreateDraft && accountBinding is not null)
+                throw new InvalidOperationException("Hesap kapsamlı yeni ilan önizlemesi yalnız mağazaya bağlı olmayan ürünler için oluşturulabilir.");
             if(connectionId is not null && operation!=EtsyOperation.CreateDraft &&
                 (accountBinding is null || !MarketplaceShopProductsModel.IsActiveBinding(accountBinding) || !AllowsAccountOperation(accountBinding,operation)))
                 throw new InvalidOperationException("Hesap kapsamlı Etsy güncellemesi için yönetime açık ürün bağlantısı gerekli.");
@@ -130,7 +132,7 @@ public sealed partial class EtsyWorkspaceService(string? directory, HttpClient h
         // Two selected local products must never target the same remote listing.
         foreach(var group in rows.Where(r=>r.ListingId.HasValue).GroupBy(r=>r.ListingId).Where(g=>g.Count()>1))foreach(var row in group) { row.CanSend=false; row.Detail="Aynı Etsy ilanına birden fazla yerel ürün bağlı."; row.Steps.Clear(); }
         var plan=new EtsyOperationPlan { ShopId=state.ShopId,Operation=operation,Rows=rows,WorkspaceRevision=state.Revision,CatalogFingerprint=hash,AccountFingerprint=Account(credentials,shop.UserId),ShopCurrency=shop.Currency };
-        store.Persist(plan); return plan;
+        store.Persist(plan,connectionId); return plan;
     }
     static bool SameCurrency(string? a,string? b)=>!string.IsNullOrWhiteSpace(a)&&!string.IsNullOrWhiteSpace(b)&&string.Equals(a.Trim(),b.Trim(),StringComparison.OrdinalIgnoreCase);
     async Task<JsonElement> Get(EtsyCredentials c,string path,CancellationToken ct)

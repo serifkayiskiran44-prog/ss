@@ -34,6 +34,7 @@ public sealed partial class TrendyolWorkspacePanel
     }
     void HandleAccountBulkPreview(MarketplaceShopSpecialistPreview request)
     {
+        InvalidatePreview();
         var connection=CurrentScopedConnection();
         new MarketplaceShopProductsModel(connection.Id,workspaceDirectory).ValidateSpecialistPreview(request);
         var operation=request.Operation;

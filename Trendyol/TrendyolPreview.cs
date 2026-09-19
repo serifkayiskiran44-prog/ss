@@ -29,6 +29,9 @@ public sealed partial class TrendyolWorkspaceStore
             if(p.Id!=id) throw new InvalidOperationException("Ürün kimliği tutarsız.");
             var profile=state.Profiles.SingleOrDefault(x=>x.ProductId==id) ?? new(){ProductId=id};
             var accountBinding=connectionId is null?null:accountBindings!.Get(id,connectionId);
+            if(connectionId is not null && operation==TrendyolOperation.Create &&
+                (accountBinding is not null || profile.IntegrationCode.Length>0))
+                throw new InvalidOperationException("Hesap kapsamlı yeni ürün önizlemesi yalnız mağazaya bağlı olmayan ürünler için oluşturulabilir.");
             if(connectionId is not null && operation!=TrendyolOperation.Create &&
                 (accountBinding is null || !MarketplaceShopProductsModel.IsActiveBinding(accountBinding) || !AllowsAccountOperation(accountBinding,operation)))
                 throw new InvalidOperationException("Hesap kapsamlı Trendyol güncellemesi için yönetime açık ürün bağlantısı gerekli.");
@@ -124,7 +127,9 @@ public sealed partial class TrendyolWorkspaceStore
         rows=rows.Select(r=>duplicates.Contains(r.Barcode)?r with{Status="Hatalı",Detail="Birden fazla yerel ürün aynı Trendyol barkodunu hedefliyor.",ItemJson=null}:r).ToList();
         var payload=JsonSerializer.Serialize(new{items=rows.Where(r=>r.ItemJson!=null).Select(r=>JsonSerializer.Deserialize<JsonElement>(r.ItemJson!)).ToArray()});
         var plan=new TrendyolPlan(Guid.NewGuid().ToString("N"),account.SupplierId,AccountFingerprint(account),state.Revision,DateTime.UtcNow,operation,CatalogFingerprint(c,tx,ids),rows,payload);
-        using var save=c.CreateCommand();save.Transaction=tx;save.CommandText="INSERT INTO TrendyolPlans VALUES($id,$seller,$json)";save.Parameters.AddWithValue("$id",plan.Id);save.Parameters.AddWithValue("$seller",plan.SellerId);save.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan));save.ExecuteNonQuery();tx.Commit();return plan;
+        using var save=c.CreateCommand();save.Transaction=tx;save.CommandText="INSERT INTO TrendyolPlans VALUES($id,$seller,$json)";save.Parameters.AddWithValue("$id",plan.Id);save.Parameters.AddWithValue("$seller",plan.SellerId);save.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan));save.ExecuteNonQuery();
+        if(connectionId is not null)MarketplaceShopProductsModel.MarkScopedPlan(c,tx,plan.Id,connectionId);
+        tx.Commit();return plan;
     }
     static bool AllowsAccountOperation(ProductChannelBinding binding,TrendyolOperation operation)=>operation switch
     {

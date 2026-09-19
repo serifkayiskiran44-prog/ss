@@ -90,10 +90,13 @@ public sealed partial class EtsyWorkspacePanel
             });
         }
         summary.Text="Seçili ürünler ve Etsy mağazası karşılaştırılıyor…";
-        plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token,specialist?.ConnectionId);
-        if(specialist is not null){accountSpecialistModel=new MarketplaceShopProductsModel(specialist.ConnectionId,directory);accountSpecialistModel.AssociateSpecialistPlan(specialist,plan.Id);accountSpecialistPlanId=plan.Id;AccountSpecialistPreview=specialist;}
-        if(operation==EtsyOperation.CreateDraft&&creationHandoffRequestId.Length>0)CompleteCreationHandoff(plan);
-        send.IsEnabled=true;summary.Text=$"{plan.Rows.Count} satır · {plan.Rows.Count(r=>r.CanSend)} gönderilebilir · {plan.Rows.Count(r=>!r.CanSend)} kontrol gerekli";if(showPreview)ShowPreview(plan);
+        var next=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token,specialist?.ConnectionId);
+        MarketplaceShopProductsModel? nextSpecialistModel=null;
+        if(specialist is not null){nextSpecialistModel=new MarketplaceShopProductsModel(specialist.ConnectionId,directory);nextSpecialistModel.AssociateSpecialistPlan(specialist,next.Id);}
+        plan=next;
+        if(specialist is not null){accountSpecialistModel=nextSpecialistModel;accountSpecialistPlanId=next.Id;AccountSpecialistPreview=specialist;}
+        if(operation==EtsyOperation.CreateDraft&&creationHandoffRequestId.Length>0)CompleteCreationHandoff(next);
+        send.IsEnabled=true;summary.Text=$"{next.Rows.Count} satır · {next.Rows.Count(r=>r.CanSend)} gönderilebilir · {next.Rows.Count(r=>!r.CanSend)} kontrol gerekli";if(showPreview)ShowPreview(next);
     }
     void ShowPreview(EtsyOperationPlan preview)
     {

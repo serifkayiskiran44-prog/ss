@@ -55,11 +55,13 @@ public sealed class EtsyWorkspaceStore
         return Hash(JsonSerializer.Serialize(values));
     }
     internal string CatalogHash(IEnumerable<string> ids) { using var c=Open(); return CatalogHash(c,null,ids); }
-    internal void Persist(EtsyOperationPlan plan)
+    internal void Persist(EtsyOperationPlan plan,string? connectionId=null)
     {
         using var c=Open(); using var tx=c.BeginTransaction(); ValidateCurrent(c,tx,plan);
         using var cmd=c.CreateCommand(); cmd.Transaction=tx; cmd.CommandText="INSERT INTO EtsyWorkspacePlans VALUES($id,$shop,$json)";
-        cmd.Parameters.AddWithValue("$id",plan.Id); cmd.Parameters.AddWithValue("$shop",plan.ShopId); cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan)); cmd.ExecuteNonQuery(); tx.Commit();
+        cmd.Parameters.AddWithValue("$id",plan.Id); cmd.Parameters.AddWithValue("$shop",plan.ShopId); cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan)); cmd.ExecuteNonQuery();
+        if(connectionId is not null)MarketplaceShopProductsModel.MarkScopedPlan(c,tx,plan.Id,connectionId);
+        tx.Commit();
     }
     internal EtsyOperationPlan Plan(string id)
     {

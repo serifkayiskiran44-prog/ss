@@ -100,6 +100,7 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
     }
     void AcceptCreationHandoff()
     {
+        InvalidatePreview();
         var connection=CurrentScopedConnection();
         var request=creationInbox.Pending(connection.Id).FirstOrDefault()??throw new InvalidOperationException("Bu Trendyol hesabı için bekleyen yeni ilan önizlemesi yok.");
         var specialist=DirectSpecialistPreview(request.ProductIds,TrendyolOperation.Create);
