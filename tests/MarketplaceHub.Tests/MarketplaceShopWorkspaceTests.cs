@@ -308,6 +308,26 @@ public sealed class MarketplaceShopWorkspaceTests
     });
 
     [TestMethod]
+    public void AccountProductListRequestsTheRealProductCardFromButtonAndDoubleClick() => InSta(() =>
+    {
+        var connection = new MarketplaceConnectionStore(directory).Save("trendyol", "101", "Shop", true);
+        var product = new CatalogStore(directory).CreateManual(new() { Sku = "CARD-1", Name = "Open me", Currency = "TRY" });
+        var panel = new MarketplaceShopProductsPanel(connection.Id, directory);
+        var requested = new List<string>();
+        panel.ProductCardRequested += requested.Add;
+        var grid = Walk(panel).OfType<DataGrid>().Single(x => x.Name == "MarketplaceShopProducts");
+        grid.SelectedItem = grid.Items.Cast<MarketplaceShopProductRow>().Single(x => x.ProductId == product.Id);
+
+        Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceOpenProductCard").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        grid.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+        {
+            RoutedEvent = Control.MouseDoubleClickEvent
+        });
+
+        CollectionAssert.AreEqual(new[] { product.Id, product.Id }, requested);
+    });
+
+    [TestMethod]
     public void SpecialistButtonPersistsTheExactSelectionAndBindingRevisions() => InSta(() =>
     {
         var connection = new MarketplaceConnectionStore(directory).Save("trendyol", "101", "Shop", true);

@@ -35,6 +35,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
     };
 
     public string? CurrentConnectionId { get; private set; }
+    public event Action<string>? ProductCardRequested;
 
     public MarketplaceAccountHomePanel(string? directory = null, Action<string>? openConnection = null)
     {
@@ -123,6 +124,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         if (workspace.Content is IDisposable disposable) disposable.Dispose();
         var host = MarketplaceWorkspaceHost.Create(connectionId, directory);
         host.AccountsRequested += () => SetChooserVisible(true);
+        host.ProductCardRequested += productId => ProductCardRequested?.Invoke(productId);
         workspace.Content = host;
         CurrentConnectionId = host.ConnectionId;
     }

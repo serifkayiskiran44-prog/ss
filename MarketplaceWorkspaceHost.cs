@@ -20,6 +20,7 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
     public IMarketplaceAdapter Adapter { get; private set; } = null!;
     public UIElement Workspace => (UIElement)body.Content;
     public event Action? AccountsRequested;
+    public event Action<string>? ProductCardRequested;
 
     MarketplaceWorkspaceHost(string connectionId, string? directory, MarketplaceAdapterRegistry registry)
     {
@@ -73,6 +74,8 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
             throw new InvalidOperationException("Operasyonel olmayan mağaza çalışma alanı açılamaz.");
         var adapter = registry.Get(connection.Channel);
         var next = CreateWorkspace(connection);
+        foreach (var panel in Descendants(next).OfType<MarketplaceShopProductsPanel>())
+            panel.ProductCardRequested += productId => ProductCardRequested?.Invoke(productId);
         if (body.Content is IDisposable prior) prior.Dispose();
         body.Content = next;
         ConnectionId = connection.Id;
@@ -96,6 +99,13 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
             }
         }
     };
+
+    static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        yield return root;
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+            foreach (var nested in Descendants(child)) yield return nested;
+    }
 
     DockPanel BuildHeader()
     {

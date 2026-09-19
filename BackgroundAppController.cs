@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
 using TrMarketplaceHubDesktop.Catalog;
@@ -31,6 +32,7 @@ public static class BackgroundJobFactory
 /// <summary>Runs due XML imports. HTTP is read-only; all local writes retain the source revision fence.</summary>
 public sealed class ScheduledXmlImportBackgroundJob : IBackgroundJob
 {
+    static readonly ConcurrentDictionary<string, SemaphoreSlim> SourceQueues = new(StringComparer.OrdinalIgnoreCase);
     readonly string? directory;
     readonly HttpClient http;
     readonly Func<DateTime> utcNow;
@@ -51,7 +53,11 @@ public sealed class ScheduledXmlImportBackgroundJob : IBackgroundJob
         var excluded = excludedSourceIds.Select(id => id.Trim()).ToHashSet(StringComparer.Ordinal);
         var due = catalog.Sources().Where(source => source.Enabled && source.AutoImport &&
             !excluded.Contains(source.Id) &&
-            utcNow() - (source.LastRunUtc ?? DateTime.MinValue) >= TimeSpan.FromMinutes(source.IntervalMinutes)).ToList();
+            utcNow() - (source.LastRunUtc ?? DateTime.MinValue) >= TimeSpan.FromMinutes(source.IntervalMinutes))
+            .OrderBy(source => source.LastRunUtc ?? DateTime.MinValue)
+            .ThenBy(source => source.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(source => source.Id, StringComparer.Ordinal)
+            .ToList();
         foreach (var source in due)
         {
             try
@@ -68,7 +74,16 @@ public sealed class ScheduledXmlImportBackgroundJob : IBackgroundJob
     }
 
     public Task ExecuteSourceAsync(string sourceId, CancellationToken token) =>
-        XmlSourceExecutionGate.RunCoalescedAsync(directory, sourceId, () => ExecuteSourceCoreAsync(sourceId, token), token);
+        XmlSourceExecutionGate.RunCoalescedAsync(directory, sourceId, () => ExecuteQueuedSourceAsync(sourceId, token), token);
+
+    async Task ExecuteQueuedSourceAsync(string sourceId, CancellationToken token)
+    {
+        var profile = Path.GetFullPath(directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop"));
+        var queue = SourceQueues.GetOrAdd(profile, _ => new SemaphoreSlim(1, 1));
+        await queue.WaitAsync(token).ConfigureAwait(false);
+        try { await ExecuteSourceCoreAsync(sourceId, token).ConfigureAwait(false); }
+        finally { queue.Release(); }
+    }
 
     async Task ExecuteSourceCoreAsync(string sourceId, CancellationToken token)
     {

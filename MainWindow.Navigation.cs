@@ -37,6 +37,7 @@ public partial class MainWindow
   Page("orders","Siparişler","Sipariş listesi, detay, kargo takibi, iade filtresi ve toplu işlem önizlemesi.",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts));
   Group("ENTEGRASYON");
   marketplaceHome=new MarketplaceAccountHomePanel(dataDirectory);
+  marketplaceHome.ProductCardRequested += productId => OpenProductCard(false, productId);
   Page("marketplaces","Pazaryeri hesapları","Etkin mağazaları ayrı kartlar halinde açın; ürün ve işlem verileri seçili hesaba bağlı kalır.",marketplaceHome);
   CompatibilityAccountLink("trendyol","Trendyol","Kayıtlı bir Trendyol hesabını açar.");
   CompatibilityAccountLink("etsy","Etsy","Kayıtlı bir Etsy hesabını açar.");

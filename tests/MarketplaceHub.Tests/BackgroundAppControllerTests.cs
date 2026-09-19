@@ -616,6 +616,24 @@ public sealed class BackgroundAppControllerTests
     }
 
     [TestMethod]
+    public async Task DifferentXmlSourcesRunOneAfterAnotherInTheSharedQueue()
+    {
+        const string feed = "<Items><Item><sku>SKU-QUEUE</sku><name>Queued</name><price>8</price><stock>1</stock></Item></Items>";
+        var firstId = Guid.NewGuid().ToString("N");
+        var secondId = Guid.NewGuid().ToString("N");
+        var catalog = new CatalogStore(root);
+        catalog.SaveSource(XmlSourceFor(firstId, "https://example.test/first.xml", autoImport: false));
+        catalog.SaveSource(XmlSourceFor(secondId, "https://example.test/second.xml", autoImport: false));
+        var handler = new ConcurrencyHttpHandler(feed);
+        using var job = new ScheduledXmlImportBackgroundJob(root, new HttpClient(handler, false));
+
+        await Task.WhenAll(job.ExecuteSourceAsync(firstId, CancellationToken.None), job.ExecuteSourceAsync(secondId, CancellationToken.None));
+
+        Assert.AreEqual(1, handler.MaximumConcurrentCalls, "Bir XML tamamlanmadan sonraki XML başlamamalı.");
+        Assert.AreEqual(2, handler.Calls);
+    }
+
+    [TestMethod]
     public async Task CancelledAutomationReleasesItsLeaseWithoutAdvancingOrFailingSchedule()
     {
         var now = DateTime.UtcNow;
@@ -770,6 +788,30 @@ public sealed class BackgroundAppControllerTests
             Entered.TrySetResult();
             await Release.Task.WaitAsync(cancellationToken);
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(xml, Encoding.UTF8, "application/xml") };
+        }
+    }
+
+    sealed class ConcurrencyHttpHandler(string xml) : HttpMessageHandler
+    {
+        int calls;
+        int active;
+        int maximumConcurrentCalls;
+        public int Calls => Volatile.Read(ref calls);
+        public int MaximumConcurrentCalls => Volatile.Read(ref maximumConcurrentCalls);
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref calls);
+            var current = Interlocked.Increment(ref active);
+            int observed;
+            while (current > (observed = Volatile.Read(ref maximumConcurrentCalls)))
+                if (Interlocked.CompareExchange(ref maximumConcurrentCalls, current, observed) == observed) break;
+            try
+            {
+                await Task.Delay(150, cancellationToken);
+                var sourceXml = xml.Replace("SKU-QUEUE", request.RequestUri!.AbsolutePath.Contains("first", StringComparison.Ordinal) ? "SKU-FIRST" : "SKU-SECOND");
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(sourceXml, Encoding.UTF8, "application/xml") };
+            }
+            finally { Interlocked.Decrement(ref active); }
         }
     }
 }

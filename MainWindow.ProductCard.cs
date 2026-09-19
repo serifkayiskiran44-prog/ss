@@ -15,9 +15,11 @@ public partial class MainWindow
         public string Currency { get; set; } = "TRY";
     }
 
-    void OpenProductCard(bool create)
+    void OpenProductCard(bool create, string? productId = null)
     {
-        var product = create ? new CatalogProduct { Currency = "TRY", CostCurrency = "TRY", Active = true } : Clone(SelectedProduct());
+        var product = create
+            ? new CatalogProduct { Currency = "TRY", CostCurrency = "TRY", Active = true }
+            : Clone(productId is null ? SelectedProduct() : store.Products().SingleOrDefault(candidate => candidate.Id == productId) ?? throw new InvalidOperationException("Ürün artık yerel katalogda bulunmuyor."));
         var tabs = new TabControl { DataContext = product, Margin = new Thickness(10) };
         var columns = new Grid(); for (var i = 0; i < 3; i++) columns.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         var identity = new StackPanel(); var pricing = new StackPanel(); var stock = new StackPanel();

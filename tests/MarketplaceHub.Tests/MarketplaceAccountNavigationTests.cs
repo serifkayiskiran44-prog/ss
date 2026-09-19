@@ -84,6 +84,24 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
+    public void AccountWorkspaceForwardsSelectedProductCardRequestToTheMainShell() => InSta(root =>
+    {
+        var connection = new MarketplaceConnectionStore(root).Save("trendyol", "101", "Trendyol A", true);
+        var product = new CatalogStore(root).CreateManual(new() { Sku = "CARD-ROUTE", Name = "Card route", Currency = "TRY" });
+        using var panel = new MarketplaceAccountHomePanel(root);
+        var requested = new List<string>();
+        panel.ProductCardRequested += requested.Add;
+
+        AccountCards(panel).Single(card => Equals(card.Tag, connection.Id)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var common = Walk(panel).OfType<MarketplaceShopProductsPanel>().Single();
+        var grid = Walk(common).OfType<DataGrid>().Single(x => x.Name == "MarketplaceShopProducts");
+        grid.SelectedItem = grid.Items.Cast<MarketplaceShopProductRow>().Single(x => x.ProductId == product.Id);
+        Walk(common).OfType<Button>().Single(x => x.Name == "MarketplaceOpenProductCard").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        CollectionAssert.AreEqual(new[] { product.Id }, requested);
+    });
+
+    [TestMethod]
     public void WorkspaceHostRejectsMissingDisabledAndCorruptConnections() => InSta(root =>
     {
         var store = new MarketplaceConnectionStore(root);

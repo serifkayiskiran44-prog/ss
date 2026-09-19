@@ -644,6 +644,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
 
     public MarketplaceShopSelectionSnapshot? SelectionSnapshot { get; private set; }
     public event Action<MarketplaceShopSpecialistPreview>? BulkPreviewRequested;
+    public event Action<string>? ProductCardRequested;
 
     public MarketplaceShopProductsPanel(string connectionId, string? directory = null, MarketplaceAdapterRegistry? registry = null)
     {
@@ -656,6 +657,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
         filters.Children.Add(Button("Filtrele", "MarketplaceApplyShopFilters", Refresh));
         top.Children.Add(filters);
         var actions = new WrapPanel();
+        actions.Children.Add(Button("Ürün kartını aç", "MarketplaceOpenProductCard", RequestProductCard));
         foreach (var operation in model.BulkOperations)
         {
             var captured = operation;
@@ -668,7 +670,8 @@ public sealed class MarketplaceShopProductsPanel : UserControl
             }));
         }
         top.Children.Add(actions); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
-        AddColumns(); root.Children.Add(products);
+        top.Children.Add(new TextBlock{Text="Ürün kartı: satıra çift tıklayın veya ürünü seçip Ürün kartını aç düğmesine basın.",Margin=new Thickness(4,2,4,4),Foreground=System.Windows.Media.Brushes.SlateGray,TextWrapping=TextWrapping.Wrap});
+        AddColumns(); products.MouseDoubleClick += (_, _) => RequestProductCard(); root.Children.Add(products);
         var footer = new WrapPanel();
         footer.Children.Add(Button("Sayfayı seç", "MarketplaceSelectPage", () => { products.SelectAll(); SelectionSnapshot = model.SelectPage(products.Items.Cast<MarketplaceShopProductRow>().Select(x => x.ProductId)); }));
         footer.Children.Add(Button("Filtrelenenlerin tümünü seç", "MarketplaceSelectAllFiltered", () => { SelectionSnapshot = model.SelectAllFiltered(filter); summary.Text = $"{SelectionSnapshot.ProductIds.Count} ürün snapshot olarak seçildi."; }));
@@ -695,25 +698,23 @@ public sealed class MarketplaceShopProductsPanel : UserControl
 
     void OpenManagementPreview(MarketplaceShopSelectionSnapshot selection)
     {
-        var content=new CheckBox{Content="İçerik yönetimi",IsThreeState=true,IsChecked=null,Margin=new Thickness(4)};
-        var price=new CheckBox{Content="Fiyat yönetimi",IsThreeState=true,IsChecked=null,Margin=new Thickness(4)};
-        var stock=new CheckBox{Content="Stok yönetimi",IsThreeState=true,IsChecked=null,Margin=new Thickness(4)};
-        var category=new TextBox{MinWidth=240,Margin=new Thickness(4)};
-        var template=new TextBox{MinWidth=240,Margin=new Thickness(4)};
+        static ComboBox Choice() => new(){ItemsSource=new[]{"Değiştirme","Aç","Kapat"},SelectedIndex=0,MinWidth=150,Margin=new Thickness(4)};
+        static bool? Value(ComboBox choice) => choice.SelectedIndex switch { 1=>true, 2=>false, _=>null };
+        var content=Choice();var price=Choice();var stock=Choice();
         var panel=new StackPanel{Margin=new Thickness(12)};
-        panel.Children.Add(new TextBlock{Text=$"{selection.ProductIds.Count} ürün için yalnız işaretlenen alanlar değişir. Boş alanlar mevcut değeri korur.",TextWrapping=TextWrapping.Wrap});
-        panel.Children.Add(content);panel.Children.Add(price);panel.Children.Add(stock);
-        panel.Children.Add(new TextBlock{Text="Kategori / taksonomi kimliği (isteğe bağlı)"});panel.Children.Add(category);
-        panel.Children.Add(new TextBlock{Text="Şablon / kargo kimliği (isteğe bağlı)"});panel.Children.Add(template);
-        var preview=new Button{Content="Değişmez önizlemeyi oluştur",Margin=new Thickness(4),Padding=new Thickness(8,5,8,5)};panel.Children.Add(preview);
-        var dialog=new Window{Title="Hesap kapsamlı yönetim önizlemesi",Width=520,Height=390,MinWidth=420,MinHeight=320,Owner=Window.GetWindow(this),WindowStartupLocation=WindowStartupLocation.CenterOwner,Content=panel};
+        panel.Children.Add(new TextBlock{Text=$"{selection.ProductIds.Count} ürün için bu mağazaya hangi bilgilerin otomatik gönderileceğini seçin. Bu adım mağazaya veri göndermez.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(4,0,4,10)});
+        void Row(string label,ComboBox choice){var row=new DockPanel{Margin=new Thickness(4)};var text=new TextBlock{Text=label,Width=250,VerticalAlignment=VerticalAlignment.Center};DockPanel.SetDock(text,Dock.Left);row.Children.Add(text);row.Children.Add(choice);panel.Children.Add(row);}
+        Row("Ürün adı, açıklama ve görseller",content);Row("Fiyat",price);Row("Stok / adet",stock);
+        panel.Children.Add(new TextBlock{Text="Değiştirme seçiliyse mevcut mağaza ayarı korunur. Kategori ve teslimat seçimleri kendi ekranlarından yapılır.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(4,10,4,6),Foreground=System.Windows.Media.Brushes.SlateGray});
+        var preview=new Button{Content="Değişikliği önizle",Margin=new Thickness(4),Padding=new Thickness(8,5,8,5)};panel.Children.Add(preview);
+        var dialog=new Window{Title="Mağaza otomatik güncelleme ayarları",Width=540,Height=340,MinWidth=460,MinHeight=300,Owner=Window.GetWindow(this),WindowStartupLocation=WindowStartupLocation.CenterOwner,Content=panel};
         preview.Click+=(_,_)=>
         {
             try
             {
-                if(content.IsChecked is null&&price.IsChecked is null&&stock.IsChecked is null&&string.IsNullOrWhiteSpace(category.Text)&&string.IsNullOrWhiteSpace(template.Text))
-                    throw new InvalidOperationException("Önizlenecek en az bir değişiklik seçin.");
-                var immutable=model.PreviewBulk(selection,MarketplaceShopBulkOperation.Management,new(content.IsChecked,price.IsChecked,stock.IsChecked,category.Text,template.Text));
+                if(Value(content) is null&&Value(price) is null&&Value(stock) is null)
+                    throw new InvalidOperationException("En az bir alan için Aç veya Kapat seçin.");
+                var immutable=model.PreviewBulk(selection,MarketplaceShopBulkOperation.Management,new(Value(content),Value(price),Value(stock)));
                 var approved=MessageBox.Show(dialog,$"Hesap: {model.AccountLabel}\n{immutable.Rows.Count} ürün\nBu yerel yönetim önizlemesi uygulansın mı?","Toplu yönetim onayı",MessageBoxButton.YesNo,MessageBoxImage.Question)==MessageBoxResult.Yes;
                 if(!approved)return;
                 var receipt=model.Apply(immutable,true);dialog.Close();SelectionSnapshot=null;Refresh();summary.Text=$"{receipt.ProductIds.Count} ürünün hesap kapsamlı yönetim ayarı güncellendi. Uzak API yazımı yapılmadı.";
@@ -723,11 +724,18 @@ public sealed class MarketplaceShopProductsPanel : UserControl
         dialog.ShowDialog();
     }
 
+    void RequestProductCard()
+    {
+        if(products.SelectedItem is not MarketplaceShopProductRow row)throw new InvalidOperationException("Ürün kartını açmak için listeden bir ürün seçin.");
+        ProductCardRequested?.Invoke(row.ProductId);
+        Refresh();
+    }
+
     void Column(string header, string path, double width) => products.Columns.Add(new DataGridTextColumn { Header = header, Binding = new Binding(path), Width = width });
     static Button Button(string label, string name, Action action) { var button = new Button { Content = label, Name = name, Margin = new Thickness(3), Padding = new Thickness(7, 3, 7, 3) }; button.Click += (_, _) => action(); return button; }
     static string Label(MarketplaceShopBulkOperation operation) => operation switch
     {
-        MarketplaceShopBulkOperation.Management => "Yönetim anahtarları · önizle",
+        MarketplaceShopBulkOperation.Management => "Otomatik güncelleme · ayarla",
         MarketplaceShopBulkOperation.Category => "Kategori · önizle",
         MarketplaceShopBulkOperation.Brand => "Marka · önizle",
         MarketplaceShopBulkOperation.Delivery => "Teslimat · önizle",
