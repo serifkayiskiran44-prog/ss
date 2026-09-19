@@ -345,6 +345,7 @@ public sealed class ProductManagementBindingPanelTests
         var catalog = new CatalogStore(directory);
         var first = catalog.CreateManual(new() { Sku = "A", Barcode = "BAR-A", Name = "A", Currency = "TRY" });
         catalog.CreateManual(new() { Sku = "B", Barcode = "BAR-B", Name = "B", Currency = "TRY" });
+        catalog.SaveSource(new XmlSource { Id = "supplier-feed", Name = "Tedarikçi XML", Location = "https://example.test/feed.xml" });
         var connection = Connected(new MarketplaceConnectionStore(directory), "trendyol", "101", "Shop");
         var remote = new FakeSnapshotProvider();
         remote.Set(connection, new ProductChannelRemoteRow(connection.Id, connection.ShopId, "r1", "A", "BAR-A"));
@@ -355,6 +356,11 @@ public sealed class ProductManagementBindingPanelTests
             var connect = LogicalWalk((DependencyObject)window.Content).OfType<Button>().Single(button => button.Name == "ProductConnectSelectedButton");
             var connectionsButton = LogicalWalk((DependencyObject)window.Content).OfType<Button>().Single(button => button.Name == "ProductConnectionsButton");
             var sourceButton = LogicalWalk((DependencyObject)window.Content).OfType<Button>().Single(button => button.Name == "ProductSourceButton");
+            var sourceFilter = LogicalWalk((DependencyObject)window.Content).OfType<ComboBox>().Single(box => box.Name == "ProductSourceFilter");
+            var sourceLabels = sourceFilter.Items.Cast<object>().Select(item => item.GetType().GetProperty("Label")!.GetValue(item)?.ToString()).ToArray();
+            CollectionAssert.Contains(sourceLabels, "Tüm kaynaklar");
+            CollectionAssert.Contains(sourceLabels, "Manuel ürünler");
+            CollectionAssert.Contains(sourceLabels, "XML · Tedarikçi XML");
             Assert.IsFalse(connect.IsEnabled);
             Assert.IsFalse(connectionsButton.IsEnabled);
             Assert.IsFalse(sourceButton.IsEnabled);
@@ -388,6 +394,40 @@ public sealed class ProductManagementBindingPanelTests
             var source = new ProductSourceWindow(directory, first.Id);
             Assert.IsFalse(source.IsApplyEnabled);
             source.Close();
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void ProductGridBuildsStoreBindingMenuFromRegisteredAccountsAndPinsChosenTarget() => InSta(() =>
+    {
+        var catalog = new CatalogStore(directory);
+        var firstProduct = catalog.CreateManual(new() { Sku = "A", Barcode = "BAR-A", Name = "A", Currency = "TRY" });
+        var secondProduct = catalog.CreateManual(new() { Sku = "B", Barcode = "BAR-B", Name = "B", Currency = "TRY" });
+        var connections = new MarketplaceConnectionStore(directory);
+        var firstStore = Connected(connections, "trendyol", "101", "Trendyol Ana Mağaza");
+        var secondStore = Connected(connections, "trendyol", "202", "Trendyol İkinci Mağaza");
+        var window = new MainWindow(directory);
+        try
+        {
+            var grid = GetField<DataGrid>(window, "products");
+            grid.SelectedItems.Add(grid.Items.Cast<CatalogProduct>().Single(product => product.Id == firstProduct.Id));
+            grid.SelectedItems.Add(grid.Items.Cast<CatalogProduct>().Single(product => product.Id == secondProduct.Id));
+            string? openedConnection = null;
+            var menu = (MenuItem)Invoke(window, "BuildMarketplaceBindingMenu", new Action<string>(id => openedConnection = id))!;
+
+            Assert.AreEqual("Bağlantı sağlanacak mağazalar", menu.Header);
+            Assert.IsTrue(menu.IsEnabled);
+            var trendyol = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Trendyol"));
+            var accounts = trendyol.Items.OfType<MenuItem>().ToArray();
+            CollectionAssert.AreEqual(new[] { "Trendyol Ana Mağaza · 101", "Trendyol İkinci Mağaza · 202" }, accounts.Select(item => item.Header?.ToString()).ToArray());
+            var connect = accounts[1].Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Seçili ürünleri bağla"));
+            connect.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.AreEqual(secondStore.Id, openedConnection);
+
+            var dialog = new ProductConnectionsWindow(directory, new[] { firstProduct.Id, secondProduct.Id }, initialConnectionId: firstStore.Id);
+            try { Assert.AreEqual(firstStore.Id, dialog.SelectedConnectionId); }
+            finally { dialog.Close(); }
         }
         finally { window.Close(); }
     });

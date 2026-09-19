@@ -146,6 +146,14 @@ public partial class MainWindow
         var menu = new ContextMenu();
         void Item(string label, Action action) { var item = new MenuItem { Header = label }; item.Click += (_, _) => { try { action(); } catch (Exception error) { Log(Safe(error)); } }; menu.Items.Add(item); }
         Item("Ürün kartını aç", () => OpenProductCard(false)); Item("Seçili ürünleri Excel'e aktar", ExportProductList); menu.Items.Add(new Separator());
+        menu.Items.Add(BuildMarketplaceBindingMenu(OpenProductConnections));
+        menu.Opened += (_, _) =>
+        {
+            var current = menu.Items.OfType<MenuItem>().Single(item => item.Name == "ProductStoreBindingMenu");
+            var index = menu.Items.IndexOf(current);
+            menu.Items[index] = BuildMarketplaceBindingMenu(OpenProductConnections);
+        };
+        menu.Items.Add(new Separator());
         foreach (var action in ProductActions) Item(action.Label, () => { productBulkChoice.SelectedItem = action; productBulkScope.SelectedIndex = 0; productBulkSection!.IsExpanded = true; productBulkValue.Focus(); if (action.Kind is BulkProductOperationKind.Activate or BulkProductOperationKind.Deactivate) PreviewProductBulk(); });
         menu.Items.Add(new Separator()); Item("Ürün kimliğini kopyala", () => Clipboard.SetText(SelectedProduct().ProductIdLabel)); Item("SKU'yu kopyala", () => Clipboard.SetText(SelectedProduct().Sku));
         Item("Ürünü sil",DeleteSelectedProduct); products.ContextMenu = menu;
@@ -230,6 +238,76 @@ public partial class MainWindow
         dialog.ShowDialog();
         RefreshProducts();
     }
+
+    void OpenProductConnections(string connectionId)
+    {
+        var dialog = new ProductConnectionsWindow(dataDirectory, SelectedProductIdsForConnection(), initialConnectionId: connectionId) { Owner = this };
+        dialog.ShowDialog();
+        RefreshProducts();
+    }
+
+    MenuItem BuildMarketplaceBindingMenu(Action<string> openConnection)
+    {
+        var selectedCount = products.SelectedItems.OfType<CatalogProduct>().Count();
+        var root = new MenuItem
+        {
+            Name = "ProductStoreBindingMenu",
+            Header = "Bağlantı sağlanacak mağazalar",
+            IsEnabled = selectedCount > 0
+        };
+        var connectionStore = new MarketplaceConnectionStore(dataDirectory);
+        var operational = MarketplaceOperationalAccounts.List(connectionStore)
+            .OrderBy(connection => connection.Channel, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(connection => connection.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(connection => connection.ShopId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var bindable = selectedCount == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : new ProductConnectionsModel(dataDirectory, SelectedProductIdsForConnection()).Targets
+                .Select(target => target.ConnectionId)
+                .ToHashSet(StringComparer.Ordinal);
+        foreach (var channelGroup in operational.GroupBy(connection => connection.Channel, StringComparer.OrdinalIgnoreCase))
+        {
+            var channel = new MenuItem { Header = MarketplaceChannelLabel(channelGroup.Key) };
+            foreach (var connection in channelGroup)
+            {
+                var account = new MenuItem { Header = $"{connection.DisplayName} · {connection.ShopId}" };
+                var connect = new MenuItem
+                {
+                    Header = bindable.Contains(connection.Id) ? "Seçili ürünleri bağla" : "Önce mağaza ayarlarını tamamla",
+                    IsEnabled = bindable.Contains(connection.Id),
+                    Tag = connection.Id
+                };
+                connect.Click += (_, _) =>
+                {
+                    try { openConnection(connection.Id); }
+                    catch (Exception error)
+                    {
+                        Log(Safe(error));
+                        MessageBox.Show(this, Safe(error), "Mağazaya bağla", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                };
+                account.Items.Add(connect);
+                channel.Items.Add(account);
+            }
+            root.Items.Add(channel);
+        }
+        if (root.Items.Count == 0)
+            root.Items.Add(new MenuItem { Header = "Kayıtlı etkin mağaza bulunamadı", IsEnabled = false });
+        return root;
+    }
+
+    static string MarketplaceChannelLabel(string channel) => channel.Trim().ToLowerInvariant() switch
+    {
+        "trendyol" => "Trendyol",
+        "etsy" => "Etsy",
+        "hepsiburada" => "Hepsiburada",
+        "amazon" => "Amazon",
+        "ebay" => "eBay",
+        "bizimhesap" => "BizimHesap",
+        _ when channel.Length == 0 => "Diğer",
+        _ => char.ToUpperInvariant(channel[0]) + channel[1..]
+    };
 
     void OpenSelectedProductConnections()
     {

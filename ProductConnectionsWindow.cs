@@ -380,6 +380,7 @@ public sealed class ProductConnectionsWindow : Window
 
     public IReadOnlyList<string> SelectedProductIds => model.SelectedProductIds;
     public bool IsApplyEnabled => applyButton.IsEnabled;
+    public string? SelectedConnectionId => targets.SelectedValue as string;
 
     public ProductConnectionsWindow(
         string? directory,
@@ -387,7 +388,8 @@ public sealed class ProductConnectionsWindow : Window
         IProductChannelRemoteSnapshotProvider? remoteSnapshots = null,
         IProductChannelCreationPreviewHandoff? creationHandoff = null,
         MarketplaceAdapterRegistry? adapters = null,
-        IProductRemoteDeactivationPreviewRouter? remoteDeactivation = null)
+        IProductRemoteDeactivationPreviewRouter? remoteDeactivation = null,
+        string? initialConnectionId = null)
     {
         model = new(directory, selectedProductIds, remoteSnapshots, creationHandoff, adapters, remoteDeactivation);
         Title = "Ürün mağaza bağlantıları";
@@ -488,6 +490,12 @@ public sealed class ProductConnectionsWindow : Window
             remoteDeactivateApproveButton.IsEnabled = remoteDeactivateCompleteButton.IsEnabled = false;
             status.Text = "Kanal başarı makbuzu doğrulandı; yalnız ilgili yerel ürün-mağaza bağlantısı kaldırıldı.";
         });
+        if (!string.IsNullOrWhiteSpace(initialConnectionId))
+        {
+            if (!model.Targets.Any(target => target.ConnectionId.Equals(initialConnectionId, StringComparison.Ordinal)))
+                throw new InvalidOperationException("Seçilen mağaza hesabı ürün bağlama hedefi olarak hazır değil; mağaza ayarlarını ve bağlantı testini tamamlayın.");
+            targets.SelectedValue = initialConnectionId;
+        }
     }
 
     void BindTargets()
