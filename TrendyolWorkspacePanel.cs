@@ -87,7 +87,7 @@ public sealed partial class TrendyolWorkspacePanel : UserControl
     {
         var saved=LoadAccount();var accountShop=scopedConnection?.ShopId??saved?.SupplierId;state=string.IsNullOrWhiteSpace(accountShop)?new():store.Load(accountShop);InvalidatePreview();competition.ItemsSource=null;competitionAccount="";
         accountStatus.Text=saved is null?"API bilgisi yok. Açılışta bağlantı kurulmaz.":$"Satıcı: {saved.SupplierId} · Ürün API V2 · Anahtarlar şifreli kayıtlı";
-        accountBadge.Text=scopedConnection is not null?$"{scopedConnection.DisplayName}  /  {scopedConnection.ShopId}     •     {scopedConnection.Status}":saved is null?"Trendyol mağazası · Bağlantı ayarları gerekli":$"Trendyol mağazası  /  {saved.SupplierId}     •     Türkiye · TRY";
+        accountBadge.Text=scopedConnection is not null?$"{scopedConnection.DisplayName}  /  {scopedConnection.ShopId}     •     {MarketplaceStatusText.ToTurkish(scopedConnection.Status)}":saved is null?"Trendyol mağazası · Bağlantı ayarları gerekli":$"Trendyol mağazası  /  {saved.SupplierId}     •     Türkiye · TRY";
         RefreshMappings();RefreshControlFilterOptions();RefreshProducts();RefreshTemplates();RefreshBrandSafety();ReloadHistory();RefreshCreationHandoff();
         status.Text=$"Kategori: {state.Categories.Count} · Marka: {state.Brands.Count} · Mağaza ürünü: {state.Products.Count} · Sözlük: {Time(state.DictionaryUpdatedUtc)} · Ürünler: {Time(state.ProductsUpdatedUtc)}";
     }

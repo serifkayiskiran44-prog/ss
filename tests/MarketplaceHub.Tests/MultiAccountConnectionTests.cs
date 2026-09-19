@@ -128,7 +128,7 @@ public sealed class MultiAccountConnectionTests
     });
 
     [TestMethod]
-    public void ConnectionSettingsExposeAccountTabsActiveStateAndDisabledCapabilityReasons()
+    public void ConnectionSettingsUseASimpleTurkishStoreFlowAndHideSeededPlaceholders()
     {
         Exception failure = null;
         var thread = new Thread(() =>
@@ -139,23 +139,21 @@ public sealed class MultiAccountConnectionTests
                 {
                     var store = new MarketplaceConnectionStore(root);
                     var trendyol = store.Save("trendyol", "101", "Trendyol A", true);
-                    var blocked = store.Save("amazon", "shop-a", "Amazon A", false);
                     var panel = MarketplaceConnectionsPanel.Create(root);
                     var controls = Walk(panel).ToList();
-                    var tabs = controls.OfType<TabControl>().Single(x => x.Name == "MarketplaceAccountTabs");
+                    var grid = controls.OfType<DataGrid>().Single(x => x.Name == "MarketplaceConnectionList");
+                    var rows = grid.ItemsSource!.Cast<object>().ToArray();
+                    var add = controls.OfType<Button>().Single(x => x.Name == "MarketplaceAddStore");
+                    var editor = controls.OfType<FrameworkElement>().Single(x => x.Name == "MarketplaceStoreEditor");
 
-                    Assert.IsTrue(tabs.Items.Cast<TabItem>().Any(x => Equals(x.Tag, trendyol.Id)));
-                    Assert.IsTrue(tabs.Items.Cast<TabItem>().Any(x => Equals(x.Tag, blocked.Id)));
-                    var activeStates = controls.OfType<CheckBox>().Where(x => x.Name.StartsWith("MarketplaceAccountActive", StringComparison.Ordinal)).ToList();
-                    Assert.IsTrue(activeStates.Any(x => x.IsChecked == true));
-                    Assert.IsTrue(activeStates.Any(x => x.IsChecked == false));
-                    var unsupported = controls.OfType<CheckBox>().Where(x => x.Name.StartsWith("MarketplaceCapability_", StringComparison.Ordinal) && !x.IsEnabled).ToList();
-                    Assert.IsTrue(unsupported.Count > 0);
-                    Assert.IsTrue(unsupported.All(x => !string.IsNullOrWhiteSpace(x.ToolTip?.ToString())));
-                    Assert.IsTrue(controls.OfType<GroupBox>().Any(x => Equals(x.Header, "Bağlantı")));
-                    Assert.IsTrue(controls.OfType<GroupBox>().Any(x => Equals(x.Header, "Ürün kuralları")));
-                    Assert.IsTrue(controls.OfType<GroupBox>().Any(x => Equals(x.Header, "Sipariş kuralları")));
-                    Assert.IsTrue(controls.OfType<GroupBox>().Any(x => Equals(x.Header, "Senkronizasyon")));
+                    Assert.AreEqual(1, rows.Length, "Unused seeded default channels must not crowd the user's store list.");
+                    Assert.AreEqual(Visibility.Collapsed, editor.Visibility);
+                    Assert.IsFalse(controls.OfType<TabControl>().Any(x => x.Name == "MarketplaceAccountTabs"));
+                    Assert.IsFalse(controls.OfType<CheckBox>().Any(x => x.Content?.ToString()?.Contains("Active", StringComparison.Ordinal) == true));
+                    add.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.AreEqual(Visibility.Visible, editor.Visibility);
+                    Assert.IsNotNull(controls.OfType<ComboBox>().SingleOrDefault(x => x.Name == "MarketplaceNewChannel"));
+                    Assert.IsNotNull(controls.OfType<Button>().SingleOrDefault(x => x.Name == "MarketplaceSaveStore"));
                 });
             }
             catch (Exception error) { failure = error; }

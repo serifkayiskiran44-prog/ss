@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
@@ -7,31 +6,41 @@ using System.Windows.Media;
 
 namespace TrMarketplaceHubDesktop;
 
+public sealed record MarketplaceConnectionListRow(MarketplaceConnection Connection)
+{
+    public string ChannelName => MarketplaceConnectionCatalog.Get(Connection.Channel).Name;
+    public string DisplayName => Connection.DisplayName;
+    public string ShopId => Connection.ShopId;
+    public string EnabledText => Connection.Enabled ? "Etkin" : "Devre dışı";
+    public string StatusText => MarketplaceStatusText.ToTurkish(Connection.Status);
+    public string LastError => MarketplaceConnectionStore.Redact(Connection.LastError);
+}
+
 public static class MarketplaceConnectionsPanel
 {
     public static FrameworkElement Create(string? dataDirectory = null, Action<string>? navigate = null, Action? connectionsChanged = null)
     {
         var store = new MarketplaceConnectionStore(dataDirectory);
-        var rows = new ObservableCollection<MarketplaceConnection>(store.List());
-        var grid = new DataGrid { ItemsSource = rows, AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, MinHeight = 260 };
-        grid.Columns.Add(new DataGridTextColumn { Header = "Kanal", Binding = new System.Windows.Data.Binding("Channel"), Width = 100 });
+        var rows = new ObservableCollection<MarketplaceConnectionListRow>(VisibleConnections(store));
+        var grid = new DataGrid { Name = "MarketplaceConnectionList", ItemsSource = rows, AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, MinHeight = 360, CanUserAddRows = false };
+        grid.Columns.Add(new DataGridTextColumn { Header = "Pazaryeri", Binding = new System.Windows.Data.Binding("ChannelName"), Width = 120 });
         grid.Columns.Add(new DataGridTextColumn { Header = "Mağaza", Binding = new System.Windows.Data.Binding("DisplayName"), Width = 190 });
         grid.Columns.Add(new DataGridTextColumn { Header = "Mağaza kimliği", Binding = new System.Windows.Data.Binding("ShopId"), Width = 130 });
-        grid.Columns.Add(new DataGridCheckBoxColumn { Header = "Etkin", Binding = new System.Windows.Data.Binding("Enabled"), Width = 55 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Durum", Binding = new System.Windows.Data.Binding("Status"), Width = 155 });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Kullanım", Binding = new System.Windows.Data.Binding("EnabledText"), Width = 90 });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Bağlantı durumu", Binding = new System.Windows.Data.Binding("StatusText"), Width = 155 });
         grid.Columns.Add(new DataGridTextColumn { Header = "Son hata", Binding = new System.Windows.Data.Binding("LastError"), Width = 260 });
 
-        var channel = new ComboBox { ItemsSource = MarketplaceConnectionCatalog.All, DisplayMemberPath = "Name", SelectedValuePath = "Id", SelectedValue = "etsy", Width = 180 };
-        var shop = new TextBox { Text = "default", Width = 180 };
-        var display = new TextBox { Width = 220 };
-        var enabled = new CheckBox { Content = "Bağlantı etkin", IsChecked = true };
+        var channel = new ComboBox { Name = "MarketplaceNewChannel", ItemsSource = MarketplaceConnectionCatalog.All, DisplayMemberPath = "Name", SelectedValuePath = "Id", SelectedValue = "trendyol", MinWidth = 220 };
+        var shop = new TextBox { Name = "MarketplaceShopId", MinWidth = 220 };
+        var display = new TextBox { Name = "MarketplaceDisplayName", MinWidth = 220 };
+        var enabled = new CheckBox { Content = "Mağaza etkin", IsChecked = true, Margin = new Thickness(4, 10, 4, 4) };
         var selectedId = "";
+        var editorTitle = new TextBlock { Text = "Yeni mağaza ekle", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 2, 4, 8) };
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
-        var capability = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
         var result = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(4, 8, 4, 8) };
-        var accountTabs = new TabControl { Name = "MarketplaceAccountTabs", Margin = new Thickness(0, 0, 0, 10), MinHeight = 175 };
+        var editor = new Border { Name = "MarketplaceStoreEditor", Visibility = Visibility.Collapsed, Padding = new Thickness(16), BorderBrush = new SolidColorBrush(Color.FromRgb(210, 222, 228)), BorderThickness = new Thickness(1), Background = Brushes.White };
         var health = new ApiHealthStore(dataDirectory);
-        foreach (var connection in rows) health.EnsureConnection(connection.Channel, connection.ShopId, connection.Status, connection.LastError);
+        foreach (var row in rows) health.EnsureConnection(row.Connection.Channel, row.Connection.ShopId, row.Connection.Status, row.Connection.LastError);
         // AllowAutoRedirect=false: this client sends credential-bearing headers
         // (x-api-key/Bearer via EtsyHttp.AddHeaders) that HttpClientHandler does not
         // strip on redirect the way it strips Authorization - the default
@@ -45,76 +54,57 @@ public static class MarketplaceConnectionsPanel
         void Show(MarketplaceConnection? item)
         {
             selectedId = item?.Id ?? "";
-            if (item is null) { shop.Text = "default"; display.Text = ""; enabled.IsChecked = true; status.Text = "Yeni mağaza kaydı."; }
-            else { channel.SelectedValue = item.Channel; shop.Text = item.ShopId; display.Text = item.DisplayName; enabled.IsChecked = item.Enabled; status.Text = $"Durum: {item.Status}\nSon test: {item.LastTestUtc?.ToLocalTime().ToString("g") ?? "yok"}\n{item.LastError}"; }
-            UpdateCapabilities();
-        }
-        void UpdateCapabilities()
-        {
-            var definition = channel.SelectedItem as MarketplaceConnectionDefinition;
-            if (definition is null) { capability.Text = ""; return; }
-            var labels = new[]
+            editor.Visibility = Visibility.Visible;
+            editorTitle.Text = item is null ? "Yeni mağaza ekle" : "Mağaza ayarları";
+            if (item is null)
             {
-                (MarketplaceOperation.ProductsRead, "Ürün okuma"), (MarketplaceOperation.OrdersRead, "Sipariş okuma"),
-                (MarketplaceOperation.StockWrite, "Stok yazma"), (MarketplaceOperation.PriceWrite, "Fiyat yazma"),
-                (MarketplaceOperation.Shipment, "Kargo")
-            };
-            capability.Text = "Yetenekler: " + string.Join(" · ", labels.Select(x => definition.Capabilities.Supports(x.Item1) ? x.Item2 : x.Item2 + " yok"));
-            if (definition.LiveApiBlocked) capability.Text += "\nCanlı API: LIVE_API_BLOCKED / NOT_CONFIGURED";
+                channel.IsEnabled = true; channel.SelectedValue = "trendyol"; shop.Text = ""; display.Text = ""; enabled.IsChecked = true;
+                status.Text = "Pazaryerini seçin, mağaza kimliğini ve görünen adı girin.";
+            }
+            else
+            {
+                channel.SelectedValue = item.Channel; channel.IsEnabled = false; shop.Text = item.ShopId; display.Text = item.DisplayName; enabled.IsChecked = item.Enabled;
+                status.Text = $"Durum: {MarketplaceStatusText.ToTurkish(item.Status)}\nSon kontrol: {item.LastTestUtc?.ToLocalTime().ToString("g") ?? "Henüz yapılmadı"}" +
+                    (string.IsNullOrWhiteSpace(item.LastError) ? "" : "\n" + MarketplaceConnectionStore.Redact(item.LastError));
+            }
         }
         void Reload()
         {
-            rows.Clear(); foreach (var item in store.List()) rows.Add(item);
-            RebuildAccountTabs();
-            if (selectedId.Length > 0) grid.SelectedItem = rows.FirstOrDefault(x => x.Id == selectedId);
+            rows.Clear(); foreach (var item in VisibleConnections(store)) rows.Add(item);
+            if (selectedId.Length > 0) grid.SelectedItem = rows.FirstOrDefault(x => x.Connection.Id == selectedId);
             connectionsChanged?.Invoke();
         }
-        void RebuildAccountTabs()
-        {
-            accountTabs.Items.Clear();
-            var index = 0;
-            foreach (var account in rows)
-            {
-                var tab = BuildAccountTab(account, index++);
-                accountTabs.Items.Add(tab);
-            }
-        }
-        channel.SelectionChanged += (_, _) => UpdateCapabilities();
-        grid.SelectionChanged += (_, _) => Show(grid.SelectedItem as MarketplaceConnection);
-        accountTabs.SelectionChanged += (_, e) =>
-        {
-            if (e.Source != accountTabs || accountTabs.SelectedItem is not TabItem tab || tab.Tag is not string id) return;
-            var account = rows.FirstOrDefault(x => x.Id == id);
-            if (account is not null) { grid.SelectedItem = account; Show(account); }
-        };
-        channel.SelectedIndex = 0; UpdateCapabilities(); Show(null); RebuildAccountTabs();
+        grid.SelectionChanged += (_, _) => { if (grid.SelectedItem is MarketplaceConnectionListRow row) Show(row.Connection); };
 
         var form = new StackPanel { Margin = new Thickness(12) };
-        form.Children.Add(new TextBlock { Text = "Hesaplar", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 4, 4, 10) });
-        form.Children.Add(accountTabs);
-        form.Children.Add(new TextBlock { Text = "Seçili mağaza bağlantısı", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 4, 4, 10) });
-        AddLabel(form, "Kanal", channel); AddLabel(form, "Mağaza kimliği", shop); AddLabel(form, "Görünen ad", display); form.Children.Add(enabled);
-        form.Children.Add(capability); form.Children.Add(status);
+        form.Children.Add(editorTitle);
+        AddLabel(form, "Pazaryeri", channel); AddLabel(form, "Mağaza / satıcı kimliği", shop); AddLabel(form, "Ekranda görünecek mağaza adı", display); form.Children.Add(enabled);
+        form.Children.Add(new TextBlock { Text = "API anahtarları mağaza kaydından sonra güvenli bağlantı ekranında girilir ve Windows kullanıcı hesabında şifreli saklanır.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray, Margin = new Thickness(4, 10, 4, 4) });
+        form.Children.Add(status);
         var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 4) };
-        actions.Children.Add(Button("Yeni", () => Show(null)));
-        actions.Children.Add(Button("Kaydet", () =>
+        var save = Button("Kaydet", () =>
         {
             var saved = store.Save(channel.SelectedValue?.ToString() ?? "", shop.Text, display.Text, enabled.IsChecked == true, selectedId);
-            selectedId = saved.Id; result.Text = "Mağaza metadatası kaydedildi. Gizli bilgiler bu ekrana veya SQLite'a yazılmaz."; Reload(); grid.SelectedItem = rows.First(x => x.Id == saved.Id); Show(saved);
+            selectedId = saved.Id; result.Text = "Mağaza kaydedildi. Şimdi API bilgilerini girip bağlantıyı kontrol edebilirsiniz."; Reload(); grid.SelectedItem = rows.First(x => x.Connection.Id == saved.Id); Show(saved);
+        });
+        save.Name = "MarketplaceSaveStore"; actions.Children.Add(save);
+        actions.Children.Add(Button("API bilgilerini gir", () =>
+        {
+            var item = RequireSelected();
+            OpenCredentialSettings(item, dataDirectory, navigate);
         }));
-        actions.Children.Add(Button("Etkinliği değiştir", () =>
+        actions.Children.Add(Button("Mağazayı aç", () =>
+        {
+            var item = RequireSelected(); navigate?.Invoke(item.Channel);
+        }));
+        actions.Children.Add(Button("Devre dışı bırak", () =>
         {
             if (string.IsNullOrWhiteSpace(selectedId)) throw new InvalidOperationException("Önce kayıtlı mağaza seçin.");
-            var next = !(grid.SelectedItem as MarketplaceConnection)?.Enabled ?? true; store.SetEnabled(selectedId, next); Reload(); result.Text = next ? "Bağlantı etkinleştirildi." : "Bağlantı pasife alındı.";
-        }));
-        actions.Children.Add(Button("Devre dışı bırak (geçmişi koru)", () =>
-        {
-            if (string.IsNullOrWhiteSpace(selectedId)) throw new InvalidOperationException("Önce kayıtlı mağaza seçin.");
-            store.Deactivate(selectedId); Reload(); result.Text = "Mağaza devre dışı bırakıldı; metadata ve geçmiş sağlık kaydı korundu.";
+            store.Deactivate(selectedId); Reload(); result.Text = "Mağaza devre dışı bırakıldı. Ürün bağlantıları ve geçmiş korundu.";
         }));
         actions.Children.Add(AsyncButton("Salt okunur bağlantı testi", async () =>
         {
-            if (grid.SelectedItem is not MarketplaceConnection item) throw new InvalidOperationException("Önce kayıtlı mağaza seçin.");
+            var item = RequireSelected();
             if (health.ShouldDefer(item.Channel, item.ShopId, DateTimeOffset.UtcNow))
             {
                 var deferred = health.Get(item.Channel, item.ShopId);
@@ -142,22 +132,55 @@ public static class MarketplaceConnectionsPanel
         }));
         form.Children.Add(actions);
         form.Children.Add(result);
-        form.Children.Add(new TextBlock { Text = "Kanal kartından ilgili ürün/sipariş/sync ekranına geçiş:", Margin = new Thickness(4, 12, 4, 4), FontWeight = FontWeights.SemiBold });
-        var links = new WrapPanel();
-        foreach (var definition in MarketplaceConnectionCatalog.All.Where(x => x.RouteKey is not null))
-        {
-            var target = definition.RouteKey!;
-            links.Children.Add(Button(definition.Name, () => navigate?.Invoke(target)));
-            links.Children.Add(Button("API belgeleri", () => Process.Start(new ProcessStartInfo(definition.DocumentationUrl) { UseShellExecute = true })));
-        }
-        form.Children.Add(links);
+        editor.Child = form;
+
+        MarketplaceConnection RequireSelected() => selectedId.Length == 0
+            ? throw new InvalidOperationException("Önce kayıtlı mağaza seçin veya yeni mağazayı kaydedin.")
+            : store.Get(selectedId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+
+        var add = Button("+ Yeni mağaza ekle", () => { grid.SelectedItem = null; Show(null); });
+        add.Name = "MarketplaceAddStore";
+        var listPanel = new DockPanel();
+        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        toolbar.Children.Add(add);
+        toolbar.Children.Add(new TextBlock { Text = "Kayıtlı mağazayı seçerek ayarlarını ve bağlantısını yönetin.", VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.SlateGray, Margin = new Thickness(10, 0, 0, 0) });
+        DockPanel.SetDock(toolbar, Dock.Top); listPanel.Children.Add(toolbar); listPanel.Children.Add(grid);
+
         var layout = new Grid { Margin = new Thickness(12) };
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(430) });
-        layout.Children.Add(new ScrollViewer { Content = grid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        var formScroll = new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(390) });
+        layout.Children.Add(listPanel);
+        var formScroll = new ScrollViewer { Content = editor, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(12, 0, 0, 0) };
         Grid.SetColumn(formScroll, 1); layout.Children.Add(formScroll);
         return layout;
+    }
+
+    static IReadOnlyList<MarketplaceConnectionListRow> VisibleConnections(MarketplaceConnectionStore store) => store.List()
+        .Where(connection => !IsUnusedSeededDefault(connection))
+        .Select(connection => new MarketplaceConnectionListRow(connection))
+        .ToArray();
+
+    static bool IsUnusedSeededDefault(MarketplaceConnection connection) =>
+        connection.Id.Equals(connection.Channel + ":default", StringComparison.OrdinalIgnoreCase) &&
+        connection.ShopId.Equals("default", StringComparison.OrdinalIgnoreCase) &&
+        connection.Status.Equals("NOT_CONFIGURED", StringComparison.OrdinalIgnoreCase) &&
+        !connection.LastTestUtc.HasValue && string.IsNullOrWhiteSpace(connection.LastError);
+
+    static void OpenCredentialSettings(MarketplaceConnection connection, string? dataDirectory, Action<string>? navigate)
+    {
+        FrameworkElement? content = connection.Channel switch
+        {
+            "trendyol" => new TrendyolWorkspacePanel(connection.Id, dataDirectory),
+            "etsy" => new EtsyWorkspacePanel(connection.Id, dataDirectory),
+            _ => null
+        };
+        if (content is null) { navigate?.Invoke(connection.Channel); return; }
+        if (content is TrendyolWorkspacePanel trendyol) trendyol.ShowSettings();
+        if (content is EtsyWorkspacePanel etsy) etsy.ShowSettings();
+        var window = new Window { Title = connection.DisplayName + " — API bağlantısı", Content = content, Width = 1180, Height = 780, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(item => item.IsActive);
+        if (owner is not null) window.Owner = owner;
+        window.ShowDialog();
     }
 
     public static T? LoadCredentialsForProbe<T>(string? dataDirectory, MarketplaceConnection item)
@@ -191,60 +214,6 @@ public static class MarketplaceConnectionsPanel
                 return $"Ozon ürün okuma yetkisi doğrulandı ({await new OzonConnection(http).ReadProductCountAsync(ozon)} ürün).";
             default: throw new InvalidOperationException("LIVE_API_BLOCKED: Bu kanal için doğrulanmış salt okunur API bağlantısı yapılandırılmadı.");
         }
-    }
-
-    static TabItem BuildAccountTab(MarketplaceConnection account, int index)
-    {
-        var definition = MarketplaceConnectionCatalog.Get(account.Channel);
-        var body = new StackPanel { Margin = new Thickness(8) };
-        body.Children.Add(new CheckBox
-        {
-            Name = "MarketplaceAccountActive_" + index,
-            Content = "Active / Etkin",
-            IsChecked = account.Active,
-            IsHitTestVisible = false,
-            Focusable = false
-        });
-        body.Children.Add(new TextBlock { Text = $"{definition.Name} · {account.ShopId} · {account.Status}", Margin = new Thickness(2, 5, 2, 8), TextWrapping = TextWrapping.Wrap });
-        body.Children.Add(SettingsSection("Bağlantı", "Hesap kimliği ve şifreli erişim bilgileri bu bağlantıya özeldir."));
-        body.Children.Add(CapabilitySection("Ürün kuralları", definition, index, new[]
-        {
-            (MarketplaceOperation.ProductsRead, "Ürün okuma"),
-            (MarketplaceOperation.PriceWrite, "Fiyat yazma"),
-            (MarketplaceOperation.StockWrite, "Stok yazma")
-        }));
-        body.Children.Add(CapabilitySection("Sipariş kuralları", definition, index, new[] { (MarketplaceOperation.OrdersRead, "Sipariş okuma") }));
-        body.Children.Add(CapabilitySection("Senkronizasyon", definition, index, new[] { (MarketplaceOperation.Shipment, "Kargo") }));
-        return new TabItem { Header = account.DisplayName, Tag = account.Id, Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
-    }
-
-    static GroupBox SettingsSection(string header, string explanation) => new()
-    {
-        Header = header,
-        Margin = new Thickness(2, 3, 2, 3),
-        Padding = new Thickness(6),
-        Content = new TextBlock { Text = explanation, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray }
-    };
-
-    static GroupBox CapabilitySection(string header, MarketplaceConnectionDefinition definition, int index, IEnumerable<(MarketplaceOperation Operation, string Label)> operations)
-    {
-        var panel = new WrapPanel();
-        foreach (var (operation, label) in operations)
-        {
-            var supported = definition.Capabilities.Supports(operation);
-            panel.Children.Add(new CheckBox
-            {
-                Name = $"MarketplaceCapability_{operation}_{index}",
-                Content = supported ? label : label + " · desteklenmiyor",
-                IsChecked = supported,
-                IsEnabled = supported,
-                IsHitTestVisible = false,
-                Focusable = false,
-                ToolTip = supported ? "Bu hesap türü tarafından desteklenir." : "Bu kanal bağdaştırıcısı bu özelliği desteklemiyor.",
-                Margin = new Thickness(6, 4, 6, 4)
-            });
-        }
-        return new GroupBox { Header = header, Margin = new Thickness(2, 3, 2, 3), Padding = new Thickness(4), Content = panel };
     }
 
     static void AddLabel(Panel panel, string label, UIElement control) { panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(4, 7, 4, 0) }); panel.Children.Add(control); }

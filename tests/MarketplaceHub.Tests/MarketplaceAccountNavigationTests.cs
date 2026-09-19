@@ -62,6 +62,22 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
+    public void OpeningAnAccountCollapsesTheChooserSoProductManagementUsesTheRemainingHeight() => InSta(root =>
+    {
+        new MarketplaceConnectionStore(root).Save("trendyol", "101", "Trendyol A", true);
+        using var panel = new MarketplaceAccountHomePanel(root);
+        var chooser = Walk(panel).OfType<FrameworkElement>().Single(x => x.Name == "MarketplaceAccountChooser");
+        var toggle = Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceAccountChooserToggle");
+        var card = AccountCards(panel).Single();
+
+        card.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.AreEqual(Visibility.Collapsed, chooser.Visibility);
+        Assert.AreEqual("Mağazaları göster", toggle.Content);
+        Assert.AreEqual(VerticalAlignment.Stretch, Walk(panel).OfType<ContentControl>().Single(x => x.Name == "MarketplaceAccountWorkspace").VerticalAlignment);
+    });
+
+    [TestMethod]
     public void WorkspaceHostRejectsMissingDisabledAndCorruptConnections() => InSta(root =>
     {
         var store = new MarketplaceConnectionStore(root);
@@ -187,12 +203,15 @@ public sealed class MarketplaceAccountNavigationTests
         {
             var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
             navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "connections"));
-            Walk(window).OfType<Button>().Single(x => Equals(x.Content, "Trendyol")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var accountGrid = Walk(window).OfType<DataGrid>().Single(x => x.Name == "MarketplaceConnectionList");
+            var rows = accountGrid.Items.Cast<MarketplaceConnectionListRow>().ToArray();
+            CollectionAssert.AreEquivalent(new[] { first.Id, second.Id }, rows.Select(x => x.Connection.Id).ToArray());
+            accountGrid.SelectedItem = rows.Single(x => x.Connection.Id == first.Id);
+            Walk(window).OfType<Button>().Single(x => Equals(x.Content, "Mağazayı aç")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-            Assert.AreEqual(0, Walk(window).OfType<TrendyolWorkspacePanel>().Count(), "A channel link must open account selection, not the first account.");
+            Assert.AreEqual(0, Walk(window).OfType<TrendyolWorkspacePanel>().Count(), "Kanalda iki hesap varsa önce hesap kartları gösterilmelidir.");
             var cards = AccountCards(window);
             CollectionAssert.AreEquivalent(new[] { first.Id, second.Id }, cards.Select(x => (string)x.Tag).ToArray());
-
             cards.Single(x => Equals(x.Tag, first.Id)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
             Assert.AreEqual(first.Id, Walk(window).OfType<TrendyolWorkspacePanel>().Single().ConnectionId);

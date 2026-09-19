@@ -32,6 +32,7 @@ public sealed record MarketplaceShopProductRow(
     string Category, string Brand, string RemoteId, string RemoteState, string Error,
     bool ManageContent, bool ManagePrice, bool ManageStock)
 {
+    public string RemoteStateText => MarketplaceStatusText.ToTurkish(RemoteState);
     public string ManagementState => $"İçerik {(ManageContent ? "✓" : "–")} · Fiyat {(ManagePrice ? "✓" : "–")} · Stok {(ManageStock ? "✓" : "–")}";
 }
 
@@ -614,11 +615,30 @@ public sealed class MarketplaceShopProductsModel
 
 public sealed class MarketplaceShopProductsPanel : UserControl
 {
+    sealed record FilterChoice<T>(T Value, string Label) where T : struct, Enum
+    {
+        public override string ToString() => Label;
+    }
+
     readonly MarketplaceShopProductsModel model;
     readonly DataGrid products = new() { Name = "MarketplaceShopProducts", AutoGenerateColumns = false, SelectionMode = DataGridSelectionMode.Extended, IsReadOnly = true };
     readonly TextBox search = new() { MinWidth = 240, Margin = new Thickness(3) };
-    readonly ComboBox binding = new() { MinWidth = 130, Margin = new Thickness(3), ItemsSource = Enum.GetValues<MarketplaceShopBindingFilter>() };
-    readonly ComboBox management = new() { MinWidth = 130, Margin = new Thickness(3), ItemsSource = Enum.GetValues<MarketplaceShopManagementFilter>() };
+    readonly ComboBox binding = new() { MinWidth = 130, Margin = new Thickness(3), ItemsSource = new[]
+    {
+        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.All, "Tümü"),
+        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.Linked, "Bağlı"),
+        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.Unlinked, "Bağlı değil"),
+        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.Error, "Hatalı")
+    } };
+    readonly ComboBox management = new() { MinWidth = 130, Margin = new Thickness(3), ItemsSource = new[]
+    {
+        new FilterChoice<MarketplaceShopManagementFilter>(MarketplaceShopManagementFilter.All, "Tümü"),
+        new FilterChoice<MarketplaceShopManagementFilter>(MarketplaceShopManagementFilter.Managed, "Yönetilen"),
+        new FilterChoice<MarketplaceShopManagementFilter>(MarketplaceShopManagementFilter.Unmanaged, "Yönetilmeyen"),
+        new FilterChoice<MarketplaceShopManagementFilter>(MarketplaceShopManagementFilter.Content, "İçerik"),
+        new FilterChoice<MarketplaceShopManagementFilter>(MarketplaceShopManagementFilter.Price, "Fiyat"),
+        new FilterChoice<MarketplaceShopManagementFilter>(MarketplaceShopManagementFilter.Stock, "Stok")
+    } };
     readonly TextBlock summary = new() { Margin = new Thickness(4), TextWrapping = TextWrapping.Wrap };
     MarketplaceShopProductFilter filter = new();
 
@@ -628,7 +648,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
     public MarketplaceShopProductsPanel(string connectionId, string? directory = null, MarketplaceAdapterRegistry? registry = null)
     {
         model = new(connectionId, directory, registry);
-        binding.SelectedItem = MarketplaceShopBindingFilter.All; management.SelectedItem = MarketplaceShopManagementFilter.All;
+        binding.SelectedIndex = 0; management.SelectedIndex = 0;
         var root = new DockPanel { Margin = new Thickness(6) };
         var top = new StackPanel();
         top.Children.Add(new TextBlock { Text = model.AccountLabel, FontWeight = FontWeights.SemiBold, FontSize = 16, Margin = new Thickness(3) });
@@ -659,7 +679,9 @@ public sealed class MarketplaceShopProductsPanel : UserControl
 
     void Refresh()
     {
-        filter = new(search.Text, (MarketplaceShopBindingFilter)(binding.SelectedItem ?? MarketplaceShopBindingFilter.All), (MarketplaceShopManagementFilter)(management.SelectedItem ?? MarketplaceShopManagementFilter.All));
+        filter = new(search.Text,
+            (binding.SelectedItem as FilterChoice<MarketplaceShopBindingFilter>)?.Value ?? MarketplaceShopBindingFilter.All,
+            (management.SelectedItem as FilterChoice<MarketplaceShopManagementFilter>)?.Value ?? MarketplaceShopManagementFilter.All);
         var rows = model.Filter(filter); products.ItemsSource = rows; summary.Text = $"{rows.Count} ürün · Hesap: {model.ConnectionId}";
     }
 
@@ -667,7 +689,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
     {
         Column("SKU", "Sku", 105); Column("GTIN", "Gtin", 120); Column("Barkod", "Barcode", 120); Column("Ürün", "Name", 230);
         Column("Yerel stok", "LocalStock", 80); Column("Yerel fiyat", "LocalPrice", 90); Column("Uzak stok", "RemoteStock", 80); Column("Uzak fiyat", "RemotePrice", 90);
-        Column("Kategori", "Category", 170); Column("Marka", "Brand", 120); Column("Uzak durum", "RemoteState", 110); Column("Hata", "Error", 180); Column("Yönetim", "ManagementState", 210);
+        Column("Kategori", "Category", 170); Column("Marka", "Brand", 120); Column("Uzak durum", "RemoteStateText", 110); Column("Hata", "Error", 180); Column("Yönetim", "ManagementState", 210);
         products.FrozenColumnCount = 4;
     }
 

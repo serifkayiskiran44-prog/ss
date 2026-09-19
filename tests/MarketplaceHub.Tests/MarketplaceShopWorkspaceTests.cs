@@ -123,7 +123,7 @@ public sealed class MarketplaceShopWorkspaceTests
         var panel = new MarketplaceShopSettingsPanel(connection.Id, directory, registry);
         Assert.IsFalse(Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Fiyatı varsayılan olarak yönet")).IsEnabled);
         Assert.IsFalse(Walk(panel).OfType<TextBox>().Single(x => x.Name == "MarketplaceDefaultCategory").IsEnabled);
-        Assert.IsFalse(Walk(panel).OfType<TabItem>().Single(x => Equals(x.Header, "Order rules")).IsEnabled);
+        Assert.IsFalse(Walk(panel).OfType<TabItem>().Single(x => Equals(x.Header, "Sipariş kuralları")).IsEnabled);
         var productSchedule = Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Ürün okumayı zamanla"));
         Assert.IsFalse(productSchedule.IsEnabled);
         StringAssert.Contains(productSchedule.ToolTip!.ToString()!, "desteklenmiyor");
@@ -298,9 +298,12 @@ public sealed class MarketplaceShopWorkspaceTests
         var grid = Walk(products).OfType<DataGrid>().Single(x => x.Name == "MarketplaceShopProducts");
         var paths = grid.Columns.OfType<DataGridBoundColumn>().Select(x => ((System.Windows.Data.Binding)x.Binding).Path.Path).ToArray();
 
-        CollectionAssert.IsSubsetOf(new[] { "Sku", "Gtin", "Name", "LocalStock", "LocalPrice", "RemoteStock", "RemotePrice", "Category", "Brand", "RemoteState", "Error", "ManagementState" }, paths);
+        CollectionAssert.IsSubsetOf(new[] { "Sku", "Gtin", "Name", "LocalStock", "LocalPrice", "RemoteStock", "RemotePrice", "Category", "Brand", "RemoteStateText", "Error", "ManagementState" }, paths);
+        var filterLabels = Walk(products).OfType<ComboBox>().SelectMany(combo => combo.Items.Cast<object>()).Select(item => item.ToString()).ToArray();
+        Assert.IsTrue(filterLabels.Contains("Tümü"));
+        Assert.IsFalse(filterLabels.Contains("All"));
         Assert.IsTrue(Walk(products).OfType<Button>().Any(x => x.Name == "MarketplaceSelectAllFiltered"));
-        CollectionAssert.AreEqual(new[] { "Active", "Connection", "Product rules", "Order rules", "Sync" },
+        CollectionAssert.AreEqual(new[] { "Etkinlik", "Bağlantı", "Ürün kuralları", "Sipariş kuralları", "Senkronizasyon" },
             Walk(settings).OfType<TabControl>().Single(x => x.Name == "MarketplaceShopSettingsSections").Items.Cast<TabItem>().Select(x => x.Header!.ToString()).ToArray());
     });
 

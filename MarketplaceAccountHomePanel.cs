@@ -21,7 +21,9 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
     readonly string? directory;
     readonly Action<string> openConnection;
     readonly WrapPanel cards = new() { Name = "MarketplaceAccountCards", Orientation = Orientation.Horizontal };
-    readonly ContentControl workspace = new() { Name = "MarketplaceAccountWorkspace" };
+    readonly ContentControl workspace = new() { Name = "MarketplaceAccountWorkspace", VerticalAlignment = VerticalAlignment.Stretch };
+    readonly ScrollViewer chooser = new() { Name = "MarketplaceAccountChooser", VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, MaxHeight = 150 };
+    readonly Button chooserToggle = new() { Name = "MarketplaceAccountChooserToggle", Content = "Mağazaları gizle", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 5, 10, 5) };
     string? channelFilter;
     readonly TextBlock empty = new()
     {
@@ -38,16 +40,20 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         this.directory = directory;
         this.openConnection = openConnection ?? OpenWorkspace;
         var root = new DockPanel { Margin = new Thickness(12) };
-        var heading = new StackPanel { Margin = new Thickness(4, 2, 4, 12) };
-        heading.Children.Add(new TextBlock { Text = "Pazaryeri hesapları", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) });
-        heading.Children.Add(new TextBlock { Text = "Her kart ayrı bir mağaza hesabıdır. Ürünler, planlar ve geçmiş yalnız seçili hesap için açılır.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray, Margin = new Thickness(0, 5, 0, 0) });
+        var heading = new DockPanel { Margin = new Thickness(4, 2, 4, 8) };
+        DockPanel.SetDock(chooserToggle, Dock.Right); heading.Children.Add(chooserToggle);
+        var headingText = new StackPanel();
+        headingText.Children.Add(new TextBlock { Text = "Pazaryeri hesapları", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) });
+        headingText.Children.Add(new TextBlock { Text = "Mağazayı seçin; ürün yönetimi kalan alanı kullanır.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray, Margin = new Thickness(0, 3, 0, 0) });
+        heading.Children.Add(headingText);
         DockPanel.SetDock(heading, Dock.Top);
         root.Children.Add(heading);
-        var cardScroll = new ScrollViewer { Content = cards, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, MaxHeight = 260 };
-        DockPanel.SetDock(cardScroll, Dock.Top);
-        root.Children.Add(cardScroll);
+        chooser.Content = cards;
+        DockPanel.SetDock(chooser, Dock.Top);
+        root.Children.Add(chooser);
         root.Children.Add(workspace);
         Content = root;
+        chooserToggle.Click += (_, _) => SetChooserVisible(chooser.Visibility != Visibility.Visible);
         Refresh();
     }
 
@@ -84,7 +90,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
                 VerticalContentAlignment = VerticalAlignment.Stretch,
                 Content = CardBody(model)
             };
-            button.Click += (_, _) => openConnection((string)button.Tag);
+            button.Click += (_, _) => { openConnection((string)button.Tag); SetChooserVisible(false); };
             cards.Children.Add(button);
         }
         if (connections.Length == 0) cards.Children.Add(empty);
@@ -101,12 +107,14 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
     {
         channelFilter = MarketplaceConnectionCatalog.Get(channel).Id;
         CloseWorkspace();
+        SetChooserVisible(true);
         Refresh();
     }
 
     public void ShowAll()
     {
         channelFilter = null;
+        SetChooserVisible(CurrentConnectionId is null);
         Refresh();
     }
 
@@ -128,6 +136,12 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         if (workspace.Content is IDisposable disposable) disposable.Dispose();
         workspace.Content = null;
         CurrentConnectionId = null;
+    }
+
+    void SetChooserVisible(bool visible)
+    {
+        chooser.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        chooserToggle.Content = visible ? "Mağazaları gizle" : "Mağazaları göster";
     }
 
     static FrameworkElement CardBody(MarketplaceAccountCard model)

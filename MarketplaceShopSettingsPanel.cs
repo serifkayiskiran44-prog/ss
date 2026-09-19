@@ -235,11 +235,11 @@ public sealed class MarketplaceShopSettingsPanel : UserControl
         capabilities = registry.Get(connection.Channel).Capabilities;
         state = store.Load(connectionId);
         var root = new DockPanel { Margin = new Thickness(6) };
-        sections.Items.Add(new TabItem { Header = "Active", Content = Section(active) });
-        sections.Items.Add(new TabItem { Header = "Connection", Content = Section(new TextBlock { Text = $"{connection.DisplayName}\n{connection.Channel} / {connection.ShopId}\nDurum: {connection.Status}", TextWrapping = TextWrapping.Wrap }) });
-        sections.Items.Add(new TabItem { Header = "Product rules", Content = ProductSection() });
-        sections.Items.Add(new TabItem { Header = "Order rules", Content = OrderSection(), IsEnabled = capabilities.Supports(MarketplaceOperation.OrdersRead) });
-        sections.Items.Add(new TabItem { Header = "Sync", Content = SyncSection() });
+        sections.Items.Add(new TabItem { Header = "Etkinlik", Content = Section(active) });
+        sections.Items.Add(new TabItem { Header = "Bağlantı", Content = Section(new TextBlock { Text = $"{connection.DisplayName}\n{MarketplaceConnectionCatalog.Get(connection.Channel).Name} / {connection.ShopId}\nDurum: {MarketplaceStatusText.ToTurkish(connection.Status)}", TextWrapping = TextWrapping.Wrap }) });
+        sections.Items.Add(new TabItem { Header = "Ürün kuralları", Content = ProductSection() });
+        sections.Items.Add(new TabItem { Header = "Sipariş kuralları", Content = OrderSection(), IsEnabled = capabilities.Supports(MarketplaceOperation.OrdersRead) });
+        sections.Items.Add(new TabItem { Header = "Senkronizasyon", Content = SyncSection() });
         root.Children.Add(sections);
         var footer = new WrapPanel(); var save = new Button { Name = "MarketplaceSaveShopSettings", Content = "Hesap ayarlarını kaydet", Margin = new Thickness(4), Padding = new Thickness(10, 5, 10, 5) };
         save.Click += (_, _) => Save(); footer.Children.Add(save); footer.Children.Add(status); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);

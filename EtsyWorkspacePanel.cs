@@ -81,7 +81,7 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         sections.Items.Add(new TabItem { Header = "Ayarlar", Content = BuildSettings() });
         sections.Items.Add(new TabItem { Header = "İşlem geçmişi", Content = BuildHistory() });
         root.Children.Add(sections); Content = root;
-        if(scopedConnection is not null){shop.Text=scopedConnection.ShopId;shop.IsReadOnly=true;summary.Text=$"{scopedConnection.DisplayName} / {scopedConnection.ShopId} · {scopedConnection.Status}";}
+        if(scopedConnection is not null){shop.Text=scopedConnection.ShopId;shop.IsReadOnly=true;summary.Text=$"{scopedConnection.DisplayName} / {scopedConnection.ShopId} · {MarketplaceStatusText.ToTurkish(scopedConnection.Status)}";}
         try { credentials = LoadCredentials(); if(credentials is not null) FillCredentials(credentials); if(scopedConnection is not null || credentials is not null) LoadState(); }
         catch(Exception ex) { summary.Text = Safe(ex); }
         RefreshProducts(); RefreshDispatchHandoffs();
