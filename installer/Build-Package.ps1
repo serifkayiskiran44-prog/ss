@@ -19,10 +19,15 @@ $files = Get-ChildItem -LiteralPath $outputFull -File -Recurse | Sort-Object Ful
 if (-not ($files | Where-Object Name -eq 'TrMarketplaceHubDesktop.exe')) {
     throw 'TrMarketplaceHubDesktop.exe publish çıktısında bulunamadı.'
 }
+$outputPrefix = $outputFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
 
 $manifestEntries = foreach ($file in $files) {
+    $fileFull = [System.IO.Path]::GetFullPath($file.FullName)
+    if (-not $fileFull.StartsWith($outputPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Yayın dosyası hedef klasör dışında: $fileFull"
+    }
     [pscustomobject]@{
-        path = [System.IO.Path]::GetRelativePath($outputFull, $file.FullName).Replace('\\','/')
+        path = $fileFull.Substring($outputPrefix.Length).Replace('\\','/')
         size = $file.Length
         sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     }
