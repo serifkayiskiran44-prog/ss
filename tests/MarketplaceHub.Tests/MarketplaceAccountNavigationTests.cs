@@ -40,6 +40,9 @@ public sealed class MarketplaceAccountNavigationTests
         Assert.AreEqual(2, model.LinkedProductCount);
         Assert.AreEqual(1, model.PendingCount);
         Assert.AreEqual(1, model.ErrorCount);
+        var visibleTexts = Walk(firstCard).OfType<TextBlock>().Select(x => x.Text).ToArray();
+        Assert.IsTrue(visibleTexts.Contains("Ayarlar eksik"));
+        Assert.IsFalse(visibleTexts.Contains("NOT_CONFIGURED"));
         firstCard.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         CollectionAssert.AreEqual(new[] { first.Id }, opened);
     });
@@ -129,6 +132,9 @@ public sealed class MarketplaceAccountNavigationTests
         Assert.IsTrue(adapter.Capabilities.Supports(MarketplaceOperation.OrdersRead));
         Assert.IsTrue(commands.Any(x => x.Name == "MarketplaceOperation_ProductsRead"));
         Assert.IsTrue(commands.Any(x => x.Name == "MarketplaceOperation_OrdersRead"));
+        CollectionAssert.IsSubsetOf(new[] { "Ürünleri oku", "Siparişleri oku", "Ürün yönetimi", "İçerik yönetimi", "Kategori eşleştirme", "Marka eşleştirme", "Teslimat yönetimi" },
+            commands.Select(x => x.Content?.ToString()).ToArray());
+        Assert.IsFalse(commands.Any(x => x.Content?.ToString() is "ProductManagement" or "ContentWrite" or "CategoryWrite" or "BrandWrite" or "DeliveryWrite"));
     });
 
     [TestMethod]

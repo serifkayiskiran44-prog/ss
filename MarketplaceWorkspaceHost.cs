@@ -56,7 +56,7 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
         var current = operational.FirstOrDefault(x => x.Id == ConnectionId)
             ?? throw new InvalidOperationException("Seçili mağaza bağlantısı operasyonel değil, devre dışı bırakıldı veya kaldırıldı.");
         title.Text = current.DisplayName;
-        detail.Text = $"{MarketplaceConnectionCatalog.Get(current.Channel).Name} · {current.ShopId} · {current.Status}";
+        detail.Text = $"{MarketplaceConnectionCatalog.Get(current.Channel).Name} · {current.ShopId} · {MarketplaceStatusText.ToTurkish(current.Status)}";
         selecting = true;
         try
         {
@@ -78,7 +78,7 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
         ConnectionId = connection.Id;
         Adapter = adapter;
         title.Text = connection.DisplayName;
-        detail.Text = $"{MarketplaceConnectionCatalog.Get(connection.Channel).Name} · {connection.ShopId} · {connection.Status}";
+        detail.Text = $"{MarketplaceConnectionCatalog.Get(connection.Channel).Name} · {connection.ShopId} · {MarketplaceStatusText.ToTurkish(connection.Status)}";
         RebuildCommands(adapter.Capabilities);
         RefreshAccounts();
     }
@@ -136,7 +136,17 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
         MarketplaceOperation.StockWrite => "Stok yönetimi",
         MarketplaceOperation.PriceWrite => "Fiyat yönetimi",
         MarketplaceOperation.Shipment => "Kargo yönetimi",
-        _ => operation.ToString()
+        MarketplaceOperation.ProductManagement => "Ürün yönetimi",
+        MarketplaceOperation.ContentWrite => "İçerik yönetimi",
+        MarketplaceOperation.CategoryWrite => "Kategori eşleştirme",
+        MarketplaceOperation.BrandWrite => "Marka eşleştirme",
+        MarketplaceOperation.DeliveryWrite => "Teslimat yönetimi",
+        MarketplaceOperation.TaxonomyWrite => "Kategori ve özellikler",
+        MarketplaceOperation.PropertiesWrite => "Ürün özellikleri",
+        MarketplaceOperation.ShippingWrite => "Kargo ve teslimat",
+        MarketplaceOperation.ReadinessWrite => "Yayın uygunluğu",
+        MarketplaceOperation.ListingCreate => "Yeni ilan oluşturma",
+        _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, null)
     };
 
     public void Dispose()

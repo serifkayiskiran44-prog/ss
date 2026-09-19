@@ -135,7 +135,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         var panel = new StackPanel();
         panel.Children.Add(new TextBlock { Text = model.DisplayName, FontSize = 17, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(new TextBlock { Text = $"{model.ChannelName} · {model.ShopId}", Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(new TextBlock { Text = model.Status, Margin = new Thickness(0, 5, 0, 0), Foreground = Brushes.SlateGray });
+        panel.Children.Add(new TextBlock { Text = MarketplaceStatusText.ToTurkish(model.Status), Margin = new Thickness(0, 5, 0, 0), Foreground = Brushes.SlateGray });
         panel.Children.Add(new TextBlock { Text = $"Bağlı {model.LinkedProductCount}  ·  Bekleyen {model.PendingCount}  ·  Hata {model.ErrorCount}", Margin = new Thickness(0, 9, 0, 0), TextWrapping = TextWrapping.Wrap });
         return panel;
     }
