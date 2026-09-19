@@ -124,6 +124,13 @@ public sealed class MarketplaceAdapterRegistry
                 var since = fromUtc == DateTime.MinValue ? (DateTimeOffset?)null : new DateTimeOffset(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc));
                 return await new OrdersEtsyClient(http).ReadAsync(credentials, since, token).ConfigureAwait(false);
             }
+            if (Channel == "hepsiburada")
+            {
+                var credentials = vault.Load<Hepsiburada.HepsiburadaCredentials>(connection.Id, connection.Channel, connection.ShopId)
+                    ?? throw new InvalidOperationException("Hepsiburada bağlantı bilgileri bu hesap için bulunamadı.");
+                using var client = new Hepsiburada.HepsiburadaApiClient(credentials, http);
+                return await new Hepsiburada.HepsiburadaOrderReader(client).ReadAsync(credentials, connection.Id, fromUtc, token).ConfigureAwait(false);
+            }
             throw new InvalidOperationException("Sipariş okuyucu uygulanmadı.");
         }
     }

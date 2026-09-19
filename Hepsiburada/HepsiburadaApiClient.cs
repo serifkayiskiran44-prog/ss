@@ -18,6 +18,7 @@ public sealed class HepsiburadaApiClient : IDisposable
     readonly bool ownsHttp;
     readonly string productBaseUrl;
     readonly string listingBaseUrl;
+    readonly string ordersBaseUrl;
     readonly string authorization;
     readonly IHepsiburadaDelay delay;
     bool disposed;
@@ -39,6 +40,7 @@ public sealed class HepsiburadaApiClient : IDisposable
         var sit = credentials.Environment == HepsiburadaEnvironment.Sit ? "-sit" : "";
         productBaseUrl = $"https://mpop{sit}.hepsiburada.com/product";
         listingBaseUrl = $"https://listing-external{sit}.hepsiburada.com";
+        ordersBaseUrl = $"https://oms-external{sit}.hepsiburada.com";
         authorization = Convert.ToBase64String(Encoding.UTF8.GetBytes(credentials.MerchantId + ":" + credentials.ServiceKey));
         ownsHttp = httpClient is null;
         http = httpClient ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
@@ -193,6 +195,49 @@ public sealed class HepsiburadaApiClient : IDisposable
                 NonnegativeInt(item, "availableStock", "stock"), NonnegativeDecimal(item, "price"), NonnegativeInt(item, "dispatchTime")));
         }
         return result.AsReadOnly();
+    }
+
+    public async Task<IReadOnlyList<HepsiburadaOrderLine>> GetOrdersAsync(DateTime fromUtc, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        const int limit = 50;
+        var result = new List<HepsiburadaOrderLine>();
+        var identities = new HashSet<string>(StringComparer.Ordinal);
+        int? expectedTotal = null;
+        for (var offset = 0; offset < MaxRows; offset += limit)
+        {
+            var url = $"{ordersBaseUrl}/orders/merchantid/{Uri.EscapeDataString(credentials.MerchantId)}?offset={offset}&limit={limit}";
+            using var document = await RequestAsync(url, cancellationToken);
+            var root = document.RootElement;
+            var rows = ReadArray(root, "items", "data");
+            if (rows.GetArrayLength() > limit) throw InvalidResponse();
+            var total = OptionalNonnegativeInt(root, "totalCount") ?? (offset + rows.GetArrayLength());
+            if (total > MaxRows || (expectedTotal.HasValue && total != expectedTotal)) throw InvalidResponse();
+            expectedTotal = total;
+            foreach (var item in rows.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var merchantId = OptionalText(item, "merchantId");
+                if (merchantId.Length > 0 && merchantId != credentials.MerchantId) throw InvalidResponse();
+                var lineId = FirstText(item, "id", "lineItemId");
+                if (!identities.Add(lineId)) throw InvalidResponse();
+                var quantity = NonnegativeInt(item, "quantity");
+                if (quantity <= 0) throw InvalidResponse();
+                var orderDate = Date(item, "orderDate");
+                var updated = OptionalDate(item, "lastStatusUpdateDate") ?? orderDate;
+                var price = Money(item, "price") ?? Money(item, "unitPrice");
+                var address = Object(item, "shippingAddress", "deliveryAddress");
+                result.Add(new(lineId, FirstText(item, "orderNumber", "OrderNumber"), orderDate, updated,
+                    OptionalText(item, "status"), FirstText(item, "sku", "hbSku"), OptionalText(item, "merchantSku"),
+                    OptionalText(item, "productBarcode"), FirstText(item, "name", "productName"), quantity,
+                    price?.Amount, price?.Currency ?? "TRY", FirstOptionalText(item, "customerName", "recipientName"),
+                    AddressText(address), FirstOptionalText(address, "city", "shippingCity"), FirstOptionalText(address, "town", "district"),
+                    CargoName(item), FirstOptionalText(item, "packageNumber", "packageId"), OptionalDecimal(item, "deci")));
+            }
+            if (rows.GetArrayLength() == 0 || offset + rows.GetArrayLength() >= total)
+                return result.Where(row => fromUtc == DateTime.MinValue || row.UpdatedUtc.UtcDateTime >= Utc(fromUtc)).ToArray();
+        }
+        throw InvalidResponse();
     }
 
     public async Task<HepsiburadaConnectionIdentity> TestReadOnlyAsync(CancellationToken cancellationToken = default)
@@ -434,6 +479,59 @@ public sealed class HepsiburadaApiClient : IDisposable
             if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var result) && result >= 0) return result;
         throw InvalidResponse();
     }
+
+    static int? OptionalNonnegativeInt(JsonElement item, string name) =>
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var result) && result >= 0 ? result : null;
+
+    static decimal? OptionalDecimal(JsonElement item, string name)
+    {
+        if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        return value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var result) && result >= 0 ? result : throw InvalidResponse();
+    }
+
+    static DateTimeOffset Date(JsonElement item, string name) => OptionalDate(item, name) ?? throw InvalidResponse();
+    static DateTimeOffset? OptionalDate(JsonElement item, string name)
+    {
+        var text = OptionalText(item, name);
+        return text.Length == 0 ? null : DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var value) ? value.ToUniversalTime() : throw InvalidResponse();
+    }
+
+    static JsonElement Object(JsonElement item, params string[] names)
+    {
+        foreach (var name in names)
+            if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object) return value;
+        return default;
+    }
+
+    static string FirstOptionalText(JsonElement item, params string[] names)
+    {
+        if (item.ValueKind != JsonValueKind.Object) return "";
+        foreach (var name in names) { var value = OptionalText(item, name); if (value.Length > 0) return value; }
+        return "";
+    }
+
+    static string AddressText(JsonElement address) => address.ValueKind != JsonValueKind.Object ? "" :
+        FirstOptionalText(address, "address", "addressDetail", "fullAddress");
+
+    static string CargoName(JsonElement item)
+    {
+        var direct = FirstOptionalText(item, "cargoCompany");
+        if (direct.Length > 0) return direct;
+        var cargo = Object(item, "cargoCompanyModel");
+        return FirstOptionalText(cargo, "name", "shortName");
+    }
+
+    static (decimal Amount, string Currency)? Money(JsonElement item, string name)
+    {
+        var money = Object(item, name);
+        if (money.ValueKind != JsonValueKind.Object) return null;
+        var amount = OptionalDecimal(money, "amount") ?? throw InvalidResponse();
+        var currency = OptionalText(money, "currency");
+        if (currency.Length is < 1 or > 3) throw InvalidResponse();
+        return (amount, currency.ToUpperInvariant());
+    }
+
+    static DateTime Utc(DateTime value) => value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
 
     static InvalidDataException InvalidResponse() => new("Hepsiburada yanıtı eksik, geçersiz veya güvenli sınırların dışında; sonuç uygulanmadı.");
 

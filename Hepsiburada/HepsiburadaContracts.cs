@@ -59,6 +59,13 @@ public sealed record HepsiburadaBuybox(
 
 public sealed record HepsiburadaCommission(string HepsiburadaSku, string MerchantSku, decimal Rate, string Currency);
 
+public sealed record HepsiburadaOrderLine(
+    string LineId, string OrderNumber, DateTimeOffset OrderDate, DateTimeOffset UpdatedUtc,
+    string Status, string HepsiburadaSku, string MerchantSku, string Barcode, string Title,
+    int Quantity, decimal? UnitPrice, string Currency,
+    string CustomerName, string ShippingAddress, string ShippingCity, string ShippingDistrict,
+    string CargoCompany, string PackageNumber, decimal? Desi);
+
 public interface IHepsiburadaDelay
 {
     Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken);
