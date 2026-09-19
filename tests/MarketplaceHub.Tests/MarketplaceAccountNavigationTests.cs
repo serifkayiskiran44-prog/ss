@@ -67,14 +67,20 @@ public sealed class MarketplaceAccountNavigationTests
         new MarketplaceConnectionStore(root).Save("trendyol", "101", "Trendyol A", true);
         using var panel = new MarketplaceAccountHomePanel(root);
         var chooser = Walk(panel).OfType<FrameworkElement>().Single(x => x.Name == "MarketplaceAccountChooser");
+        var heading = Walk(panel).OfType<FrameworkElement>().Single(x => x.Name == "MarketplaceAccountHeading");
         var toggle = Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceAccountChooserToggle");
         var card = AccountCards(panel).Single();
 
         card.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
         Assert.AreEqual(Visibility.Collapsed, chooser.Visibility);
-        Assert.AreEqual("Mağazaları göster", toggle.Content);
+        Assert.AreEqual(Visibility.Collapsed, heading.Visibility);
         Assert.AreEqual(VerticalAlignment.Stretch, Walk(panel).OfType<ContentControl>().Single(x => x.Name == "MarketplaceAccountWorkspace").VerticalAlignment);
+
+        Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceShowAccounts").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.AreEqual(Visibility.Visible, chooser.Visibility);
+        Assert.AreEqual(Visibility.Visible, heading.Visibility);
+        Assert.AreEqual("Mağazaları gizle", toggle.Content);
     });
 
     [TestMethod]
@@ -135,22 +141,17 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
-    public void RegistryCapabilitiesShowImplementedOrdersCommandForTrendyol() => InSta(root =>
+    public void RegistryCapabilitiesStayInTheAdapterWithoutRedundantHeaderButtons() => InSta(root =>
     {
         var store = new MarketplaceConnectionStore(root);
         var connection = store.Save("trendyol", "101", "Trendyol A", true);
         var adapter = MarketplaceAdapterRegistry.Default.Get("trendyol");
         using var host = MarketplaceWorkspaceHost.Create(connection.Id, root);
-        var commands = Walk(host).OfType<Button>().Where(x => x.Name.StartsWith("MarketplaceOperation_", StringComparison.Ordinal)).ToArray();
-
         Assert.AreEqual("trendyol", adapter.Channel);
         Assert.IsTrue(adapter.Capabilities.Supports(MarketplaceOperation.ProductsRead));
         Assert.IsTrue(adapter.Capabilities.Supports(MarketplaceOperation.OrdersRead));
-        Assert.IsTrue(commands.Any(x => x.Name == "MarketplaceOperation_ProductsRead"));
-        Assert.IsTrue(commands.Any(x => x.Name == "MarketplaceOperation_OrdersRead"));
-        CollectionAssert.IsSubsetOf(new[] { "Ürünleri oku", "Siparişleri oku", "Ürün yönetimi", "İçerik yönetimi", "Kategori eşleştirme", "Marka eşleştirme", "Teslimat yönetimi" },
-            commands.Select(x => x.Content?.ToString()).ToArray());
-        Assert.IsFalse(commands.Any(x => x.Content?.ToString() is "ProductManagement" or "ContentWrite" or "CategoryWrite" or "BrandWrite" or "DeliveryWrite"));
+        Assert.AreEqual(0, Walk(host).OfType<Button>().Count(x => x.Name.StartsWith("MarketplaceOperation_", StringComparison.Ordinal)));
+        Assert.IsNotNull(Walk(host).OfType<Button>().Single(x => x.Name == "MarketplaceShowAccounts"));
     });
 
     [TestMethod]
@@ -249,6 +250,9 @@ public sealed class MarketplaceAccountNavigationTests
 
             Assert.AreEqual(Visibility.Collapsed, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
             Assert.AreEqual(Visibility.Collapsed, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "ProductSummaryBar").Visibility);
+
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "marketplaces"));
+            Assert.AreEqual(Visibility.Collapsed, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
 
             navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "categories"));
             Assert.AreEqual(Visibility.Visible, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);

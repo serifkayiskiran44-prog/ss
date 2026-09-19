@@ -90,7 +90,7 @@ public partial class MainWindow
   selectingRoute = true;
   try { NavigationList.SelectedItem = item; ModuleTabs.SelectedItem = page; } finally { selectingRoute = false; }
   // Ürün ekranının kendi arama ve işlem araçları vardır; ortak başlık ve özet şeridi tablo alanını daraltmasın.
-  PageHeader.Visibility = key == "products" ? Visibility.Collapsed : Visibility.Visible;
+  PageHeader.Visibility = key is "products" or "marketplaces" ? Visibility.Collapsed : Visibility.Visible;
   ProductSummaryBar.Visibility = Visibility.Collapsed;
   PageTitle.Text = title ?? routeTitles[key];
   PageDescription.Text = description ?? item.ToolTip?.ToString() ?? "";

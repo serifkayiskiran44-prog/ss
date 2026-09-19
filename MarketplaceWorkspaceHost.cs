@@ -10,9 +10,8 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
     readonly MarketplaceConnectionStore connections;
     readonly MarketplaceAdapterRegistry registry;
     readonly ComboBox switcher = new() { Name = "MarketplaceAccountSwitcher", MinWidth = 240, DisplayMemberPath = nameof(MarketplaceConnection.DisplayName), SelectedValuePath = nameof(MarketplaceConnection.Id) };
-    readonly TextBlock title = new() { FontSize = 19, FontWeight = FontWeights.SemiBold };
+    readonly TextBlock title = new() { FontSize = 16, FontWeight = FontWeights.SemiBold };
     readonly TextBlock detail = new() { Foreground = Brushes.SlateGray, TextWrapping = TextWrapping.Wrap };
-    readonly WrapPanel commands = new() { Margin = new Thickness(0, 7, 0, 0) };
     readonly ContentControl body = new() { Name = "MarketplaceWorkspaceBody" };
     bool selecting;
     bool disposed;
@@ -20,6 +19,7 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
     public string ConnectionId { get; private set; } = "";
     public IMarketplaceAdapter Adapter { get; private set; } = null!;
     public UIElement Workspace => (UIElement)body.Content;
+    public event Action? AccountsRequested;
 
     MarketplaceWorkspaceHost(string connectionId, string? directory, MarketplaceAdapterRegistry registry)
     {
@@ -32,7 +32,7 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
             Background = new SolidColorBrush(Color.FromRgb(240, 245, 247)),
             BorderBrush = new SolidColorBrush(Color.FromRgb(215, 226, 230)),
             BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(12),
+            Padding = new Thickness(8, 5, 8, 5),
             Child = BuildHeader()
         };
         DockPanel.SetDock(header, Dock.Top);
@@ -79,7 +79,6 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
         Adapter = adapter;
         title.Text = connection.DisplayName;
         detail.Text = $"{MarketplaceConnectionCatalog.Get(connection.Channel).Name} · {connection.ShopId} · {MarketplaceStatusText.ToTurkish(connection.Status)}";
-        RebuildCommands(adapter.Capabilities);
         RefreshAccounts();
     }
 
@@ -98,56 +97,21 @@ public sealed class MarketplaceWorkspaceHost : UserControl, IDisposable
         }
     };
 
-    StackPanel BuildHeader()
+    DockPanel BuildHeader()
     {
-        var panel = new StackPanel();
         var row = new DockPanel();
+        var accounts = new Button { Name = "MarketplaceShowAccounts", Content = "Mağazalar", Margin = new Thickness(6, 3, 3, 3), Padding = new Thickness(10, 5, 10, 5) };
+        accounts.Click += (_, _) => AccountsRequested?.Invoke();
+        DockPanel.SetDock(accounts, Dock.Right);
+        row.Children.Add(accounts);
         DockPanel.SetDock(switcher, Dock.Right);
         row.Children.Add(switcher);
         var identity = new StackPanel();
         identity.Children.Add(title);
         identity.Children.Add(detail);
         row.Children.Add(identity);
-        panel.Children.Add(row);
-        panel.Children.Add(commands);
-        return panel;
+        return row;
     }
-
-    void RebuildCommands(MarketplaceCapabilities capabilities)
-    {
-        commands.Children.Clear();
-        foreach (var operation in Enum.GetValues<MarketplaceOperation>().Where(capabilities.Supports))
-        {
-            commands.Children.Add(new Button
-            {
-                Name = "MarketplaceOperation_" + operation,
-                Content = OperationLabel(operation),
-                IsHitTestVisible = false,
-                Focusable = false,
-                Margin = new Thickness(3)
-            });
-        }
-    }
-
-    static string OperationLabel(MarketplaceOperation operation) => operation switch
-    {
-        MarketplaceOperation.ProductsRead => "Ürünleri oku",
-        MarketplaceOperation.OrdersRead => "Siparişleri oku",
-        MarketplaceOperation.StockWrite => "Stok yönetimi",
-        MarketplaceOperation.PriceWrite => "Fiyat yönetimi",
-        MarketplaceOperation.Shipment => "Kargo yönetimi",
-        MarketplaceOperation.ProductManagement => "Ürün yönetimi",
-        MarketplaceOperation.ContentWrite => "İçerik yönetimi",
-        MarketplaceOperation.CategoryWrite => "Kategori eşleştirme",
-        MarketplaceOperation.BrandWrite => "Marka eşleştirme",
-        MarketplaceOperation.DeliveryWrite => "Teslimat yönetimi",
-        MarketplaceOperation.TaxonomyWrite => "Kategori ve özellikler",
-        MarketplaceOperation.PropertiesWrite => "Ürün özellikleri",
-        MarketplaceOperation.ShippingWrite => "Kargo ve teslimat",
-        MarketplaceOperation.ReadinessWrite => "Yayın uygunluğu",
-        MarketplaceOperation.ListingCreate => "Yeni ilan oluşturma",
-        _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, null)
-    };
 
     public void Dispose()
     {
