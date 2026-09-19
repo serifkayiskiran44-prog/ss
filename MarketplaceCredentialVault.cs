@@ -2,6 +2,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using TrMarketplaceHubDesktop.Hepsiburada;
 
 namespace TrMarketplaceHubDesktop;
 
@@ -139,6 +140,7 @@ public sealed class MarketplaceCredentialVault
         var exactType = payload!.GetType();
         if (channel == "etsy" && typeof(T) == typeof(EtsyCredentials) && exactType == typeof(EtsyCredentials)) return;
         if (channel == "trendyol" && typeof(T) == typeof(TrendyolSettings) && exactType == typeof(TrendyolSettings)) return;
+        if (channel == "hepsiburada" && typeof(T) == typeof(HepsiburadaCredentials) && exactType == typeof(HepsiburadaCredentials)) return;
         throw new ArgumentException("Bu kanal için bağlantı bilgisi türü desteklenmiyor.", nameof(payload));
     }
 
@@ -146,7 +148,8 @@ public sealed class MarketplaceCredentialVault
     {
         if (channel == "etsy" && typeof(T) == typeof(EtsyCredentials)) return;
         if (channel == "trendyol" && typeof(T) == typeof(TrendyolSettings)) return;
-        if (typeof(T) == typeof(EtsyCredentials) || typeof(T) == typeof(TrendyolSettings))
+        if (channel == "hepsiburada" && typeof(T) == typeof(HepsiburadaCredentials)) return;
+        if (typeof(T) == typeof(EtsyCredentials) || typeof(T) == typeof(TrendyolSettings) || typeof(T) == typeof(HepsiburadaCredentials))
             throw new InvalidOperationException(RecoveryMessage);
         throw new ArgumentException("Bu kanal için bağlantı bilgisi türü desteklenmiyor.");
     }
@@ -166,6 +169,13 @@ public sealed class MarketplaceCredentialVault
             TrendyolConnection.Validate(trendyol);
             if (!string.Equals(channel, "trendyol", StringComparison.Ordinal) || !string.Equals(trendyol.SupplierId, shopId, StringComparison.Ordinal))
                 throw new ArgumentException("Trendyol bağlantı bilgisi hesap kimliğiyle eşleşmiyor.", nameof(payload));
+        }
+        else if (payload?.GetType() == typeof(HepsiburadaCredentials))
+        {
+            var hepsiburada = (HepsiburadaCredentials)(object)payload;
+            HepsiburadaConnection.Validate(hepsiburada);
+            if (!string.Equals(channel, "hepsiburada", StringComparison.Ordinal) || !string.Equals(hepsiburada.MerchantId, shopId, StringComparison.Ordinal))
+                throw new ArgumentException("Hepsiburada bağlantı bilgisi hesap kimliğiyle eşleşmiyor.", nameof(payload));
         }
         else throw new ArgumentException("Bağlantı bilgisi türü desteklenmiyor.", nameof(payload));
     }
