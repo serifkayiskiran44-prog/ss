@@ -29,6 +29,7 @@ public sealed class MarketplaceOrderSyncService
     readonly MarketplaceAdapterRegistry adapters;
     readonly OrdersStore orders;
     readonly OrderStockDecisionService stock;
+    readonly MarketplaceShopSettingsStore settings;
     readonly Func<DateTime> utcNow;
     readonly Action<MarketplaceConnection>? beforePersist;
     readonly Action<MarketplaceConnection>? beforeSyncStatePersist;
@@ -41,6 +42,7 @@ public sealed class MarketplaceOrderSyncService
         this.adapters = adapters ?? MarketplaceAdapterRegistry.CreateDefault(directory);
         orders = new(directory);
         stock = new(directory);
+        settings = new(directory, this.adapters);
         this.utcNow = utcNow ?? (() => DateTime.UtcNow);
         this.beforePersist = beforePersist;
         this.beforeSyncStatePersist = beforeSyncStatePersist;
@@ -52,14 +54,15 @@ public sealed class MarketplaceOrderSyncService
         foreach (var connection in MarketplaceOperationalAccounts.List(connections))
         {
             token.ThrowIfCancellationRequested();
-            IMarketplaceAdapter adapter;
-            try { adapter = adapters.Get(connection.Channel); }
-            catch (ArgumentException) { continue; }
-            if (!adapter.Capabilities.Supports(MarketplaceOperation.OrdersRead)) continue;
             try
             {
-                results.Add(await RefreshAsync(connection, adapter, token).ConfigureAwait(false));
+                var adapter = adapters.Get(connection.Channel);
+                if (!adapter.Capabilities.Supports(MarketplaceOperation.OrdersRead)) continue;
+                var accountSettings = settings.Load(connection.Id);
+                if (!OrdersEnabled(accountSettings)) continue;
+                results.Add(await RefreshAsync(connection, adapter, accountSettings, token).ConfigureAwait(false));
             }
+            catch (ArgumentException) { continue; }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
             catch
             {
@@ -72,7 +75,7 @@ public sealed class MarketplaceOrderSyncService
         return results;
     }
 
-    async Task<MarketplaceOrderSyncResult> RefreshAsync(MarketplaceConnection connection, IMarketplaceAdapter adapter, CancellationToken token)
+    async Task<MarketplaceOrderSyncResult> RefreshAsync(MarketplaceConnection connection, IMarketplaceAdapter adapter, MarketplaceShopSettings accountSettings, CancellationToken token)
     {
         var now = Utc(utcNow());
         var stored = orders.GetSyncState(connection.Id);
@@ -89,7 +92,7 @@ public sealed class MarketplaceOrderSyncService
         {
             var remote = await adapter.ReadOrdersAsync(connection.Id, cursor, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
-            if (!StillCurrent(connection)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
+            if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
             if (remote.Count > 10_000) throw new InvalidOperationException("Sipariş okuma güvenli kayıt sınırını aştı.");
 
             var seen = new HashSet<(string Marketplace, string Shop, string Order)>(new OrderKeyComparer());
@@ -103,19 +106,20 @@ public sealed class MarketplaceOrderSyncService
                 normalized.Add(copy);
             }
 
-            if (!StillCurrent(connection)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
+            if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
             beforePersist?.Invoke(connection);
+            if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
             var applied = 0;var resolved = new List<AccountOrderStockResolution>(normalized.Count);
             foreach (var copy in normalized)
             {
                 token.ThrowIfCancellationRequested();
                 var decision = stock.ResolveAccountOrder(connection, copy);resolved.Add(decision);
-                var result = stock.ApplyAccountOrder(connection, decision, !decision.ReviewRequired && IsStockDeductible(decision.Order));
+                var result = stock.ApplyAccountOrder(connection, decision, !decision.ReviewRequired && IsStockDeductible(decision.Order), accountSettings.Revision);
                 if (result.StockApplied) applied++;
             }
             var nextCursor = resolved.Count == 0 ? cursor : resolved.Max(item => item.Order.SourceUpdatedAt.UtcDateTime);
             if (nextCursor < cursor) nextCursor = cursor;
-            if (!StillCurrent(connection)) return Result(connection, MarketplaceOrderSyncStatus.Stale, resolved.Count, applied, resolved.Count(item => item.ReviewRequired), cursor, "");
+            if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, resolved.Count, applied, resolved.Count(item => item.ReviewRequired), cursor, "");
             var nextState = new OrdersStore.SyncState(connection.Id, connection.Channel, connection.ShopId, connection.Revision,
                 nextCursor, 0, null, "", expectedStateVersion, now);
             beforeSyncStatePersist?.Invoke(connection);
@@ -125,7 +129,7 @@ public sealed class MarketplaceOrderSyncService
         catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
         catch (Exception error)
         {
-            if (!StillCurrent(connection)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
+            if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
             var failures = checked((sameGeneration ? stored!.FailureCount : 0) + 1);
             var delayMinutes = Math.Min(60, 1 << Math.Min(6, failures - 1));
             var safeError = SafeError(error);
@@ -142,16 +146,25 @@ public sealed class MarketplaceOrderSyncService
         }
     }
 
-    bool StillCurrent(MarketplaceConnection expected)
+    bool StillCurrent(MarketplaceConnection expected, long expectedSettingsRevision)
     {
         MarketplaceConnection? current;
         try { current = connections.Get(expected.Id); }
         catch (MarketplaceConnectionCorruptException) { return false; }
-        return current is not null && MarketplaceOperationalAccounts.IsEligible(current, connections) &&
-            current.Revision == expected.Revision &&
-            current.Channel.Equals(expected.Channel, StringComparison.Ordinal) &&
-            current.ShopId.Equals(expected.ShopId, StringComparison.Ordinal);
+        if (current is null || !MarketplaceOperationalAccounts.IsEligible(current, connections) ||
+            current.Revision != expected.Revision ||
+            !current.Channel.Equals(expected.Channel, StringComparison.Ordinal) ||
+            !current.ShopId.Equals(expected.ShopId, StringComparison.Ordinal)) return false;
+        try
+        {
+            var currentSettings = settings.Load(expected.Id);
+            return currentSettings.Revision == expectedSettingsRevision && OrdersEnabled(currentSettings);
+        }
+        catch (Exception) { return false; }
     }
+
+    static bool OrdersEnabled(MarketplaceShopSettings value) =>
+        value.Active && value.OrderRules.Enabled && value.Sync.OrdersEnabled;
 
     static MarketplaceOrderSyncResult Result(MarketplaceConnection connection, MarketplaceOrderSyncStatus status,
         int read, int applied, int review, DateTime cursor, string error) =>

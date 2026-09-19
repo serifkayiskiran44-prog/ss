@@ -651,3 +651,12 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M120 Etsy product surface: ürün, Etsy şablonu, credential/shop ve listing mapping’i birleştiren read-only readiness kararı ve wrong-shop negatif testi eklendi (docs/taskpacks/M120.md).
 - [x] M121 supporting screen parity: operasyon sayaçları için ortak gerçek-snapshot özeti eklendi ve dashboard durum satırı bu sözleşmeyi kullanıyor (docs/taskpacks/M121.md).
 - [x] M122 final screen parity: merkezi navigation route audit’i eksik paneli BLOCKED raporlıyor ve mevcut rotaların tam sözleşmesini test ediyor (docs/taskpacks/M122.md).
+
+## Multi-store production integration closure — 2026-09-19
+
+- [x] XML manual/background apply now treats `ProductSourceBindings` as the authority for Content, Price and OnlineStock; exact enabled source ownership is required, a newly reassigned Content owner safely adopts its own source identity only from one unambiguous global SKU/barcode match, and another supplier's reused source-local ID cannot hijack the old product.
+- [x] Orders exposes physical-location management; a fresh profile can create a named physical location and then use immutable transfer preview/receipt plus manual-sale receipt flows.
+- [x] Order reads require account `Active`, `OrderRules.Enabled` and `Sync.OrdersEnabled`; disabled accounts perform zero adapter calls and failures remain account-isolated.
+- [x] Scheduled product reads remain explicitly unsupported because the current account adapter contract has no safe implementation; the stored true state is rejected and the UI control is disabled with an explanation.
+- [x] No live HTTP or marketplace write was used. All seven `DEFERRED_BY_USER` areas remain unchanged.
+- [x] Final verification: exact Release suite **1353/1353** passed; clean self-contained `Windows-Excel-Final` package and visible MainWindow smoke passed (package SHA-256 `5b2fe3036b0a2171db1813048e5bf2e0efdf422b657b6a8a2ea70f7125fb2d00`).

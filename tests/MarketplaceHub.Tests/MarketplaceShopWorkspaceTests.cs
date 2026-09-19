@@ -124,7 +124,9 @@ public sealed class MarketplaceShopWorkspaceTests
         Assert.IsFalse(Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Fiyatı varsayılan olarak yönet")).IsEnabled);
         Assert.IsFalse(Walk(panel).OfType<TextBox>().Single(x => x.Name == "MarketplaceDefaultCategory").IsEnabled);
         Assert.IsFalse(Walk(panel).OfType<TabItem>().Single(x => Equals(x.Header, "Order rules")).IsEnabled);
-        Assert.IsTrue(Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Ürün okumayı zamanla")).IsEnabled);
+        var productSchedule = Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Ürün okumayı zamanla"));
+        Assert.IsFalse(productSchedule.IsEnabled);
+        StringAssert.Contains(productSchedule.ToolTip!.ToString()!, "desteklenmiyor");
         Assert.IsFalse(Walk(panel).OfType<CheckBox>().Single(x => Equals(x.Content, "Sipariş okumayı zamanla")).IsEnabled);
     });
 
@@ -230,7 +232,7 @@ public sealed class MarketplaceShopWorkspaceTests
         var saved = store.Save(firstInitial with
         {
             ProductRules = firstInitial.ProductRules with { DefaultCategoryId = "11", DefaultTemplateId = "ship-a", ManagePrice = true },
-            Sync = firstInitial.Sync with { ProductsEnabled = true, IntervalMinutes = 30 }
+            Sync = firstInitial.Sync with { IntervalMinutes = 30 }
         }, firstInitial.Revision, first.Revision);
 
         Assert.AreEqual(1L, saved.Revision);

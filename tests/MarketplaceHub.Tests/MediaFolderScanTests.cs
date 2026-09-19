@@ -93,7 +93,15 @@ public sealed class MediaFolderScanTests
             catalog.SaveSource(new XmlSource { Id = "a", Location = "https://example.test/a.xml" });
             catalog.SaveSource(new XmlSource { Id = "b", Location = "https://example.test/b.xml" });
             catalog.Import(new XmlSource { Id = "a", Location = "https://example.test/a.xml" }, [new CatalogProduct { SourceId = "a", Sku = "SHARED-1", Name = "A", Price = 10, Currency = "USD" }]);
-            catalog.Import(new XmlSource { Id = "b", Location = "https://example.test/b.xml" }, [new CatalogProduct { SourceId = "b", Sku = "SHARED-1", Name = "B", Price = 10, Currency = "USD" }]);
+            var duplicate = new CatalogProduct { Id = Guid.NewGuid().ToString("N"), SourceId = "b", Sku = "SHARED-1", Name = "B", Price = 10, Currency = "USD" };
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + Path.Combine(root, "catalog.db")))
+            {
+                connection.Open(); using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO CatalogProducts(Id,Json) VALUES($id,$json)";
+                command.Parameters.AddWithValue("$id", duplicate.Id);
+                command.Parameters.AddWithValue("$json", System.Text.Json.JsonSerializer.Serialize(duplicate));
+                command.ExecuteNonQuery();
+            }
             File.WriteAllBytes(Path.Combine(folder, "SHARED-1.jpg"), [1]);
 
             var preview = MediaFolderScan.Preview(folder, catalog.Products());

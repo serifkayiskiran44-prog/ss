@@ -32,6 +32,7 @@ public sealed record MarketplaceShopSettingsPatch(
 
 public sealed class MarketplaceShopSettingsStore
 {
+    public const bool ScheduledProductReadsSupported = false;
     readonly MarketplaceConnectionStore connections;
     readonly MarketplaceAdapterRegistry registry;
     readonly string connectionString;
@@ -189,8 +190,8 @@ public sealed class MarketplaceShopSettingsStore
         if ((state.OrderRules.Enabled || state.OrderRules.AutoAcknowledge || state.Sync.OrdersEnabled) &&
             !capabilities.Supports(MarketplaceOperation.OrdersRead))
             throw new InvalidOperationException("Adapter sipariş kurallarını desteklemiyor.");
-        if (state.Sync.ProductsEnabled && !capabilities.Supports(MarketplaceOperation.ProductsRead))
-            throw new InvalidOperationException("Adapter ürün senkronunu desteklemiyor.");
+        if (state.Sync.ProductsEnabled && (!capabilities.Supports(MarketplaceOperation.ProductsRead) || !ScheduledProductReadsSupported))
+            throw new InvalidOperationException("Hesap kapsamlı zamanlanmış ürün okuma henüz desteklenmiyor.");
     }
 
     internal static bool SupportsCategory(MarketplaceCapabilities capabilities) =>
@@ -268,7 +269,7 @@ public sealed class MarketplaceShopSettingsPanel : UserControl
         active.IsChecked = state.Active; content.IsChecked = state.ProductRules.ManageContent; price.IsChecked = state.ProductRules.ManagePrice; stock.IsChecked = state.ProductRules.ManageStock;
         category.Text = state.ProductRules.DefaultCategoryId; brand.Text = state.ProductRules.DefaultBrandId; template.Text = state.ProductRules.DefaultTemplateId; shipping.Text = state.ProductRules.DefaultShippingId; source.Text = state.ProductRules.ContentSource;
         orders.IsChecked = state.OrderRules.Enabled; acknowledge.IsChecked = state.OrderRules.AutoAcknowledge; location.Text = state.OrderRules.StockLocationId;
-        syncProducts.IsChecked = state.Sync.ProductsEnabled; syncOrders.IsChecked = state.Sync.OrdersEnabled; interval.Text = state.Sync.IntervalMinutes.ToString(CultureInfo.CurrentCulture);
+        syncProducts.IsChecked = MarketplaceShopSettingsStore.ScheduledProductReadsSupported && state.Sync.ProductsEnabled; syncOrders.IsChecked = state.Sync.OrdersEnabled; interval.Text = state.Sync.IntervalMinutes.ToString(CultureInfo.CurrentCulture);
     }
 
     UIElement ProductSection()
@@ -288,7 +289,8 @@ public sealed class MarketplaceShopSettingsPanel : UserControl
         template.IsEnabled = MarketplaceShopSettingsStore.SupportsTemplate(capabilities);
         shipping.IsEnabled = MarketplaceShopSettingsStore.SupportsShipping(capabilities);
         orders.IsEnabled = acknowledge.IsEnabled = location.IsEnabled = capabilities.Supports(MarketplaceOperation.OrdersRead);
-        syncProducts.IsEnabled = capabilities.Supports(MarketplaceOperation.ProductsRead);
+        syncProducts.IsEnabled = capabilities.Supports(MarketplaceOperation.ProductsRead) && MarketplaceShopSettingsStore.ScheduledProductReadsSupported;
+        if (!syncProducts.IsEnabled) syncProducts.ToolTip = "Hesap kapsamlı zamanlanmış ürün okuma bu sürümde desteklenmiyor; uzman ürün ekranından manuel okuma kullanın.";
         syncOrders.IsEnabled = capabilities.Supports(MarketplaceOperation.OrdersRead);
         interval.IsEnabled = syncProducts.IsEnabled || syncOrders.IsEnabled;
     }

@@ -27,6 +27,7 @@ public sealed class UnifiedOrdersPanelTests
         Assert.IsNotNull(controls.OfType<ListBox>().SingleOrDefault(control => control.Name == "MarketplaceOrderSourceFilter"));
         Assert.IsNotNull(controls.OfType<ComboBox>().SingleOrDefault(control => control.Name == "MarketplaceOrderReviewFilter"));
         Assert.IsNotNull(controls.OfType<Button>().SingleOrDefault(control => control.Name == "ManualStoreSaleButton"));
+        Assert.IsNotNull(controls.OfType<Button>().SingleOrDefault(control => control.Name == "InventoryLocationsButton"));
         var grid = controls.OfType<DataGrid>().Single();
         Assert.IsTrue(grid.Columns.Any(column => Equals(column.Header, "Hesap")));
     });
@@ -143,6 +144,27 @@ public sealed class UnifiedOrdersPanelTests
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
             foreach (var child in Walk(VisualTreeHelper.GetChild(root, i))) yield return child;
     }
+
+    [TestMethod]
+    public void FreshProfileCanCreatePhysicalLocationTransferStockAndCompleteManualSale() => InSta(root =>
+    {
+        var catalog = new CatalogStore(root);
+        var product = catalog.CreateManual(new() { Sku = "FRESH", Name = "Fresh", Stock = 5, Currency = "TRY" });
+        var locations = new InventoryLocationManagementModel(root);
+
+        var physical = locations.CreatePhysicalStore("Kadikoy");
+        Assert.ThrowsException<InvalidOperationException>(() => locations.CreatePhysicalStore(" kadikoy "));
+        Assert.ThrowsException<ArgumentException>(() => locations.CreatePhysicalStore("  "));
+        var preview = locations.PreviewTransfer(product.Id, InventoryLocationStore.OnlineLocationId, physical.Id, 3);
+        locations.ApplyTransfer(preview);
+        var sale = new ManualSaleService(root);
+        sale.Apply(sale.Preview(product.Id, physical.Id, 2), approved: true);
+
+        var inventory = new InventoryLocationStore(root);
+        Assert.AreEqual(2, inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+        Assert.AreEqual(1, inventory.GetBalance(product.Id, physical.Id).Quantity);
+        Assert.AreEqual(1, new OrdersStore(root).ReadAll().Count(order => order.IsPhysicalSale));
+    });
 
     static void InSta(Action<string> action)
     {

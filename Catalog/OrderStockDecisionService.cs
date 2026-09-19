@@ -65,7 +65,7 @@ public sealed class OrderStockDecisionService
   ArgumentNullException.ThrowIfNull(resolution);if(resolution.ReviewRequired||resolution.Lines.Count==0)throw new InvalidOperationException("İnceleme gerektiren sipariş stoktan düşülemez.");
   return catalog.ApplyResolvedOrderStock(resolution.Order.Marketplace,resolution.Order.ShopId,resolution.Order.OrderId,resolution.Lines);
  }
- public AccountOrderApplyResult ApplyAccountOrder(MarketplaceConnection connection,AccountOrderStockResolution resolution,bool deductStock)=>catalog.ApplyAccountOrder(connection,resolution,deductStock);
+public AccountOrderApplyResult ApplyAccountOrder(MarketplaceConnection connection,AccountOrderStockResolution resolution,bool deductStock,long? expectedSettingsRevision=null)=>catalog.ApplyAccountOrder(connection,resolution,deductStock,expectedSettingsRevision);
 
  IReadOnlyList<ResolvedOrderStockLine> Capture(IEnumerable<(CatalogProduct Product,int Quantity)> products)=>products.OrderBy(item=>item.Product.Id,StringComparer.Ordinal).Select(item=>
  {

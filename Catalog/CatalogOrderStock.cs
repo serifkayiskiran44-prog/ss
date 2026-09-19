@@ -214,14 +214,14 @@ public partial class CatalogStore
   return new(false,receipt);
  }
 
- public AccountOrderApplyResult ApplyAccountOrder(MarketplaceConnection expected,AccountOrderStockResolution resolution,bool deductStock)
+ public AccountOrderApplyResult ApplyAccountOrder(MarketplaceConnection expected,AccountOrderStockResolution resolution,bool deductStock,long? expectedSettingsRevision=null)
  {
   ArgumentNullException.ThrowIfNull(expected);ArgumentNullException.ThrowIfNull(resolution);_ = new OrdersStore(DataDirectory);
   using var connection=Open();using(var attach=connection.CreateCommand()){attach.CommandText="ATTACH DATABASE $path AS ordersdb";attach.Parameters.AddWithValue("$path",System.IO.Path.Combine(DataDirectory,"orders.db"));attach.ExecuteNonQuery();}
   SqliteTransaction? transaction=null;
   try
   {
-   transaction=connection.BeginTransaction(deferred:false);ValidateConnectionFence(connection,transaction,expected);
+   transaction=connection.BeginTransaction(deferred:false);ValidateConnectionFence(connection,transaction,expected);if(expectedSettingsRevision.HasValue)ValidateOrderSettingsFence(connection,transaction,expected.Id,expectedSettingsRevision.Value);
    if(!resolution.Order.ConnectionId.Equals(expected.Id,StringComparison.Ordinal)||!resolution.Order.ShopId.Equals(expected.ShopId,StringComparison.Ordinal))throw new InvalidOperationException("Sipariş hesap kimliği bağlantı çitiyle uyuşmuyor.");
    var orderApplied=OrdersStore.SaveAttached(connection,transaction,resolution.Order);OrderStockResult? stockResult=null;
    if(!orderApplied){transaction.Commit();return new(false,false,false);}
@@ -237,6 +237,11 @@ public partial class CatalogStore
   {
    transaction?.Dispose();using var detach=connection.CreateCommand();detach.CommandText="DETACH DATABASE ordersdb";detach.ExecuteNonQuery();
   }
+ }
+
+ static void ValidateOrderSettingsFence(SqliteConnection connection,SqliteTransaction transaction,string connectionId,long expectedRevision)
+ {
+  using var command=connection.CreateCommand();command.Transaction=transaction;command.CommandText="SELECT Revision,Json FROM MarketplaceShopSettings WHERE ConnectionId=$connection";command.Parameters.AddWithValue("$connection",connectionId);using var reader=command.ExecuteReader();if(!reader.Read()||reader.GetInt64(0)!=expectedRevision)throw new InvalidOperationException("Mağaza senkron ayarları değişti; sipariş uygulanmadı.");MarketplaceShopSettings? settings;try{settings=JsonSerializer.Deserialize<MarketplaceShopSettings>(reader.GetString(1));}catch(JsonException){throw new InvalidOperationException("Mağaza senkron ayarları bozuk; sipariş uygulanmadı.");}if(settings is null||settings.ConnectionId!=connectionId||settings.Revision!=expectedRevision||!settings.Active||!settings.OrderRules.Enabled||!settings.Sync.OrdersEnabled)throw new InvalidOperationException("Mağaza sipariş senkronu etkin değil; sipariş uygulanmadı.");
  }
 
  static void ValidateBindingFence(SqliteConnection connection,SqliteTransaction transaction,MarketplaceConnection expected,IReadOnlyList<ResolvedOrderBinding> snapshots)

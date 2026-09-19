@@ -40,13 +40,24 @@ public sealed class InventoryLocationStore
         ValidateId(id, nameof(id));
         if (string.IsNullOrWhiteSpace(name) || name.Length > 200) throw new ArgumentException("Mağaza adı zorunlu ve en fazla 200 karakter olabilir.", nameof(name));
         id = id.Trim(); name = name.Trim();
-        using var connection = Open(); using var command = connection.CreateCommand();
+        using var connection = Open(); using var transaction = connection.BeginTransaction(deferred: false);
+        using (var duplicate = connection.CreateCommand())
+        {
+            duplicate.Transaction = transaction;
+            duplicate.CommandText = "SELECT 1 FROM InventoryLocations WHERE Kind=$kind AND Name=$name COLLATE NOCASE LIMIT 1";
+            duplicate.Parameters.AddWithValue("$kind", (int)InventoryLocationKind.PhysicalStore); duplicate.Parameters.AddWithValue("$name", name);
+            if (duplicate.ExecuteScalar() is not null) throw new InvalidOperationException("Bu adla bir fiziksel envanter konumu zaten var.");
+        }
+        using var command = connection.CreateCommand(); command.Transaction = transaction;
         command.CommandText = "INSERT INTO InventoryLocations(Id,Name,Kind,Enabled,Version) VALUES($id,$name,$kind,1,1)";
         command.Parameters.AddWithValue("$id", id); command.Parameters.AddWithValue("$name", name); command.Parameters.AddWithValue("$kind", (int)InventoryLocationKind.PhysicalStore);
-        try { command.ExecuteNonQuery(); }
+        try { command.ExecuteNonQuery(); transaction.Commit(); }
         catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { throw new InvalidOperationException("Bu envanter konumu zaten var.", ex); }
         return new(id, name, InventoryLocationKind.PhysicalStore, true, 1);
     }
+
+    public InventoryLocation CreatePhysicalStore(string name) =>
+        CreatePhysicalStore("physical-" + Guid.NewGuid().ToString("N"), name);
 
     public InventoryBalance GetBalance(string productId, string locationId)
     {
@@ -226,4 +237,15 @@ public sealed class InventoryLocationStore
         if (product is null) throw new InvalidOperationException("Merkezi ürün bulunamadı.");
         product.Stock = quantity; product.LockStock = true; product.UpdatedUtc = at; CatalogStore.Put(connection, "CatalogProducts", product.Id, product, transaction);
     }
+}
+
+public sealed class InventoryLocationManagementModel
+{
+    readonly InventoryLocationStore inventory;
+    public InventoryLocationManagementModel(string? directory = null) => inventory = new(directory);
+    public IReadOnlyList<InventoryLocation> Locations => inventory.Locations();
+    public InventoryLocation CreatePhysicalStore(string name) => inventory.CreatePhysicalStore(name);
+    public InventoryTransferPreview PreviewTransfer(string productId, string fromLocationId, string toLocationId, int quantity) =>
+        inventory.PreviewTransfer(productId, fromLocationId, toLocationId, quantity);
+    public InventoryApplyResult ApplyTransfer(InventoryTransferPreview preview) => inventory.ApplyTransfer(preview);
 }

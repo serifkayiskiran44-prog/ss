@@ -71,6 +71,15 @@ public sealed class ProductSourceBindingTests
         }
     }
 
+    sealed class StaticXmlHandler(string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+        }
+    }
+
     static void SetField(object target, string name, object value) =>
         target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
 
@@ -166,6 +175,205 @@ public sealed class ProductSourceBindingTests
     }
 
     [TestMethod]
+    public async Task ManualAndScheduledXmlRefreshUpdateOnlyTheirOwnedGroupsWithoutDuplicatingIdentity()
+    {
+        var root = NewRoot();
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var content = Source(Guid.NewGuid().ToString("N"));
+            var price = Source(Guid.NewGuid().ToString("N"));
+            content.UpdateName = true;
+            price.UpdateName = true;
+            content.Fields["SourceProductId"] = "ref";
+            price.Fields["SourceProductId"] = "ref";
+            catalog.SaveSource(content); catalog.SaveSource(price);
+            var initialFeed = Feed.Replace("<sku>", "<ref>content-ref</ref><sku>");
+            catalog.Import(content, XmlCatalog.Preview(initialFeed, content));
+            var product = catalog.Products().Single();
+            var bindings = new ProductSourceBindingStore(root);
+            bindings.MigrateFromCatalog();
+            var priceBinding = bindings.Get(product.Id).Single(x => x.Group == ProductFieldGroup.Price);
+            bindings.Save(priceBinding with { SourceId = price.Id }, priceBinding.Version);
+            var stockBinding = bindings.Get(product.Id).Single(x => x.Group == ProductFieldGroup.OnlineStock);
+            bindings.Save(stockBinding with { Kind = ProductSourceKind.Manual, SourceId = "" }, stockBinding.Version);
+            var inventory = new InventoryLocationStore(root);
+            var online = inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId);
+            inventory.SetBalance(product.Id, InventoryLocationStore.OnlineLocationId, 7, online.Version);
+
+            var contentFeed = initialFeed.Replace("Product", "Content A").Replace("<price>10", "<price>91").Replace("<stock>4", "<stock>91");
+            catalog.ImportIfSourceCurrent(content, CatalogStore.SourceConfigRevision(content), XmlCatalog.Preview(contentFeed, content, catalog));
+            var afterContent = catalog.Products().Single();
+            Assert.AreEqual("Content A", afterContent.Name);
+            Assert.AreEqual(10m, afterContent.Price);
+            Assert.AreEqual(7, afterContent.Stock);
+
+            var priceFeed = Feed.Replace("<sku>", "<ref>price-ref</ref><sku>").Replace("Product", "Content B").Replace("<price>10", "<price>23").Replace("<stock>4", "<stock>23");
+            using (var scheduled = new ScheduledXmlImportBackgroundJob(root, new HttpClient(new StaticXmlHandler(priceFeed))))
+                await scheduled.ExecuteSourceAsync(price.Id, CancellationToken.None);
+            var afterPrice = catalog.Products().Single();
+            Assert.AreEqual("Content A", afterPrice.Name);
+            Assert.AreEqual(23m, afterPrice.Price);
+            Assert.AreEqual(7, afterPrice.Stock);
+            Assert.AreEqual("content-ref", afterPrice.SourceProductId, "A price-only owner must not replace the content identity.");
+            Assert.AreEqual(content.Id, afterPrice.SourceId, "A price-only owner must not replace the content source.");
+            Assert.AreEqual(1, catalog.Products().Count);
+            Assert.AreEqual(7, inventory.GetBalance(product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+        }
+        finally { Cleanup(root); }
+    }
+
+    [TestMethod]
+    public async Task ReassignedContentOwnerAdoptsItsIdentityOnceThenScheduledRefreshUsesIt()
+    {
+        var root = NewRoot();
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var sourceA = Source(Guid.NewGuid().ToString("N"));
+            var sourceB = Source(Guid.NewGuid().ToString("N"));
+            sourceA.UpdateName = sourceB.UpdateName = true;
+            sourceA.Fields["SourceProductId"] = sourceB.Fields["SourceProductId"] = "ref";
+            catalog.SaveSource(sourceA); catalog.SaveSource(sourceB);
+            catalog.Import(sourceA, XmlCatalog.Preview(Feed.Replace("<sku>", "<ref>a-ref</ref><sku>"), sourceA));
+            var original = catalog.Products().Single();
+            var bindings = new ProductSourceBindingStore(root);
+            var content = bindings.Get(original.Id).Single(binding => binding.Group == ProductFieldGroup.Content);
+            bindings.Save(content with { SourceId = sourceB.Id }, content.Version, original.UpdatedUtc, CatalogStore.SourceConfigRevision(sourceB));
+
+            var firstB = Feed.Replace("<sku>", "<ref>b-ref</ref><sku>").Replace("Product", "B first");
+            catalog.ImportIfSourceCurrent(sourceB, CatalogStore.SourceConfigRevision(sourceB), XmlCatalog.Preview(firstB, sourceB, catalog));
+            var adopted = catalog.Products().Single();
+            Assert.AreEqual(original.Id, adopted.Id);
+            Assert.AreEqual("b-ref", adopted.SourceProductId);
+            Assert.AreEqual(sourceB.Id, adopted.SourceId);
+            Assert.AreEqual("B first", adopted.Name);
+
+            var nextB = firstB.Replace("B first", "B scheduled");
+            using (var scheduled = new ScheduledXmlImportBackgroundJob(root, new HttpClient(new StaticXmlHandler(nextB))))
+                await scheduled.ExecuteSourceAsync(sourceB.Id, CancellationToken.None);
+            var refreshed = catalog.Products().Single();
+            Assert.AreEqual(original.Id, refreshed.Id);
+            Assert.AreEqual("b-ref", refreshed.SourceProductId);
+            Assert.AreEqual("B scheduled", refreshed.Name);
+            Assert.AreEqual(1, catalog.Products().Count);
+
+            var conflictingB = nextB.Replace("b-ref", "b-other");
+            Assert.ThrowsException<InvalidOperationException>(() =>
+                catalog.ImportIfSourceCurrent(sourceB, CatalogStore.SourceConfigRevision(sourceB), XmlCatalog.Preview(conflictingB, sourceB, catalog)));
+            Assert.AreEqual("b-ref", catalog.Products().Single().SourceProductId, "Only the first import after reassignment may adopt the new owner's identity.");
+        }
+        finally { Cleanup(root); }
+    }
+
+    [TestMethod]
+    public async Task ReassignedContentOwnerCannotHijackOldProductThroughAnotherSuppliersReusedLocalId()
+    {
+        var root = NewRoot();
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var sourceA = Source(Guid.NewGuid().ToString("N"));
+            var sourceB = Source(Guid.NewGuid().ToString("N"));
+            sourceA.UpdateName = sourceB.UpdateName = true;
+            sourceA.Fields["SourceProductId"] = sourceB.Fields["SourceProductId"] = "ref";
+            catalog.SaveSource(sourceA); catalog.SaveSource(sourceB);
+            var aFeed = Feed.Replace("<sku>", "<ref>shared-local-id</ref><sku>");
+            catalog.Import(sourceA, XmlCatalog.Preview(aFeed, sourceA));
+            var productA = catalog.Products().Single();
+            var bindings = new ProductSourceBindingStore(root);
+            var content = bindings.Get(productA.Id).Single(binding => binding.Group == ProductFieldGroup.Content);
+            bindings.Save(content with { SourceId = sourceB.Id }, content.Version, productA.UpdatedUtc, CatalogStore.SourceConfigRevision(sourceB));
+
+            var firstB = aFeed.Replace("SKU-1", "SKU-2").Replace("Product", "Supplier B");
+            catalog.ImportIfSourceCurrent(sourceB, CatalogStore.SourceConfigRevision(sourceB), XmlCatalog.Preview(firstB, sourceB, catalog));
+            var afterManual = catalog.Products();
+            Assert.AreEqual(2, afterManual.Count, "A source-local ID reused by another supplier must not identify A's product.");
+            var unchangedA = afterManual.Single(product => product.Id == productA.Id);
+            Assert.AreEqual("SKU-1", unchangedA.Sku);
+            Assert.AreEqual(sourceA.Id, unchangedA.SourceId);
+            Assert.AreEqual("shared-local-id", unchangedA.SourceProductId);
+            var productB = afterManual.Single(product => product.Sku == "SKU-2");
+            Assert.AreEqual(sourceB.Id, productB.SourceId);
+            Assert.AreEqual("shared-local-id", productB.SourceProductId);
+
+            var nextB = firstB.Replace("Supplier B", "Supplier B scheduled");
+            using (var scheduled = new ScheduledXmlImportBackgroundJob(root, new HttpClient(new StaticXmlHandler(nextB))))
+                await scheduled.ExecuteSourceAsync(sourceB.Id, CancellationToken.None);
+            var afterScheduled = catalog.Products();
+            Assert.AreEqual(2, afterScheduled.Count);
+            Assert.AreEqual(productB.Id, afterScheduled.Single(product => product.Sku == "SKU-2").Id, "Subsequent B reads must follow B's own persisted local identity.");
+            Assert.AreEqual("Supplier B scheduled", afterScheduled.Single(product => product.Id == productB.Id).Name);
+            Assert.AreEqual("SKU-1", afterScheduled.Single(product => product.Id == productA.Id).Sku);
+        }
+        finally { Cleanup(root); }
+    }
+
+    [TestMethod]
+    public void ContentOwnershipReassignmentRejectsStaleSourceRevision()
+    {
+        var root = NewRoot();
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var sourceA = Source(Guid.NewGuid().ToString("N"));
+            var sourceB = Source(Guid.NewGuid().ToString("N"));
+            catalog.SaveSource(sourceA); catalog.SaveSource(sourceB);
+            catalog.Import(sourceA, XmlCatalog.Preview(Feed, sourceA));
+            var product = catalog.Products().Single();
+            var store = new ProductSourceBindingStore(root);
+            var content = store.Get(product.Id).Single(binding => binding.Group == ProductFieldGroup.Content);
+            var staleRevision = CatalogStore.SourceConfigRevision(sourceB);
+            sourceB.MarkupPercent = 15;
+            catalog.SaveSource(sourceB);
+
+            Assert.ThrowsException<InvalidOperationException>(() =>
+                store.Save(content with { SourceId = sourceB.Id }, content.Version, product.UpdatedUtc, staleRevision));
+            var unchanged = store.Get(product.Id).Single(binding => binding.Group == ProductFieldGroup.Content);
+            Assert.AreEqual(sourceA.Id, unchanged.SourceId);
+            Assert.AreEqual(content.Version, unchanged.Version);
+        }
+        finally { Cleanup(root); }
+    }
+
+    [TestMethod]
+    public void ReassignedContentOwnerFailsClosedWhenGlobalIdentityIsAmbiguous()
+    {
+        var root = NewRoot();
+        try
+        {
+            var catalog = new CatalogStore(root);
+            var sourceA = Source(Guid.NewGuid().ToString("N"));
+            var sourceB = Source(Guid.NewGuid().ToString("N"));
+            sourceA.Fields["SourceProductId"] = sourceB.Fields["SourceProductId"] = "ref";
+            catalog.SaveSource(sourceA); catalog.SaveSource(sourceB);
+            catalog.Import(sourceA, XmlCatalog.Preview(Feed.Replace("<sku>", "<ref>a-ref</ref><sku>"), sourceA));
+            var product = catalog.Products().Single();
+            var store = new ProductSourceBindingStore(root);
+            var content = store.Get(product.Id).Single(binding => binding.Group == ProductFieldGroup.Content);
+            store.Save(content with { SourceId = sourceB.Id }, content.Version);
+            using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "catalog.db") }.ToString()))
+            {
+                connection.Open();
+                var duplicate = JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(product))!;
+                duplicate.Id = Guid.NewGuid().ToString("N"); duplicate.SourceId = ""; duplicate.SourceKind = "manual"; duplicate.SourceProductId = ""; duplicate.Stock = 0;
+                using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO CatalogProducts(Id,Json) VALUES($id,$json)";
+                command.Parameters.AddWithValue("$id", duplicate.Id);
+                command.Parameters.AddWithValue("$json", JsonSerializer.Serialize(duplicate));
+                command.ExecuteNonQuery();
+            }
+
+            var incoming = Feed.Replace("<sku>", "<ref>a-ref</ref><sku>");
+            Assert.ThrowsException<InvalidOperationException>(() =>
+                catalog.ImportIfSourceCurrent(sourceB, CatalogStore.SourceConfigRevision(sourceB), XmlCatalog.Preview(incoming, sourceB, catalog)));
+            Assert.AreEqual(2, catalog.Products().Count);
+            Assert.IsTrue(catalog.Products().Any(item => item.Id == product.Id && item.SourceProductId == "a-ref"));
+        }
+        finally { Cleanup(root); }
+    }
+
+    [TestMethod]
     public void SaveValidatesXmlSourceAndUsesCompareAndSwapVersion()
     {
         var root = NewRoot();
@@ -208,12 +416,12 @@ public sealed class ProductSourceBindingTests
             var before = JsonSerializer.Serialize(catalog.Products().Single());
 
             var store = new ProductSourceBindingStore(root);
-            Assert.AreEqual(3, store.MigrateFromCatalog());
+            Assert.AreEqual(0, store.MigrateFromCatalog(), "New XML imports create their source bindings atomically.");
             Assert.AreEqual(0, store.MigrateFromCatalog(), "The migration must be restart-safe and preserve existing choices.");
 
             var migrated = store.Get(product.Id).ToDictionary(x => x.Group);
             Assert.AreEqual((ProductSourceKind.Xml, "xml-a"), (migrated[ProductFieldGroup.Content].Kind, migrated[ProductFieldGroup.Content].SourceId));
-            Assert.AreEqual((ProductSourceKind.Manual, ""), (migrated[ProductFieldGroup.Price].Kind, migrated[ProductFieldGroup.Price].SourceId));
+            Assert.AreEqual((ProductSourceKind.Xml, "xml-a"), (migrated[ProductFieldGroup.Price].Kind, migrated[ProductFieldGroup.Price].SourceId), "Persisted bindings, not later legacy provenance edits, are authoritative.");
             Assert.AreEqual((ProductSourceKind.Xml, "xml-a"), (migrated[ProductFieldGroup.OnlineStock].Kind, migrated[ProductFieldGroup.OnlineStock].SourceId));
             Assert.AreEqual(before, JsonSerializer.Serialize(catalog.Products().Single()), "Migration must not rewrite legacy catalog values.");
         }

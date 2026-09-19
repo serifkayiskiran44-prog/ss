@@ -257,6 +257,50 @@ public sealed class MultiStoreOrderSyncTests
     }
 
     [TestMethod]
+    public async Task AccountSettingsMustEnableActiveOrderRulesAndOrderSyncBeforeRemoteRead()
+    {
+        var connections = new MarketplaceConnectionStore(root);
+        var connection = connections.Save("trendyol", "101", "A", true);
+        var reader = new FakeAdapter("trendyol", true);
+        var registry = new MarketplaceAdapterRegistry(new[] { reader });
+        var settings = new MarketplaceShopSettingsStore(root, registry);
+        var service = new MarketplaceOrderSyncService(root, registry, () => DateTime.UtcNow);
+
+        await service.RefreshAllAsync();
+        var current = settings.Load(connection.Id);
+        settings.Save(current with { Active = false, OrderRules = new(true), Sync = new(OrdersEnabled: true) }, 0, connection.Revision);
+        await service.RefreshAllAsync();
+        current = settings.Load(connection.Id);
+        settings.Save(current with { Active = true, OrderRules = new(false), Sync = new(OrdersEnabled: true) }, current.Revision, connection.Revision);
+        await service.RefreshAllAsync();
+        current = settings.Load(connection.Id);
+        settings.Save(current with { Active = true, OrderRules = new(true), Sync = new(OrdersEnabled: false) }, current.Revision, connection.Revision);
+        await service.RefreshAllAsync();
+
+        Assert.AreEqual(0, reader.Calls);
+        current = settings.Load(connection.Id);
+        settings.Save(current with { Active = true, OrderRules = new(true), Sync = new(OrdersEnabled: true) }, current.Revision, connection.Revision);
+        await service.RefreshAllAsync();
+        Assert.AreEqual(1, reader.Calls);
+    }
+
+    [TestMethod]
+    public void SettingsRevisionIsRecheckedInsideAtomicOrderApply()
+    {
+        var setup = SetupOneAccount();
+        var stock = new OrderStockDecisionService(root);
+        var resolution = stock.ResolveAccountOrder(setup.Connection, Order("101", "ORD-SETTINGS-RACE", "REMOTE-A", 1, 10));
+        var settings = new MarketplaceShopSettingsStore(root, new MarketplaceAdapterRegistry(new[] { setup.Reader }));
+        var enabled = settings.Load(setup.Connection.Id);
+        settings.Save(enabled with { Active = false }, enabled.Revision, setup.Connection.Revision);
+
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            stock.ApplyAccountOrder(setup.Connection, resolution, deductStock: true, enabled.Revision));
+        Assert.AreEqual(0, new OrdersStore(root).ReadAll().Count);
+        Assert.AreEqual(10, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+    }
+
+    [TestMethod]
     public async Task ResultFinishingAfterConnectionWasDisabledCannotSaveOrderOrCursor()
     {
         var setup = SetupOneAccount(blocking: true);
@@ -375,6 +419,8 @@ public sealed class MultiStoreOrderSyncTests
         var secondReader = new FakeAdapter("etsy", true);
         var now = DateTime.UnixEpoch.AddDays(100);
         var service = new MarketplaceOrderSyncService(root, new MarketplaceAdapterRegistry(new IMarketplaceAdapter[] { firstReader, secondReader }), () => now);
+        EnableOrderSync(root, first, new MarketplaceAdapterRegistry(new IMarketplaceAdapter[] { firstReader, secondReader }));
+        EnableOrderSync(root, second, new MarketplaceAdapterRegistry(new IMarketplaceAdapter[] { firstReader, secondReader }));
         return (service, first, second, firstReader, secondReader, product, now);
     }
 
@@ -386,7 +432,15 @@ public sealed class MultiStoreOrderSyncTests
         var product = catalog.CreateManual(new() { Sku = "LOCAL", Barcode = "LOCAL-BAR", Name = "Product", Stock = 10, Currency = "TRY" });
         new ProductChannelBindingStore(root).Save(new(product.Id, connection.Id, "r-a", "REMOTE-A", "BAR-A", true, true, true, "", "", "Active", 0, default), 0);
         var reader = new FakeAdapter("trendyol", true, blocking);
+        EnableOrderSync(root, connection, new MarketplaceAdapterRegistry(new[] { reader }));
         return (new(root, new MarketplaceAdapterRegistry(new[] { reader }), () => DateTime.UnixEpoch.AddDays(100)), connection, reader, product);
+    }
+
+    static void EnableOrderSync(string root, MarketplaceConnection connection, MarketplaceAdapterRegistry registry)
+    {
+        var store = new MarketplaceShopSettingsStore(root, registry);
+        var current = store.Load(connection.Id);
+        store.Save(current with { Active = true, OrderRules = new(true), Sync = new(OrdersEnabled: true) }, current.Revision, connection.Revision);
     }
 
     static OrderSnapshot Order(string shop, string id, string sku, int quantity, long updatedSeconds, string status = "Created") => new()
