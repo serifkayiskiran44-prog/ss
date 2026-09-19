@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
 using TrMarketplaceHubDesktop.Hepsiburada;
@@ -56,5 +57,12 @@ public sealed class HepsiburadaConnection
     {
         Validate(settings);
         throw new InvalidOperationException("LIVE_API_BLOCKED: Hepsiburada resmi endpoint/scope sözleşmesi bu çalışma alanında doğrulanmadı; HTTP isteği gönderilmedi.");
+    }
+
+    public async Task<HepsiburadaConnectionIdentity> TestReadOnlyAsync(HepsiburadaCredentials credentials, HttpClient? httpClient = null, CancellationToken cancellationToken = default)
+    {
+        Validate(credentials);
+        using var client = new HepsiburadaApiClient(credentials, httpClient);
+        return await client.TestReadOnlyAsync(cancellationToken);
     }
 }
