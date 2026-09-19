@@ -1,3 +1,5 @@
+using System.Net.Http;
+
 namespace TrMarketplaceHubDesktop;
 
 public sealed record RemoteProductIdentity(string ConnectionId, string RemoteId, string Sku, string Barcode);
@@ -14,8 +16,12 @@ public sealed class MarketplaceAdapterRegistry
 {
     readonly IReadOnlyDictionary<string, IMarketplaceAdapter> adapters;
 
-    public static MarketplaceAdapterRegistry Default { get; } = new(
-        MarketplaceConnectionCatalog.All.Select(definition => new CatalogMarketplaceAdapter(definition)));
+    public static MarketplaceAdapterRegistry Default { get; } = CreateDefault();
+
+    public static MarketplaceAdapterRegistry CreateDefault(string? directory = null, Func<HttpClient>? httpFactory = null) => new(
+        MarketplaceConnectionCatalog.All.Select(definition => definition.Id is "etsy" or "trendyol"
+            ? (IMarketplaceAdapter)new AccountScopedMarketplaceAdapter(definition, directory, httpFactory)
+            : new CatalogMarketplaceAdapter(definition)));
 
     public MarketplaceAdapterRegistry(IEnumerable<IMarketplaceAdapter> adapters)
     {
@@ -61,6 +67,49 @@ public sealed class MarketplaceAdapterRegistry
         {
             if (!Capabilities.Supports(operation))
                 throw new InvalidOperationException($"{Channel}/{operation}: capability desteklenmiyor; HTTP isteği oluşturulmadı.");
+        }
+    }
+
+    sealed class AccountScopedMarketplaceAdapter(
+        MarketplaceConnectionDefinition definition,
+        string? directory,
+        Func<HttpClient>? httpFactory) : IMarketplaceAdapter
+    {
+        public string Channel { get; } = definition.Id;
+        public MarketplaceCapabilities Capabilities { get; } = definition.Capabilities;
+
+        public Task<IReadOnlyList<RemoteProductIdentity>> ReadProductsAsync(string connectionId, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("Ürün okuma, seçili hesabın uzman çalışma alanından başlatılmalıdır.");
+        }
+
+        public async Task<IReadOnlyList<OrderSnapshot>> ReadOrdersAsync(string connectionId, DateTime fromUtc, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!Capabilities.Supports(MarketplaceOperation.OrdersRead))
+                throw new InvalidOperationException($"{Channel}/OrdersRead: capability desteklenmiyor; HTTP isteği oluşturulmadı.");
+            var store = new MarketplaceConnectionStore(directory);
+            var connection = store.Get(connectionId) ?? throw new InvalidOperationException("Sipariş hesabı bulunamadı.");
+            if (!connection.Channel.Equals(Channel, StringComparison.OrdinalIgnoreCase) || !MarketplaceOperationalAccounts.IsEligible(connection, store))
+                throw new InvalidOperationException("Sipariş hesabı etkin veya operasyonel değil.");
+            var vault = new MarketplaceCredentialVault(directory);
+            using var http = httpFactory?.Invoke() ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(60) };
+            if (Channel == "trendyol")
+            {
+                var settings = vault.Load<TrendyolSettings>(connection.Id, connection.Channel, connection.ShopId)
+                    ?? throw new InvalidOperationException("Trendyol bağlantı bilgileri bu hesap için bulunamadı.");
+                using var client = new Trendyol.TrendyolApiClient(settings, http);
+                return await client.GetOrdersAsync(fromUtc, token).ConfigureAwait(false);
+            }
+            if (Channel == "etsy")
+            {
+                var credentials = vault.Load<EtsyCredentials>(connection.Id, connection.Channel, connection.ShopId)
+                    ?? throw new InvalidOperationException("Etsy bağlantı bilgileri bu hesap için bulunamadı.");
+                var since = fromUtc == DateTime.MinValue ? (DateTimeOffset?)null : new DateTimeOffset(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc));
+                return await new OrdersEtsyClient(http).ReadAsync(credentials, since, token).ConfigureAwait(false);
+            }
+            throw new InvalidOperationException("Sipariş okuyucu uygulanmadı.");
         }
     }
 }

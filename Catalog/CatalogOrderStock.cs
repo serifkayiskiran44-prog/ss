@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace TrMarketplaceHubDesktop.Catalog;
 
 public sealed record OrderStockMovement(string ProductId,string Sku,int Quantity,int StockBefore,int StockAfter);
-public sealed record OrderStockReceipt(string Marketplace,string ShopId,string OrderId,DateTime AppliedUtc,List<OrderStockMovement> Movements);
+public sealed record OrderStockReceipt(string Marketplace,string ShopId,string OrderId,DateTime AppliedUtc,List<OrderStockMovement> Movements,IReadOnlyList<ResolvedOrderStockLine>? ResolvedLines=null);
 public sealed record OrderStockResult(bool AlreadyApplied,OrderStockReceipt Receipt);
 /// Bounded diagnostics only (order identity, a short reason, detection time) -
 /// never Payload/Json/movement/product content - for an OrderStockReceipts row
@@ -87,6 +87,11 @@ public partial class CatalogStore
   if(parsed.Movements.Any(m=>string.IsNullOrWhiteSpace(m.ProductId)||string.IsNullOrWhiteSpace(m.Sku))){reason="Movement missing product/sku identity";return false;}
   if(parsed.Movements.Select(m=>m.ProductId).Distinct(StringComparer.Ordinal).Count()!=parsed.Movements.Count){reason="Duplicate ProductId movement";return false;}
   if(parsed.Movements.Any(m=>m.Quantity<=0||m.StockBefore<0||m.StockAfter<0||m.StockAfter!=m.StockBefore-m.Quantity)){reason="Invalid or inconsistent movement quantities";return false;}
+  if(parsed.ResolvedLines is {Count:>0} lines)
+  {
+   if(lines.Any(line=>string.IsNullOrWhiteSpace(line.ProductId)||string.IsNullOrWhiteSpace(line.Sku)||line.Quantity<=0||line.ProductGeneration<=0||line.BalanceVersion<=0)||lines.Select(line=>line.ProductId).Distinct(StringComparer.Ordinal).Count()!=lines.Count){reason="Invalid resolved product snapshot";return false;}
+   var quantities=parsed.Movements.ToDictionary(movement=>movement.ProductId,movement=>movement.Quantity,StringComparer.Ordinal);if(lines.Count!=quantities.Count||lines.Any(line=>!quantities.TryGetValue(line.ProductId,out var quantity)||quantity!=line.Quantity)){reason="Resolved product snapshot mismatch";return false;}
+  }
   if(parsed.AppliedUtc==default||parsed.AppliedUtc<new DateTime(2000,1,1)||parsed.AppliedUtc>DateTime.UtcNow.AddDays(1)){reason="Invalid AppliedUtc";return false;}
   receipt=parsed;return true;
  }
@@ -160,6 +165,99 @@ public partial class CatalogStore
    cmd.Transaction=tx;cmd.CommandText="INSERT INTO InventoryOrderReceipts(Marketplace,ShopId,OrderId,Payload,AppliedUtc) VALUES($marketplace,$shop,$order,$payload,$at)";
    OrderStockIdentityParams(cmd,marketplace,shopId,orderId);cmd.Parameters.AddWithValue("$payload",payload);cmd.Parameters.AddWithValue("$at",at.ToString("O"));cmd.ExecuteNonQuery();
   }
-  tx.Commit();return new(false,receipt);
+ tx.Commit();return new(false,receipt);
+ }
+
+ public OrderStockResult ApplyResolvedOrderStock(string marketplace,string shopId,string orderId,IReadOnlyList<ResolvedOrderStockLine> lines)
+ {
+  ValidateOrderStockIdentity(marketplace,shopId,orderId);using var connection=Open();using var transaction=connection.BeginTransaction(deferred:false);
+  var result=ApplyResolvedOrderStockCore(connection,transaction,marketplace,shopId,orderId,lines);transaction.Commit();return result;
+ }
+
+ OrderStockResult ApplyResolvedOrderStockCore(SqliteConnection connection,SqliteTransaction transaction,string marketplace,string shopId,string orderId,IReadOnlyList<ResolvedOrderStockLine> lines)
+ {
+  if(lines is null||lines.Count==0)throw new ArgumentException("Stok düşümü için çözülmüş ürün satırı zorunlu.");
+  if(lines.Any(line=>string.IsNullOrWhiteSpace(line.ProductId)||string.IsNullOrWhiteSpace(line.Sku)||line.Quantity<=0||line.ProductGeneration<=0||line.BalanceVersion<=0)||lines.Select(line=>line.ProductId).Distinct(StringComparer.Ordinal).Count()!=lines.Count)
+   throw new ArgumentException("Çözülmüş stok satırları geçersiz veya tekrarlı.");
+  using(var find=connection.CreateCommand())
+  {
+   find.Transaction=transaction;find.CommandText="SELECT Json FROM OrderStockReceipts WHERE Marketplace=$marketplace AND ShopId=$shop AND OrderId=$order";OrderStockIdentityParams(find,marketplace,shopId,orderId);
+   if(find.ExecuteScalar() is string json)
+   {
+    if(!TryReadReceipt(json,marketplace,shopId,orderId,out var existing,out var reason))throw new OrderStockReceiptCorruptException(marketplace,shopId,orderId,reason!);
+    var expected=lines.ToDictionary(line=>line.ProductId,line=>line.Quantity,StringComparer.Ordinal);var actual=existing!.Movements.ToDictionary(line=>line.ProductId,line=>line.Quantity,StringComparer.Ordinal);
+    if(expected.Count!=actual.Count||expected.Any(pair=>!actual.TryGetValue(pair.Key,out var quantity)||quantity!=pair.Value))throw new InvalidOperationException("Bu sipariş için stok daha önce farklı ürün/adetlerle düşüldü; tekrar uygulanamaz.");
+    return new(true,existing);
+   }
+  }
+  var at=DateTime.UtcNow;var movements=new List<OrderStockMovement>();var reference=InventoryLedger.OrderReference(marketplace,shopId,orderId);
+  foreach(var line in lines.OrderBy(item=>item.ProductId,StringComparer.Ordinal))
+  {
+   CatalogProduct product;using(var find=connection.CreateCommand())
+   {
+    find.Transaction=transaction;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",line.ProductId);var json=find.ExecuteScalar() as string??throw new InvalidOperationException($"Ürün {line.ProductId} bulunamadı; işlem geri alındı.");
+    if(!TryDeserializeProduct(line.ProductId,json,out var candidate,out _))throw new InvalidOperationException("Çözülmüş ürün kaydı bozuk; işlem geri alındı.");product=candidate!;
+   }
+   if(!product.Active||!product.Sku.Equals(line.Sku,StringComparison.Ordinal)||product.UpdatedUtc!=line.ProductUpdatedUtc)throw new InvalidOperationException($"SKU {line.Sku}: ürün önizlemeden sonra değişti; işlem geri alındı.");
+   if(InventoryLedger.ReadProductGeneration(connection,transaction,product.Id)!=line.ProductGeneration)throw new InvalidOperationException($"SKU {line.Sku}: ürün nesli değişti; işlem geri alındı.");
+   var balance=InventoryLedger.ReadBalance(connection,transaction,product.Id,InventoryLedger.OnlineLocationId);
+   if(balance.Version!=line.BalanceVersion||balance.Quantity!=product.Stock)throw new InvalidOperationException($"SKU {line.Sku}: stok önizlemeden sonra değişti; işlem geri alındı.");
+   if(balance.Quantity<line.Quantity)throw new InvalidOperationException($"SKU {line.Sku}: stok yetersiz ({balance.Quantity}/{line.Quantity}).");
+   var after=checked(balance.Quantity-line.Quantity);InventoryLedger.SetBalance(connection,transaction,product.Id,InventoryLedger.OnlineLocationId,after,balance.Version);
+   var movement=new OrderStockMovement(product.Id,product.Sku,line.Quantity,balance.Quantity,after);movements.Add(movement);product.Stock=after;product.LockStock=true;product.UpdatedUtc=at;Put(connection,"CatalogProducts",product.Id,product,transaction);
+   using(var command=connection.CreateCommand()){command.Transaction=transaction;command.CommandText="INSERT INTO OrderStockMovements VALUES($marketplace,$shop,$order,$product,$sku,$quantity,$before,$after,$at)";OrderStockIdentityParams(command,marketplace,shopId,orderId);command.Parameters.AddWithValue("$product",product.Id);command.Parameters.AddWithValue("$sku",product.Sku);command.Parameters.AddWithValue("$quantity",line.Quantity);command.Parameters.AddWithValue("$before",balance.Quantity);command.Parameters.AddWithValue("$after",after);command.Parameters.AddWithValue("$at",at.ToString("O"));command.ExecuteNonQuery();}
+   InventoryLedger.RecordMovement(connection,transaction,product.Id,InventoryLedger.OnlineLocationId,balance.Quantity,after,InventoryMovementKind.OnlineOrder,reference,at);
+  }
+  var immutableLines=lines.OrderBy(line=>line.ProductId,StringComparer.Ordinal).ToArray();var receipt=new OrderStockReceipt(marketplace,shopId,orderId,at,movements,immutableLines);var payload=JsonSerializer.Serialize(immutableLines);
+  using(var command=connection.CreateCommand()){command.Transaction=transaction;command.CommandText="INSERT INTO OrderStockReceipts VALUES($marketplace,$shop,$order,$payload,$json)";OrderStockIdentityParams(command,marketplace,shopId,orderId);command.Parameters.AddWithValue("$payload",payload);command.Parameters.AddWithValue("$json",JsonSerializer.Serialize(receipt));command.ExecuteNonQuery();}
+  using(var command=connection.CreateCommand()){command.Transaction=transaction;command.CommandText="INSERT INTO InventoryOrderReceipts(Marketplace,ShopId,OrderId,Payload,AppliedUtc) VALUES($marketplace,$shop,$order,$payload,$at)";OrderStockIdentityParams(command,marketplace,shopId,orderId);command.Parameters.AddWithValue("$payload",payload);command.Parameters.AddWithValue("$at",at.ToString("O"));command.ExecuteNonQuery();}
+  return new(false,receipt);
+ }
+
+ public AccountOrderApplyResult ApplyAccountOrder(MarketplaceConnection expected,AccountOrderStockResolution resolution,bool deductStock)
+ {
+  ArgumentNullException.ThrowIfNull(expected);ArgumentNullException.ThrowIfNull(resolution);_ = new OrdersStore(DataDirectory);
+  using var connection=Open();using(var attach=connection.CreateCommand()){attach.CommandText="ATTACH DATABASE $path AS ordersdb";attach.Parameters.AddWithValue("$path",System.IO.Path.Combine(DataDirectory,"orders.db"));attach.ExecuteNonQuery();}
+  SqliteTransaction? transaction=null;
+  try
+  {
+   transaction=connection.BeginTransaction(deferred:false);ValidateConnectionFence(connection,transaction,expected);
+   if(!resolution.Order.ConnectionId.Equals(expected.Id,StringComparison.Ordinal)||!resolution.Order.ShopId.Equals(expected.ShopId,StringComparison.Ordinal))throw new InvalidOperationException("Sipariş hesap kimliği bağlantı çitiyle uyuşmuyor.");
+   var orderApplied=OrdersStore.SaveAttached(connection,transaction,resolution.Order);OrderStockResult? stockResult=null;
+   if(!orderApplied){transaction.Commit();return new(false,false,false);}
+   if(!resolution.ReviewRequired)ValidateBindingFence(connection,transaction,expected,resolution.Bindings);
+   if(deductStock)
+   {
+    if(resolution.ReviewRequired||resolution.Lines.Count==0)throw new InvalidOperationException("İnceleme gerektiren sipariş stoktan düşülemez.");
+    stockResult=ApplyResolvedOrderStockCore(connection,transaction,resolution.Order.Marketplace,resolution.Order.ShopId,resolution.Order.OrderId,resolution.Lines);
+   }
+   transaction.Commit();return new(true,deductStock&&stockResult is {AlreadyApplied:false},stockResult?.AlreadyApplied??false);
+  }
+  finally
+  {
+   transaction?.Dispose();using var detach=connection.CreateCommand();detach.CommandText="DETACH DATABASE ordersdb";detach.ExecuteNonQuery();
+  }
+ }
+
+ static void ValidateBindingFence(SqliteConnection connection,SqliteTransaction transaction,MarketplaceConnection expected,IReadOnlyList<ResolvedOrderBinding> snapshots)
+ {
+  if(snapshots.Count==0||snapshots.Any(snapshot=>!snapshot.ConnectionId.Equals(expected.Id,StringComparison.Ordinal)||!snapshot.ManageStock)||snapshots.Select(snapshot=>snapshot.ProductId).Distinct(StringComparer.Ordinal).Count()!=snapshots.Count)
+   throw new InvalidOperationException("Sipariş ürün bağlantısı eksik veya stok yönetimine kapalı; sonuç uygulanmadı.");
+  foreach(var snapshot in snapshots)
+  {
+   using var command=connection.CreateCommand();command.Transaction=transaction;command.CommandText="SELECT RemoteId,RemoteSku,RemoteBarcode,ManageStock,Version,UpdatedUtc FROM ProductChannelBindings WHERE ProductId=$product AND ConnectionId=$connection";command.Parameters.AddWithValue("$product",snapshot.ProductId);command.Parameters.AddWithValue("$connection",snapshot.ConnectionId);using var reader=command.ExecuteReader();
+   if(!reader.Read()||!reader.GetString(0).Equals(snapshot.RemoteId,StringComparison.Ordinal)||!reader.GetString(1).Equals(snapshot.RemoteSku,StringComparison.Ordinal)||!reader.GetString(2).Equals(snapshot.RemoteBarcode,StringComparison.Ordinal)||reader.GetInt64(3)!=1||reader.GetInt64(4)!=snapshot.Version||!DateTime.TryParse(reader.GetString(5),System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.RoundtripKind,out var updated)||updated!=snapshot.UpdatedUtc)
+    throw new InvalidOperationException("Sipariş ürün bağlantısı çözümlemeden sonra değişti; sonuç uygulanmadı.");
+  }
+ }
+
+ static void ValidateConnectionFence(SqliteConnection connection,SqliteTransaction transaction,MarketplaceConnection expected)
+ {
+  using var command=connection.CreateCommand();command.Transaction=transaction;command.CommandText="SELECT Channel,ShopId,Enabled,Status,Revision,LastTestUtc FROM MarketplaceConnections WHERE Id=$id";command.Parameters.AddWithValue("$id",expected.Id);using var reader=command.ExecuteReader();
+  if(!reader.Read()||!reader.GetString(0).Equals(expected.Channel,StringComparison.Ordinal)||!reader.GetString(1).Equals(expected.ShopId,StringComparison.Ordinal)||reader.GetInt64(2)!=1||reader.GetInt64(4)!=expected.Revision)throw new InvalidOperationException("Mağaza bağlantısı değişti veya devre dışı; sonuç uygulanmadı.");
+  var status=reader.GetString(3);var lastTest=reader.IsDBNull(5)?null:reader.GetString(5);reader.Close();if(lastTest is not null&&!DateTime.TryParse(lastTest,System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.RoundtripKind,out _))throw new InvalidOperationException("Mağaza bağlantısı sağlık kaydı bozuk; sonuç uygulanmadı.");if(status.Equals("FAILED",StringComparison.OrdinalIgnoreCase)||status.Equals("LIVE_API_BLOCKED",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Mağaza bağlantısı işlem için uygun değil.");
+  var seeded=expected.Id.Equals(expected.Channel+":default",StringComparison.OrdinalIgnoreCase)&&expected.ShopId.Equals("default",StringComparison.OrdinalIgnoreCase);if(!seeded)return;
+  var verified=lastTest is not null&&(status.Equals("CONNECTED",StringComparison.OrdinalIgnoreCase)||status.Equals("CONNECTED_READ_ONLY",StringComparison.OrdinalIgnoreCase));if(verified)return;
+  using var marker=connection.CreateCommand();marker.Transaction=transaction;marker.CommandText="SELECT 1 FROM MarketplaceCredentialMigrations WHERE Channel=$channel AND ConnectionId=$id AND ShopId=$shop";marker.Parameters.AddWithValue("$channel",expected.Channel);marker.Parameters.AddWithValue("$id",expected.Id);marker.Parameters.AddWithValue("$shop",expected.ShopId);if(marker.ExecuteScalar() is null)throw new InvalidOperationException("Varsayılan mağaza hesabı doğrulanmadı; sonuç uygulanmadı.");
  }
 }

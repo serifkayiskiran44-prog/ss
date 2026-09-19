@@ -282,6 +282,85 @@ public sealed class TrendyolApiClient : IDisposable
         return result.AsReadOnly();
     }
 
+    public async Task<IReadOnlyList<OrderSnapshot>> GetOrdersAsync(DateTime fromUtc, CancellationToken cancellationToken = default)
+    {
+        if (fromUtc != DateTime.MinValue && fromUtc.Kind != DateTimeKind.Utc) fromUtc = fromUtc.ToUniversalTime();
+        var now = DateTimeOffset.UtcNow;
+        // Trendyol order history is queried in a bounded window. Initial sync
+        // must not send Unix epoch as an effectively unbounded date range.
+        var earliest = now.AddDays(-14);
+        var requestedStart = fromUtc == DateTime.MinValue ? earliest : new DateTimeOffset(fromUtc);
+        var boundedStart = requestedStart < earliest ? earliest : requestedStart > now ? now : requestedStart;
+        var start = boundedStart.ToUnixTimeMilliseconds();
+        var end = now.ToUnixTimeMilliseconds();
+        var orders = new Dictionary<string, OrderSnapshot>(StringComparer.Ordinal);
+        var packages = new HashSet<long>();
+        var read = 0;
+        int? total = null;
+        for (var page = 0; page < MaxPages; page++)
+        {
+            var path = $"/integration/order/sellers/{seller}/orders?startDate={start.ToString(CultureInfo.InvariantCulture)}&endDate={end.ToString(CultureInfo.InvariantCulture)}&page={page}&size=200&orderByField=PackageLastModifiedDate&orderByDirection=DESC";
+            using var document = await RequestAsync(HttpMethod.Get, path, null, cancellationToken);
+            var root = document.RootElement;
+            var currentTotal = NonnegativeInt(root, "totalElements");
+            var pages = NonnegativeInt(root, "totalPages");
+            if (currentTotal > MaxRows || pages > MaxPages || (total.HasValue && total != currentTotal) || pages != (currentTotal + 199) / 200 || NonnegativeInt(root, "page") != page)
+                throw InvalidResponse();
+            total = currentTotal;
+            var content = Array(root, "content");
+            var expected = Math.Min(200, currentTotal - read);
+            if (content.GetArrayLength() != expected) throw InvalidResponse();
+            foreach (var package in content.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var packageId = PositiveId(package, "shipmentPackageId");
+                if (!packages.Add(packageId)) throw InvalidResponse();
+                var orderId = Text(package, "orderNumber");
+                var modified = EpochMilliseconds(package, "lastModifiedDate", "packageLastModifiedDate", "orderDate");
+                var status = DisplayText(package, "status");
+                if (!orders.TryGetValue(orderId, out var order))
+                {
+                    order = new OrderSnapshot
+                    {
+                        Marketplace = "Trendyol", ShopId = seller, OrderId = orderId, RawStatus = status,
+                        PaymentStatus = "Bilinmiyor", Source = "Trendyol API", UpdatedAt = modified,
+                        SourceUpdatedAt = modified, LastSync = DateTimeOffset.UtcNow,
+                        CustomerName = JoinName(OptionalDisplayText(package, "customerFirstName"), OptionalDisplayText(package, "customerLastName")),
+                        Total = OptionalDecimal(package, "totalPrice"), Currency = OptionalDisplayText(package, "currencyCode")
+                    };
+                    ReadAddress(package, "shipmentAddress", out var shippingName, out var shippingAddress, out var shippingCity, out var shippingDistrict, out _);
+                    order.ShippingName = shippingName; order.ShippingAddress = shippingAddress; order.ShippingCity = shippingCity; order.ShippingDistrict = shippingDistrict;
+                    ReadAddress(package, "invoiceAddress", out var billingName, out var billingAddress, out var billingCity, out var billingDistrict, out var taxNumber);
+                    order.BillingName = billingName; order.BillingAddress = billingAddress; order.BillingCity = billingCity; order.BillingDistrict = billingDistrict; order.TaxNumber = taxNumber;
+                    orders.Add(orderId, order);
+                }
+                else
+                {
+                    if (modified > order.SourceUpdatedAt) { order.SourceUpdatedAt = modified; order.UpdatedAt = modified; order.RawStatus = status; }
+                }
+                var lines = Array(package, "lines");
+                if (lines.GetArrayLength() == 0) throw InvalidResponse();
+                foreach (var line in lines.EnumerateArray())
+                {
+                    var quantity = PositiveInt(line, "quantity");
+                    order.Items.Add(new OrderItem
+                    {
+                        Title = DisplayText(line, "productName"), Sku = OptionalDisplayText(line, "merchantSku"),
+                        Barcode = OptionalDisplayText(line, "barcode"), Quantity = quantity, UnitPrice = OptionalDecimal(line, "price")
+                    });
+                }
+                order.Shipments.Add(new OrderShipment { Id = packageId.ToString(CultureInfo.InvariantCulture), State = status, Source = "Trendyol API" });
+            }
+            read += content.GetArrayLength();
+            if (read == currentTotal)
+            {
+                foreach (var order in orders.Values) { OrderNormalizer.Normalize(order); OrdersRules.Validate(order); }
+                return orders.Values.OrderByDescending(order => order.SourceUpdatedAt).ToArray();
+            }
+        }
+        throw InvalidResponse();
+    }
+
     public async Task<IReadOnlyList<TrendyolBuybox>> GetBuyboxAsync(IEnumerable<string> barcodes, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(barcodes);
@@ -456,6 +535,28 @@ public sealed class TrendyolApiClient : IDisposable
     {
         var value = Property(item, name);
         return value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var id) && id > 0 ? id : throw InvalidResponse();
+    }
+    static int PositiveInt(JsonElement item, string name)
+    {
+        var value = Property(item, name);
+        return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) && number > 0 ? number : throw InvalidResponse();
+    }
+    static DateTimeOffset EpochMilliseconds(JsonElement item, params string[] names)
+    {
+        foreach (var name in names)
+            if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var milliseconds) && milliseconds >= 0)
+                try { return DateTimeOffset.FromUnixTimeMilliseconds(milliseconds); } catch (ArgumentOutOfRangeException) { throw InvalidResponse(); }
+        throw InvalidResponse();
+    }
+    static string JoinName(string first, string last) => string.Join(" ", new[] { first, last }.Where(value => value.Length > 0));
+    static void ReadAddress(JsonElement item, string name, out string displayName, out string address, out string city, out string district, out string taxNumber)
+    {
+        displayName = address = city = district = taxNumber = "";
+        if (!item.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return;
+        if (value.ValueKind != JsonValueKind.Object) throw InvalidResponse();
+        displayName = JoinName(OptionalDisplayText(value, "firstName"), OptionalDisplayText(value, "lastName"));
+        address = OptionalDisplayText(value, "fullAddress"); city = OptionalDisplayText(value, "city");
+        district = OptionalDisplayText(value, "district"); taxNumber = OptionalDisplayText(value, "taxNumber");
     }
     static int NonnegativeInt(JsonElement item, string name) => OptionalInt(item, name) is { } number ? number : throw InvalidResponse();
     static int? OptionalInt(JsonElement item, string name)

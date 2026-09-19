@@ -20,6 +20,7 @@ public sealed class ProductSourceModel
     readonly ProductSourceBindingStore bindings;
     readonly InventoryLocationStore inventory;
     ProductSourceChangePreview? preview;
+    InventoryTransferPreview? transferPreview;
 
     public string ProductId { get; }
     public IReadOnlyList<ProductSourceBinding> Bindings { get; private set; } = Array.Empty<ProductSourceBinding>();
@@ -27,6 +28,7 @@ public sealed class ProductSourceModel
     public IReadOnlyList<ProductBalanceRow> Balances { get; private set; } = Array.Empty<ProductBalanceRow>();
     public ProductSourceChangePreview? CurrentPreview => preview;
     public bool CanApply => preview is not null;
+    public InventoryTransferPreview? CurrentTransferPreview => transferPreview;
 
     public ProductSourceModel(string? directory, string productId)
     {
@@ -102,6 +104,22 @@ public sealed class ProductSourceModel
         Refresh();
         return saved;
     }
+
+    public InventoryTransferPreview PreviewTransfer(string fromLocationId, string toLocationId, int quantity)
+    {
+        transferPreview = inventory.PreviewTransfer(ProductId, fromLocationId, toLocationId, quantity);
+        return transferPreview;
+    }
+
+    public InventoryApplyResult ApplyTransfer(InventoryTransferPreview value)
+    {
+        if (transferPreview is null || value != transferPreview)
+            throw new InvalidOperationException("Önce güncel stok transfer önizlemesi alın.");
+        var result = inventory.ApplyTransfer(value);
+        transferPreview = null;
+        Refresh();
+        return result;
+    }
 }
 
 public sealed class ProductSourceWindow : Window
@@ -114,6 +132,11 @@ public sealed class ProductSourceWindow : Window
     readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray, Margin = new Thickness(4) };
     readonly DataGrid bindingGrid = new() { IsReadOnly = true, AutoGenerateColumns = false, Height = 180 };
     readonly DataGrid balanceGrid = new() { IsReadOnly = true, AutoGenerateColumns = false, Height = 180 };
+    readonly ComboBox transferFrom = new() { Name = "InventoryTransferFrom", MinWidth = 190, DisplayMemberPath = nameof(ProductBalanceRow.LocationName) };
+    readonly ComboBox transferTo = new() { Name = "InventoryTransferTo", MinWidth = 190, DisplayMemberPath = nameof(ProductBalanceRow.LocationName) };
+    readonly TextBox transferQuantity = new() { Name = "InventoryTransferQuantity", Width = 70, Text = "1" };
+    readonly Button transferPreviewButton = new() { Name = "InventoryTransferPreviewButton", Content = "Transferi önizle" };
+    readonly Button transferApplyButton = new() { Name = "InventoryTransferApplyButton", Content = "Onayla ve transferi uygula", IsEnabled = false };
 
     public bool IsApplyEnabled => apply.IsEnabled;
 
@@ -126,6 +149,8 @@ public sealed class ProductSourceWindow : Window
         source.ItemsSource = model.Sources;
         bindingGrid.ItemsSource = model.Bindings;
         balanceGrid.ItemsSource = model.Balances;
+        transferFrom.ItemsSource = model.Balances;
+        transferTo.ItemsSource = model.Balances;
         Content = Build();
         group.SelectionChanged += (_, _) => UpdatePreviewState();
         source.SelectionChanged += (_, _) => UpdatePreviewState();
@@ -144,6 +169,24 @@ public sealed class ProductSourceWindow : Window
             bindingGrid.ItemsSource = model.Bindings;
             balanceGrid.ItemsSource = model.Balances;
             status.Text = $"{result.Group} kaynağı kaydedildi.";
+        });
+        transferPreviewButton.Click += (_, _) => Run(() =>
+        {
+            if (transferFrom.SelectedItem is not ProductBalanceRow from || transferTo.SelectedItem is not ProductBalanceRow to ||
+                !int.TryParse(transferQuantity.Text, NumberStyles.None, CultureInfo.InvariantCulture, out var quantity))
+                throw new InvalidOperationException("Kaynak, hedef ve pozitif tam adet seçin.");
+            var result = model.PreviewTransfer(from.LocationId, to.LocationId, quantity);
+            transferApplyButton.IsEnabled = true;
+            status.Text = $"Transfer önizlemesi: {from.LocationName} → {to.LocationName}, {result.Quantity} adet. Uygulamak için açıkça onaylayın.";
+        });
+        transferApplyButton.Click += (_, _) => Run(() =>
+        {
+            var result = model.ApplyTransfer(model.CurrentTransferPreview ?? throw new InvalidOperationException("Önce transfer önizlemesi alın."));
+            balanceGrid.ItemsSource = model.Balances;
+            transferFrom.ItemsSource = model.Balances;
+            transferTo.ItemsSource = model.Balances;
+            transferApplyButton.IsEnabled = false;
+            status.Text = $"Transfer makbuzu {result.ReceiptId} kaydedildi.";
         });
     }
 
@@ -165,6 +208,9 @@ public sealed class ProductSourceWindow : Window
         root.Children.Add(bindingGrid);
         root.Children.Add(new TextBlock { Text = "Çevrimiçi ve fiziksel stok", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 4) });
         root.Children.Add(balanceGrid);
+        root.Children.Add(new TextBlock { Text = "Stok transferi", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 4) });
+        root.Children.Add(new TextBlock { Text = "Kaynak ve hedef bakiyeler önizlemede sabitlenir. Önizleme alınmadan veya ayrıca onaylanmadan stok değişmez.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray });
+        var transfer = new WrapPanel(); transfer.Children.Add(transferFrom); transfer.Children.Add(transferTo); transfer.Children.Add(transferQuantity); transfer.Children.Add(transferPreviewButton); transfer.Children.Add(transferApplyButton); root.Children.Add(transfer);
         return new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 

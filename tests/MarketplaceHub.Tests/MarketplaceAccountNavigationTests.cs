@@ -116,7 +116,7 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
-    public void RegistryCapabilitiesHideUnsupportedOrdersCommandForTrendyol() => InSta(root =>
+    public void RegistryCapabilitiesShowImplementedOrdersCommandForTrendyol() => InSta(root =>
     {
         var store = new MarketplaceConnectionStore(root);
         var connection = store.Save("trendyol", "101", "Trendyol A", true);
@@ -126,9 +126,9 @@ public sealed class MarketplaceAccountNavigationTests
 
         Assert.AreEqual("trendyol", adapter.Channel);
         Assert.IsTrue(adapter.Capabilities.Supports(MarketplaceOperation.ProductsRead));
-        Assert.IsFalse(adapter.Capabilities.Supports(MarketplaceOperation.OrdersRead));
+        Assert.IsTrue(adapter.Capabilities.Supports(MarketplaceOperation.OrdersRead));
         Assert.IsTrue(commands.Any(x => x.Name == "MarketplaceOperation_ProductsRead"));
-        Assert.IsFalse(commands.Any(x => x.Name == "MarketplaceOperation_OrdersRead"));
+        Assert.IsTrue(commands.Any(x => x.Name == "MarketplaceOperation_OrdersRead"));
     });
 
     [TestMethod]

@@ -71,6 +71,13 @@ public sealed class InventoryLocationStore
         using var connection = Open(); return InventoryLedger.ReadMovements(connection, productId);
     }
 
+    public long GetProductGeneration(string productId)
+    {
+        ValidateId(productId, nameof(productId));
+        using var connection = Open(); EnsureProduct(connection, null, productId);
+        return InventoryLedger.ReadProductGeneration(connection, null, productId);
+    }
+
     public InventoryBalance SetBalance(string productId, string locationId, int quantity, long expectedVersion)
     {
         ValidateId(productId, nameof(productId)); ValidateId(locationId, nameof(locationId));
@@ -154,7 +161,8 @@ public sealed class InventoryLocationStore
         return new(result.AlreadyApplied, reference, result.Receipt.AppliedUtc, movements);
     }
 
-    public InventoryApplyResult ApplyManualSale(string receiptId, string productId, string locationId, int quantity)
+    public InventoryApplyResult ApplyManualSale(string receiptId, string productId, string locationId, int quantity,
+        long? expectedProductGeneration = null, long? expectedLocationVersion = null, long? expectedBalanceVersion = null)
     {
         ValidateId(receiptId, nameof(receiptId)); ValidateId(productId, nameof(productId)); ValidateId(locationId, nameof(locationId));
         if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
@@ -172,7 +180,13 @@ public sealed class InventoryLocationStore
         }
         var location = EnsureProductAndLocation(connection, transaction, productId, locationId, InventoryLocationKind.PhysicalStore);
         if (location.Kind != InventoryLocationKind.PhysicalStore) throw new InvalidOperationException("Manuel satış yalnız fiziksel mağaza stokundan düşülebilir.");
+        if (expectedProductGeneration.HasValue && InventoryLedger.ReadProductGeneration(connection, transaction, productId) != expectedProductGeneration.Value)
+            throw new InvalidOperationException("Ürün manuel satış önizlemesinden sonra silinip yeniden oluşturuldu; yeni önizleme alın.");
+        if (expectedLocationVersion.HasValue && location.Version != expectedLocationVersion.Value)
+            throw new InvalidOperationException("Fiziksel mağaza konumu önizlemeden sonra değişti; yeni önizleme alın.");
         var balance = InventoryLedger.ReadBalance(connection, transaction, productId, locationId);
+        if (expectedBalanceVersion.HasValue && balance.Version != expectedBalanceVersion.Value)
+            throw new InvalidOperationException("Fiziksel mağaza stoku önizlemeden sonra değişti; yeni önizleme alın.");
         if (balance.Quantity < quantity) throw new InvalidOperationException($"Fiziksel mağaza stoku yetersiz ({balance.Quantity}/{quantity}).");
         var after = checked(balance.Quantity - quantity); InventoryLedger.SetBalance(connection, transaction, productId, locationId, after, balance.Version);
         var at = DateTime.UtcNow; var movement = InventoryLedger.RecordMovement(connection, transaction, productId, locationId, balance.Quantity, after, InventoryMovementKind.ManualSale, receiptId, at);
