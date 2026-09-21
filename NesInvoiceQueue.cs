@@ -177,6 +177,17 @@ public sealed class NesInvoiceQueueStore
         if (leaseDuration <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(leaseDuration));
         using var connection = Open();
         using var transaction = connection.BeginTransaction(deferred: false);
+        using (var quarantine = connection.CreateCommand())
+        {
+            quarantine.Transaction = transaction;
+            quarantine.CommandText = "UPDATE nes_invoice_queue SET state=$unknown,lease_token='',lease_until_utc=NULL,last_error=$error,updated_utc=$now WHERE state=$running AND step=$send AND lease_until_utc IS NOT NULL AND lease_until_utc<=$now";
+            quarantine.Parameters.AddWithValue("$unknown", (int)NesQueueState.Unknown);
+            quarantine.Parameters.AddWithValue("$running", (int)NesQueueState.Running);
+            quarantine.Parameters.AddWithValue("$send", (int)NesQueueStep.SendInvoice);
+            quarantine.Parameters.AddWithValue("$error", "Gönderim sırasında uygulama kapandı; yeniden göndermeden önce NES mutabakatı gerekli.");
+            quarantine.Parameters.AddWithValue("$now", Format(now));
+            quarantine.ExecuteNonQuery();
+        }
         string? id = null;
         using (var find = connection.CreateCommand())
         {
@@ -232,6 +243,21 @@ public sealed class NesInvoiceQueueStore
             "state=$state,attempt_count=attempt_count+1,next_attempt_utc=$next,lease_token='',lease_until_utc=NULL,last_error=$error,updated_utc=$now",
             command => { command.Parameters.AddWithValue("$state", (int)NesQueueState.RetryWaiting); command.Parameters.AddWithValue("$next", Format(now.Add(delay))); command.Parameters.AddWithValue("$error", MarketplaceConnectionStore.Redact(error ?? "")); command.Parameters.AddWithValue("$now", Format(now)); });
     }
+
+    public void RecordRemoteAndAdvance(string id, string leaseToken, string uuid, string invoiceNumber, NesQueueStep nextStep, DateTimeOffset now) =>
+        LeaseUpdate(id, leaseToken,
+            "nes_uuid=$uuid,invoice_number=$number,state=$state,step=$step,next_attempt_utc=$next,lease_token='',lease_until_utc=NULL,last_error='',updated_utc=$now",
+            command => { command.Parameters.AddWithValue("$uuid", uuid ?? ""); command.Parameters.AddWithValue("$number", invoiceNumber ?? ""); command.Parameters.AddWithValue("$state", (int)NesQueueState.Ready); command.Parameters.AddWithValue("$step", (int)nextStep); command.Parameters.AddWithValue("$next", Format(now)); command.Parameters.AddWithValue("$now", Format(now)); });
+
+    public void RecordPdfAndAdvance(string id, string leaseToken, string path, string sha256, NesQueueStep nextStep, DateTimeOffset now) =>
+        LeaseUpdate(id, leaseToken,
+            "pdf_path=$path,pdf_sha256=$sha,state=$state,step=$step,next_attempt_utc=$next,lease_token='',lease_until_utc=NULL,last_error='',updated_utc=$now",
+            command => { command.Parameters.AddWithValue("$path", path ?? ""); command.Parameters.AddWithValue("$sha", sha256 ?? ""); command.Parameters.AddWithValue("$state", (int)NesQueueState.Ready); command.Parameters.AddWithValue("$step", (int)nextStep); command.Parameters.AddWithValue("$next", Format(now)); command.Parameters.AddWithValue("$now", Format(now)); });
+
+    public void Release(string id, string leaseToken, DateTimeOffset now) =>
+        LeaseUpdate(id, leaseToken,
+            "state=$state,next_attempt_utc=$next,lease_token='',lease_until_utc=NULL,updated_utc=$now",
+            command => { command.Parameters.AddWithValue("$state", (int)NesQueueState.Ready); command.Parameters.AddWithValue("$next", Format(now)); command.Parameters.AddWithValue("$now", Format(now)); });
 
     public void Block(string id, string leaseToken, string error, DateTimeOffset now) => Terminal(id, leaseToken, NesQueueState.Blocked, error, now);
     public void MarkUnknown(string id, string leaseToken, string error, DateTimeOffset now) => Terminal(id, leaseToken, NesQueueState.Unknown, error, now);
