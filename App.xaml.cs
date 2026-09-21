@@ -92,6 +92,7 @@ public partial class App : Application
                     new NesInvoiceQueueStore(dataDirectory), new OrdersStore(dataDirectory),
                     new AuditStore(dataDirectory), nesQueueOperations, TimeProvider.System);
                 nesQueueRunner = new NesQueueRunner(processor.ProcessNextAsync, TimeSpan.FromMinutes(1));
+                NesQueueRuntime.WakeRequested = nesQueueRunner.Wake;
                 nesQueueRunner.Start();
             }
             catch (Exception queueError)
@@ -116,6 +117,7 @@ public partial class App : Application
         try { nesQueueRunner?.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
         catch (Exception ex) { LogFatal(dataDirectory, ex); }
         nesQueueOperations?.Dispose();
+        NesQueueRuntime.WakeRequested = null;
         base.OnExit(e);
     }
 

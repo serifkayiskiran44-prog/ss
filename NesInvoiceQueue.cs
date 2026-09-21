@@ -259,6 +259,23 @@ public sealed class NesInvoiceQueueStore
             "state=$state,next_attempt_utc=$next,lease_token='',lease_until_utc=NULL,updated_utc=$now",
             command => { command.Parameters.AddWithValue("$state", (int)NesQueueState.Ready); command.Parameters.AddWithValue("$next", Format(now)); command.Parameters.AddWithValue("$now", Format(now)); });
 
+    public void Retry(string id, DateTimeOffset now)
+    {
+        using var connection = Open(); using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE nes_invoice_queue SET state=$ready,next_attempt_utc=$next,last_error='',updated_utc=$now WHERE id=$id AND state=$retry";
+        command.Parameters.AddWithValue("$ready", (int)NesQueueState.Ready); command.Parameters.AddWithValue("$retry", (int)NesQueueState.RetryWaiting);
+        command.Parameters.AddWithValue("$next", Format(now)); command.Parameters.AddWithValue("$now", Format(now)); command.Parameters.AddWithValue("$id", id);
+        if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("Yalnız yeniden deneme bekleyen kayıt çalıştırılabilir.");
+    }
+
+    public void Cancel(string id, DateTimeOffset now)
+    {
+        using var connection = Open(); using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE nes_invoice_queue SET state=$cancelled,next_attempt_utc=NULL,last_error='',updated_utc=$now WHERE id=$id AND state IN ($planned,$ready,$retry,$blocked)";
+        command.Parameters.AddWithValue("$cancelled", (int)NesQueueState.Cancelled); command.Parameters.AddWithValue("$planned", (int)NesQueueState.Planned); command.Parameters.AddWithValue("$ready", (int)NesQueueState.Ready); command.Parameters.AddWithValue("$retry", (int)NesQueueState.RetryWaiting); command.Parameters.AddWithValue("$blocked", (int)NesQueueState.Blocked); command.Parameters.AddWithValue("$now", Format(now)); command.Parameters.AddWithValue("$id", id);
+        if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("Bu kuyruk kaydı mevcut durumunda iptal edilemez.");
+    }
+
     public void Block(string id, string leaseToken, string error, DateTimeOffset now) => Terminal(id, leaseToken, NesQueueState.Blocked, error, now);
     public void MarkUnknown(string id, string leaseToken, string error, DateTimeOffset now) => Terminal(id, leaseToken, NesQueueState.Unknown, error, now);
     public void Complete(string id, string leaseToken, DateTimeOffset now) => Terminal(id, leaseToken, NesQueueState.Completed, "", now);

@@ -5,6 +5,12 @@ using System.Threading.Tasks;
 
 namespace TrMarketplaceHubDesktop;
 
+public static class NesQueueRuntime
+{
+    public static Action? WakeRequested { get; set; }
+    public static void Wake() => WakeRequested?.Invoke();
+}
+
 public sealed class NesQueueRunner : IAsyncDisposable
 {
     readonly Func<CancellationToken, Task<bool>> processNext;
