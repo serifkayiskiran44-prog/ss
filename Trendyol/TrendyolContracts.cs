@@ -8,6 +8,8 @@ public sealed record TrendyolRemoteProduct(string Barcode, string StockCode, str
 {
     public string Status { get; init; } = "";
     public string StatusDetail { get; init; } = "";
+    public long? CategoryId { get; init; }
+    public long? BrandId { get; init; }
 }
 public sealed record TrendyolAddress(long Id, string Name, bool IsShipment, bool IsReturning);
 public sealed record TrendyolCarrier(string Code, string Name);

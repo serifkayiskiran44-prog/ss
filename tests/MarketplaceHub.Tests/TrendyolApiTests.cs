@@ -321,6 +321,16 @@ public class TrendyolApiTests
         Assert.AreEqual("", positional.Status);
     }
 
+    [TestMethod]
+    public async Task ProductsPreserveCategoryAndBrandForBarcodeCatalogMatching()
+    {
+        const string response = """{"page":0,"totalPages":1,"totalElements":1,"content":[{"contentId":8,"title":"Product","category":{"id":123,"name":"Mama"},"brand":{"id":456,"name":"Örnek Marka"},"variants":[{"supplierId":42,"barcode":"8680000000001","stockCode":"S1"}]}]}""";
+        using var client = new TrendyolApiClient(Settings(), new HttpClient(new FakeHandler(_ => Json(response))));
+        var product = (await client.GetProductsAsync(true)).Single();
+        Assert.AreEqual(123L, product.CategoryId);
+        Assert.AreEqual(456L, product.BrandId);
+    }
+
     static string ProductStatusResponse(bool approved, string fields)
     {
         var item = "\"supplierId\":42,\"barcode\":\"B1\",\"stockCode\":\"S1\"" + (fields.Length > 0 ? "," + fields : "");

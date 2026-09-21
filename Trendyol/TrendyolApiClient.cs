@@ -186,9 +186,11 @@ public sealed class TrendyolApiClient : IDisposable
                     if (!contents.Add(contentId)) throw InvalidResponse();
                     var offers = Array(item, "variants");
                     if (offers.GetArrayLength() == 0) throw InvalidResponse();
-                    foreach (var offer in offers.EnumerateArray()) AddProduct(offer, title, contentId, true);
+                    var categoryId = OptionalNestedPositiveId(item, "category");
+                    var brandId = OptionalNestedPositiveId(item, "brand");
+                    foreach (var offer in offers.EnumerateArray()) AddProduct(offer, title, contentId, true, categoryId, brandId);
                 }
-                else AddProduct(item, title, 0, false);
+                else AddProduct(item, title, 0, false, OptionalNestedPositiveId(item, "category"), OptionalNestedPositiveId(item, "brand"));
             }
             readContents += array.GetArrayLength();
             if (readContents == currentTotal) return result.AsReadOnly();
@@ -196,7 +198,7 @@ public sealed class TrendyolApiClient : IDisposable
         }
         throw InvalidResponse();
 
-        void AddProduct(JsonElement item, string title, long contentId, bool isApproved)
+        void AddProduct(JsonElement item, string title, long contentId, bool isApproved, long? categoryId, long? brandId)
         {
             if (PositiveId(item, "supplierId") != sellerId) throw InvalidResponse();
             var barcode = Text(item, "barcode");
@@ -208,7 +210,9 @@ public sealed class TrendyolApiClient : IDisposable
                 OptionalInt(stock, "quantity"), OptionalDecimal(price, "salePrice"), OptionalDecimal(price, "listPrice"), isApproved)
             {
                 Status = status.Status,
-                StatusDetail = status.Detail
+                StatusDetail = status.Detail,
+                CategoryId = categoryId,
+                BrandId = brandId
             });
         }
     }
@@ -456,6 +460,12 @@ public sealed class TrendyolApiClient : IDisposable
     {
         var value = Property(item, name);
         return value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var id) && id > 0 ? id : throw InvalidResponse();
+    }
+    static long? OptionalNestedPositiveId(JsonElement item, string name)
+    {
+        if (item.ValueKind != JsonValueKind.Object) throw InvalidResponse();
+        if (!item.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        return value.ValueKind == JsonValueKind.Object ? PositiveId(value, "id") : throw InvalidResponse();
     }
     static int NonnegativeInt(JsonElement item, string name) => OptionalInt(item, name) is { } number ? number : throw InvalidResponse();
     static int? OptionalInt(JsonElement item, string name)
