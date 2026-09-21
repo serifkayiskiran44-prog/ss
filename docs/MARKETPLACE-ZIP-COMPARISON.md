@@ -120,10 +120,17 @@ Trendyol rekabet analizi güncel projede zaten daha güvenli biçimde bulunuyor.
 
 1. ~~NES sıralı otomatik kuyruk ve otomatik fatura numarası mutabakatı~~ — tamamlandı
 2. ~~Sipariş ekranında gerçek toplu NES fatura işlemleri~~ — tamamlandı
-3. Önizlemeli barkod, kargo etiketi ve fatura yazdırma merkezi
-4. Trendyol canlı iptal ve iade işlemleri
-5. Sipariş arşivleme ve geri yükleme
-6. Hepsiburada rekabet analizi
+3. ~~Önizlemeli barkod, kargo etiketi ve fatura yazdırma merkezi~~ — tamamlandı
+4. ~~Trendyol canlı iptal ve iade işlemleri~~ — tamamlandı
+5. ~~Sipariş arşivleme ve geri yükleme~~ — tamamlandı
+6. ~~Hepsiburada rekabet analizi~~ — resmi canlı rakip uç noktası doğrulanana kadar sınırlandırılmış manuel analiz eklendi
+
+## Uygulanan tasarım iyileştirmeleri
+
+- Ana pencere önce görünür hale geliyor; ürün havuzu, arama dizini ve modül hazırlığı kullanıcı arayüzü açıldıktan sonra başlıyor.
+- Yazdırma merkezi Code 128 barkod, kargo etiketi, fatura özeti, yazıcı/kopya seçimi ve yazdırma geçmişi sağlıyor.
+- Sipariş arşivi geri yüklenebilir ve arşivlenen kayıtlar API yenilemesi sırasında etkin listeye kendiliğinden dönmüyor.
+- Trendyol tedarik edememe, iade okuma, iade kabul ve ret işlemleri gerçek satır kimliği ve açık kullanıcı onayı gerektiriyor.
 
 ## İkinci tarama sonucu
 

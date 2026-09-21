@@ -44,6 +44,7 @@ public partial class MainWindow : Window
  readonly TextBlock calculationStatus=Hint("Alış fiyatını girip hesaplamayı test edebilirsin."),fxStatus=Hint("Kur henüz alınmadı.");
  XmlSource? source; CatalogProduct? edit; EtsyListingTemplate template=new(); EtsyCredentials credentials=new("","","",""); OAuthAttempt? attempt;
  List<MappingEntry> mappings=[]; string xml="",loadedLocation="",previewRevision=""; int listingOffset,listingTotal,productOffset,productTotal,searchRevision,globalSearchRevision; string loadedListingShop="",loadedListingState="";
+ bool workspaceInitialized;
  public MainWindow():this(null){}
  public MainWindow(string? directory)
  {
@@ -54,8 +55,14 @@ public partial class MainWindow : Window
   GlobalSearchBox.TextChanged += GlobalSearchBox_TextChanged;
   LogList.ItemsSource=logs;
   try{if(File.Exists(logPath))foreach(var line in File.ReadLines(logPath).TakeLast(100))logs.Insert(0,line);}catch(IOException){}
+  StatusText.Text="Çalışma alanı hazırlanıyor…";
+  Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,new Action(InitializeWorkspace));
+ }
+ void InitializeWorkspace()
+ {
+  if(workspaceInitialized)return;workspaceInitialized=true;
   BuildProducts();BuildSources();BuildApi();BuildListings();BuildTemplate();BuildNavigation();
-  try{template=TemplateStore.Load(directory);templateEditor.DataContext=template;var saved=directory==null?CredentialStore.Load():null;if(saved!=null)SetCredentials(saved);}catch(Exception e){Log(Safe(e));}
+  try{template=TemplateStore.Load(dataDirectory);templateEditor.DataContext=template;var saved=dataDirectory==null?CredentialStore.Load():null;if(saved!=null)SetCredentials(saved);}catch(Exception e){Log(Safe(e));}
   RefreshSources();RefreshProducts();timer.Tick+=async(_,_)=>await ScheduledAsync();timer.Start();searchTimer.Tick+=async(_,_)=>{searchTimer.Stop();await SearchProductsAsync();};globalSearchTimer.Tick+=SearchTimer_Tick;_ = WarmGlobalSearchAsync();
   Log("Global masaüstü hazır. XML otomasyonu yalnız program açıkken çalışır.");
   if (startupRecovery.State.UncleanExit) Log("Önceki çalışma normal kapanmamış; yerel recovery kontrolleri uygulandı.");
