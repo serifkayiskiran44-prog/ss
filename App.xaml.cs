@@ -84,7 +84,14 @@ public partial class App : Application
                 window.WindowState = WindowState.Maximized;
             }
             MainWindow = window;
+            window.ShowInTaskbar = true;
             window.Show();
+            window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                if (!window.IsVisible) window.Show();
+                if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+                window.Activate();
+            }));
             try
             {
                 nesQueueOperations = new NesQueueOperations(dataDirectory);
