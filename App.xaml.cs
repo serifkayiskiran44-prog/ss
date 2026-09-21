@@ -13,6 +13,8 @@ public partial class App : Application
 {
     StartupCrashGuard? crashGuard;
     string? dataDirectory;
+    NesQueueRunner? nesQueueRunner;
+    NesQueueOperations? nesQueueOperations;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -83,6 +85,19 @@ public partial class App : Application
             }
             MainWindow = window;
             window.Show();
+            try
+            {
+                nesQueueOperations = new NesQueueOperations(dataDirectory);
+                var processor = new NesQueueProcessor(
+                    new NesInvoiceQueueStore(dataDirectory), new OrdersStore(dataDirectory),
+                    new AuditStore(dataDirectory), nesQueueOperations, TimeProvider.System);
+                nesQueueRunner = new NesQueueRunner(processor.ProcessNextAsync, TimeSpan.FromMinutes(1));
+                nesQueueRunner.Start();
+            }
+            catch (Exception queueError)
+            {
+                LogFatal(dataDirectory, new InvalidOperationException("NES kuyruğu başlatılamadı; manuel işlemler kullanılabilir. " + MarketplaceConnectionStore.Redact(queueError.Message)));
+            }
         }
         catch (Exception ex)
         {
@@ -94,6 +109,14 @@ public partial class App : Application
                 MessageBoxImage.Error);
             Shutdown(-1);
         }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        try { nesQueueRunner?.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        catch (Exception ex) { LogFatal(dataDirectory, ex); }
+        nesQueueOperations?.Dispose();
+        base.OnExit(e);
     }
 
     /// Test/smoke hook only: MARKETPLACEHUB_DATA_DIR lets Smoke-Test.ps1 point a real
