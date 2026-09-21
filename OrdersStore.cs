@@ -78,14 +78,47 @@ public sealed partial class OrdersStore
    var payload=get.ExecuteScalar() as string;
    if(payload!=null&&!manual){
     if(!TryReadOrder(o.Marketplace,o.ShopId,o.OrderId,payload,out var previous,out var corrupt))throw new OrderRowCorruptException(o.Marketplace,o.ShopId,o.OrderId,corrupt!.Reason);
-    if(previous!.UpdatedAt>=o.UpdatedAt)continue;
+    if(previous!.UpdatedAt>o.UpdatedAt)continue;
+    if(previous.UpdatedAt==o.UpdatedAt)
+    {
+     var enriched=EnrichSameTimestamp(previous,o);
+     if(!enriched)continue;
+     o=previous;
+    }
     foreach(var old in previous.Shipments){var current=o.Shipments.FirstOrDefault(s=>s.Id==old.Id);if(current==null){o.Shipments.Add(old);continue;}current.Events=old.Events;
      if(old.Source=="Yerel / manuel"&&old.Events.Count>0){current.State=old.State;current.Source=old.Source;current.TrackingUrl=old.TrackingUrl;current.Carrier=old.Carrier;current.TrackingNumber=old.TrackingNumber;}
     }
+    if(previous.InvoiceUuid.Length>0){o.InvoiceProvider=previous.InvoiceProvider;o.InvoiceType=previous.InvoiceType;o.InvoiceNumber=previous.InvoiceNumber;o.InvoiceUuid=previous.InvoiceUuid;o.InvoiceStatus=previous.InvoiceStatus;o.InvoiceUrl=previous.InvoiceUrl;o.InvoiceIssuedAt=previous.InvoiceIssuedAt;}
    }
    using var put=c.CreateCommand();put.Transaction=tx;put.CommandText="INSERT INTO orders VALUES($m,$s,$i,$p) ON CONFLICT(marketplace,shop,id) DO UPDATE SET payload=excluded.payload";Key(put,o);put.Parameters.AddWithValue("$p",JsonSerializer.Serialize(o));put.ExecuteNonQuery();
-  }
-  tx.Commit();
+ }
+ tx.Commit();
+}
+ static bool EnrichSameTimestamp(OrderSnapshot saved,OrderSnapshot incoming)
+ {
+  var changed=false;
+  void Fill(string target,string value,Action<string> set){if(target.Length==0&&!string.IsNullOrWhiteSpace(value)){set(value);changed=true;}}
+  Fill(saved.CustomerName,incoming.CustomerName,v=>saved.CustomerName=v);Fill(saved.CustomerId,incoming.CustomerId,v=>saved.CustomerId=v);Fill(saved.CustomerCode,incoming.CustomerCode,v=>saved.CustomerCode=v);
+  Fill(saved.CustomerEmail,incoming.CustomerEmail,v=>saved.CustomerEmail=v);Fill(saved.BillingEmail,incoming.BillingEmail,v=>saved.BillingEmail=v);Fill(saved.CustomerPhone,incoming.CustomerPhone,v=>saved.CustomerPhone=v);
+  Fill(saved.BillingName,incoming.BillingName,v=>saved.BillingName=v);Fill(saved.BillingAddress,incoming.BillingAddress,v=>saved.BillingAddress=v);Fill(saved.BillingCountry,incoming.BillingCountry,v=>saved.BillingCountry=v);Fill(saved.BillingCity,incoming.BillingCity,v=>saved.BillingCity=v);Fill(saved.BillingDistrict,incoming.BillingDistrict,v=>saved.BillingDistrict=v);
+  Fill(saved.TaxNumber,incoming.TaxNumber,v=>saved.TaxNumber=v);Fill(saved.CustomerTaxOffice,incoming.CustomerTaxOffice,v=>saved.CustomerTaxOffice=v);Fill(saved.CustomerIdentityNumber,incoming.CustomerIdentityNumber,v=>saved.CustomerIdentityNumber=v);
+  Fill(saved.ShippingName,incoming.ShippingName,v=>saved.ShippingName=v);Fill(saved.ShippingAddress,incoming.ShippingAddress,v=>saved.ShippingAddress=v);Fill(saved.ShippingCountry,incoming.ShippingCountry,v=>saved.ShippingCountry=v);Fill(saved.ShippingCity,incoming.ShippingCity,v=>saved.ShippingCity=v);Fill(saved.ShippingDistrict,incoming.ShippingDistrict,v=>saved.ShippingDistrict=v);Fill(saved.ShippingPhone,incoming.ShippingPhone,v=>saved.ShippingPhone=v);
+  Fill(saved.PaymentType,incoming.PaymentType,v=>saved.PaymentType=v);Fill(saved.MarketplaceInvoiceStatus,incoming.MarketplaceInvoiceStatus,v=>saved.MarketplaceInvoiceStatus=v);
+  if(saved.EInvoiceAvailable is null&&incoming.EInvoiceAvailable is not null){saved.EInvoiceAvailable=incoming.EInvoiceAvailable;changed=true;}
+  if(saved.MarketplaceCustomerId==0&&incoming.MarketplaceCustomerId!=0){saved.MarketplaceCustomerId=incoming.MarketplaceCustomerId;changed=true;}
+  if(saved.Items.Count==0&&incoming.Items.Count>0){saved.Items=incoming.Items;changed=true;}
+  if(saved.Shipments.Count==0&&incoming.Shipments.Count>0){saved.Shipments=incoming.Shipments;changed=true;}
+  if(changed){saved.Source=incoming.Source;saved.LastSync=incoming.LastSync;saved.SourceUpdatedAt=incoming.SourceUpdatedAt;}
+  return changed;
+ }
+ public void AttachNesInvoice(string marketplace,string shop,string orderId,string invoiceType,string uuid,string number,string status,DateTimeOffset? issuedAt=null)
+ {
+  if(!Guid.TryParse(uuid,out _)||string.IsNullOrWhiteSpace(number))throw new ArgumentException("Geçerli NES UUID ve fatura numarası gerekli.");
+  using var c=Open();using var tx=c.BeginTransaction();using var get=c.CreateCommand();get.Transaction=tx;get.CommandText="SELECT payload FROM orders WHERE marketplace=$m AND shop=$s AND id=$i";get.Parameters.AddWithValue("$m",marketplace);get.Parameters.AddWithValue("$s",shop);get.Parameters.AddWithValue("$i",orderId);
+  var payload=get.ExecuteScalar() as string??throw new InvalidOperationException("Faturanın bağlanacağı sipariş bulunamadı.");if(!TryReadOrder(marketplace,shop,orderId,payload,out var order,out var corrupt))throw new OrderRowCorruptException(marketplace,shop,orderId,corrupt!.Reason);
+  if(order!.InvoiceUuid.Length>0&&!string.Equals(order.InvoiceUuid,uuid,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Bu siparişe farklı bir fatura zaten bağlı; ikinci fatura bağlanmadı.");
+  order.InvoiceProvider="NES";order.InvoiceType=invoiceType;order.InvoiceUuid=uuid;order.InvoiceNumber=number;order.InvoiceStatus=status;order.InvoiceIssuedAt=issuedAt??DateTimeOffset.UtcNow;
+  using var put=c.CreateCommand();put.Transaction=tx;put.CommandText="UPDATE orders SET payload=$p WHERE marketplace=$m AND shop=$s AND id=$i";put.Parameters.AddWithValue("$p",JsonSerializer.Serialize(order));put.Parameters.AddWithValue("$m",marketplace);put.Parameters.AddWithValue("$s",shop);put.Parameters.AddWithValue("$i",orderId);put.ExecuteNonQuery();tx.Commit();
  }
  static void Key(SqliteCommand cmd,OrderSnapshot o){cmd.Parameters.AddWithValue("$m",o.Marketplace);cmd.Parameters.AddWithValue("$s",o.ShopId);cmd.Parameters.AddWithValue("$i",o.OrderId);}
 }

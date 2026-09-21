@@ -38,11 +38,13 @@ public partial class MainWindow
   etsyWorkspace.CredentialsChanged+=SetCredentials;
   Page("etsy","Etsy","Ürün kontrolü, SKU eşleştirme, kategori ve kargo şablonları, gönderim sonuçları.",etsyWorkspace);
   Page("bizimhesap","BizimHesap","Ürün/depo okuma ve XML ürünleri için SKU-barkod eşleştirme önizlemesi.",BizimHesapPanel.Create(dataDirectory));
+  Page("nes","NES e‑Fatura","Siparişten UBL‑TR hazırlama, NES önizleme, kontrollü gönderim ve belge takibi.",NesPanel.Create(dataDirectory));
   Group("YÖNETİM");
   var settings=new StackPanel{Margin=new Thickness(20)};
   settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
   settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
   settings.Children.Add(Button("BizimHesap bağlantı ayarları",()=>Navigate("bizimhesap")));
+  settings.Children.Add(Button("NES e‑Fatura ayarları",()=>Navigate("nes")));
   settings.Children.Add(Button("Trendyol bağlantı ayarları",()=>{Navigate("trendyol");trendyolWorkspace.ShowSettings();}));
   settings.Children.Add(Button("Etsy bağlantı ayarları",()=>{Navigate("etsy");etsyWorkspace.ShowSettings();}));
   settings.Children.Add(Heading("Sürüm, yedek ve taşıma"));settings.Children.Add(DataBackupPanel.Create(dataDirectory));

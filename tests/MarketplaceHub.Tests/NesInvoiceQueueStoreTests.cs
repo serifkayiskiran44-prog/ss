@@ -68,6 +68,22 @@ public sealed class NesInvoiceQueueStoreTests
     }
 
     [TestMethod]
+    public void ExpiredLeaseAtSendStepRequiresReconciliationInsteadOfResend()
+    {
+        using var temp = new TemporaryDirectory();
+        var store = new NesInvoiceQueueStore(temp.Path);
+        store.Enqueue(Request("send-crash"), Now);
+        store.TryClaimNext(Now, TimeSpan.FromMinutes(2), out var prepare);
+        store.Advance(prepare!.Id, prepare.LeaseToken, NesQueueStep.SendInvoice, NesQueueState.Ready, Now);
+        store.TryClaimNext(Now, TimeSpan.FromMinutes(2), out _);
+
+        Assert.IsFalse(store.TryClaimNext(Now.AddMinutes(3), TimeSpan.FromMinutes(2), out _));
+        var saved = store.List().Single();
+        Assert.AreEqual(NesQueueState.Unknown, saved.State);
+        StringAssert.Contains(saved.LastError, "mutabakat");
+    }
+
+    [TestMethod]
     public void RetryDelayIsCappedAtTwentyFourHoursAndErrorIsRedacted()
     {
         using var temp = new TemporaryDirectory();

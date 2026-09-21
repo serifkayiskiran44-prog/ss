@@ -135,4 +135,15 @@ public sealed class OrderFilterTests
         Assert.IsFalse(OrderFilterCriteria.Matches(rightShopWrongDate, "", null, None, shops, "Tümü", from, to));
         Assert.IsFalse(OrderFilterCriteria.Matches(wrongShopRightDate, "", null, None, shops, "Tümü", from, to));
     }
+
+    [TestMethod]
+    public void AdvancedPaymentAndInvoiceFiltersMustBothMatch()
+    {
+        var order=Order("Trendyol","shop","A1",DateTimeOffset.UtcNow);
+        order.PaymentStatus="Ödendi";order.InvoiceNumber="EAR202600001";
+
+        Assert.IsTrue(OrderAdvancedFilterCriteria.Matches(order,"Ödendi","Tümü",true,false));
+        Assert.IsFalse(OrderAdvancedFilterCriteria.Matches(order,"Bekliyor","Tümü",true,false));
+        Assert.IsFalse(OrderAdvancedFilterCriteria.Matches(order,"Ödendi","Tümü",false,true));
+    }
 }
