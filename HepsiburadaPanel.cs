@@ -17,6 +17,11 @@ public static class HepsiburadaPanel
         HepsiburadaSettings Read() => new(merchant.Text.Trim(), username.Text.Trim(), password.Password, agent.Text.Trim());
         root.Children.Add(Button("Şifreli kaydet", () => { var settings = Read(); HepsiburadaConnection.Validate(settings); store.Save(settings); state.Text = "Hepsiburada ayarları DPAPI ile kaydedildi. Canlı API durumu: LIVE_API_BLOCKED."; }));
         root.Children.Add(AsyncButton("Salt okunur bağlantı testi", async () => await new HepsiburadaConnection().TestReadOnlyAsync(Read())));
+        root.Children.Add(new Separator { Margin = new Thickness(0, 18, 0, 12) });
+        root.Children.Add(new TextBlock { Text = "Rekabet analizi", FontSize = 18, FontWeight = FontWeights.SemiBold });
+        root.Children.Add(new TextBlock { Text = "Hepsiburada'nın doğrulanmış bir rakip fiyat API uç noktası olmadığı için rakip fiyatını panelden veya yetkili rapordan girin. Sistem alt/üst fiyat sınırına göre öneri üretir; fiyatı kendiliğinden mağazaya göndermez.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkSlateGray, Margin = new Thickness(0, 4, 0, 8) });
+        var competitor=Field(root,"Rakip fiyatı");var minimum=Field(root,"Minimum satış fiyatı");var maximum=Field(root,"Maksimum satış fiyatı");var difference=Field(root,"Rakipten düşük olma farkı");
+        root.Children.Add(Button("Fiyat önerisi hesapla",()=>{if(!decimal.TryParse(competitor.Text,out var c)||!decimal.TryParse(minimum.Text,out var min)||!decimal.TryParse(maximum.Text,out var max)||!decimal.TryParse(difference.Text,out var diff))throw new ArgumentException("Fiyat alanlarını sayı olarak girin.");var suggestion=HepsiburadaCompetition.Suggest(c,min,max,diff);state.Text=suggestion.Price.HasValue?$"Önerilen fiyat: {suggestion.Price:0.00} TL · {suggestion.Message}":suggestion.Message;}));
         try { var saved = store.Load(); if (saved is not null) { merchant.Text = saved.MerchantId; username.Text = saved.Username; agent.Text = saved.UserAgent; state.Text = HepsiburadaConnection.Describe(saved); } else state.Text = "NOT_CONFIGURED: Hepsiburada ayarı yok."; } catch (Exception e) { state.Text = MarketplaceConnectionStore.Redact(e.Message); }
         return new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }

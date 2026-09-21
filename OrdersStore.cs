@@ -49,7 +49,7 @@ public sealed partial class OrdersStore
  {
   directory??=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");Directory.CreateDirectory(directory);
   connectionString=new SqliteConnectionStringBuilder{DataSource=Path.Combine(directory,"orders.db"),DefaultTimeout=15,Pooling=true}.ToString();
-  using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA busy_timeout=15000;CREATE TABLE IF NOT EXISTS orders(marketplace TEXT NOT NULL,shop TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(marketplace,shop,id));CREATE INDEX IF NOT EXISTS IX_orders_marketplace_shop ON orders(marketplace,shop);CREATE INDEX IF NOT EXISTS IX_orders_status ON orders(json_extract(payload,'$.RawStatus'));CREATE INDEX IF NOT EXISTS IX_orders_updated ON orders(json_extract(payload,'$.UpdatedAt') DESC)";cmd.ExecuteNonQuery();SchemaVersion.Ensure(c);
+  using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA busy_timeout=15000;CREATE TABLE IF NOT EXISTS orders(marketplace TEXT NOT NULL,shop TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(marketplace,shop,id));CREATE INDEX IF NOT EXISTS IX_orders_marketplace_shop ON orders(marketplace,shop);CREATE INDEX IF NOT EXISTS IX_orders_status ON orders(json_extract(payload,'$.RawStatus'));CREATE INDEX IF NOT EXISTS IX_orders_updated ON orders(json_extract(payload,'$.UpdatedAt') DESC)";cmd.ExecuteNonQuery();EnsureArchive(c);SchemaVersion.Ensure(c);
  }
  SqliteConnection Open(){var c=new SqliteConnection(connectionString);c.Open();using var pragma=c.CreateCommand();pragma.CommandText="PRAGMA busy_timeout=15000";pragma.ExecuteNonQuery();return c;}
  public List<OrderSnapshot> ReadAll(){using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT marketplace,shop,id,payload FROM orders";using var r=cmd.ExecuteReader();var rows=new List<OrderSnapshot>();while(r.Read())if(TryReadOrder(r.GetString(0),r.GetString(1),r.GetString(2),r.GetString(3),out var order,out _))rows.Add(order!);return rows.OrderByDescending(o=>o.UpdatedAt).ToList();}
@@ -74,7 +74,7 @@ public sealed partial class OrdersStore
   using var c=Open();using var tx=c.BeginTransaction();
   foreach(var original in orders)
   {
-   var o=original.Copy();using var get=c.CreateCommand();get.Transaction=tx;get.CommandText="SELECT payload FROM orders WHERE marketplace=$m AND shop=$s AND id=$i";Key(get,o);
+   var o=original.Copy();if(!manual){using var archived=c.CreateCommand();archived.Transaction=tx;archived.CommandText="SELECT COUNT(*) FROM order_archive WHERE marketplace=$m AND shop=$s AND id=$i";Key(archived,o);if(Convert.ToInt32(archived.ExecuteScalar())>0)continue;}using var get=c.CreateCommand();get.Transaction=tx;get.CommandText="SELECT payload FROM orders WHERE marketplace=$m AND shop=$s AND id=$i";Key(get,o);
    var payload=get.ExecuteScalar() as string;
    if(payload!=null&&!manual){
     if(!TryReadOrder(o.Marketplace,o.ShopId,o.OrderId,payload,out var previous,out var corrupt))throw new OrderRowCorruptException(o.Marketplace,o.ShopId,o.OrderId,corrupt!.Reason);
@@ -107,6 +107,7 @@ public sealed partial class OrdersStore
   if(saved.EInvoiceAvailable is null&&incoming.EInvoiceAvailable is not null){saved.EInvoiceAvailable=incoming.EInvoiceAvailable;changed=true;}
   if(saved.MarketplaceCustomerId==0&&incoming.MarketplaceCustomerId!=0){saved.MarketplaceCustomerId=incoming.MarketplaceCustomerId;changed=true;}
   if(saved.Items.Count==0&&incoming.Items.Count>0){saved.Items=incoming.Items;changed=true;}
+  else foreach(var savedItem in saved.Items){var incomingItem=incoming.Items.FirstOrDefault(x=>(x.Sku.Length>0&&x.Sku==savedItem.Sku)||(x.Barcode.Length>0&&x.Barcode==savedItem.Barcode)||(x.ProductId.Length>0&&x.ProductId==savedItem.ProductId));if(savedItem.MarketplaceLineId==0&&incomingItem?.MarketplaceLineId>0){savedItem.MarketplaceLineId=incomingItem.MarketplaceLineId;changed=true;}}
   if(saved.Shipments.Count==0&&incoming.Shipments.Count>0){saved.Shipments=incoming.Shipments;changed=true;}
   if(changed){saved.Source=incoming.Source;saved.LastSync=incoming.LastSync;saved.SourceUpdatedAt=incoming.SourceUpdatedAt;}
   return changed;

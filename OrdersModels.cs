@@ -102,6 +102,7 @@ public sealed class OrderSnapshot
 }
 public sealed class OrderItem
 {
+ public long MarketplaceLineId {get;set;}
  public string ProductId {get;set;}="";
  public string MarketplaceProductCode {get;set;}="";
  public string Barcode {get;set;}="";
