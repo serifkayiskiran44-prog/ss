@@ -5,7 +5,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $outputFull = [System.IO.Path]::GetFullPath($OutputDirectory)
 $packageFull = [System.IO.Path]::GetFullPath($PackagePath)
 
