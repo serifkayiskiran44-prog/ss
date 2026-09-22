@@ -10,6 +10,8 @@ public sealed record BizimHesapProduct(string Id, string Code, string Barcode, s
 public sealed record BizimHesapWarehouse(string Id, string Name);
 public sealed record BizimHesapInventory(string ProductId, int Quantity);
 public sealed record BizimHesapCreateProduct(string Sku, string Barcode, string Title, decimal NetPrice, decimal VatRate, int Quantity, string Currency);
+public sealed record BizimHesapCreateResponse(int ResultCode, string ErrorText, string RemoteId);
+public sealed class BizimHesapProductRejectedException(string message) : InvalidOperationException(message);
 
 /// <summary>Only the endpoints evidenced by the user-provided Postman collection live here.</summary>
 public sealed class BizimHesapConnection(HttpClient http)
@@ -37,6 +39,48 @@ public sealed class BizimHesapConnection(HttpClient http)
         request.Headers.TryAddWithoutValidation("Token", settings.Token);
         request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
         return request;
+    }
+
+    public async Task<BizimHesapCreateResponse> AddProductAsync(BizimHesapSettings settings, BizimHesapCreateProduct product, CancellationToken cancellationToken = default)
+    {
+        using var request = BuildAddProductRequest(settings, product);
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.Moved or HttpStatusCode.Redirect or HttpStatusCode.RedirectMethod or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect)
+            throw new InvalidOperationException("BizimHesap yönlendirme yanıtı verdi; kimlik bilgisi aktarılmadı.");
+        if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"BizimHesap HTTP {(int)response.StatusCode}: ürün kaydedilemedi.");
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (json.Length > 65536) throw new InvalidOperationException("BizimHesap ürün kaydı yanıtı beklenenden büyük.");
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("BizimHesap ürün kaydı yanıtı nesne biçiminde değil.");
+            var resultCode = Int(root, "resultCode", "code");
+            var error = FirstText(root, "errorText", "error", "message");
+            if (resultCode != 0 || error.Length > 0)
+            {
+                var detail = error.Length > 0 ? AuditStore.Sanitize(error) : "Sunucu hata metni döndürmedi.";
+                if (detail.Length > 500) detail = detail[..500];
+                throw new BizimHesapProductRejectedException($"BizimHesap ürün kaydını reddetti (resultCode: {resultCode}): {detail}");
+            }
+            var remoteId = FirstText(root, "id", "guid", "productId");
+            if (remoteId.Length == 0 && root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+                remoteId = FirstText(data, "id", "guid", "productId");
+            return new(resultCode, "", remoteId);
+        }
+        catch (JsonException) { throw new InvalidOperationException("BizimHesap ürün kaydı yanıtı beklenen JSON biçiminde değil."); }
+    }
+
+    public async Task<IReadOnlyList<BizimHesapProduct>> ReadAllProductsAsync(BizimHesapSettings settings, CancellationToken cancellationToken = default)
+    {
+        var all = new List<BizimHesapProduct>();
+        for (var page = 1; page <= 100; page++)
+        {
+            var rows = await ReadProductsAsync(settings, page, 100, cancellationToken);
+            all.AddRange(rows);
+            if (rows.Count < 100) return all;
+        }
+        throw new InvalidOperationException("BizimHesap ürün sayfalaması 10.000 kayıt sınırını aştı.");
     }
 
     public async Task<IReadOnlyList<BizimHesapProduct>> ReadProductsAsync(BizimHesapSettings settings, int page = 1, int size = 100, CancellationToken cancellationToken = default)
@@ -77,13 +121,20 @@ public sealed class BizimHesapConnection(HttpClient http)
     {
         if (root.ValueKind == JsonValueKind.Array) return root.EnumerateArray().ToArray();
         if (root.ValueKind == JsonValueKind.Object)
+        {
             foreach (var name in new[] { "data", "items", "result" })
                 if (root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array) return value.EnumerateArray().ToArray();
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+                foreach (var name in new[] { "products", "warehouses", "inventory", "items" })
+                    if (data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array) return value.EnumerateArray().ToArray();
+        }
         throw new InvalidOperationException("BizimHesap yanıt listesi beklenen biçimde değil.");
     }
 
     static BizimHesapProduct Product(JsonElement row) => new(Text(row, "guid", "productId", "id"), Text(row, "code", "stockCode", "id"), Text(row, "barcode", "barCode"), Text(row, "title", "name"), Decimal(row, "price", "salePrice"), Integer(row, "quantity", "stock", "amount"));
     static string Text(JsonElement row, params string[] names) { foreach (var name in names) if (row.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String) return value.GetString() ?? ""; return ""; }
-    static int Integer(JsonElement row, params string[] names) { foreach (var name in names) if (row.TryGetProperty(name, out var value) && value.TryGetInt32(out var number)) return number; return 0; }
+    static int Integer(JsonElement row, params string[] names) { foreach (var name in names) if (row.TryGetProperty(name, out var value)) { if (value.TryGetInt32(out var number)) return number; if (value.TryGetDouble(out var decimalNumber) && decimalNumber is >= int.MinValue and <= int.MaxValue) return (int)Math.Round(decimalNumber, MidpointRounding.AwayFromZero); } return 0; }
     static decimal Decimal(JsonElement row, params string[] names) { foreach (var name in names) if (row.TryGetProperty(name, out var value) && value.TryGetDecimal(out var number)) return number; return 0; }
+    static int Int(JsonElement row, params string[] names) { foreach (var name in names) if (row.TryGetProperty(name, out var value)) { if (value.TryGetInt32(out var number)) return number; if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out number)) return number; } return 0; }
+    static string FirstText(JsonElement row, params string[] names) { foreach (var name in names) if (row.TryGetProperty(name, out var value)) { if (value.ValueKind == JsonValueKind.String) return (value.GetString() ?? "").Trim(); if (value.ValueKind == JsonValueKind.Number) return value.GetRawText(); } return ""; }
 }

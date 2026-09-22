@@ -51,6 +51,19 @@ public sealed class BizimHesapConnectionTests
     }
 
     [TestMethod]
+    public async Task ReadProductsAsync_reads_bizimhesap_data_products_wrapper()
+    {
+        var body = "{\"resultCode\":0,\"errorText\":\"\",\"data\":{\"products\":[{\"id\":\"42\",\"code\":\"SKU-1\",\"barcode\":\"B-1\",\"title\":\"Ürün\",\"price\":10.5,\"quantity\":7.0}]}}";
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+        using var http = new HttpClient(handler);
+
+        var row = (await new BizimHesapConnection(http).ReadProductsAsync(Settings())).Single();
+
+        Assert.AreEqual("SKU-1", row.Code);
+        Assert.AreEqual(7, row.Quantity);
+    }
+
+    [TestMethod]
     public async Task ReadWarehousesAsync_classifies_rate_limit_without_echoing_token()
     {
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.TooManyRequests));
@@ -82,5 +95,36 @@ public sealed class BizimHesapConnectionTests
         Assert.AreEqual(100m, body.RootElement.GetProperty("price").GetDecimal());
         Assert.AreEqual("TL", body.RootElement.GetProperty("currency").GetString());
         Assert.AreEqual(20m, body.RootElement.GetProperty("taxRate").GetDecimal());
+    }
+
+    [TestMethod]
+    public async Task AddProductAsync_returns_success_result_without_exposing_credentials()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"resultCode\":0,\"errorText\":\"\",\"data\":{\"id\":\"remote-42\"}}")
+        });
+        using var http = new HttpClient(handler);
+
+        var result = await new BizimHesapConnection(http).AddProductAsync(Settings(), new("SKU-1", "BARKOD-1", "Ürün", 100m, 20m, 5, "TRY"));
+
+        Assert.AreEqual(0, result.ResultCode);
+        Assert.AreEqual("remote-42", result.RemoteId);
+    }
+
+    [TestMethod]
+    public async Task AddProductAsync_surfaces_sanitized_api_error_text()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"resultCode\":12,\"errorText\":\"Ürün kodu reddedildi\"}")
+        });
+        using var http = new HttpClient(handler);
+
+        var error = await Assert.ThrowsExceptionAsync<BizimHesapProductRejectedException>(() =>
+            new BizimHesapConnection(http).AddProductAsync(Settings(), new("SKU-1", "BARKOD-1", "Ürün", 100m, 20m, 5, "TRY")));
+
+        StringAssert.Contains(error.Message, "Ürün kodu reddedildi");
+        Assert.IsFalse(error.Message.Contains("token-value", StringComparison.Ordinal));
     }
 }
