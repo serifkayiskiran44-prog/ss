@@ -59,6 +59,7 @@ public class EtsyWorkspacePanelTests
             var window=new MainWindow(dir);
             try
             {
+                window.Dispatcher.Invoke(()=>{},System.Windows.Threading.DispatcherPriority.ContextIdle);
                 var nav=Walk(window).OfType<ListBox>().Single(l=>l.Name=="NavigationList");
                 Assert.IsTrue(nav.Items.OfType<ListBoxItem>().Any(i=>Equals(i.Tag,"etsy") && Equals(i.Content,"Etsy")));
             }
