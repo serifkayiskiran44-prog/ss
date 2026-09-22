@@ -9,6 +9,16 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $outputFull = [System.IO.Path]::GetFullPath($OutputDirectory)
 $packageFull = [System.IO.Path]::GetFullPath($PackagePath)
 
+function Get-PackageRelativePath([string]$Root, [string]$Path) {
+    $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $pathFull = [System.IO.Path]::GetFullPath($Path)
+    $prefix = $rootFull + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $pathFull.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Paket dosyası çıktı klasörünün dışında: $pathFull"
+    }
+    return $pathFull.Substring($prefix.Length).Replace('\', '/')
+}
+
 if (Test-Path $outputFull) { Remove-Item -LiteralPath $outputFull -Recurse -Force }
 New-Item -ItemType Directory -Path $outputFull -Force | Out-Null
 
@@ -22,7 +32,7 @@ if (-not ($files | Where-Object Name -eq 'TrMarketplaceHubDesktop.exe')) {
 
 $manifestEntries = foreach ($file in $files) {
     [pscustomobject]@{
-        path = [System.IO.Path]::GetRelativePath($outputFull, $file.FullName).Replace('\\','/')
+        path = Get-PackageRelativePath $outputFull $file.FullName
         size = $file.Length
         sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     }

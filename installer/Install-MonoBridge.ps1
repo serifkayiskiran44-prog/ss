@@ -10,6 +10,16 @@ $exeSource = Join-Path $package 'TrMarketplaceHubDesktop.exe'
 if (-not (Test-Path $exeSource)) { throw 'Self-contained publish klasörü ve TrMarketplaceHubDesktop.exe bulunamadı.' }
 
 $releaseManifestPath = Join-Path $package 'release-manifest.json'
+
+function Get-PackageRelativePath([string]$Root, [string]$Path) {
+    $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $pathFull = [System.IO.Path]::GetFullPath($Path)
+    $prefix = $rootFull + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $pathFull.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Paket dosyası paket klasörünün dışında: $pathFull"
+    }
+    return $pathFull.Substring($prefix.Length).Replace('\', '/')
+}
 if (-not (Test-Path $releaseManifestPath)) { throw 'release-manifest.json bulunamadı; doğrulanmamış paket kurulmayacak.' }
 $releaseManifest = Get-Content -LiteralPath $releaseManifestPath -Raw | ConvertFrom-Json
 if ($releaseManifest.product -ne 'MarketplaceHub' -or $releaseManifest.rid -ne 'win-x64' -or -not $releaseManifest.selfContained) {
@@ -48,7 +58,7 @@ $actualFiles = Get-ChildItem -LiteralPath $package -File -Recurse |
     Where-Object { $_.Name -ne 'publish-manifest.json' -and $_.Name -ne 'release-manifest.json' }
 $actualRelative = New-Object 'System.Collections.Generic.HashSet[string]'
 foreach ($file in $actualFiles) {
-    $rel = [System.IO.Path]::GetRelativePath($package, $file.FullName).Replace('\', '/')
+    $rel = Get-PackageRelativePath $package $file.FullName
     [void]$actualRelative.Add($rel.ToLowerInvariant())
 }
 $manifestRelative = New-Object 'System.Collections.Generic.HashSet[string]'
