@@ -62,6 +62,19 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
+    public void AccountHomeOffersAVisibleAddStoreActionThatRoutesToConnections() => InSta(root =>
+    {
+        var routes = new List<string>();
+        using var panel = new MarketplaceAccountHomePanel(root, _ => { }, routes.Add);
+        var add = Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceAddStore");
+
+        Assert.AreEqual(Visibility.Visible, add.Visibility);
+        add.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        CollectionAssert.AreEqual(new[] { "connections" }, routes);
+    });
+
+    [TestMethod]
     public void OpeningAnAccountCollapsesTheChooserSoProductManagementUsesTheRemainingHeight() => InSta(root =>
     {
         new MarketplaceConnectionStore(root).Save("trendyol", "101", "Trendyol A", true);

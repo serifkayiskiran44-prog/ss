@@ -44,7 +44,7 @@ public partial class MainWindow
   Page("sync","Senkronizasyon","Kanal, XML ve otomasyon işlerini tek kuyruğa bağlı olarak izleyin.",BuildSync());
   Page("automation","Otomasyon","Zamanlanmış işleri ve kontrollü tekrar denemeleri yönetin.",BuildAutomation());
   Group("MAĞAZALAR");
-  marketplaceHome=new MarketplaceAccountHomePanel(dataDirectory);
+  marketplaceHome=new MarketplaceAccountHomePanel(dataDirectory,navigate:OpenMarketplaceRoute);
   marketplaceHome.ProductCardRequested += productId => OpenProductCard(false, productId);
   Page("marketplaces","Pazaryeri hesapları","Etkin mağazaları ayrı kartlar halinde açın; ürün ve işlem verileri seçili hesaba bağlı kalır.",marketplaceHome);
   CompatibilityAccountLink("trendyol","Trendyol","Kayıtlı bir Trendyol hesabını açar.");
@@ -58,22 +58,7 @@ public partial class MainWindow
   Page("reports","Raporlar ve denetim","Tanılama, denetim kaydı ve operasyon raporlarını inceleyin.",DiagnosticsPanel.Create(dataDirectory,OpenMarketplaceRoute));
   Group("SİSTEM");
   Page("connections","Mağaza bağlantıları","Hesap metadatası, etkinlik, bağlantı durumu ve desteklenen yetenekler.",MarketplaceConnectionsPanel.Create(dataDirectory,OpenMarketplaceRoute,marketplaceHome.Refresh));
-  var settings=new StackPanel{Margin=new Thickness(20)};
-  settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
-  settings.Children.Add(Hint("Pazaryeri erişim bilgileri ilgili kanalın Bağlantı sekmesindedir. Bağlantı doğrulaması ürün aktarımının etkin olduğu anlamına gelmez."));
-  settings.Children.Add(Button("BizimHesap bağlantı ayarları",()=>Navigate("bizimhesap")));
-  settings.Children.Add(Button("NES e‑Fatura ayarları",()=>Navigate("nes")));
-  settings.Children.Add(Button("Mağaza bağlantılarını yönet",()=>Navigate("connections")));
-  if(backgroundController is not null)
-  {
-   var closeToTray=new CheckBox{Content="Pencereyi kapatınca MonoBridge'i bildirim alanında çalıştır",IsChecked=backgroundController.CloseToTray,Margin=new Thickness(4,10,4,4)};
-   closeToTray.Checked+=(_,_)=>backgroundController.CloseToTray=true;
-   closeToTray.Unchecked+=(_,_)=>backgroundController.CloseToTray=false;
-   settings.Children.Add(closeToTray);
-  }
-  settings.Children.Add(Heading("Sürüm, yedek ve taşıma"));settings.Children.Add(DataBackupPanel.Create(dataDirectory));
-  settings.Children.Add(Heading("Yerel veri ve otomasyon"));settings.Children.Add(Hint("XML kaynakları ve ürün kilitleri XML otomasyonu / Ürün yönetimi ekranlarından düzenlenir. Zamanlı salt okunur işler MonoBridge bildirim alanında çalışırken devam eder. İşlem geçmişi pencerenin altındadır."));
-  Page("settings","Ayarlar","Hesap bağlantıları, pazaryeri görselleri ve yerel çalışma bilgileri",Scroll(settings));
+  Page("settings","Ayarlar","Hesap, mağaza, otomasyon, yerel veri ve sağlık ayarlarını bölümler halinde yönetin.",new SettingsHubPanel(dataDirectory,backgroundController,OpenMarketplaceRoute));
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var initial = uiPreferences.Get("last-route");

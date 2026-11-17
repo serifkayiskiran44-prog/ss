@@ -20,10 +20,12 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
 {
     readonly string? directory;
     readonly Action<string> openConnection;
+    readonly Action<string> navigate;
     readonly WrapPanel cards = new() { Name = "MarketplaceAccountCards", Orientation = Orientation.Horizontal };
     readonly ContentControl workspace = new() { Name = "MarketplaceAccountWorkspace", VerticalAlignment = VerticalAlignment.Stretch };
     readonly ScrollViewer chooser = new() { Name = "MarketplaceAccountChooser", VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, MaxHeight = 150 };
     readonly Button chooserToggle = new() { Name = "MarketplaceAccountChooserToggle", Content = "Mağazaları gizle", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 5, 10, 5) };
+    readonly Button addStore = new() { Name = "MarketplaceAddStore", Content = "Mağaza ekle", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 5, 10, 5) };
     readonly DockPanel heading = new() { Name = "MarketplaceAccountHeading", Margin = new Thickness(4, 2, 4, 8) };
     string? channelFilter;
     readonly TextBlock empty = new()
@@ -37,12 +39,14 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
     public string? CurrentConnectionId { get; private set; }
     public event Action<string>? ProductCardRequested;
 
-    public MarketplaceAccountHomePanel(string? directory = null, Action<string>? openConnection = null)
+    public MarketplaceAccountHomePanel(string? directory = null, Action<string>? openConnection = null, Action<string>? navigate = null)
     {
         this.directory = directory;
         this.openConnection = openConnection ?? OpenWorkspace;
+        this.navigate = navigate ?? (_ => { });
         var root = new DockPanel { Margin = new Thickness(12) };
         DockPanel.SetDock(chooserToggle, Dock.Right); heading.Children.Add(chooserToggle);
+        DockPanel.SetDock(addStore, Dock.Right); heading.Children.Add(addStore);
         var headingText = new StackPanel();
         headingText.Children.Add(new TextBlock { Text = "Pazaryeri hesapları", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) });
         headingText.Children.Add(new TextBlock { Text = "Mağazayı seçin; ürün yönetimi kalan alanı kullanır.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray, Margin = new Thickness(0, 3, 0, 0) });
@@ -55,6 +59,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         root.Children.Add(workspace);
         Content = root;
         chooserToggle.Click += (_, _) => SetChooserVisible(chooser.Visibility != Visibility.Visible);
+        addStore.Click += (_, _) => this.navigate("connections");
         Refresh();
     }
 
