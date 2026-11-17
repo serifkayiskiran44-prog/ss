@@ -9,7 +9,12 @@ public sealed record ScreenParityAuditResult(string Status, IReadOnlyList<string
 public static class ScreenParityAudit
 {
     public static IReadOnlySet<string> RequiredRoutes { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    { "dashboard", "products", "orders", "xml", "excel", "taxonomy", "sync", "automation", "connections", "api-health", "messages", "settings", "reports" };
+    {
+        "dashboard", "products", "bulk-products", "categories", "brands", "taxonomy", "media", "xml", "excel",
+        "orders", "order-exceptions", "policy-center", "sync", "automation", "marketplaces", "listing-matrix",
+        "bizimhesap", "nes", "data-quality", "api-health", "messages", "reports", "readiness", "connections",
+        "settings", "locale", "backup", "migration"
+    };
 
     public static ScreenParityAuditResult Evaluate(IEnumerable<string> registeredRoutes)
     {

@@ -220,10 +220,16 @@ public sealed class SafetyAndStabilityTests
     [TestMethod]
     public void ScreenParityAuditReportsMissingRouteAndPassesCompleteContract()
     {
-        var missing = TrMarketplaceHubDesktop.ScreenParityAudit.Evaluate(["dashboard", "products"]);
+        string[] previousRouteContract =
+        [
+            "dashboard", "products", "orders", "xml", "excel", "taxonomy", "sync", "automation",
+            "connections", "api-health", "messages", "settings", "reports"
+        ];
+        var missing = TrMarketplaceHubDesktop.ScreenParityAudit.Evaluate(previousRouteContract);
         var complete = TrMarketplaceHubDesktop.ScreenParityAudit.Evaluate(TrMarketplaceHubDesktop.ScreenParityAudit.RequiredRoutes);
         Assert.AreEqual("BLOCKED", missing.Status);
-        CollectionAssert.Contains(missing.MissingRoutes.ToList(), "orders");
+        foreach (var route in new[] { "backup", "bulk-products", "listing-matrix", "locale", "migration", "order-exceptions", "readiness" })
+            CollectionAssert.Contains(missing.MissingRoutes.ToList(), route);
         Assert.AreEqual("WORKING", complete.Status);
     }
 
