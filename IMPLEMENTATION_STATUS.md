@@ -1,5 +1,11 @@
 # Uygulama durumu — .NET 8 EXE
 
+## Kapsamlı Entegra temiz-oda görev haritası — 2026-11-17
+- Entegra ana menüsü, resmi eğitim/geliştirme/platform kaynakları ve MonoBridge'in mevcut operasyon panelleri temiz-oda yaklaşımıyla karşılaştırıldı; kaynak kodu, decompile çıktısı, private API ve marka varlıkları kullanılmadı.
+- `docs/CLAUDE-ENTEGRA-COMPREHENSIVE-TASK.md` içinde T0–T11 bilgi mimarisi, uygulama sırası, dosya sınırları, güvenlik kapıları ve kabul kriterleri hazırlandı. İlk iş yeni servis yazmak değil, hazır fakat görünmeyen panelleri ortak navigasyona bağlayan T0'dır.
+- Entegra yönetici/UAC katmanında açıldığı için alt ekranların otomatik görsel turu tamamlanamadı; UAC aşılmadı, canlı kaydet/gönder/sil yapılmadı.
+- Doküman değişikliğinden sonra self-contained win-x64 `Windows-Current` publish başarılı oldu. Tam test komutu iki kez testhost bağlantı aşamasında sırasıyla 90 ve 180 saniyelik zaman aşımına uğradı; test gövdesi başlamadı ve bu durum başarı olarak raporlanmadı.
+
 ## Entegra esinli operasyon arayüzü — 2026-11-17
 - Ana kabuk MonoBridge markasını koruyarak daha kompakt bir operasyon düzenine taşındı; global komut alanı ve mevcut bütün ana rotalar görünür kaldı.
 - Ürün Yönetimi yoğun filtre/özet/tablo/düzenleme bölgelerine, XML Yönetimi kaynak/ayırıcı/tanım/önizleme bölgelerine ayrıldı. Mevcut yerel kayıt, önizleme, stale ve onay güvenlikleri değiştirilmedi.

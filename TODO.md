@@ -1,5 +1,13 @@
 # Devam durumu — 2026-09-11
 
+## Kapsamlı Entegra temiz-oda operasyon paritesi — 2026-11-17
+- [x] Entegra ana menüsü, resmi eğitim/geliştirme/platform kaynakları ve MonoBridge mevcut panelleri salt okunur karşılaştırıldı.
+- [x] Kaynak kodu/decompile/private API kullanmadan kapsamlı bilgi mimarisi ve T0–T11 uygulama sırası hazırlandı: `docs/CLAUDE-ENTEGRA-COMPREHENSIVE-TASK.md`.
+- [x] Yedi `DEFERRED_BY_USER` alanı, yeni login/rol sistemi, fulfillment ve settlement kapsam dışında tutuldu.
+- [ ] T0: Kodda hazır fakat görünmeyen operasyon panellerini ortak navigasyona bağla; yeni servis yazma.
+- [ ] T1–T11: Görev dosyasındaki sırayla stok defteri, ürün kalitesi, mağaza matrisi, Trendyol, sipariş, Excel/XML, scheduler, politika, rapor ve yönetim kapanışlarını uygula.
+- [ ] Entegra yönetici/UAC katmanında açıldığı için alt ekranların kullanıcı oturumunda salt-okunur görsel turunu daha sonra tamamla; UAC aşılmadı ve canlı kaydet/gönder/sil yapılmadı.
+
 ## Entegra esinli operasyon arayüzü — 2026-11-17
 - [x] MonoBridge kimliğini koruyan kompakt uygulama kabuğu, global komut alanı ve tam operasyon navigasyonu eklendi.
 - [x] Ürün Yönetimi; filtre, sonuç özeti, yoğun ürün tablosu ve mevcut güvenli düzenleme akışlarını öne çıkaran çalışma alanına dönüştürüldü.
