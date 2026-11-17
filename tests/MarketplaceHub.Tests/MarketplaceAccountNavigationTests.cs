@@ -300,11 +300,32 @@ public sealed class MarketplaceAccountNavigationTests
         try
         {
             var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            string[] expectedRoutes =
+            [
+                "dashboard", "products", "bulk-products", "categories", "brands", "taxonomy", "media", "xml", "excel",
+                "orders", "order-exceptions", "policy-center", "sync", "automation", "marketplaces", "listing-matrix",
+                "bizimhesap", "nes", "data-quality", "api-health", "messages", "reports", "readiness", "connections",
+                "settings", "locale", "backup", "migration"
+            ];
             var tags = navigation.Items.OfType<ListBoxItem>().Where(x => x.Tag is not null).Select(x => x.Tag!.ToString()!).ToArray();
-            foreach (var route in ScreenParityAudit.RequiredRoutes)
+            CollectionAssert.AreEquivalent(expectedRoutes, ScreenParityAudit.RequiredRoutes.ToArray());
+            foreach (var route in expectedRoutes)
                 Assert.AreEqual(1, tags.Count(x => string.Equals(x, route, StringComparison.OrdinalIgnoreCase)), $"Route '{route}' must be registered exactly once.");
             Assert.AreEqual("WORKING", ScreenParityAudit.Evaluate(tags).Status);
             Assert.AreEqual("dashboard", ((ListBoxItem)navigation.SelectedItem).Tag);
+
+            var tabs = Walk(window).OfType<TabControl>().Single(x => x.Name == "ModuleTabs");
+            foreach (var route in new[] { "bulk-products", "listing-matrix", "order-exceptions", "readiness", "locale", "backup", "migration" })
+            {
+                var page = tabs.Items.OfType<TabItem>().Single(x => Equals(x.Tag, route));
+                Assert.IsNull(page.Content, $"Lazy route '{route}' must not construct its panel during startup.");
+                navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, route));
+                Assert.IsNotNull(page.Content, $"Lazy route '{route}' must construct its panel on first selection.");
+                var firstContent = page.Content;
+                navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "dashboard"));
+                navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, route));
+                Assert.AreSame(firstContent, page.Content, $"Lazy route '{route}' must reuse its first panel instance.");
+            }
         }
         finally { window.Close(); }
     });
