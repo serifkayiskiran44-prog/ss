@@ -48,7 +48,7 @@ public sealed class MarketplaceOrderSyncService
         this.beforeSyncStatePersist = beforeSyncStatePersist;
     }
 
-    public async Task<IReadOnlyList<MarketplaceOrderSyncResult>> RefreshAllAsync(CancellationToken token = default)
+    public async Task<IReadOnlyList<MarketplaceOrderSyncResult>> RefreshAllAsync(CancellationToken token = default, bool respectInterval = false)
     {
         var results = new List<MarketplaceOrderSyncResult>();
         foreach (var connection in MarketplaceOperationalAccounts.List(connections))
@@ -60,7 +60,7 @@ public sealed class MarketplaceOrderSyncService
                 if (!adapter.Capabilities.Supports(MarketplaceOperation.OrdersRead)) continue;
                 var accountSettings = settings.Load(connection.Id);
                 if (!OrdersEnabled(accountSettings)) continue;
-                results.Add(await RefreshAsync(connection, adapter, accountSettings, token).ConfigureAwait(false));
+                results.Add(await RefreshAsync(connection, adapter, accountSettings, token, respectInterval).ConfigureAwait(false));
             }
             catch (ArgumentException) { continue; }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
@@ -75,7 +75,7 @@ public sealed class MarketplaceOrderSyncService
         return results;
     }
 
-    async Task<MarketplaceOrderSyncResult> RefreshAsync(MarketplaceConnection connection, IMarketplaceAdapter adapter, MarketplaceShopSettings accountSettings, CancellationToken token)
+    async Task<MarketplaceOrderSyncResult> RefreshAsync(MarketplaceConnection connection, IMarketplaceAdapter adapter, MarketplaceShopSettings accountSettings, CancellationToken token, bool respectInterval)
     {
         var now = Utc(utcNow());
         var stored = orders.GetSyncState(connection.Id);
@@ -87,6 +87,10 @@ public sealed class MarketplaceOrderSyncService
         var expectedStateVersion = stored?.Version ?? 0;
         if (sameGeneration && stored!.NextAttemptUtc is { } next && next > now)
             return Result(connection, MarketplaceOrderSyncStatus.Backoff, 0, 0, 0, cursor, stored.LastError);
+
+        // Scheduled reads follow the per-account "Senkron aralığı"; a manual refresh always reads.
+        if (respectInterval && sameGeneration && stored!.FailureCount == 0 && stored.UpdatedUtc.AddMinutes(accountSettings.Sync.IntervalMinutes) > now)
+            return Result(connection, MarketplaceOrderSyncStatus.Backoff, 0, 0, 0, cursor, "");
 
         try
         {

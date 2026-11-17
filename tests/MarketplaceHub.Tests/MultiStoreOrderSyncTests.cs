@@ -297,6 +297,22 @@ public sealed class MultiStoreOrderSyncTests
     }
 
     [TestMethod]
+    public async Task ScheduledRefreshHonoursTheAccountSyncIntervalButManualRefreshDoesNot()
+    {
+        var setup = SetupOneAccount();
+        setup.Reader.Set(Order("101", "ORD-1", "REMOTE-A", 1, 10));
+        await setup.Service.RefreshAllAsync(respectInterval: true);
+        var calls = setup.Reader.Calls;
+
+        var scheduled = await setup.Service.RefreshAllAsync(respectInterval: true);
+
+        Assert.AreEqual(calls, setup.Reader.Calls, "The 60-minute default interval has not passed yet.");
+        Assert.AreEqual(MarketplaceOrderSyncStatus.Backoff, scheduled.Single().Status);
+        await setup.Service.RefreshAllAsync();
+        Assert.AreEqual(calls + 1, setup.Reader.Calls, "A manual refresh must always read.");
+    }
+
+    [TestMethod]
     public async Task DisabledAndUnsupportedAccountsAreNotRead()
     {
         var connections = new MarketplaceConnectionStore(root);

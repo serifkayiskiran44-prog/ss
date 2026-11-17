@@ -721,7 +721,7 @@ Kaynak: salt okunur denetim; ikinci doğrulama aşaması kullanım sınırına t
 - [ ] Kanal planları stok/fiyat politikasını okumuyor; politika anahtarı ConnectionId değil (PP-01). Hepsiburada para birimi ve yönetim bayrağı denetimi eklendi (PP-02/03).
 - [ ] XML içe aktarma Active/Category'yi kural eşleşmesinde sıfırlıyor (POOL-02). Elle girilen alanların silinmesi (POOL-03) ve kartın kanal fiyatını donmuş kopya yazması (POOL-01) düzeltildi.
 - [ ] Excel tarih hücreleri kültür kaydırması (XA-04), kategori yeniden adlandırmanın XML kurallarına yansımaması (TAX-01). Windows-1254 çözümü eklendi (XA-08).
-- [ ] Sipariş okuma 'Senkron aralığı' ve API sağlık geri çekilmesini yok sayıyor (AE-03). Etsy arka plan belirteç yenilemesi eklendi (AE-02).
+- [x] Zamanlanmış sipariş okuma hesabın 'Senkron aralığı'na uyuyor, elle yenileme her zaman okur (AE-03; API sağlık geri çekilmesi hâlâ açık). Etsy arka plan belirteç yenilemesi eklendi (AE-02).
 - [ ] 82 açık TODO maddesinin sınıflandırması: yalnız ilk 27'nin sonucu alındı; kalan 55 için denetim yeniden çalıştırılmalı.
 
 ## Kod incelemesiyle yeniden değerlendirilenler (2026-11-17)
