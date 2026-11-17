@@ -711,3 +711,15 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] `SiteXmlPublisher`: ortak anahtar HKCU'dan okunur; önizleme, açık onay, değişiklik denetimi, geri okuma doğrulaması ve makbuz; ana makine sabit, belirteç sızıntısı testli; sahte HTTP ile 16 test.
 - [ ] Yayınlama ekranı ve hangi XML'in yayınlanacağı (`Models/Model` şeması) kullanıcı kararı bekliyor; zamanlayıcıdan yükleme bilinçli olarak kapalı.
 - [ ] Canlı siteye ilk yükleme kullanıcı oturumunda, açık onayla denenmeli (şu an canlı istek yapılmadı).
+
+# Denetim bulguları — 2026-11-17 (doğrulanmamış, sırada)
+
+Kaynak: salt okunur denetim; ikinci doğrulama aşaması kullanım sınırına takıldığı için aşağıdakiler henüz kodda tek tek doğrulanmadı.
+- [ ] Trendyol iptal/iade onayı yalnız onay kutusuyla kapılı; önizleme, stale kontrolü, makbuz yok (LWG-01).
+- [ ] Üç Trendyol yazma yolu eski tek hesaplı `trendyol.bin` ile çalışıyor, sipariş mağazasıyla SupplierId karşılaştırmıyor (LWG-03).
+- [ ] İlk hesap eşitlemesi tüm geçmiş pencere için stok düşüyor; devreye alma kesim tarihi yok (STK-03).
+- [ ] Kanal planları stok/fiyat politikasını okumuyor; politika anahtarı ConnectionId değil (PP-01), Hepsiburada para birimi/yönetim bayrağı denetimi yok (PP-02/03).
+- [ ] XML içe aktarma Active/Category'yi sıfırlıyor, elle girilen alanları siliyor (POOL-02/03); ürün kartı kanal fiyatını sabit kopya yazıyor (POOL-01).
+- [ ] Excel tarih hücreleri kültür kaydırması (XA-04), XML Windows-1254 çözümü (XA-08), kategori yeniden adlandırmanın XML kurallarına yansımaması (TAX-01).
+- [ ] Etsy arka plan okuması erişim belirtecini yenilemiyor (AE-02); sipariş okuma 'Senkron aralığı' ve API sağlık geri çekilmesini yok sayıyor (AE-03).
+- [ ] 82 açık TODO maddesinin sınıflandırması: yalnız ilk 27'nin sonucu alındı; kalan 55 için denetim yeniden çalıştırılmalı.

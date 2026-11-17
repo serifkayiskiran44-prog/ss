@@ -357,3 +357,13 @@ Multi-store production integration closure (2026-09-19): XML apply paths now enf
 - Korumalar: kök `Models` veya `ArrayOfModel` olmalı ve en az bir `Model` içermeli (boş dosya canlı yayını boşaltırdı); DTD yasak; 256 MB üst sınır; site ve dosya adı `^[a-z0-9][a-z0-9_-]{0,63}$`. Hata metinleri ve veritabanı belirteçten arındırılır (ham ve URL kodlu biçimler testle doğrulandı).
 - Henüz ekranı ve otomasyon bağlantısı yoktur (tasarım ayrı yürütülüyor); zamanlayıcı ve tepsi hiçbir koşulda yükleme başlatmaz. Hangi XML'in yayınlanacağı kullanıcı kararı bekliyor: MonoBridge `Products` dışa aktarımı site beslemesiyle (`Models/Model`) aynı şema değildir ve servis tarafından reddedilir.
 - Doğrulama: 16 yeni test (sahte HTTP; gerçek siteye istek yok).
+
+## Denetim bulgularından doğrulanıp düzeltilenler — 2026-11-17
+Salt okunur denetimin (7 alan raporu) bulguları kodda tek tek doğrulandı; önce başarısız test yazıldı, sonra düzeltildi.
+- Kategori yolu bozuk tek ürün (`Kedi >`) kategori/marka sayfalarını kurarken istisna atıp uygulamayı açılışta düşürüyordu: artık atlanır, sayılır ve sayfada bildirilir.
+- Yarıda kesilen (çöken/elektriği giden) XML çalışması kaynağı sonsuza dek kilitliyordu: açılışta ve 2 saat eşiğiyle `Failed (yarıda kesildi)` yapılır.
+- Eşitlenen siparişlerde iptal/iade stok iadesi makbuzu bulamıyordu (`Trendyol` ↔ `trendyol` büyük/küçük harf): artık saklanan yazımla çözülür.
+- Arşivlenmiş sipariş hesap eşitlemesiyle etkin listeye dönüp stok düşebiliyordu: artık arşiv kontrol edilir.
+- Stoğu yetmeyen tek sipariş tüm hesap eşitlemesini durduruyordu: sipariş incelemeye alınır (stok düşmez), imleç ilerler, diğer siparişler işlenir.
+- NES kuyruğunda gönderim sırasında uygulama kapanınca fatura yeniden gönderilebiliyordu: yarıda kalan gönderim `Unknown` olur, kendiliğinden tekrar gönderilmez.
+- Doğrulama: tam Release testi **1516/1516** (NES düzeltmesinden önce); denetimin kalan bulguları aşağıda TODO'da.
