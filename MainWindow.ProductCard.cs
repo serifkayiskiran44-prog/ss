@@ -15,9 +15,11 @@ public partial class MainWindow
         public string Currency { get; set; } = "TRY";
     }
 
-    void OpenProductCard(bool create)
+    void OpenProductCard(bool create, string? productId = null)
     {
-        var product = create ? new CatalogProduct { Currency = "TRY", CostCurrency = "TRY", Active = true } : Clone(SelectedProduct());
+        var product = create
+            ? new CatalogProduct { Currency = "TRY", CostCurrency = "TRY", Active = true }
+            : Clone(productId is null ? SelectedProduct() : store.Products().SingleOrDefault(candidate => candidate.Id == productId) ?? throw new InvalidOperationException("Ürün artık yerel katalogda bulunmuyor."));
         var tabs = new TabControl { DataContext = product, Margin = new Thickness(10) };
         var columns = new Grid(); for (var i = 0; i < 3; i++) columns.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         var identity = new StackPanel(); var pricing = new StackPanel(); var stock = new StackPanel();
@@ -74,7 +76,16 @@ public partial class MainWindow
         tabs.Items.Add(new TabItem { Header = "Resimler ve açıklama", Content = Scroll(media) });
         var channels = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, ItemsSource = create ? null : MarketplaceProductPanelModel.Build(product.Id, dataDirectory) };
         foreach (var col in new[] { ("Pazaryeri", "Channel", 150d), ("Mağaza", "ShopId", 130d), ("Durum", "Durum", 180d), ("Eşleştirme", "MappingId", 190d), ("Ne yapılmalı?", "Aciklama", 430d) }) Column(channels, col.Item1, col.Item2, col.Item3);
-        tabs.Items.Add(new TabItem { Header = "Pazaryeri durumları", Content = channels });
+        var channelHost = new System.Windows.Controls.DockPanel();
+        if (!create)
+        {
+            var channelActions = new WrapPanel();
+            channelActions.Children.Add(Button("Mağaza bağlantıları", () => new ProductConnectionsWindow(dataDirectory, new[] { product.Id }) { Owner = this }.ShowDialog()));
+            channelActions.Children.Add(Button("Kaynak ve stok bakiyeleri", () => new ProductSourceWindow(dataDirectory, product.Id) { Owner = this }.ShowDialog()));
+            System.Windows.Controls.DockPanel.SetDock(channelActions, System.Windows.Controls.Dock.Top); channelHost.Children.Add(channelActions);
+        }
+        channelHost.Children.Add(channels);
+        tabs.Items.Add(new TabItem { Header = "Pazaryeri durumları", Content = channelHost });
         Window? dialog = null; var actions = new WrapPanel(); var message = Hint("");
         actions.Children.Add(Button("Kaydet", () =>
         {

@@ -5,6 +5,28 @@ using TrMarketplaceHubDesktop.Etsy;
 namespace TrMarketplaceHubDesktop;
 public sealed partial class EtsyWorkspacePanel
 {
+    UIElement BuildAccountShopProducts(UIElement specialized)
+    {
+        if(scopedConnection is null)return specialized;
+        var tabs=new TabControl{Name="EtsyAccountProductSections"};
+        var common=new MarketplaceShopProductsPanel(scopedConnection.Id,directory);common.BulkPreviewRequested+=HandleAccountBulkPreview;
+        tabs.Items.Add(new TabItem{Header="Hesap ürünleri",Content=common});
+        tabs.Items.Add(new TabItem{Header="Etsy işlemleri",Content=specialized});
+        return tabs;
+    }
+    void HandleAccountBulkPreview(MarketplaceShopSpecialistPreview request)
+    {
+        var connection=CurrentScopedConnection();
+        new MarketplaceShopProductsModel(connection.Id,directory).ValidateSpecialistPreview(request);
+        var target=request.Operation switch{
+            MarketplaceShopBulkOperation.CreatePreview=>EtsyOperation.CreateDraft,
+            MarketplaceShopBulkOperation.PricePreview=>EtsyOperation.Price,
+            MarketplaceShopBulkOperation.StockPreview=>EtsyOperation.Stock,
+            MarketplaceShopBulkOperation.ContentPreview=>EtsyOperation.Content,
+            MarketplaceShopBulkOperation.Taxonomy or MarketplaceShopBulkOperation.Properties or MarketplaceShopBulkOperation.Shipping or MarketplaceShopBulkOperation.Readiness=>EtsyOperation.Content,
+            _=>throw new InvalidOperationException("Bu Etsy işlemi uzman önizlemeye bağlanmadı.")};
+        AccountSpecialistPreviewTask=Run(()=>Preview(target,request.Rows.Select(row=>row.ProductId).ToArray(),false,request));
+    }
     UIElement BuildControl()
     {
         var grid=new Grid{Margin=new Thickness(6)};
@@ -15,11 +37,11 @@ public sealed partial class EtsyWorkspacePanel
         var bulk=new Border{Visibility=Visibility.Collapsed};
         var toggleFilters=ActionButton("Detaylı filtreleme",()=>filters.Visibility=filters.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible);toggleFilters.Name="EtsyToggleFilters";
         var toggleBulk=ActionButton("Toplu işlemler",()=>bulk.Visibility=bulk.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible);toggleBulk.Name="EtsyToggleBulk";
-        top.Children.Add(Bar(Field("Arama (ürün adı, stok kodu, barkod)",search),ActionButton("Ara",()=>{page=0;RefreshProducts();}),toggleFilters,toggleBulk,AsyncButton("Etsy kontrol / yenile",PullListings),ActionButton("Ürün kartını aç",OpenProduct)));
+        top.Children.Add(Bar(Field("Arama (ürün adı, stok kodu, barkod)",search),ActionButton("Ara",()=>{page=0;RefreshProducts();}),toggleFilters,toggleBulk,AsyncButton("Etsy kontrol / yenile",PullListings),ActionButton("Ürün kartını aç",OpenProduct),creationHandoffButton,remoteDeactivateHandoffButton));
         top.Children.Add(filters);
         var actions=new WrapPanel();
         foreach(var op in new[]{EtsyOperation.CreateDraft,EtsyOperation.PriceAndStock,EtsyOperation.Price,EtsyOperation.Stock,EtsyOperation.Content,EtsyOperation.Publish,EtsyOperation.Deactivate})
-        {var captured=op;actions.Children.Add(AsyncButton(OperationLabel(op)+" · önizle",()=>Preview(captured)));}
+        {var captured=op;var button=ActionButton(OperationLabel(op)+" · önizle",()=>AccountSpecialistPreviewTask=Run(()=>Preview(captured,showPreview:false)));button.Name="EtsyPreview_"+op;actions.Children.Add(button);}
         actions.Children.Add(ActionButton("SKU ile eşleştir",MatchProducts));
         actions.Children.Add(templateChoice); actions.Children.Add(ActionButton("Seçililere şablonu ata",AssignTemplate));
         bulk.Child=Scroll(actions);bulk.MaxHeight=115;top.Children.Add(bulk);
@@ -50,11 +72,31 @@ public sealed partial class EtsyWorkspacePanel
         var table=Table("EtsyMatchPreview");Column(table,"SKU","Sku",120);Column(table,"Ürün","Title",270);Column(table,"İlan ID","ListingId",110);Column(table,"Durum","Status",100);Column(table,"Açıklama","Detail",320);table.ItemsSource=rows;
         var window=Dialog("SKU eşleştirme önizlemesi",1000,550);var dock=new DockPanel();var apply=ActionButton($"{rows.Count(r=>r.CanMatch)} kesin eşleşmeyi kaydet",()=>{service.ApplyMatches(state,rows.Where(r=>r.CanMatch).ToArray());LoadState();ClearPreview();window.Close();});apply.IsEnabled=rows.Any(r=>r.CanMatch);DockPanel.SetDock(apply,Dock.Bottom);dock.Children.Add(apply);dock.Children.Add(table);window.Content=dock;window.ShowDialog();
     }
-    async Task Preview(EtsyOperation operation)
+    async Task Preview(EtsyOperation operation,IReadOnlyList<string>? exactProductIds=null,bool showPreview=true,MarketplaceShopSpecialistPreview? specialist=null)
     {
-        var ids=RequireSelection();ClearPreview();var c=await Authorized();
+        var ids=exactProductIds is null?PreviewProductIds(operation):Array.AsReadOnly(exactProductIds.ToArray());
+        ClearPreview();var c=await Authorized();
+        if(specialist is null&&scopedConnection is not null)
+        {
+            var connection=CurrentScopedConnection();var model=new MarketplaceShopProductsModel(connection.Id,directory);
+            specialist=model.PreviewDirectSpecialist(model.SelectPage(ids),operation switch
+            {
+                EtsyOperation.CreateDraft=>MarketplaceShopBulkOperation.CreatePreview,
+                EtsyOperation.Price=>MarketplaceShopBulkOperation.PricePreview,
+                EtsyOperation.Stock=>MarketplaceShopBulkOperation.StockPreview,
+                EtsyOperation.PriceAndStock=>MarketplaceShopBulkOperation.PriceAndStockPreview,
+                EtsyOperation.Content or EtsyOperation.Publish or EtsyOperation.Deactivate=>MarketplaceShopBulkOperation.ContentPreview,
+                _=>throw new InvalidOperationException("Bu Etsy işlemi hesap kapsamlı önizlemeye bağlanmadı.")
+            });
+        }
         summary.Text="Seçili ürünler ve Etsy mağazası karşılaştırılıyor…";
-        plan=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token);send.IsEnabled=true;summary.Text=$"{plan.Rows.Count} satır · {plan.Rows.Count(r=>r.CanSend)} gönderilebilir · {plan.Rows.Count(r=>!r.CanSend)} kontrol gerekli";ShowPreview(plan);
+        var next=await new EtsyWorkspaceService(directory,http).PreviewAsync(c,ids,operation,lifetime.Token,specialist?.ConnectionId);
+        MarketplaceShopProductsModel? nextSpecialistModel=null;
+        if(specialist is not null){nextSpecialistModel=new MarketplaceShopProductsModel(specialist.ConnectionId,directory);nextSpecialistModel.AssociateSpecialistPlan(specialist,next.Id);}
+        plan=next;
+        if(specialist is not null){accountSpecialistModel=nextSpecialistModel;accountSpecialistPlanId=next.Id;AccountSpecialistPreview=specialist;}
+        if(operation==EtsyOperation.CreateDraft&&creationHandoffRequestId.Length>0)CompleteCreationHandoff(next);
+        send.IsEnabled=true;summary.Text=$"{next.Rows.Count} satır · {next.Rows.Count(r=>r.CanSend)} gönderilebilir · {next.Rows.Count(r=>!r.CanSend)} kontrol gerekli";if(showPreview)ShowPreview(next);
     }
     void ShowPreview(EtsyOperationPlan preview)
     {
@@ -67,7 +109,7 @@ public sealed partial class EtsyWorkspacePanel
         {
             if(MessageBox.Show(window,$"{state.ShopName} mağazasında {preview.Rows.Count(r=>r.CanSend)} ürüne ‘{OperationLabel(preview.Operation)}’ işlemi uygulanacak. Onaylıyor musunuz?","Etsy gönderim onayı",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
             approve.IsEnabled=false;
-            try{var c=await Authorized();var receipts=await new EtsyWorkspaceService(directory,http).SendAsync(c,preview.Id,true,lifetime.Token);table.ItemsSource=null;LoadState();ClearPreview();summary.Text=string.Join(" · ",receipts.GroupBy(r=>r.Status).Select(g=>$"{g.Count()} {g.Key}"));window.Close();sections.SelectedIndex=2;}
+            try{var c=await Authorized();var receipts=await new EtsyWorkspaceService(directory,http).SendAsync(c,preview.Id,true,lifetime.Token,beforeClaim:accountSpecialistPlanId==preview.Id?()=>accountSpecialistModel!.ValidateSpecialistPlan(preview.Id):null);table.ItemsSource=null;LoadState();ClearPreview();summary.Text=string.Join(" · ",receipts.GroupBy(r=>r.Status).Select(g=>$"{g.Count()} {g.Key}"));window.Close();sections.SelectedIndex=2;}
             catch(Exception ex){ClearPreview();try{LoadState();}catch{summary.Text="İşlem geçmişi okunamadı; uygulamayı yenileyin.";}MessageBox.Show(window,Safe(ex),"Etsy sonucu",MessageBoxButton.OK,MessageBoxImage.Warning);window.Close();}
         };
         window.ShowDialog();

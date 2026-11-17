@@ -21,7 +21,10 @@ public static class MarketplaceStatusText
         ["ERROR"] = "İşlem hatası", ["PENDING"] = "İşlem bekliyor",
         ["SYNCED"] = "Eşitlendi", ["DRAFT"] = "Taslak", ["None"] = "İşlem yok",
         ["CONNECTED"] = "Bağlı", ["CONNECTED_READ_ONLY"] = "Salt okunur bağlı",
-        ["NOT_CONFIGURED"] = "Ayarlar eksik", ["FAILED"] = "Bağlantı başarısız"
+        ["NOT_CONFIGURED"] = "Ayarlar eksik", ["FAILED"] = "Bağlantı başarısız",
+        ["NewListingCandidate"] = "Yeni ilan adayı", ["Active"] = "Etkin",
+        ["Approved"] = "Onaylandı", ["Unmatched"] = "Eşleşmedi",
+        ["Rejected"] = "Reddedildi", ["ReviewRequired"] = "İnceleme gerekli"
     };
 
     public static string ToTurkish(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : Labels.TryGetValue(value, out var label) ? label : value;

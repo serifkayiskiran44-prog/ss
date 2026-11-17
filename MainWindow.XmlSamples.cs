@@ -45,6 +45,12 @@ public partial class MainWindow
         CompactBoundField(sourceRules, "Varsayılan KDV %", "DefaultVatRate");
         Choice("Varsayılan alış dövizi", "CostCurrency", ["TRY", "USD", "EUR", "GBP"]);
         sourceRules.Children.Add(Hint("Varsayılan: XML alanı boşsa. Sabit: bu kaynaktaki tüm ürünlere uygulanır. Kategori 1–5 soldan seçilir."));
+        sourceRules.Children.Add(Heading("Ön ekler"));
+        CompactBoundField(sourceRules, "Ürün kodu ön eki", "SkuPrefix");
+        CompactBoundField(sourceRules, "Barkod ön eki", "BarcodePrefix");
+        CompactBoundField(sourceRules, "GTIN ön eki", "GtinPrefix");
+        CompactBoundField(sourceRules, "Görsel URL ön eki", "ImageUrlPrefix");
+        sourceRules.Children.Add(Hint("Ön ek yalnız dolu XML değerine eklenir. Görsel ön eki göreli adresleri tamamlar; tam http/https adresleri aynen korunur."));
     }
 
     void BuildXmlSampleToolbar()

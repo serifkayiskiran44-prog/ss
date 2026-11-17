@@ -35,7 +35,9 @@ public sealed partial class EtsyWorkspacePanel
         var templates=new DockPanel{Margin=new Thickness(8)};var templateTop=new StackPanel();templateTop.Children.Add(Note("Kargo ve hazırlık süresi Etsy'deki mağaza profillerinden seçilir. Şablonu ürün listesinden seçili ürünlere atayın."));templateList.MinWidth=280;
         templateTop.Children.Add(Bar(templateList,ActionButton("Yeni şablon",()=>OpenTemplate(null)),ActionButton("Şablonu düzenle",()=>OpenTemplate(state.Templates.FirstOrDefault(t=>t.Id==Selected(templateList))??throw new InvalidOperationException("Şablon seçin."))),AsyncButton("Mağaza profillerini yenile",PullMetadata)));
         templateTop.Children.Add(Note("Hazırlayan, üretim zamanı ve ürünün malzeme/tedarik niteliği gerçek ürüne uygun seçilmelidir. Döviz dönüşümü otomatik varsayılmaz; Etsy fiyatı mağaza dövizinde girilir."));DockPanel.SetDock(templateTop,Dock.Top);templates.Children.Add(templateTop);templates.Children.Add(new TextBlock{Text="Kargo profillerini Etsy mağazanızda oluşturup buradan alın.\nHer ürün kendi başlık, açıklama, kategori ve özellikleriyle şablonu tamamlayabilir.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(12)});
-        settings.Items.Add(new TabItem{Header="İlan ve kargo şablonları",Content=templates});return settings;
+        settings.Items.Add(new TabItem{Header="İlan ve kargo şablonları",Content=templates});
+        if(scopedConnection is not null)settings.Items.Add(new TabItem{Header="Hesap kuralları",Content=new MarketplaceShopSettingsPanel(scopedConnection.Id,directory)});
+        return settings;
     }
     EtsyCredentials ReadCredentials()
     {
@@ -43,7 +45,17 @@ public sealed partial class EtsyWorkspacePanel
         return EtsyCredentialChanges.Merge(prior,key.Password,secret.Password,token.Password,refreshToken.Password,shop.Text,redirect.Text);
     }
     void FillCredentials(EtsyCredentials value) {key.Password=value.Key;secret.Password=value.Secret;token.Password=value.Token;refreshToken.Password=value.RefreshToken;shop.Text=value.ShopId;redirect.Text=value.RedirectUri.Length>0?value.RedirectUri:"https://localhost:5099/etsy/callback";}
-    void PersistCredentials(EtsyCredentials value) {CredentialStore.Save(value,directory);credentials=value;FillCredentials(value);CredentialsChanged?.Invoke(value);ClearPreview();LoadState();}
+    void PersistCredentials(EtsyCredentials value)
+    {
+        if(scopedConnection is null) CredentialStore.Save(value,directory);
+        else
+        {
+            var current=CurrentScopedConnection();
+            if(value.ShopId!=current.ShopId)throw new InvalidOperationException("WRONG_ACCOUNT: Etsy mağaza kimliği seçili hesapla eşleşmiyor.");
+            credentialVault!.Save(current.Id,current.Channel,current.ShopId,value);
+        }
+        credentials=value;FillCredentials(value);CredentialsChanged?.Invoke(value);ClearPreview();LoadState();
+    }
     void SaveConnection()
     {
         var value=ReadCredentials();if(!long.TryParse(value.ShopId,out var id)||id<=0)throw new InvalidOperationException("Mağaza ID pozitif bir sayı olmalıdır.");EtsyHttp.ValidateValue(value.Key);EtsyHttp.ValidateValue(value.Secret);
@@ -51,6 +63,7 @@ public sealed partial class EtsyWorkspacePanel
     }
     async Task<EtsyCredentials> Authorized()
     {
+        if(scopedConnection is not null)CurrentScopedConnection();
         var saved=credentials??throw new InvalidOperationException("Önce Etsy bağlantısını kaydedin.");
         if(string.IsNullOrEmpty(saved.Token))throw new InvalidOperationException("Etsy hesabını tarayıcı üzerinden yetkilendirin.");
         if(!saved.IsAccessTokenUsable()){saved=await new EtsyOAuth(http).RefreshAsync(saved,lifetime.Token);PersistCredentials(saved);}return saved;

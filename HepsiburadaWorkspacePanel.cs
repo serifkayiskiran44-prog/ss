@@ -1,0 +1,221 @@
+using System.Net.Http;
+using System.Globalization;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using TrMarketplaceHubDesktop.Hepsiburada;
+
+namespace TrMarketplaceHubDesktop;
+
+public sealed class HepsiburadaWorkspacePanel : UserControl, IDisposable
+{
+    readonly string? directory;
+    readonly MarketplaceConnection connection;
+    readonly MarketplaceConnectionStore connections;
+    readonly MarketplaceCredentialVault vault;
+    readonly TabControl sections = new() { Name = "HepsiburadaSections" };
+    readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(6), Foreground = Brushes.DarkSlateGray };
+    readonly TextBox merchant = new() { Name = "HepsiburadaMerchantId", MinWidth = 360, IsReadOnly = true };
+    readonly PasswordBox serviceKey = new() { Name = "HepsiburadaServiceKey", MinWidth = 360 };
+    readonly ComboBox environment = new() { Name = "HepsiburadaEnvironment", MinWidth = 180, ItemsSource = Enum.GetValues<HepsiburadaEnvironment>() };
+    readonly TextBox userAgent = new() { Name = "HepsiburadaUserAgent", MinWidth = 360 };
+    MarketplaceShopProductsPanel? productsPanel;
+    readonly DataGrid competition = new() { Name = "HepsiburadaBuybox", AutoGenerateColumns = true, IsReadOnly = true };
+    readonly TextBox minimumPrice = new() { Name = "HepsiburadaMinimumPrice", Width = 100, Text = "1" };
+    readonly TextBox maximumDecrease = new() { Name = "HepsiburadaMaximumDecrease", Width = 100, Text = "0" };
+    readonly TextBox undercut = new() { Name = "HepsiburadaUndercut", Width = 100, Text = "0,01" };
+    readonly ComboBox previewOperation = new()
+    {
+        Name = "HepsiburadaPreviewOperation", MinWidth = 180,
+        ItemsSource = new[] { "Stok", "Fiyat", "Fiyat ve stok", "Yeni ilan" }, SelectedIndex = 0
+    };
+    readonly DataGrid history = new() { Name = "HepsiburadaHistory", AutoGenerateColumns = true, IsReadOnly = true };
+    CancellationTokenSource? cancellation;
+
+    public string ConnectionId => connection.Id;
+    public string AccountShopId => connection.ShopId;
+    public event Action<string>? ProductCardRequested;
+
+    public HepsiburadaWorkspacePanel(string connectionId, string? directory = null)
+    {
+        this.directory = directory;
+        connections = new(directory);
+        connection = connections.Get(connectionId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        if (!connection.Enabled || connection.Channel != "hepsiburada") throw new InvalidOperationException("Hepsiburada çalışma alanı için etkin bir Hepsiburada hesabı gerekli.");
+        vault = new(directory);
+        merchant.Text = connection.ShopId;
+        environment.SelectedItem = HepsiburadaEnvironment.Production;
+        userAgent.Text = "MonoBridge/1.0";
+
+        var root = new DockPanel { Margin = new Thickness(10) };
+        var header = new DockPanel { Margin = new Thickness(4, 0, 4, 8) };
+        var settings = Button("Mağaza ayarları", "HepsiburadaOpenSettings", ShowSettings);
+        DockPanel.SetDock(settings, Dock.Right); header.Children.Add(settings);
+        header.Children.Add(new TextBlock { Text = $"{connection.DisplayName} / {connection.ShopId} · {MarketplaceStatusText.ToTurkish(connection.Status)}", FontSize = 16, FontWeight = FontWeights.SemiBold });
+        DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
+        DockPanel.SetDock(status, Dock.Bottom); root.Children.Add(status);
+        sections.Items.Add(new TabItem { Header = "Hepsiburada kontrol", Content = BuildControl() });
+        sections.Items.Add(new TabItem { Header = "Ayarlar", Content = BuildSettings() });
+        sections.Items.Add(new TabItem { Header = "Rekabet analizi", Content = BuildCompetition() });
+        sections.Items.Add(new TabItem { Header = "İşlem geçmişi", Content = history });
+        root.Children.Add(sections); Content = root;
+        LoadCredentials();
+    }
+
+    FrameworkElement BuildControl()
+    {
+        var root = new DockPanel();
+        var toolbar = new WrapPanel { Margin = new Thickness(4) };
+        toolbar.Children.Add(Button("Hepsiburada ürünlerini oku", "HepsiburadaReadProducts", ReadProductsAsync));
+        toolbar.Children.Add(previewOperation);
+        toolbar.Children.Add(Button("Seçili ürünleri önizle", "HepsiburadaCreateDispatchPreview", PreviewSelected));
+        DockPanel.SetDock(toolbar, Dock.Top); root.Children.Add(toolbar);
+        productsPanel = new MarketplaceShopProductsPanel(connection.Id, directory);
+        productsPanel.ProductCardRequested += id => ProductCardRequested?.Invoke(id);
+        root.Children.Add(productsPanel);
+        RefreshHistory();
+        return root;
+    }
+
+    FrameworkElement BuildSettings()
+    {
+        var form = new StackPanel { Margin = new Thickness(12), MaxWidth = 760 };
+        form.Children.Add(Text("Hepsiburada satıcı panelindeki mağaza kimliği ve servis anahtarı bu Windows kullanıcısı için şifrelenerek saklanır."));
+        Field(form, "Mağaza / Merchant ID", merchant);
+        Field(form, "Servis anahtarı", serviceKey);
+        form.Children.Add(Text("Kayıtlı servis anahtarını değiştirmeyecekseniz alanı boş bırakın.", true));
+        Field(form, "Ortam", environment);
+        Field(form, "User-Agent", userAgent);
+        var actions = new WrapPanel();
+        actions.Children.Add(Button("Ayarları kaydet", "HepsiburadaSaveSettings", SaveCredentials));
+        actions.Children.Add(Button("Salt okunur bağlantıyı kontrol et", "HepsiburadaTestConnection", TestConnectionAsync));
+        form.Children.Add(actions);
+        return new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
+    FrameworkElement BuildCompetition()
+    {
+        var root = new DockPanel();
+        var tools = new WrapPanel { Margin = new Thickness(6) };
+        tools.Children.Add(Text("Korunan minimum")); tools.Children.Add(minimumPrice);
+        tools.Children.Add(Text("En fazla düşüş")); tools.Children.Add(maximumDecrease);
+        tools.Children.Add(Text("Rakibin altı")); tools.Children.Add(undercut);
+        tools.Children.Add(Button("Buybox ve komisyonları oku", "HepsiburadaReadCompetition", ReadCompetitionAsync));
+        tools.Children.Add(Text("Öneriler yalnız görüntülenir; fiyat otomatik gönderilmez.", true));
+        DockPanel.SetDock(tools, Dock.Top); root.Children.Add(tools); root.Children.Add(competition);
+        return root;
+    }
+
+    void LoadCredentials()
+    {
+        var saved = vault.Load<HepsiburadaCredentials>(connection.Id, connection.Channel, connection.ShopId);
+        if (saved is null) { status.Text = "API bilgileri eksik. Ayarlar bölümünden servis anahtarını kaydedin."; return; }
+        environment.SelectedItem = saved.Environment; userAgent.Text = saved.UserAgent;
+        status.Text = "API bilgileri şifreli kayıtlı. Servis anahtarı ekranda gösterilmez.";
+    }
+
+    void SaveCredentials()
+    {
+        var previous = vault.Load<HepsiburadaCredentials>(connection.Id, connection.Channel, connection.ShopId);
+        var key = serviceKey.Password.Length > 0 ? serviceKey.Password : previous?.ServiceKey ?? "";
+        var value = new HepsiburadaCredentials(connection.ShopId, key, (HepsiburadaEnvironment)(environment.SelectedItem ?? HepsiburadaEnvironment.Production), userAgent.Text.Trim());
+        HepsiburadaConnection.Validate(value);
+        vault.Save(connection.Id, connection.Channel, connection.ShopId, value);
+        serviceKey.Clear(); status.Text = "Hepsiburada bağlantı bilgileri şifreli olarak kaydedildi.";
+    }
+
+    async Task TestConnectionAsync()
+    {
+        var current = connections.Get(connection.Id) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        var credentials = RequireCredentials();
+        status.Text = "Salt okunur bağlantı kontrol ediliyor…";
+        using var http = SafeHttp();
+        var identity = await new HepsiburadaConnection().TestReadOnlyAsync(credentials, http, Token);
+        var outcome = connections.RecordTest(current.Id, current.Revision, true);
+        status.Text = outcome == ConnectionTestApplyResult.Applied ? $"Bağlantı doğrulandı · Mağaza {identity.MerchantId} · Salt okunur" : "Bağlantı tamamlandı ancak mağaza ayarı değişti; sonuç uygulanmadı.";
+    }
+
+    async Task ReadProductsAsync()
+    {
+        var credentials = RequireCredentials();
+        status.Text = "Hepsiburada ürünleri okunuyor…";
+        using var http = SafeHttp(); using var client = new HepsiburadaApiClient(credentials, http);
+        var state = await new HepsiburadaWorkspaceService(new HepsiburadaWorkspaceStore(directory)).RefreshProductsAsync(connection.Id, credentials, client, Token);
+        productsPanel?.Reload();
+        status.Text = $"{state.Products.Count:N0} Hepsiburada ürünü okundu. Eşleştirme barkoda, ardından çelişmeyen SKU'ya göre yapılır.";
+    }
+
+    void PreviewSelected()
+    {
+        var selection = productsPanel?.SelectionSnapshot ?? throw new InvalidOperationException("Önce Sayfayı seç veya Filtrelenenlerin tümünü seç düğmesiyle ürünleri seçin.");
+        var operation = previewOperation.SelectedIndex switch
+        {
+            1 => HepsiburadaOperation.Price,
+            2 => HepsiburadaOperation.PriceAndStock,
+            3 => HepsiburadaOperation.ListingCreate,
+            _ => HepsiburadaOperation.Stock
+        };
+        var plan = new HepsiburadaDispatchStore(directory).Preview(connection.Id, selection.ProductIds, operation);
+        var errors = plan.Rows.Count(row => row.Status == "Hatalı");
+        var ready = plan.Rows.Count - errors;
+        MessageBox.Show($"Mağaza: {connection.DisplayName}\nİşlem: {OperationLabel(operation)}\nHazır: {ready}\nHatalı: {errors}\n\nBu yalnızca değişmez önizleme kaydıdır. Canlı API yazımı, mağaza okuma yetkisi doğrulanana kadar kapalıdır.",
+            "Hepsiburada gönderim önizlemesi", MessageBoxButton.OK, errors > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        status.Text = $"{OperationLabel(operation)} önizlemesi kaydedildi · {ready} hazır · {errors} hatalı · Canlı gönderim kapalı.";
+    }
+
+    void RefreshHistory() => history.ItemsSource = new HepsiburadaDispatchStore(directory).Receipts(connection.Id);
+    static string OperationLabel(HepsiburadaOperation operation) => operation switch
+    {
+        HepsiburadaOperation.Stock => "Stok",
+        HepsiburadaOperation.Price => "Fiyat",
+        HepsiburadaOperation.PriceAndStock => "Fiyat ve stok",
+        HepsiburadaOperation.ListingCreate => "Yeni ilan",
+        _ => operation.ToString()
+    };
+
+    async Task ReadCompetitionAsync()
+    {
+        var minimum = DecimalValue(minimumPrice.Text, "Korunan minimum fiyat");
+        var decrease = DecimalValue(maximumDecrease.Text, "En fazla fiyat düşüşü");
+        var difference = DecimalValue(undercut.Text, "Rakibin altına inme tutarı");
+        var state = new HepsiburadaWorkspaceStore(directory).Read(connection.Id);
+        var skus = state.Products.Select(x => x.HepsiburadaSku).Where(x => x.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
+        if (skus.Length == 0) throw new InvalidOperationException("Önce Hepsiburada ürünlerini okuyun.");
+        var credentials = RequireCredentials();
+        using var http = SafeHttp(); using var client = new HepsiburadaApiClient(credentials, http);
+        var buybox = new List<HepsiburadaBuybox>(); var commissions = new List<HepsiburadaCommission>();
+        foreach (var batch in skus.Chunk(1000))
+        {
+            buybox.AddRange(await client.GetBuyboxAsync(batch, Token));
+            commissions.AddRange(await client.GetCommissionsAsync(batch, Token));
+        }
+        var rates = commissions.ToDictionary(x => x.HepsiburadaSku, x => x.Rate, StringComparer.Ordinal);
+        competition.ItemsSource = buybox.Select(row =>
+        {
+            var suggestion = HepsiburadaCompetition.Suggest(row, minimum, decrease, difference);
+            return new CompetitionRow(row.MerchantSku, row.HepsiburadaSku, row.Rank, row.WinningPrice, row.OwnPrice,
+                rates.GetValueOrDefault(row.HepsiburadaSku), suggestion.Price, suggestion.Detail);
+        }).ToArray();
+        status.Text = $"{buybox.Count:N0} ürünün Buybox bilgisi okundu. Fiyat önerileri gönderilmedi.";
+    }
+
+    HepsiburadaCredentials RequireCredentials() => vault.Load<HepsiburadaCredentials>(connection.Id, connection.Channel, connection.ShopId)
+        ?? throw new InvalidOperationException("Önce Ayarlar bölümünde Hepsiburada servis anahtarını kaydedin.");
+    CancellationToken Token => (cancellation ??= new CancellationTokenSource()).Token;
+    static HttpClient SafeHttp() => new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(60) };
+    static decimal DecimalValue(string text, string label)
+    {
+        if (!decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out var value) &&
+            !decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value))
+            throw new InvalidOperationException(label + " geçersiz.");
+        return value;
+    }
+    public void ShowSettings() => sections.SelectedIndex = 1;
+    public void Dispose() { cancellation?.Cancel(); cancellation?.Dispose(); cancellation = null; }
+
+    static TextBlock Text(string value, bool muted = false) => new() { Text = value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4), Foreground = muted ? Brushes.SlateGray : Brushes.DarkSlateGray };
+    static void Field(Panel panel, string label, UIElement control) { panel.Children.Add(Text(label)); panel.Children.Add(control); }
+    static Button Button(string label, string name, Action action) { var button = new Button { Name = name, Content = label, Margin = new Thickness(3), Padding = new Thickness(9, 5, 9, 5) }; button.Click += (_, _) => { try { action(); } catch (Exception ex) { MessageBox.Show(MarketplaceConnectionStore.Redact(ex.Message), "Hepsiburada", MessageBoxButton.OK, MessageBoxImage.Warning); } }; return button; }
+    static Button Button(string label, string name, Func<Task> action) { var button = new Button { Name = name, Content = label, Margin = new Thickness(3), Padding = new Thickness(9, 5, 9, 5) }; button.Click += async (_, _) => { try { button.IsEnabled = false; await action(); } catch (Exception ex) { MessageBox.Show(MarketplaceConnectionStore.Redact(ex.Message), "Hepsiburada", MessageBoxButton.OK, MessageBoxImage.Warning); } finally { button.IsEnabled = true; } }; return button; }
+    sealed record CompetitionRow(string SatıcıStokKodu, string HepsiburadaSku, int? Sıra, decimal? KazananFiyat, decimal? KendiFiyatımız, decimal KomisyonOranı, decimal? ÖnerilenFiyat, string Açıklama);
+}

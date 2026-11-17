@@ -126,7 +126,11 @@ public partial class CatalogStore
             using var find = connection.CreateCommand(); find.Transaction = transaction; find.CommandText = "SELECT Json FROM CatalogProducts WHERE Id=$id"; find.Parameters.AddWithValue("$id", line.ProductId); var product = find.ExecuteScalar() is string json ? JsonSerializer.Deserialize<CatalogProduct>(json) : null;
             if (product is null) throw new InvalidOperationException($"{line.Sku} ürünü bulunamadı; siparişi yeniden yükleyin.");
             if (product.UpdatedUtc != line.ProductUpdatedUtc || product.Stock != line.CurrentStock) throw new InvalidOperationException($"{line.Sku} ürünü önizlemeden sonra değişti; yeni geri koyma önizlemesi alın.");
+            var balance = InventoryLedger.ReadBalance(connection, transaction, product.Id, InventoryLedger.OnlineLocationId);
+            if (balance.Version == 0 || balance.Quantity != line.CurrentStock) throw new InvalidOperationException($"{line.Sku} çevrimiçi bakiyesi katalog stokuyla uyuşmuyor; stok incelemesi gerekli.");
             product.Stock = line.RestoredStock; product.UpdatedUtc = DateTime.UtcNow; Put(connection, "CatalogProducts", product.Id, product, transaction);
+            InventoryLedger.RecordMovement(connection, transaction, product.Id, InventoryLedger.OnlineLocationId, line.CurrentStock, line.RestoredStock,
+                InventoryMovementKind.OrderRestock, InventoryLedger.OrderReference(preview.Marketplace, preview.ShopId, preview.OrderId) + ":" + actionKey, product.UpdatedUtc);
         }
         var applied = DateTime.UtcNow;
         using var command = connection.CreateCommand(); command.Transaction = transaction; command.CommandText = "INSERT INTO OrderStockRestores VALUES($marketplace,$shop,$order,$action,$payload,$at)"; OrderStockIdentityParams(command, preview.Marketplace, preview.ShopId, preview.OrderId); command.Parameters.AddWithValue("$action", actionKey); command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(preview.Lines)); command.Parameters.AddWithValue("$at", applied.ToString("O", CultureInfo.InvariantCulture)); command.ExecuteNonQuery(); transaction.Commit(); return new(false, applied, preview.Lines);

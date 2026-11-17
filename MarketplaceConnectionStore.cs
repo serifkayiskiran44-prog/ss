@@ -17,12 +17,12 @@ public static class MarketplaceConnectionCatalog
 {
     public static IReadOnlyList<MarketplaceConnectionDefinition> All { get; } = Array.AsReadOnly(new[]
     {
-        new MarketplaceConnectionDefinition("etsy", "Etsy", "etsy", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead, MarketplaceOperation.StockWrite, MarketplaceOperation.PriceWrite }), "https://developers.etsy.com/documentation/", false),
-        new MarketplaceConnectionDefinition("ebay", "eBay", "ebay", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead, MarketplaceOperation.StockWrite }), "https://developer.ebay.com/api-docs/", false),
+        new MarketplaceConnectionDefinition("etsy", "Etsy", "etsy", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead, MarketplaceOperation.StockWrite, MarketplaceOperation.PriceWrite, MarketplaceOperation.ProductManagement, MarketplaceOperation.ContentWrite, MarketplaceOperation.TaxonomyWrite, MarketplaceOperation.PropertiesWrite, MarketplaceOperation.ShippingWrite, MarketplaceOperation.ReadinessWrite, MarketplaceOperation.ListingCreate }), "https://developers.etsy.com/documentation/", false),
+        new MarketplaceConnectionDefinition("ebay", "eBay", "ebay", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.StockWrite }), "https://developer.ebay.com/api-docs/", false),
         new MarketplaceConnectionDefinition("amazon", "Amazon", "amazon", MarketplaceCapabilities.LocalOnly, "https://developer-docs.amazon.com/sp-api/", true),
-        new MarketplaceConnectionDefinition("trendyol", "Trendyol", "trendyol", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.StockWrite, MarketplaceOperation.PriceWrite }), "https://developers.trendyol.com/", false),
-        new MarketplaceConnectionDefinition("hepsiburada", "Hepsiburada", "hepsiburada", MarketplaceCapabilities.LocalOnly, "https://developers.hepsiburada.com/", true),
-        new MarketplaceConnectionDefinition("allegro", "Allegro", "allegro", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead }), "https://developer.allegro.pl/", false),
+        new MarketplaceConnectionDefinition("trendyol", "Trendyol", "trendyol", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead, MarketplaceOperation.StockWrite, MarketplaceOperation.PriceWrite, MarketplaceOperation.ProductManagement, MarketplaceOperation.ContentWrite, MarketplaceOperation.CategoryWrite, MarketplaceOperation.BrandWrite, MarketplaceOperation.DeliveryWrite }), "https://developers.trendyol.com/", false),
+        new MarketplaceConnectionDefinition("hepsiburada", "Hepsiburada", "hepsiburada", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead, MarketplaceOperation.OrdersRead, MarketplaceOperation.ProductManagement }), "https://developers.hepsiburada.com/tr/companies/hepsiburada", false),
+        new MarketplaceConnectionDefinition("allegro", "Allegro", "allegro", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead }), "https://developer.allegro.pl/", false),
         new MarketplaceConnectionDefinition("ozon", "Ozon", "ozon", new(new HashSet<MarketplaceOperation>{ MarketplaceOperation.ProductsRead }), "https://docs.ozon.ru/api/seller/", false),
         new MarketplaceConnectionDefinition("joom", "Joom", "joom", MarketplaceCapabilities.LocalOnly, "https://merchant.joom.com/docs/api", true),
         new MarketplaceConnectionDefinition("wish", "Wish", "wish", MarketplaceCapabilities.LocalOnly, "https://merchant.wish.com/documentation/api/v3/oauth", true),
@@ -44,7 +44,12 @@ public sealed record MarketplaceConnection(
     string Status,
     DateTime? LastTestUtc,
     string LastError,
-    long Revision);
+    long Revision)
+{
+    public bool Active => Enabled;
+}
+
+public sealed record MarketplaceCredentialMigrationMarker(string Channel, string ConnectionId, string ShopId, DateTime CompletedUtc);
 
 /// Outcome of applying a connection test result through the revision fence.
 /// Applied is the only case that actually wrote Status/LastTestUtc/LastError.
@@ -90,6 +95,16 @@ public sealed class MarketplaceConnectionStore
             """;
         command.ExecuteNonQuery();
         EnsureColumn(connection, "Revision", "INTEGER NOT NULL DEFAULT 0");
+        using var migration = connection.CreateCommand();
+        migration.CommandText = """
+            CREATE TABLE IF NOT EXISTS MarketplaceCredentialMigrations(
+                Channel TEXT PRIMARY KEY,
+                ConnectionId TEXT NOT NULL,
+                ShopId TEXT NOT NULL,
+                CompletedUtc TEXT NOT NULL
+            )
+            """;
+        migration.ExecuteNonQuery();
     }
 
     static void EnsureColumn(SqliteConnection connection, string name, string definition)
@@ -144,15 +159,29 @@ public sealed class MarketplaceConnectionStore
         return row;
     }
 
+    public MarketplaceConnection? Find(string channel, string shopId)
+    {
+        var normalizedChannel = MarketplaceConnectionCatalog.Get(channel).Id;
+        shopId = ValidateLabel(shopId, "Mağaza kimliği 1–160 karakter olmalı.", nameof(shopId));
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id,Channel,ShopId,DisplayName,Enabled,Status,LastTestUtc,LastError,Revision FROM MarketplaceConnections WHERE Channel=$channel AND ShopId=$shop";
+        command.Parameters.AddWithValue("$channel", normalizedChannel);
+        command.Parameters.AddWithValue("$shop", shopId);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return null;
+        if (!TryRead(reader, out var row, out var corrupt)) throw new MarketplaceConnectionCorruptException(corrupt!.Id, corrupt.Reason);
+        return row;
+    }
+
     public MarketplaceConnection Save(string channel, string shopId, string displayName, bool enabled, string? id = null)
     {
         var definition = MarketplaceConnectionCatalog.Get(channel);
-        shopId = shopId.Trim();
-        displayName = displayName.Trim();
-        if (shopId.Length is < 1 or > 160 || shopId.Any(char.IsControl)) throw new ArgumentException("Mağaza kimliği 1–160 karakter olmalı.", nameof(shopId));
-        if (displayName.Length is < 1 or > 160 || displayName.Any(char.IsControl)) throw new ArgumentException("Görünen ad 1–160 karakter olmalı.", nameof(displayName));
+        shopId = ValidateLabel(shopId, "Mağaza kimliği 1–160 karakter olmalı.", nameof(shopId));
+        displayName = ValidateLabel(displayName, "Görünen ad 1–160 karakter olmalı.", nameof(displayName));
         var normalizedChannel = definition.Id;
         var actualId = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString("N") : id.Trim();
+        if (actualId.Length > 512 || actualId.Any(char.IsControl)) throw new ArgumentException("Bağlantı kimliği geçersiz.", nameof(id));
         using var connection = Open();
         using var command = connection.CreateCommand();
         // Revision bumps on every metadata/enabled change (insert starts at 1) so an
@@ -194,10 +223,58 @@ public sealed class MarketplaceConnectionStore
     public bool DeleteIfUntouchedSinceCreate(string id, long expectedRevision)
     {
         using var connection = Open();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        using var table = connection.CreateCommand();
+        table.Transaction = transaction;
+        table.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ProductChannelBindings'";
+        var hasBindingTables = table.ExecuteScalar() is not null;
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM MarketplaceConnections WHERE Id=$id AND Revision=$revision";
+        command.Transaction = transaction;
+        command.CommandText = "DELETE FROM MarketplaceConnections WHERE Id=$id AND Revision=$revision " +
+            "AND NOT EXISTS(SELECT 1 FROM MarketplaceCredentialMigrations WHERE ConnectionId=$id)" +
+            (hasBindingTables
+                ? " AND NOT EXISTS(SELECT 1 FROM ProductChannelBindings WHERE ConnectionId=$id)" +
+                  " AND NOT EXISTS(SELECT 1 FROM ProductChannelBindingPreviews WHERE ConnectionId=$id)" +
+                  " AND NOT EXISTS(SELECT 1 FROM ProductChannelBindingReceipts WHERE ConnectionId=$id)"
+                : "");
         command.Parameters.AddWithValue("$id", id); command.Parameters.AddWithValue("$revision", expectedRevision);
-        return command.ExecuteNonQuery() == 1;
+        var deleted = command.ExecuteNonQuery() == 1;
+        transaction.Commit();
+        return deleted;
+    }
+
+    public MarketplaceCredentialMigrationMarker? CredentialMigration(string channel)
+    {
+        var normalizedChannel = MarketplaceConnectionCatalog.Get(channel).Id;
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Channel,ConnectionId,ShopId,CompletedUtc FROM MarketplaceCredentialMigrations WHERE Channel=$channel";
+        command.Parameters.AddWithValue("$channel", normalizedChannel);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return null;
+        if (!TryParseUtc(reader.GetString(3), out var completed)) throw new InvalidDataException("Credential migration marker timestamp is corrupt.");
+        return new(reader.GetString(0), reader.GetString(1), reader.GetString(2), completed);
+    }
+
+    public void MarkCredentialMigration(string channel, string connectionId, string shopId)
+    {
+        var normalizedChannel = MarketplaceConnectionCatalog.Get(channel).Id;
+        var connection = Get(connectionId) ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        if (!string.Equals(connection.Channel, normalizedChannel, StringComparison.Ordinal) ||
+            !string.Equals(connection.ShopId, shopId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Mağaza bağlantı kimliği doğrulanamadı.");
+        using var database = Open();
+        using var command = database.CreateCommand();
+        command.CommandText = """
+            INSERT INTO MarketplaceCredentialMigrations(Channel,ConnectionId,ShopId,CompletedUtc)
+            VALUES($channel,$connection,$shop,$completed)
+            ON CONFLICT(Channel) DO UPDATE SET ConnectionId=excluded.ConnectionId,ShopId=excluded.ShopId,CompletedUtc=excluded.CompletedUtc
+            """;
+        command.Parameters.AddWithValue("$channel", normalizedChannel);
+        command.Parameters.AddWithValue("$connection", connectionId);
+        command.Parameters.AddWithValue("$shop", shopId);
+        command.Parameters.AddWithValue("$completed", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        command.ExecuteNonQuery();
     }
 
     /// Applies a connection-test result only if the connection is still enabled
@@ -254,6 +331,14 @@ public sealed class MarketplaceConnectionStore
     /// Only ever a format/parse failure - never conflated with a DB-busy/locked
     /// SqliteException, which is raised by the surrounding command, not this parse.
     static bool TryParseUtc(string value, out DateTime result) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out result);
+
+    static string ValidateLabel(string value, string message, string parameter)
+    {
+        if (value is null) throw new ArgumentNullException(parameter);
+        value = value.Trim();
+        if (value.Length is < 1 or > 160 || value.Any(char.IsControl)) throw new ArgumentException(message, parameter);
+        return value;
+    }
 
     internal static string Redact(string value)
     {

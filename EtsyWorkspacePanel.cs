@@ -12,9 +12,13 @@ namespace TrMarketplaceHubDesktop;
 public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
 {
     readonly string? directory;
+    readonly MarketplaceConnection? scopedConnection;
+    readonly MarketplaceCredentialVault? credentialVault;
     readonly CatalogStore catalog;
     readonly EtsyWorkspaceStore store;
-    readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+    readonly ProductChannelCreationPreviewInbox creationInbox;
+    readonly ProductRemoteDeactivationDispatchStore remoteDeactivationDispatches;
+    readonly HttpClient http;
     readonly CancellationTokenSource lifetime = new();
     readonly TabControl sections = new() { Name = "EtsySections" };
     readonly TabControl settings = new() { Name = "EtsySettingsSections" };
@@ -24,30 +28,63 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
     readonly ComboBox stateFilter = Choices("Tüm ürünler", "Eşleşenler", "Eşleşmeyenler", "Stokta olanlar");
     readonly ComboBox templateChoice = Select();
     readonly Button send = new() { Name = "EtsySend", Content = "Önizlemeyi aç", IsEnabled = false };
+    readonly Button creationHandoffButton = new() { Name = "EtsyCreationHandoffButton", Content = "Merkezden gelen yeni ilanlar", IsEnabled = false };
+    readonly Button remoteDeactivateHandoffButton = new() { Name = "EtsyRemoteDeactivateHandoffButton", Content = "Onaylı pasife alma istekleri", IsEnabled = false };
     EtsyCredentials? credentials;
     EtsyWorkspaceState state = new();
     EtsyOperationPlan? plan;
+    MarketplaceShopProductsModel? accountSpecialistModel;
+    string accountSpecialistPlanId = "";
+    string creationHandoffRequestId = "";
     int page;
     bool busy;
     bool disposed;
     public event Action<EtsyCredentials>? CredentialsChanged;
+    public string? ConnectionId => scopedConnection?.Id;
+    public string AccountShopId => scopedConnection?.ShopId ?? credentials?.ShopId ?? "";
+    public IReadOnlyList<string> CreationHandoffProductIds { get; private set; } = Array.Empty<string>();
+    public MarketplaceShopSpecialistPreview? AccountSpecialistPreview { get; private set; }
+    public string AccountSpecialistPlanId => accountSpecialistPlanId;
+    public EtsyOperation? AccountSpecialistOperation => plan?.Operation;
+    public IReadOnlyList<string> AccountSpecialistPlanProductIds => plan?.Rows.Select(row => row.ProductId).ToArray() ?? Array.Empty<string>();
+    public Task? AccountSpecialistPreviewTask { get; private set; }
 
-    public EtsyWorkspacePanel(string? directory = null)
+    public EtsyWorkspacePanel(string? directory = null) : this(directory, null, false, null) { }
+
+    public EtsyWorkspacePanel(string connectionId, string? directory) : this(directory, connectionId, true, null) { }
+
+    public EtsyWorkspacePanel(string connectionId, string? directory, HttpMessageHandler handler)
+        : this(directory, connectionId, true, new HttpClient(handler ?? throw new ArgumentNullException(nameof(handler)), true)) { }
+
+    EtsyWorkspacePanel(string? directory, string? connectionId, bool accountScoped, HttpClient? injectedHttp)
     {
+        http = injectedHttp ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+        if (accountScoped)
+        {
+            scopedConnection = new MarketplaceConnectionStore(directory).Get(connectionId!)
+                ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+            if (!scopedConnection.Enabled || scopedConnection.Channel != "etsy")
+                throw new InvalidOperationException("Etsy çalışma alanı için etkin ve doğru kanal hesabı gerekli.");
+            credentialVault = new MarketplaceCredentialVault(directory);
+        }
         this.directory = directory; catalog = new(directory); store = new(directory);
+        creationInbox = new(directory); remoteDeactivationDispatches = new(directory);
+        creationHandoffButton.Click += (_, _) => Local(AcceptCreationHandoff);
+        remoteDeactivateHandoffButton.Click += async (_, _) => await Run(OpenRemoteDeactivateHandoff);
         BuildStyle();
         var root = new DockPanel { Margin = new Thickness(12) };
         var top = new DockPanel { Margin = new Thickness(0,0,0,10) };
         var open = ActionButton("Mağaza ayarları", ShowSettings); open.Name = "EtsyOpenSettings";
         DockPanel.SetDock(open,Dock.Right); top.Children.Add(open); top.Children.Add(summary);
         DockPanel.SetDock(top,Dock.Top); root.Children.Add(top);
-        sections.Items.Add(new TabItem { Header = "Etsy kontrol", Content = BuildControl() });
+        sections.Items.Add(new TabItem { Header = "Etsy kontrol", Content = BuildAccountShopProducts(BuildControl()) });
         sections.Items.Add(new TabItem { Header = "Ayarlar", Content = BuildSettings() });
         sections.Items.Add(new TabItem { Header = "İşlem geçmişi", Content = BuildHistory() });
         root.Children.Add(sections); Content = root;
-        try { credentials = CredentialStore.Load(directory); if(credentials is not null) { FillCredentials(credentials); LoadState(); } }
+        if(scopedConnection is not null){shop.Text=scopedConnection.ShopId;shop.IsReadOnly=true;summary.Text=$"{scopedConnection.DisplayName} / {scopedConnection.ShopId} · {MarketplaceStatusText.ToTurkish(scopedConnection.Status)}";}
+        try { credentials = LoadCredentials(); if(credentials is not null) FillCredentials(credentials); if(scopedConnection is not null || credentials is not null) LoadState(); }
         catch(Exception ex) { summary.Text = Safe(ex); }
-        RefreshProducts();
+        RefreshProducts(); RefreshDispatchHandoffs();
         Loaded += (_,_) => { var window=Window.GetWindow(this); if(window is not null) window.Closed += (_,_)=>Dispose(); };
     }
     public void Dispose() { if(disposed)return;disposed=true;lifetime.Cancel();http.Dispose();lifetime.Dispose(); }
@@ -58,19 +95,25 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         if(busy)return; busy=true; IsEnabled=false;
         try { await action(); }
         catch(OperationCanceledException) { summary.Text="İşlem iptal edildi."; }
-        catch(Exception ex) { summary.Text=Safe(ex); MessageBox.Show(Window.GetWindow(this), Safe(ex),"Etsy",MessageBoxButton.OK,MessageBoxImage.Warning); }
+        catch(Exception ex) { summary.Text=Safe(ex); var owner=Window.GetWindow(this);if(owner is not null)MessageBox.Show(owner, Safe(ex),"Etsy",MessageBoxButton.OK,MessageBoxImage.Warning); }
         finally { busy=false; IsEnabled=true; }
     }
     void Local(Action action) { try { action(); } catch(Exception ex) { summary.Text=Safe(ex);MessageBox.Show(Window.GetWindow(this),Safe(ex),"Etsy",MessageBoxButton.OK,MessageBoxImage.Warning); } }
     void LoadState()
     {
-        if(credentials is null || string.IsNullOrWhiteSpace(credentials.ShopId))return;
-        state=store.Load(credentials.ShopId); ReloadChoices();
+        var accountShop = scopedConnection?.ShopId ?? credentials?.ShopId;
+        if(string.IsNullOrWhiteSpace(accountShop))return;
+        state=store.Load(accountShop); ReloadChoices();
         summary.Text=$"{(state.ShopName.Length>0?state.ShopName:"Etsy mağazası")}  /  {state.ShopId}  ·  {state.Currency}  ·  {state.Listings.Count:N0} ilan";
         history.ItemsSource=store.Receipts(state.ShopId); RefreshProducts();
     }
     void SaveState() { if(string.IsNullOrEmpty(state.ShopId))throw new InvalidOperationException("Önce Etsy mağazasını doğrulayın.");store.Save(state);state=store.Load(state.ShopId);ClearPreview();ReloadChoices();RefreshProducts(); }
-    void ClearPreview() { plan=null;send.IsEnabled=false; }
+    void ClearPreview() { ClearAccountSpecialistAssociation();plan=null;send.IsEnabled=false; }
+    void ClearAccountSpecialistAssociation()
+    {
+        if(accountSpecialistPlanId.Length>0)accountSpecialistModel?.ClearSpecialistPlanAssociation(accountSpecialistPlanId);
+        accountSpecialistPlanId="";accountSpecialistModel=null;AccountSpecialistPreview=null;
+    }
     IReadOnlyList<string> SelectedIds() => products.SelectedItems.Cast<ProductRow>().Select(r=>r.Id).ToArray();
     IReadOnlyList<string> RequireSelection() { var ids=SelectedIds();if(ids.Count==0)throw new InvalidOperationException("Önce ürün listesinden ürün seçin.");return ids; }
     void RefreshProducts()
@@ -91,6 +134,86 @@ public sealed partial class EtsyWorkspacePanel : UserControl, IDisposable
         string storeMessage(string id)=>history.ItemsSource is IReadOnlyList<EtsyOperationReceipt> receipts?receipts.FirstOrDefault(r=>r.ProductId==id)?.Detail??"":"";
     }
     static string StateLabel(string value)=>value switch {"active"=>"Yayında","draft"=>"Taslak","inactive"=>"Pasif","sold_out"=>"Tükendi","expired"=>"Süresi doldu",_=>value};
+
+    EtsyCredentials? LoadCredentials()
+    {
+        if (scopedConnection is null) return CredentialStore.Load(directory);
+        var current = CurrentScopedConnection();
+        var value = credentialVault!.Load<EtsyCredentials>(current.Id, current.Channel, current.ShopId);
+        if (value is not null && value.ShopId != current.ShopId)
+            throw new InvalidOperationException("WRONG_ACCOUNT: Etsy şifreli hesabı seçili mağazayla eşleşmiyor.");
+        return value;
+    }
+
+    void RefreshDispatchHandoffs()
+    {
+        if (scopedConnection is null)
+        {
+            creationHandoffButton.IsEnabled = remoteDeactivateHandoffButton.IsEnabled = false;
+            return;
+        }
+        var creation = creationInbox.Pending(scopedConnection.Id);
+        creationHandoffButton.IsEnabled = creation.Count > 0;
+        creationHandoffButton.Content = creation.Count == 0 ? "Merkezden gelen yeni ilanlar" : $"Merkezden gelen yeni ilanlar ({creation.Sum(item => item.ProductIds.Count)})";
+        var deactivations = remoteDeactivationDispatches.Pending(scopedConnection.Id);
+        remoteDeactivateHandoffButton.IsEnabled = deactivations.Count > 0;
+        remoteDeactivateHandoffButton.Content = deactivations.Count == 0 ? "Onaylı pasife alma istekleri" : $"Onaylı pasife alma istekleri ({deactivations.Count})";
+    }
+
+    void AcceptCreationHandoff()
+    {
+        var connection = CurrentScopedConnection();
+        var request = creationInbox.Pending(connection.Id).FirstOrDefault()
+            ?? throw new InvalidOperationException("Bu Etsy hesabı için bekleyen yeni ilan önizlemesi yok.");
+        creationHandoffRequestId = request.Id;
+        CreationHandoffProductIds = Array.AsReadOnly(request.ProductIds.ToArray());
+        products.UnselectAll();
+        var exact = CreationHandoffProductIds.ToHashSet(StringComparer.Ordinal);
+        foreach (var item in products.Items.Cast<ProductRow>().Where(item => exact.Contains(item.Id))) products.SelectedItems.Add(item);
+        summary.Text = $"{CreationHandoffProductIds.Count} ürünün hesap kapsamlı isteği açıldı. ‘Taslak oluştur · önizle’ yalnız bu ürünleri kullanır; plan kalıcılaşmadan istek tamamlanmaz.";
+    }
+
+    IReadOnlyList<string> PreviewProductIds(EtsyOperation operation) => operation == EtsyOperation.CreateDraft && creationHandoffRequestId.Length > 0
+        ? Array.AsReadOnly(CreationHandoffProductIds.ToArray())
+        : RequireSelection();
+
+    void CompleteCreationHandoff(EtsyOperationPlan persistedPlan)
+    {
+        if (creationHandoffRequestId.Length == 0) return;
+        var connection = CurrentScopedConnection();
+        if (!store.IsPersistedCreationPlan(persistedPlan.Id, connection.ShopId, CreationHandoffProductIds))
+            throw new InvalidOperationException("Etsy yeni ilan planı kalıcı değil veya hesap kapsamlı ürün setiyle eşleşmiyor; istek beklemede tutuldu.");
+        creationInbox.Recognize(creationHandoffRequestId, connection.Id);
+        creationHandoffRequestId = "";
+        CreationHandoffProductIds = Array.Empty<string>();
+        RefreshDispatchHandoffs();
+    }
+
+    async Task OpenRemoteDeactivateHandoff()
+    {
+        var connection = CurrentScopedConnection();
+        var request = remoteDeactivationDispatches.Pending(connection.Id).FirstOrDefault()
+            ?? throw new InvalidOperationException("Bu Etsy hesabı için onaylı pasife alma isteği yok.");
+        await Preview(EtsyOperation.Deactivate,new[] { request.Preview.ProductId },false);
+        if(plan is null)throw new InvalidOperationException("Etsy pasife alma önizlemesi oluşturulamadı.");
+        var exactRow = plan.Rows.SingleOrDefault(row => row.ProductId == request.Preview.ProductId);
+        if (exactRow is null || !exactRow.CanSend || exactRow.ListingId?.ToString(CultureInfo.InvariantCulture) != request.Preview.RemoteId)
+            throw new InvalidOperationException("Etsy pasife alma önizlemesi onaylanan uzak ilan kimliğiyle eşleşmedi; gönderim bağlanmadı.");
+        remoteDeactivationDispatches.AttachChannelPlan(request.Preview.Id, connection.Id, plan.Id);
+        send.IsEnabled = true;
+        summary.Text = "Onaylı pasife alma isteği Etsy gönderim önizlemesine bağlandı. Gönderim için önizleme penceresinde ayrıca açık onay gerekir.";
+        RefreshDispatchHandoffs();
+        ShowPreview(plan);
+    }
+
+    internal MarketplaceConnection CurrentScopedConnection()
+    {
+        var current = new MarketplaceConnectionStore(directory).Get(scopedConnection!.Id)
+            ?? throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+        if (!current.Enabled || current.Channel != "etsy" || current.ShopId != scopedConnection.ShopId)
+            throw new InvalidOperationException("WRONG_ACCOUNT: Mağaza bağlantısı devre dışı veya değiştirilmiş.");
+        return current;
+    }
     sealed record ProductRow(string Id,string Sku,string Title,string Barcode,int Stock,decimal Price,string Currency,long? ListingId,int? EtsyStock,decimal? EtsyPrice,string EtsyCurrency,string State,string Category,string Brand,string Detail,string TemplateId);
     sealed record Option(string Id,string Name) { public override string ToString()=>Name; }
     static void SetOptions(ComboBox combo,IEnumerable<Option> values,string? selected=null)

@@ -23,6 +23,32 @@ public sealed partial class TrendyolWorkspacePanel
     int PageSize=>pageSize.SelectedItem is int size?size:100;
     static ComboBox FilterChoice(string name,params string[] items)=>new(){Name=name,ItemsSource=items,SelectedIndex=0,MinWidth=125,Margin=new(3),VerticalContentAlignment=VerticalAlignment.Center};
     static FrameworkElement ControlGroup(string title,UIElement content,double width)=>new GroupBox{Header=title,Content=content,Width=width,Margin=new(4),Padding=new(5),BorderBrush=Line,BorderThickness=new(1)};
+    UIElement BuildAccountShopProducts(UIElement specialized)
+    {
+        if(scopedConnection is null)return specialized;
+        var sections=new TabControl{Name="TrendyolAccountProductSections"};
+        var common=new MarketplaceShopProductsPanel(scopedConnection.Id,workspaceDirectory);common.BulkPreviewRequested+=HandleAccountBulkPreview;
+        sections.Items.Add(new TabItem{Header="Hesap ürünleri",Content=common});
+        sections.Items.Add(new TabItem{Header="Trendyol işlemleri",Content=specialized});
+        return sections;
+    }
+    void HandleAccountBulkPreview(MarketplaceShopSpecialistPreview request)
+    {
+        InvalidatePreview();
+        var connection=CurrentScopedConnection();
+        new MarketplaceShopProductsModel(connection.Id,workspaceDirectory).ValidateSpecialistPreview(request);
+        var operation=request.Operation;
+        var target=operation switch{
+            MarketplaceShopBulkOperation.Category or MarketplaceShopBulkOperation.Brand=>TrendyolOperation.UpdateUnapproved,
+            MarketplaceShopBulkOperation.Delivery=>TrendyolOperation.Delivery,
+            MarketplaceShopBulkOperation.PricePreview=>TrendyolOperation.Price,
+            MarketplaceShopBulkOperation.StockPreview=>TrendyolOperation.Stock,
+            MarketplaceShopBulkOperation.ContentPreview=>TrendyolOperation.Content,
+            MarketplaceShopBulkOperation.CreatePreview=>TrendyolOperation.Create,
+            _=>throw new InvalidOperationException("Bu Trendyol işlemi uzman önizlemeye bağlanmadı.")};
+        mode.SelectedItem=mode.Items.Cast<Mode>().Single(m=>m.Value==target);
+        PresentPreview(store.Preview(Account(),request.Rows.Select(row=>row.ProductId),target,connection.Id),request);
+    }
     static void FilterField(Panel panel,string label,UIElement input)
     {
         var row=new DockPanel();var caption=new TextBlock{Text=label,Width=85,VerticalAlignment=VerticalAlignment.Center,Margin=new(2),TextWrapping=TextWrapping.Wrap};DockPanel.SetDock(caption,Dock.Left);row.Children.Add(caption);row.Children.Add(input);panel.Children.Add(row);
@@ -34,7 +60,7 @@ public sealed partial class TrendyolWorkspacePanel
         var toggleFilters=B("⌄ Detaylı filtreleme",()=>{});toggleFilters.Click+=(_,_)=>{detailedFilters.Visibility=detailedFilters.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;toggleFilters.Content=detailedFilters.Visibility==Visibility.Visible?"⌃ Detaylı filtreleme":"⌄ Detaylı filtreleme";};toggleFilters.Name="TrendyolToggleFilters";toggleFilters.VerticalAlignment=VerticalAlignment.Bottom;toolbar.Children.Add(toggleFilters);
         var toggleBulk=B("⌄ Toplu işlemler",()=>{});toggleBulk.Click+=(_,_)=>{bulkActions.Visibility=bulkActions.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;toggleBulk.Content=bulkActions.Visibility==Visibility.Visible?"⌃ Toplu işlemler":"⌄ Toplu işlemler";};toggleBulk.Name="TrendyolToggleBulk";toggleBulk.VerticalAlignment=VerticalAlignment.Bottom;toolbar.Children.Add(toggleBulk);
         var match=B("Barkodla eşleştir / oluştur",MatchProducts);match.Name="TrendyolMatchProducts";match.VerticalAlignment=VerticalAlignment.Bottom;toolbar.Children.Add(match);
-        var open=B("Ürün kartını aç",OpenProductEditor);open.Name="TrendyolOpenProduct";open.VerticalAlignment=VerticalAlignment.Bottom;toolbar.Children.Add(open);var refresh=A("Trendyol kontrol / yenile",RefreshStoreProducts);refresh.VerticalAlignment=VerticalAlignment.Bottom;toolbar.Children.Add(refresh);top.Children.Add(toolbar);
+        var open=B("Ürün kartını aç",OpenProductEditor);open.Name="TrendyolOpenProduct";open.VerticalAlignment=VerticalAlignment.Bottom;toolbar.Children.Add(open);var refresh=A("Trendyol kontrol / yenile",RefreshStoreProducts);refresh.VerticalAlignment=VerticalAlignment.Bottom;toolbar.Children.Add(refresh);creationHandoffButton.VerticalAlignment=VerticalAlignment.Bottom;toolbar.Children.Add(creationHandoffButton);top.Children.Add(toolbar);
         var quick=new WrapPanel();quick.Children.Add(T("Seçili ürünlerde"));quick.Children.Add(mode);var previewButton=Primary(B("Önizle",BuildPreview));previewButton.Name="TrendyolBuildPreview";quick.Children.Add(previewButton);controlSummary.FontSize=11;controlSummary.Margin=new(9,6,5,4);quick.Children.Add(controlSummary);top.Children.Add(quick);
         toggleBulk.Click+=(_,_)=>quick.Visibility=bulkActions.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;
         BuildDetailedFilters();BuildBulkActions();top.Children.Add(detailedFilters);top.Children.Add(bulkActions);

@@ -14,7 +14,7 @@ public partial class MainWindow
         var template = new ComboBox { ItemsSource = AutomationTemplateCatalog.All, DisplayMemberPath = "Name", Width = 180, SelectedIndex = 0 };
         var kind = new TextBox { IsReadOnly = true, Width = 90 };
         var channel = new TextBox { Text = "etsy", Width = 110 };
-        var shop = new TextBox { Text = "default", Width = 140 };
+        var shop = new TextBox { Text = "default", Width = 140, ToolTip = "Sağlık için mağaza kimliği; XML için kaynak kimliği" };
         var interval = new TextBox { Text = "30", Width = 80 };
         var schedule = new ComboBox { ItemsSource = new[] { "Interval", "Daily", "Weekly" }, SelectedIndex = 0, Width = 90 };
         var runAt = new TextBox { Text = "09:00", Width = 70 };
@@ -24,7 +24,7 @@ public partial class MainWindow
         var retryLimit = new TextBox { Text = "3", Width = 55 };
         var retryBackoff = new TextBox { Text = "5", Width = 55 };
         var enabled = new CheckBox { Content = "Etkin", IsChecked = true, Margin = new Thickness(8, 4, 8, 4) };
-        var status = Hint("Zamanlayıcı yalnız uygulama açıkken çalışır. XML, stok, fiyat, normal sync ve sağlık şablonları yerel kuyruğa alınır.");
+        var status = Hint("Zamanlayıcı MonoBridge bildirim alanında çalışırken sürer. Arka planda yalnız XML ve sağlık okuma işleri yürütülür; stok/fiyat yazımları açık onay akışında kalır.");
         template.SelectionChanged += (_, _) => { if (template.SelectedItem is AutomationTemplate selected) { kind.Text = selected.Kind.ToString(); interval.Text = selected.IntervalMinutes.ToString(CultureInfo.InvariantCulture); } };
         void Refresh() => jobs.ItemsSource = store.List();
         var save = Button("Kaydet", () =>
@@ -38,10 +38,10 @@ public partial class MainWindow
         var toggle = Button("Seçileni etkin/pasif yap", () => { if (jobs.SelectedItem is not AutomationJob job) throw new InvalidOperationException("Önce otomasyon seçin."); job.Enabled = !job.Enabled; store.Save(job); new AuditStore(dataDirectory).Append(new AuditEvent { Module = "automation", Action = "toggle", Marketplace = job.Channel, ShopId = job.Shop, Outcome = "Succeeded", Detail = job.Enabled ? "Etkin" : "Pasif" }); Refresh(); });
         var run = Button("Seçileni şimdi çalıştır", () => { if (jobs.SelectedItem is not AutomationJob job) throw new InvalidOperationException("Önce otomasyon seçin."); job.NextRunUtc = DateTime.UtcNow; job.FailureCount = 0; store.Save(job); status.Text = "İş çalıştırılmak üzere kuyruğa alındı; lease duplicate çalışmayı engeller."; Refresh(); });
         var form = new WrapPanel();
-        foreach (var pair in new[] { ("Şablon", (Control)template), ("Tür", (Control)kind), ("Kanal", channel), ("Mağaza", shop), ("Dakika", interval), ("Takvim", schedule), ("Saat", runAt), ("Gün", days), ("Pencere baş", windowStart), ("Pencere son", windowEnd), ("Retry", retryLimit), ("Backoff", retryBackoff) }) { form.Children.Add(new TextBlock { Text = pair.Item1, Margin = new Thickness(4, 7, 2, 0) }); form.Children.Add(pair.Item2); }
+        foreach (var pair in new[] { ("Şablon", (Control)template), ("Tür", (Control)kind), ("Kanal", channel), ("Mağaza / XML kaynak", shop), ("Dakika", interval), ("Takvim", schedule), ("Saat", runAt), ("Gün", days), ("Pencere baş", windowStart), ("Pencere son", windowEnd), ("Retry", retryLimit), ("Backoff", retryBackoff) }) { form.Children.Add(new TextBlock { Text = pair.Item1, Margin = new Thickness(4, 7, 2, 0) }); form.Children.Add(pair.Item2); }
         form.Children.Add(enabled); form.Children.Add(save); form.Children.Add(toggle); form.Children.Add(run);
         var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 1200 };
-        panel.Children.Add(Heading("Otomasyon takvimi ve şablonları")); panel.Children.Add(Hint("Günlük/haftalık saat ve isteğe bağlı çalışma penceresi kullanın. Uygulama kapalıyken arka plan servisi varmış gibi davranılmaz; açılışta due işler lease ile tek kez kuyruğa alınır. Retry backoff ve son hata kayıtlıdır.")); panel.Children.Add(form); panel.Children.Add(jobs); panel.Children.Add(status); Refresh(); return Scroll(panel);
+        panel.Children.Add(Heading("Otomasyon takvimi ve şablonları")); panel.Children.Add(Hint("Günlük/haftalık saat ve isteğe bağlı çalışma penceresi kullanın. XML şablonunda Mağaza / XML kaynak alanına kaynak kimliğini girin. MonoBridge bildirim alanında açıkken işler lease ile doğrudan yürütülür; başarıdan sonra takvim ilerler. Retry backoff ve son hata kayıtlıdır.")); panel.Children.Add(form); panel.Children.Add(jobs); panel.Children.Add(status); Refresh(); return Scroll(panel);
     }
 
     (EtsyListingUpdatePreview Preview, CatalogProduct Product, string SyncJobId)? pendingEtsyDispatch;

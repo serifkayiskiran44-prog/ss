@@ -19,6 +19,9 @@ public partial class MainWindow
     readonly ComboBox productBulkChoice = new() { Width = 225, DisplayMemberPath = "Label", SelectedValuePath = "Kind" };
     readonly ComboBox productBulkValue = new() { Width = 230, IsEditable = true };
     readonly ComboBox productBulkScope = new() { Width = 225, ItemsSource = new[] { "Yalnız seçtiğim ürünler", "Filtreye uyan tüm ürünler" }, SelectedIndex = 0 };
+    readonly Button productConnectSelectedButton = new() { Name = "ProductConnectSelectedButton", Content = "Mağazaya bağla", IsEnabled = false };
+    readonly Button productConnectionsButton = new() { Name = "ProductConnectionsButton", Content = "Bağlantılar", IsEnabled = false };
+    readonly Button productSourceButton = new() { Name = "ProductSourceButton", Content = "Kaynak ve stok", IsEnabled = false };
     Expander? productBulkSection;
     record ProductAction(BulkProductOperationKind Kind, string Label);
     static readonly ProductAction[] ProductActions =
@@ -41,6 +44,12 @@ public partial class MainWindow
         bar.Children.Add(Button("Temizle", () => search.Clear()));
         bar.Children.Add(Button("+ Yeni ürün", () => OpenProductCard(true)));
         bar.Children.Add(Button("Ürün kartı", () => OpenProductCard(false)));
+        productConnectSelectedButton.Click += (_, _) => OpenProductConnections();
+        productConnectionsButton.Click += (_, _) => OpenSelectedProductConnections();
+        productSourceButton.Click += (_, _) => OpenSelectedProductSource();
+        bar.Children.Add(productConnectSelectedButton);
+        bar.Children.Add(productConnectionsButton);
+        bar.Children.Add(productSourceButton);
         bar.Children.Add(Button("Kolonlar", OpenProductColumnChooser));
         bar.Children.Add(Button("Excel'e aktar", ExportProductList));
         bar.Children.Add(Button("Excel ile güncelle", () => Navigate("excel")));
@@ -82,6 +91,8 @@ public partial class MainWindow
         products.HorizontalGridLinesBrush = Brushes.LightGray; products.VerticalGridLinesBrush = Brushes.LightGray;
         products.FrozenColumnCount = 3; products.CanUserReorderColumns = true; products.CanUserResizeColumns = true;
         products.RowDetailsVisibilityMode = DataGridRowDetailsVisibilityMode.Collapsed;
+        var badgeBinding = new Binding(".") { Converter = new ProductBadgeTextConverter(dataDirectory) };
+        products.Columns.Insert(Math.Min(3, products.Columns.Count), new DataGridTextColumn { Header = "Mağazalar", Binding = badgeBinding, Width = 105, IsReadOnly = true });
         products.CellEditEnding += (_, args) =>
         {
             if (args.EditAction != DataGridEditAction.Commit || args.Row.Item is not CatalogProduct changed) return;
@@ -101,7 +112,12 @@ public partial class MainWindow
                 }
             }), System.Windows.Threading.DispatcherPriority.Background);
         };
-        products.SelectionChanged += (_, _) => productSelection.Text = $"Seçilen: {products.SelectedItems.Count:N0}";
+        products.SelectionChanged += (_, _) =>
+        {
+            productSelection.Text = $"Seçilen: {products.SelectedItems.Count:N0}";
+            UpdateProductConnectionCommandState();
+        };
+        UpdateProductConnectionCommandState();
         var detail = new FrameworkElementFactory(typeof(Button)); detail.SetValue(ContentControl.ContentProperty, "+"); detail.SetValue(Control.PaddingProperty, new Thickness(0));
         detail.AddHandler(System.Windows.Controls.Button.ClickEvent, new RoutedEventHandler((sender, args) =>
         {
@@ -120,13 +136,24 @@ public partial class MainWindow
             var text = new StackPanel { Width = 650, Margin = new Thickness(12, 0, 0, 0) };
             text.Children.Add(Hint($"ID: {product.ProductIdLabel} • Marka ID: {product.BrandIdLabel} • Kategori ID: {product.CategoryIdLabel}"));
             text.Children.Add(Hint(product.Category));
-            text.Children.Add(Hint(string.Join("\n", MarketplaceProductPanelModel.Build(product.Id, dataDirectory).Select(p => $"{p.Channel} / {p.ShopId}: {p.Status}"))));
+            var connectionDetails = ProductConnectionPresentation.Details(dataDirectory, product.Id);
+            text.Children.Add(Hint(connectionDetails.Count == 0
+                ? "Mağaza bağlantısı yok."
+                : string.Join("\n", connectionDetails.Select(row => $"{row.DisplayName} / {row.ShopId}: {row.State} · içerik {(row.ManageContent ? "açık" : "kapalı")}, fiyat {(row.ManagePrice ? "açık" : "kapalı")}, stok {(row.ManageStock ? "açık" : "kapalı")}"))));
             text.Children.Add(Hint($"Fiyat: {(product.LockPrice ? "kilitli" : "güncellenebilir")} • Stok: {(product.LockStock ? "kilitli" : "güncellenebilir")}"));
             line.Children.Add(text); target.Content = line;
         };
         var menu = new ContextMenu();
         void Item(string label, Action action) { var item = new MenuItem { Header = label }; item.Click += (_, _) => { try { action(); } catch (Exception error) { Log(Safe(error)); } }; menu.Items.Add(item); }
         Item("Ürün kartını aç", () => OpenProductCard(false)); Item("Seçili ürünleri Excel'e aktar", ExportProductList); menu.Items.Add(new Separator());
+        menu.Items.Add(BuildMarketplaceBindingMenu(OpenProductConnections));
+        menu.Opened += (_, _) =>
+        {
+            var current = menu.Items.OfType<MenuItem>().Single(item => item.Name == "ProductStoreBindingMenu");
+            var index = menu.Items.IndexOf(current);
+            menu.Items[index] = BuildMarketplaceBindingMenu(OpenProductConnections);
+        };
+        menu.Items.Add(new Separator());
         foreach (var action in ProductActions) Item(action.Label, () => { productBulkChoice.SelectedItem = action; productBulkScope.SelectedIndex = 0; productBulkSection!.IsExpanded = true; productBulkValue.Focus(); if (action.Kind is BulkProductOperationKind.Activate or BulkProductOperationKind.Deactivate) PreviewProductBulk(); });
         menu.Items.Add(new Separator()); Item("Ürün kimliğini kopyala", () => Clipboard.SetText(SelectedProduct().ProductIdLabel)); Item("SKU'yu kopyala", () => Clipboard.SetText(SelectedProduct().Sku));
         Item("Ürünü sil",DeleteSelectedProduct); products.ContextMenu = menu;
@@ -188,4 +215,120 @@ public partial class MainWindow
     }
 
     static IEnumerable<string> ProductImages(CatalogProduct product) => product.ImageUrls.Split(new[] { '|', '\r', '\n' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct();
+
+    IReadOnlyList<string> SelectedProductIdsForConnection()
+    {
+        var ids = products.SelectedItems.OfType<CatalogProduct>().Select(product => product.Id).Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0)
+            throw new InvalidOperationException("Mağazaya bağlamak için ürün tablosundan en az bir ürünü açıkça seçin. Filtrelenmiş veya sayfadaki ürünler otomatik seçilmez.");
+        return Array.AsReadOnly(ids);
+    }
+
+    void UpdateProductConnectionCommandState()
+    {
+        var count = products.SelectedItems.OfType<CatalogProduct>().Count();
+        productConnectSelectedButton.IsEnabled = count > 0;
+        productConnectionsButton.IsEnabled = count > 0;
+        productSourceButton.IsEnabled = count == 1;
+    }
+
+    void OpenProductConnections()
+    {
+        var dialog = new ProductConnectionsWindow(dataDirectory, SelectedProductIdsForConnection()) { Owner = this };
+        dialog.ShowDialog();
+        RefreshProducts();
+    }
+
+    void OpenProductConnections(string connectionId, bool showConnections)
+    {
+        var dialog = new ProductConnectionsWindow(dataDirectory, SelectedProductIdsForConnection(), initialConnectionId: connectionId, showConnections: showConnections) { Owner = this };
+        dialog.ShowDialog();
+        RefreshProducts();
+    }
+
+    MenuItem BuildMarketplaceBindingMenu(Action<string, bool> openConnection)
+    {
+        var selectedCount = products.SelectedItems.OfType<CatalogProduct>().Count();
+        var root = new MenuItem
+        {
+            Name = "ProductStoreBindingMenu",
+            Header = "Bağlantı sağlanacak mağazalar",
+            IsEnabled = selectedCount > 0
+        };
+        var connectionStore = new MarketplaceConnectionStore(dataDirectory);
+        var operational = MarketplaceOperationalAccounts.List(connectionStore)
+            .OrderBy(connection => connection.Channel, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(connection => connection.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(connection => connection.ShopId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var bindable = selectedCount == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : new ProductConnectionsModel(dataDirectory, SelectedProductIdsForConnection()).Targets
+                .Select(target => target.ConnectionId)
+                .ToHashSet(StringComparer.Ordinal);
+        foreach (var channelGroup in operational.GroupBy(connection => connection.Channel, StringComparer.OrdinalIgnoreCase))
+        {
+            var channel = new MenuItem { Header = MarketplaceChannelLabel(channelGroup.Key) };
+            foreach (var connection in channelGroup)
+            {
+                var account = new MenuItem { Header = $"{connection.DisplayName} · {connection.ShopId}" };
+                if (!bindable.Contains(connection.Id))
+                {
+                    account.Items.Add(new MenuItem { Header = "Bu kanal için ürün bağlantısı hazır değil", IsEnabled = false });
+                    channel.Items.Add(account);
+                    continue;
+                }
+                void Action(string label, bool showConnections)
+                {
+                    var item = new MenuItem { Header = label, Tag = connection.Id };
+                    item.Click += (_, _) =>
+                    {
+                        try { openConnection(connection.Id, showConnections); }
+                        catch (Exception error)
+                        {
+                            Log(Safe(error));
+                            MessageBox.Show(this, Safe(error), "Mağazaya bağla", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    };
+                    account.Items.Add(item);
+                }
+                Action("Seçili ürünleri bağla / eşleştir", false);
+                Action("Bağlantıyı ve yönetimi güncelle", true);
+                channel.Items.Add(account);
+            }
+            root.Items.Add(channel);
+        }
+        if (root.Items.Count == 0)
+            root.Items.Add(new MenuItem { Header = "Kayıtlı etkin mağaza bulunamadı", IsEnabled = false });
+        return root;
+    }
+
+    static string MarketplaceChannelLabel(string channel) => channel.Trim().ToLowerInvariant() switch
+    {
+        "trendyol" => "Trendyol",
+        "etsy" => "Etsy",
+        "hepsiburada" => "Hepsiburada",
+        "amazon" => "Amazon",
+        "ebay" => "eBay",
+        "bizimhesap" => "BizimHesap",
+        _ when channel.Length == 0 => "Diğer",
+        _ => char.ToUpperInvariant(channel[0]) + channel[1..]
+    };
+
+    void OpenSelectedProductConnections()
+    {
+        var selected = SelectedProductIdsForConnection();
+        var dialog = new ProductConnectionsWindow(dataDirectory, selected) { Owner = this };
+        dialog.ShowDialog();
+        RefreshProducts();
+    }
+
+    void OpenSelectedProductSource()
+    {
+        var selected = SelectedProductIdsForConnection();
+        if (selected.Count != 1) throw new InvalidOperationException("Kaynak ve stok ayrıntıları için tam bir ürün seçin.");
+        var dialog = new ProductSourceWindow(dataDirectory, selected[0]) { Owner = this };
+        dialog.ShowDialog();
+        RefreshProducts();
+    }
 }

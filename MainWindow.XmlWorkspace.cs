@@ -14,7 +14,7 @@ public partial class MainWindow
     readonly DataGrid xmlCategories = new() { IsReadOnly = false, SelectionMode = DataGridSelectionMode.Extended, RowHeight = 29 };
     readonly ObservableCollection<XmlCategoryRule> categoryRows = new();
     readonly Grid xmlMappingFields = new();
-    readonly TextBlock xmlListStatus = Hint("Bir kaynağı seçin; tanımını açmak için çift tıklayın.");
+    readonly TextBlock xmlListStatus = Hint("Otomatik kaynaklar tek sırada çalışır: biri tamamlanınca sıradaki başlar. Süre, kaynağın yeniden sıraya girmeden önceki en kısa beklemesidir.");
     readonly ObservableCollection<string> itemPaths = new();
     Window? xmlDefinitionDialog;
 
@@ -25,8 +25,8 @@ public partial class MainWindow
         Column(sources, "XML adı", "Name", 245);
         Column(sources, "Son çalışma", "LastRunUtc", 145);
         Column(sources, "Sonuç / hata mesajı", "LastStatus", 440);
-        Column(sources, "Otomatik", "AutoImport", 75);
-        Column(sources, "Aralık (dk)", "IntervalMinutes", 85);
+        Column(sources, "Sıraya dahil", "AutoImport", 90);
+        Column(sources, "Yeniden sıra (dk)", "IntervalMinutes", 115);
         sources.SelectionChanged += (_, _) => { if (sources.SelectedItem is XmlSource selected) SetSource(Clone(selected)); };
         sources.MouseDoubleClick += (_, e) => { if (e.OriginalSource is DependencyObject origin && FindParent<DataGridRow>(origin) != null) OpenXmlDefinition(); };
         var toolbar = new WrapPanel();
@@ -137,7 +137,8 @@ public partial class MainWindow
         advancedStock.AddHandler(System.Windows.Controls.Primitives.ToggleButton.CheckedEvent,new RoutedEventHandler((_,_)=>Dispatcher.BeginInvoke(new Action(UpdateStockExample))));
         advancedStock.AddHandler(System.Windows.Controls.Primitives.ToggleButton.UncheckedEvent,new RoutedEventHandler((_,_)=>Dispatcher.BeginInvoke(new Action(UpdateStockExample))));
         sourceRules.Children.Add(new Expander{Header="Gelişmiş stok ayarları",Content=advancedStock});
-        Flag(sourceRules, "Otomatik çalıştır (program açıkken)", "AutoImport"); CompactBoundField(sourceRules, "Aralık / dakika", "IntervalMinutes");
+        Flag(sourceRules, "Otomatik XML sırasına dahil et", "AutoImport"); CompactBoundField(sourceRules, "Yeniden sıraya giriş (dk)", "IntervalMinutes");
+        sourceRules.Children.Add(Hint("Bu kaynak için ayrı zamanlayıcı açılmaz. MonoBridge tek kuyruğu çalıştırır; bir XML bitmeden diğeri başlamaz."));
         sourceRules.Children.Add(Hint("Kategori ve pazaryeri formüllerini ana XML listesinin alt tablosunda düzenleyin."));
         var extra = new StackPanel();
         CompactBoundField(extra, "Marka filtresi (;)", "BrandFilter"); CompactBoundField(extra, "Kategori filtresi (;)", "CategoryFilter");

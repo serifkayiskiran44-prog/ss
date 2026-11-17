@@ -1,6 +1,17 @@
 # Pazaryeri API hazırlık durumu
 
-Kontrol tarihi: 10 Eylül 2026. Bu belge araştırma ve uygulama önerisidir. Hesap açıldığı, satıcı onayı alındığı veya canlı API bağlantısı kurulduğu anlamına gelmez. Hiçbir kimlik bilgisi okunmadı veya kaydedilmedi; uzak hesaplarda değişiklik yapılmadı.
+## Hepsiburada uygulama notu — 19 Eylül 2026
+
+Resmî geliştirici portalına göre Merchant ID URL yolunda, servis anahtarı HTTP Basic kimlik doğrulamasında ve entegrasyona özgü User-Agent başlığında kullanılır. MonoBridge tarafında hesap bazlı şifreli kayıt; ürün/listing/kategori/özellik/Buybox/komisyon/sipariş okumaları; ürün eşleştirme ve güvenli gönderim önizleme altyapısı hazırdır.
+
+Sağlanan hesapla yapılan üretim doğrulamasında ürün ve kategori servisleri `403`, listing ve sipariş servisleri `401` döndürdü. Bu nedenle bağlantı canlı doğrulanmış sayılmaz ve yazma yetenekleri açılmadı. Satıcı panelinde **Bilgilerim → Entegrasyon → Entegratör Bilgileri** alanından bu entegrasyona atanmış yeni servis anahtarı veya gerekli API izinleri alınmalıdır. Denemeler yalnızca GET istekleriydi; uzak veri değiştirilmedi.
+
+- Resmî portal: https://developers.hepsiburada.com/tr/companies/hepsiburada
+- Ürün okuma: `/product/api/products/all-products-of-merchant/{merchantId}`
+- Listing okuma: `/listings/merchantid/{merchantId}`
+- Sipariş okuma: `/orders/merchantid/{merchantId}`
+
+Aşağıdaki genel kanal araştırmasının kontrol tarihi 10 Eylül 2026'dır. Hepsiburada için yukarıdaki 19 Eylül notu daha günceldir. Genel tabloda bir bağlantının bulunması hesap açıldığı, satıcı onayı alındığı veya canlı API bağlantısı kurulduğu anlamına gelmez; uzak hesaplarda değişiklik yapılmadı.
 
 | Kanal | Resmî belgede doğrulanan bağlantı yolu | Tamamlanması gerekenler |
 |---|---|---|

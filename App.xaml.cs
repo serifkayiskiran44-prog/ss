@@ -2,6 +2,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace TrMarketplaceHubDesktop;
@@ -15,12 +17,42 @@ public partial class App : Application
     string? dataDirectory;
     NesQueueRunner? nesQueueRunner;
     NesQueueOperations? nesQueueOperations;
+    SingleInstanceGuard? singleInstance;
+    BackgroundAppController? backgroundController;
+    MonoBridgeTrayIcon? trayIcon;
+    bool exitStarted;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
         dataDirectory = ResolveDataDirectory();
+
+        singleInstance = SingleInstanceGuard.TryAcquire(dataDirectory, ActivateMainWindow);
+        if (singleInstance is null)
+        {
+            Shutdown(0);
+            return;
+        }
+
+        try
+        {
+            if (!MultiStoreMigrationStartupGate.EnsureReady(dataDirectory, RequestMigrationConfirmation))
+            {
+                Shutdown(0);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Çoklu mağaza veri geçişi tamamlanamadı. Hiçbir pazaryeri çağrısı yapılmadı. Ayrıntı: " + AuditStore.Sanitize(ex.Message),
+                "MarketplaceHub — veri geçişi engellendi",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(-1);
+            return;
+        }
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
@@ -72,8 +104,11 @@ public partial class App : Application
 
         try
         {
-            var window = new MainWindow(dataDirectory);
+            backgroundController = new BackgroundAppController(dataDirectory, BackgroundJobFactory.Create(dataDirectory));
+            var window = new MainWindow(dataDirectory, backgroundController);
             window.ContentRendered += (_, _) => crashGuard?.MarkReachedUi();
+            window.FirstHiddenToTray += (_, _) => trayIcon?.ShowBackgroundNotice();
+            window.ExitRequested += async (_, _) => await ExitAsync();
             // The 1440x900 default is larger than common laptop work areas (e.g. 1366x720):
             // clamp the restore size and start maximized so nothing opens off-screen.
             var work = SystemParameters.WorkArea;
@@ -106,6 +141,8 @@ public partial class App : Application
             {
                 LogFatal(dataDirectory, new InvalidOperationException("NES kuyruğu başlatılamadı; manuel işlemler kullanılabilir. " + MarketplaceConnectionStore.Redact(queueError.Message)));
             }
+            trayIcon = new MonoBridgeTrayIcon(backgroundController, Dispatcher, ActivateMainWindow, () => ExitAsync());
+            backgroundController.Start();
         }
         catch (Exception ex)
         {
@@ -115,16 +152,93 @@ public partial class App : Application
                 "MarketplaceHub — başlatma hatası",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            Shutdown(-1);
+            _ = ExitAsync(-1);
+        }
+    }
+
+    static string? RequestMigrationConfirmation(MultiStoreMigrationDryRun report)
+    {
+        var token = new TextBox { Margin = new Thickness(0, 8, 0, 12), MinWidth = 440 };
+        var confirm = new Button { Content = "Yedeği oluştur ve geçişi başlat", IsDefault = true, MinWidth = 220, Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "İptal", IsCancel = true, MinWidth = 90 };
+        var window = new Window
+        {
+            Title = "MarketplaceHub — çoklu mağaza veri geçişi",
+            Width = 620,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ResizeMode = ResizeMode.NoResize,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Children =
+                {
+                    new TextBlock { Text = "Mevcut yerel veriler çoklu mağaza modeline geçirilecek. İşlemden önce doğrulanmış bir geri dönüş yedeği oluşturulur; pazaryeri HTTP çağrısı yapılmaz.", TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold },
+                    new TextBlock { Margin = new Thickness(0, 12, 0, 0), TextWrapping = TextWrapping.Wrap,
+                        Text = $"Kaynak bağları: {report.SourceBindings} · Çevrimiçi bakiye: {report.OnlineBalances} · Fiziksel bakiye: {report.PhysicalBalances}\nBağlantı: {report.Connections} · Ürün bağlantısı: {report.ProductBindings} · Sipariş: {report.Orders} · Otomasyon: {report.AutomationSettings}" },
+                    new TextBlock { Margin = new Thickness(0, 12, 0, 0), Text = "Onaylamak için aşağıdaki yerel tokenı aynen yazın:", TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Margin = new Thickness(0, 4, 0, 0), Text = report.ConfirmationToken, FontFamily = new FontFamily("Consolas"), FontWeight = FontWeights.Bold },
+                    token,
+                    new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Children = { confirm, cancel } }
+                }
+            }
+        };
+        confirm.Click += (_, _) =>
+        {
+            if (!string.Equals(token.Text.Trim(), report.ConfirmationToken, StringComparison.Ordinal))
+            {
+                MessageBox.Show(window, "Onay tokenı eşleşmiyor; veri geçişi başlatılmadı.", "MarketplaceHub — onay gerekli", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            window.DialogResult = true;
+        };
+        return window.ShowDialog() == true ? token.Text.Trim() : null;
+    }
+
+    void ActivateMainWindow()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (MainWindow is not Window window) return;
+            if (!window.IsVisible) window.Show();
+            if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+            window.Activate();
+        });
+    }
+
+    async Task ExitAsync(int exitCode = 0)
+    {
+        if (exitStarted) return;
+        exitStarted = true;
+        try
+        {
+            if (backgroundController is not null)
+            {
+                backgroundController.RequestExplicitExit();
+                await backgroundController.ShutdownAsync();
+            }
+        }
+        finally
+        {
+            trayIcon?.Dispose();
+            if (MainWindow is Window window) window.Close();
+            Shutdown(exitCode);
         }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        trayIcon?.Dispose();
+        if (backgroundController is not null)
+        {
+            backgroundController.RequestExplicitExit();
+            backgroundController.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
         try { nesQueueRunner?.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
         catch (Exception ex) { LogFatal(dataDirectory, ex); }
         nesQueueOperations?.Dispose();
         NesQueueRuntime.WakeRequested = null;
+        singleInstance?.Dispose();
         base.OnExit(e);
     }
 
@@ -146,7 +260,7 @@ public partial class App : Application
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         e.Handled = true;
-        Shutdown(-1);
+        _ = ExitAsync(-1);
     }
 
     void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)

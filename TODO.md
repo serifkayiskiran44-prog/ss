@@ -13,6 +13,20 @@
 - [x] Bireysel e-Arşiv sipariş kartında kaynak VKN/TCKN boş olsa da faturada kullanılacak `11111111111` değerini açık göster; kaynak pazaryeri verisini değiştirme.
 - [x] 1148/1148 Release testi geçti; güncel self-contained win-x64 yayın oluşturuldu.
 - [ ] Gerçek pazaryeri iade onay/ret çağrıları yalnız resmî endpoint ve mevcut canlı yazma güvenlik kapıları doğrulandıktan sonra eklenebilir; yerel karar akışı canlı işlem sayılmaz.
+## Çoklu mağaza ürün çalışma alanı — 2026-09-19
+- [x] Exact `ConnectionId` ile hesap kapsamlı geniş ürün tablosu; bağlı/yeni aday/hata ve yönetim filtreleri; sayfa veya tüm filtre sonucu için değişmez seçim snapshot'ı.
+- [x] Kanal capability'lerine göre Trendyol kategori/marka/teslimat/fiyat/stok/içerik ve Etsy taksonomi/özellik/kargo/hazırlık/yeni ilan önizleme yönlendirmeleri; mevcut uzman kontroller korunuyor.
+- [x] İçerik/fiyat/stok yönetim anahtarları ile kategori/şablon değerleri immutable önizleme, açık onay, connection revision, catalog timestamp ve binding CAS korumasıyla yalnız seçili hesapta uygulanıyor; uzak API yazımı yapılmıyor.
+- [x] Active, Connection, Product rules, Order rules ve Sync bölümleri exact hesap altında monotonic revision/CAS ile saklanıyor; boş alanlar kayıtlı kuralları koruyor.
+- [x] Çoklu mağaza göçü v1 üretim başlangıç kapısı: schema/store/preflight yazımlarından önce salt okunur dry-run ve exact binding kimlik birleşimi gösteriliyor; açık token onayından sonra harici doğrulanmış yedek, atomik checkpoint/makbuz, her checkpoint'ten güvenli devam, idempotent tekrar ve yerel rollback çalışıyor. Fresh/current profil prompt açmıyor; ayarlar paneli geçişi bypass etmiyor.
+- [x] Task 1 ertelenen kategori düzeltmeleri: hedef kategoride yalnız büyük/küçük harf değişikliği revision'ı değiştiriyor; kategori kuralları anlamsal kanonik sırayla hash'leniyor.
+- [x] Final denetimde bağlantı oluşturma telafisinin mevcut ürün binding/preview/receipt kayıtlarını yetim bırakması engellendi; açık SQLite WAL bulunan veri klasöründe eski snapshot ile göç başlatılması kapatıldı.
+- [x] Reviewer sertleştirmesi sonrası hedefli çoklu mağaza/startup paketi 257/257 ve tam Release paketi 1345/1345 geçti; tamamlanmış checkpoint yedeği her idempotent dönüşte doğrulanıyor, partial resume yalnız ilk onay özeti ve checkpoint parmak iziyle ilerliyor.
+- [x] Source binding, inventory balance, connection/credential ve product binding aşamalarının genel durable in-progress marker'ı var; checkpoint öncesi crash doğrulanmış onay yedeğini geri yükleyip yeni dry-run/açık onay istiyor. Verify salt okunur, complete atomik state replace; marker dışındaki mutation fail-closed kalıyor.
+- [x] Directory-swap restore işlemi aktif veri klasörünün dışındaki dayanıklı journal ile korunuyor. Beş restore substep'inde restart recovery var; eksik aktif klasör, bozuk backup/hash, değiştirilmiş path/fingerprint ve journalsız stale artifakt yazma başlamadan fail-closed. `Verified` sonrasındaki mutasyon da `Completed` makbuzu yazılmadan son WAL/fingerprint/yedek doğrulamasında reddediliyor.
+- [x] Backup/restore tree traversal aktif, staging, pre-restore ve restored-active sınırlarında nested reparse dosya/klasör girdilerini reddediyor; junction izlemeyen cleanup dış hedefe dokunmuyor. Gerçek Windows junction regresyonları credential/media yollarını, artifakt korumasını ve beşinci `StagingExtracted` crash sınırını kapsıyor.
+- [x] Reviewer düzeltmeleriyle temiz `Windows-Excel-Final` self-contained win-x64 yayını, 477 dosyalık integrity manifesti ve izole gerçek MainWindow smoke'u geçti; uygulama açık bırakılmadı.
+- [ ] Yayınlanan uygulamanın ayrıntılı iki hesap/ürün/binding/mağaza/stok/sipariş/manual satış/tray pause-resume görsel kontrolünü controller oturumunda tamamla; otomatik WPF regresyonları ve gerçek MainWindow açılışı bu dalda geçti.
 
 ## Etsy çalışma alanı — 2026-09-18
 - [x] İki Entegra Etsy eğitiminin tam Türkçe altyazısını ve ilgili ekranlarını incele; güncel resmi Etsy API ile karşılaştır.
@@ -667,3 +681,20 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] NES ekranındaki yinelenen sipariş listesini kaldırıp ekranı bağlantı ayarları ve geçmişle sınırlandırma.
 - [ ] Gerçek NES test hesabı ve Trendyol mağazasında tek test siparişiyle uçtan uca canlı doğrulama; kullanıcı onayı olmadan çalıştırılmayacak.
 - [ ] Hepsiburada fatura yükleme sözleşmesini resmi satıcı API erişimiyle ayrıca doğrulama.
+## Multi-store production integration closure — 2026-09-19
+
+- [x] XML manual/background apply now treats `ProductSourceBindings` as the authority for Content, Price and OnlineStock; exact enabled source ownership is required, a newly reassigned Content owner safely adopts its own source identity only from one unambiguous global SKU/barcode match, and another supplier's reused source-local ID cannot hijack the old product.
+- [x] Orders exposes physical-location management; a fresh profile can create a named physical location and then use immutable transfer preview/receipt plus manual-sale receipt flows.
+- [x] Order reads require account `Active`, `OrderRules.Enabled` and `Sync.OrdersEnabled`; disabled accounts perform zero adapter calls and failures remain account-isolated.
+- [x] Scheduled product reads remain explicitly unsupported because the current account adapter contract has no safe implementation; the stored true state is rejected and the UI control is disabled with an explanation.
+- [x] No live HTTP or marketplace write was used. All seven `DEFERRED_BY_USER` areas remain unchanged.
+- [x] Final verification: exact Release suite **1353/1353** passed; clean self-contained `Windows-Excel-Final` package and visible MainWindow smoke passed (package SHA-256 `5b2fe3036b0a2171db1813048e5bf2e0efdf422b657b6a8a2ea70f7125fb2d00`).
+# Hepsiburada / sonraki iş — 2026-09-19
+
+- [x] Hesap bazlı şifreli Merchant ID + servis anahtarı ayarları.
+- [x] Ürün, listing, kategori, zorunlu özellik, Buybox, komisyon ve sipariş salt okunur istemcileri.
+- [x] Barkod öncelikli ürün eşleştirme, hesap izolasyonu ve Hepsiburada mağaza çalışma alanı.
+- [x] Seçili ürünler için değişmez stok/fiyat/fiyat+stok/yeni ilan önizlemeleri ve kalıcı işlem kaydı.
+- [ ] Hepsiburada panelinden bu entegrasyona atanmış yeni servis anahtarı alınmalı; mevcut canlı denemede ürün/kategori 403, listing/sipariş 401 döndü.
+- [ ] Salt okunur doğrulama başarılı olduktan sonra resmî yazma izinleri ve takip uçları gerçek test ürünüyle doğrulanmalı; o zamana kadar canlı gönderim kapalı kalacak.
+- [ ] Sonraki modül: Trendyol + Hepsiburada + Amazon ortak rekabet analizi; Excel ile min/max/barem fiyatı, aktiflik ve rakip bağlantısını toplu önizleme/onay ile güncelleme.

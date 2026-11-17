@@ -115,7 +115,7 @@ public sealed class ProductSearchTests
     }
 
     [TestMethod]
-    public void DuplicateSkuAcrossSourcesIsFoundByReviewFilter()
+    public void DuplicateSkuAcrossSourcesUpdatesExistingIdentityInsteadOfCreatingDuplicate()
     {
         var store = NewStore(out var root);
         try
@@ -123,14 +123,12 @@ public sealed class ProductSearchTests
             store.SaveSource(new XmlSource { Id = "src-a", Location = "https://example.test/a.xml" });
             store.SaveSource(new XmlSource { Id = "src-b", Location = "https://example.test/b.xml" });
             store.Import(new XmlSource { Id = "src-a", Location = "https://example.test/a.xml" }, [Product("src-a", "SHARED-1"), Product("src-a", "UNIQUE-1")]);
-            // XML import only de-duplicates within its own source, so two different
-            // sources can independently introduce the same SKU text - a real-world
-            // case CreateManual's stricter global check does not cover.
             store.Import(new XmlSource { Id = "src-b", Location = "https://example.test/b.xml" }, [Product("src-b", "shared-1")]);
 
             var page = store.Search("", filter: new CatalogFilter { DuplicateIdentityOnly = true });
-            Assert.AreEqual(2, page.Total);
-            Assert.IsTrue(page.Items.All(p => string.Equals(CatalogStore.NormalizeIdentityKey(p.Sku), "SHARED-1")));
+            Assert.AreEqual(0, page.Total);
+            Assert.AreEqual(2, store.Products().Count);
+            Assert.AreEqual(1, store.Products().Count(p => string.Equals(CatalogStore.NormalizeIdentityKey(p.Sku), "SHARED-1")));
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
@@ -158,7 +156,15 @@ public sealed class ProductSearchTests
             store.SaveSource(new XmlSource { Id = "src-a", Location = "https://example.test/a.xml" });
             store.SaveSource(new XmlSource { Id = "src-b", Location = "https://example.test/b.xml" });
             store.Import(new XmlSource { Id = "src-a", Location = "https://example.test/a.xml" }, [Product("src-a", "SHARED-1")]);
-            store.Import(new XmlSource { Id = "src-b", Location = "https://example.test/b.xml" }, [Product("src-b", "SHARED-1")]);
+            var duplicate = Product("src-b", "SHARED-1"); duplicate.Id = Guid.NewGuid().ToString("N");
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + Path.Combine(root, "catalog.db")))
+            {
+                connection.Open(); using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO CatalogProducts(Id,Json) VALUES($id,$json)";
+                command.Parameters.AddWithValue("$id", duplicate.Id);
+                command.Parameters.AddWithValue("$json", System.Text.Json.JsonSerializer.Serialize(duplicate));
+                command.ExecuteNonQuery();
+            }
 
             var before = store.Products().Count;
             var page = store.Search("", filter: new CatalogFilter { DuplicateIdentityOnly = true });

@@ -55,16 +55,26 @@ public sealed class EtsyWorkspaceStore
         return Hash(JsonSerializer.Serialize(values));
     }
     internal string CatalogHash(IEnumerable<string> ids) { using var c=Open(); return CatalogHash(c,null,ids); }
-    internal void Persist(EtsyOperationPlan plan)
+    internal void Persist(EtsyOperationPlan plan,string? connectionId=null)
     {
         using var c=Open(); using var tx=c.BeginTransaction(); ValidateCurrent(c,tx,plan);
         using var cmd=c.CreateCommand(); cmd.Transaction=tx; cmd.CommandText="INSERT INTO EtsyWorkspacePlans VALUES($id,$shop,$json)";
-        cmd.Parameters.AddWithValue("$id",plan.Id); cmd.Parameters.AddWithValue("$shop",plan.ShopId); cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan)); cmd.ExecuteNonQuery(); tx.Commit();
+        cmd.Parameters.AddWithValue("$id",plan.Id); cmd.Parameters.AddWithValue("$shop",plan.ShopId); cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(plan)); cmd.ExecuteNonQuery();
+        if(connectionId is not null)MarketplaceShopProductsModel.MarkScopedPlan(c,tx,plan.Id,connectionId);
+        tx.Commit();
     }
     internal EtsyOperationPlan Plan(string id)
     {
         using var c=Open(); using var cmd=c.CreateCommand(); cmd.CommandText="SELECT Json FROM EtsyWorkspacePlans WHERE Id=$id"; cmd.Parameters.AddWithValue("$id",id);
         return JsonSerializer.Deserialize<EtsyOperationPlan>(cmd.ExecuteScalar() as string ?? throw new InvalidOperationException("Kaydedilmiş Etsy önizlemesi bulunamadı."))!;
+    }
+    public bool IsPersistedCreationPlan(string id,string shopId,IReadOnlyList<string> productIds)
+    {
+        if(string.IsNullOrWhiteSpace(id)||productIds.Count==0||productIds.Any(string.IsNullOrWhiteSpace)||productIds.Distinct(StringComparer.Ordinal).Count()!=productIds.Count)return false;
+        using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="SELECT Json FROM EtsyWorkspacePlans WHERE Id=$id AND ShopId=$shop";cmd.Parameters.AddWithValue("$id",id);cmd.Parameters.AddWithValue("$shop",Shop(shopId));
+        if(cmd.ExecuteScalar() is not string json)return false;
+        EtsyOperationPlan value;try{value=JsonSerializer.Deserialize<EtsyOperationPlan>(json)??throw new JsonException();}catch(JsonException){return false;}
+        return value.Id==id&&value.ShopId==shopId&&value.Operation==EtsyOperation.CreateDraft&&value.Rows.Select(row=>row.ProductId).SequenceEqual(productIds,StringComparer.Ordinal);
     }
     static void ValidateCurrent(SqliteConnection c,SqliteTransaction tx,EtsyOperationPlan plan)
     {

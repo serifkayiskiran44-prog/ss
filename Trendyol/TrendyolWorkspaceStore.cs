@@ -10,10 +10,12 @@ namespace TrMarketplaceHubDesktop.Trendyol;
 /// <summary>Outbound mappings are seller-scoped and independent of XML import mappings.</summary>
 public sealed partial class TrendyolWorkspaceStore
 {
+    readonly string directory;
     readonly string connectionString;
     public TrendyolWorkspaceStore(string? directory = null)
     {
         directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
+        this.directory = directory;
         _ = new CatalogStore(directory);
         _ = new TaxonomyStore(directory);
         connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "catalog.db"), DefaultTimeout = 15 }.ToString();

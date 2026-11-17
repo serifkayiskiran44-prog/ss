@@ -36,22 +36,40 @@ public sealed partial class EtsyWorkspaceService(string? directory, HttpClient h
     }
     public void ApplyMatches(EtsyWorkspaceState state,IReadOnlyList<EtsyMatchRow> matches)=>store.ApplyMatches(state,matches);
 
-    public async Task<EtsyOperationPlan> PreviewAsync(EtsyCredentials credentials,IReadOnlyList<string> productIds,EtsyOperation operation,CancellationToken cancellationToken=default)
+    public async Task<EtsyOperationPlan> PreviewAsync(EtsyCredentials credentials,IReadOnlyList<string> productIds,EtsyOperation operation,CancellationToken cancellationToken=default,string? connectionId=null)
     {
         Credentials(credentials);
         if(productIds.Count is <1 or >500||productIds.Distinct().Count()!=productIds.Count||!Enum.IsDefined(operation))throw new InvalidOperationException("1–500 benzersiz ürün ve geçerli işlem seçin.");
+        if(connectionId is not null)
+        {
+            var connections=new MarketplaceConnectionStore(directory);var scoped=connections.Get(connectionId)??throw new InvalidOperationException("Mağaza bağlantısı bulunamadı.");
+            if(scoped.Channel!="etsy"||scoped.ShopId!=credentials.ShopId||!MarketplaceOperationalAccounts.IsEligible(scoped,connections))
+                throw new InvalidOperationException("Hesap kapsamlı Etsy bağlantısı önizleme hesabıyla eşleşmiyor.");
+        }
         var state=store.Load(credentials.ShopId); var hash=store.CatalogHash(productIds); var products=catalog.Products().ToDictionary(p=>p.Id);
         var shop=await new EtsyMetadataClient(http).GetShopAsync(credentials,cancellationToken).ConfigureAwait(false);
         var rows=new List<EtsyPreviewRow>();
         foreach(var id in productIds)
         {
             cancellationToken.ThrowIfCancellationRequested(); var row=new EtsyPreviewRow { ProductId=id,Action=operation.ToString() }; rows.Add(row);
+            var accountBinding=connectionId is null?null:new ProductChannelBindingStore(directory).Get(id,connectionId);
+            if(connectionId is not null && operation==EtsyOperation.CreateDraft && accountBinding is not null)
+                throw new InvalidOperationException("Hesap kapsamlı yeni ilan önizlemesi yalnız mağazaya bağlı olmayan ürünler için oluşturulabilir.");
+            if(connectionId is not null && operation!=EtsyOperation.CreateDraft &&
+                (accountBinding is null || !MarketplaceShopProductsModel.IsActiveBinding(accountBinding) || !AllowsAccountOperation(accountBinding,operation)))
+                throw new InvalidOperationException("Hesap kapsamlı Etsy güncellemesi için yönetime açık ürün bağlantısı gerekli.");
             try
             {
                 if(!products.TryGetValue(id,out var product))throw new InvalidOperationException("Ürün katalogda bulunamadı.");
                 row.Sku=product.Sku; row.Title=product.Name;
                 if(store.HasUnresolved(state.ShopId,id))throw new InvalidOperationException("Önceki gönderimin sonucu belirsiz/eksik; Etsy mağazasında kontrol edip işlem geçmişini uzlaştırın. Tekrar gönderilmez.");
-                var profile=state.Profiles.SingleOrDefault(p=>p.ProductId==id)??new() { ProductId=id };
+                var storedProfile=state.Profiles.SingleOrDefault(p=>p.ProductId==id)??new() { ProductId=id };
+                var profile=JsonSerializer.Deserialize<EtsyProductProfile>(JsonSerializer.Serialize(storedProfile))!;
+                if(profile.ListingId is null && long.TryParse(accountBinding?.RemoteId,NumberStyles.None,CultureInfo.InvariantCulture,out var boundListing) && boundListing>0)
+                    profile.ListingId=boundListing;
+                if(profile.TemplateId.Length==0 && accountBinding is not null)profile.TemplateId=accountBinding.TemplateId;
+                if(profile.TaxonomyId is null && long.TryParse(accountBinding?.CategoryId,NumberStyles.None,CultureInfo.InvariantCulture,out var boundTaxonomy) && boundTaxonomy>0)
+                    profile.TaxonomyId=boundTaxonomy;
                 row.ListingId=profile.ListingId;
                 if(!row.ListingId.HasValue&&!string.IsNullOrWhiteSpace(product.EtsyListingId))
                 { if(!long.TryParse(product.EtsyListingId,NumberStyles.None,CultureInfo.InvariantCulture,out var legacy)||legacy<=0)throw new InvalidOperationException("Eski Etsy ilan kimliği geçersiz."); row.ListingId=legacy; }
@@ -61,6 +79,10 @@ public sealed partial class EtsyWorkspaceService(string? directory, HttpClient h
                 if(row.ListingId is long listing)
                 {
                     remote=await Listing(credentials,listing,cancellationToken).ConfigureAwait(false); row.RemoteFingerprint=ListingHash(remote);
+                    if(accountBinding is not null && (accountBinding.RemoteId!=listing.ToString(CultureInfo.InvariantCulture) ||
+                        (accountBinding.RemoteSku.Length>0 && (!remote.TryGetProperty("skus",out var remoteSkus) ||
+                         !remoteSkus.EnumerateArray().Any(value=>value.GetString()==accountBinding.RemoteSku)))))
+                        throw new InvalidOperationException("Hesap kapsamlı uzak ilan kimliği Etsy yanıtıyla eşleşmiyor.");
                     if(remote.GetProperty("state").GetString() is not ("active" or "inactive" or "draft" or "expired" or "sold_out"))throw new InvalidOperationException("Etsy ilan durumu bu işlem için uygun değil.");
                 }
                 if(operation==EtsyOperation.CreateDraft)
@@ -110,7 +132,7 @@ public sealed partial class EtsyWorkspaceService(string? directory, HttpClient h
         // Two selected local products must never target the same remote listing.
         foreach(var group in rows.Where(r=>r.ListingId.HasValue).GroupBy(r=>r.ListingId).Where(g=>g.Count()>1))foreach(var row in group) { row.CanSend=false; row.Detail="Aynı Etsy ilanına birden fazla yerel ürün bağlı."; row.Steps.Clear(); }
         var plan=new EtsyOperationPlan { ShopId=state.ShopId,Operation=operation,Rows=rows,WorkspaceRevision=state.Revision,CatalogFingerprint=hash,AccountFingerprint=Account(credentials,shop.UserId),ShopCurrency=shop.Currency };
-        store.Persist(plan); return plan;
+        store.Persist(plan,connectionId); return plan;
     }
     static bool SameCurrency(string? a,string? b)=>!string.IsNullOrWhiteSpace(a)&&!string.IsNullOrWhiteSpace(b)&&string.Equals(a.Trim(),b.Trim(),StringComparison.OrdinalIgnoreCase);
     async Task<JsonElement> Get(EtsyCredentials c,string path,CancellationToken ct)
@@ -210,4 +232,13 @@ public sealed partial class EtsyWorkspaceService(string? directory, HttpClient h
         }
         row.Title=p.Name; row.Detail=create?$"Taslak oluştur + SKU ({p.Sku}) + {profile.Properties.Count} özellik; {row.Steps.Count(s=>s.Image!=null)} görsel. Fiyat {p.Price} {shop.Currency}, stok {p.Stock}. Yayına alınmaz.":"Başlık, açıklama, kategori, şablon alanları ve seçilen özellikler güncellenir; fiyat ve stok korunur.";
     }
+    static bool AllowsAccountOperation(ProductChannelBinding binding,EtsyOperation operation)=>operation switch
+    {
+        EtsyOperation.Stock=>binding.ManageStock,
+        EtsyOperation.Price=>binding.ManagePrice,
+        EtsyOperation.PriceAndStock=>binding.ManagePrice&&binding.ManageStock,
+        EtsyOperation.Content or EtsyOperation.Publish or EtsyOperation.Deactivate=>binding.ManageContent,
+        EtsyOperation.CreateDraft=>true,
+        _=>false
+    };
 }

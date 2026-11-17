@@ -5,6 +5,7 @@ namespace TrMarketplaceHubDesktop.Catalog;
 public partial class CatalogStore
 {
  readonly string connectionString;
+ internal string DataDirectory {get;}
  public CatalogPage Search(string search,int offset=0,int limit=200,CatalogFilter? filter=null, CancellationToken cancellationToken=default)
  {
   cancellationToken.ThrowIfCancellationRequested();
@@ -53,12 +54,53 @@ public partial class CatalogStore
   var items=new List<CatalogProduct>();using(var page=c.CreateCommand()){cancellationToken.ThrowIfCancellationRequested();Params(page);page.CommandText="SELECT Id,Json FROM CatalogProducts"+where+" ORDER BY json_extract(Json,'$.Name') COLLATE NOCASE,Id LIMIT $limit OFFSET $offset";page.Parameters.AddWithValue("$limit",limit);page.Parameters.AddWithValue("$offset",offset);using var reader=page.ExecuteReader();while(reader.Read()){cancellationToken.ThrowIfCancellationRequested();if(TryDeserializeProduct(reader.GetString(0),reader.GetString(1),out var p,out _))items.Add(p!);}}
   tx.Commit();return new(items,total,inStock,linked);
  }
- public CatalogStore(string? directory=null){directory??=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");Directory.CreateDirectory(directory);connectionString=new SqliteConnectionStringBuilder{DataSource=System.IO.Path.Combine(directory,"catalog.db"),DefaultTimeout=15,Pooling=true}.ToString();using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA busy_timeout=15000;CREATE TABLE IF NOT EXISTS Sources(Id TEXT PRIMARY KEY, Json TEXT NOT NULL);CREATE TABLE IF NOT EXISTS CatalogProducts(Id TEXT PRIMARY KEY, Json TEXT NOT NULL);CREATE INDEX IF NOT EXISTS IX_CatalogProducts_Sku ON CatalogProducts(json_extract(Json,'$.Sku') COLLATE NOCASE);CREATE INDEX IF NOT EXISTS IX_CatalogProducts_Barcode ON CatalogProducts(json_extract(Json,'$.Barcode') COLLATE NOCASE);CREATE INDEX IF NOT EXISTS IX_CatalogProducts_Brand ON CatalogProducts(json_extract(Json,'$.Brand') COLLATE NOCASE);CREATE INDEX IF NOT EXISTS IX_CatalogProducts_Category ON CatalogProducts(json_extract(Json,'$.Category') COLLATE NOCASE);";cmd.ExecuteNonQuery();InitializeOrderStock(c);InitializeStockPolicies(c);InitializePricePolicies(c);SchemaVersion.Ensure(c);InitializeSequenceIds(c);}
+ public CatalogStore(string? directory=null){directory??=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MonoBridgeDesktop");DataDirectory=System.IO.Path.GetFullPath(directory);Directory.CreateDirectory(DataDirectory);connectionString=new SqliteConnectionStringBuilder{DataSource=System.IO.Path.Combine(DataDirectory,"catalog.db"),DefaultTimeout=15,Pooling=true}.ToString();using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA busy_timeout=15000;CREATE TABLE IF NOT EXISTS Sources(Id TEXT PRIMARY KEY, Json TEXT NOT NULL);CREATE TABLE IF NOT EXISTS CatalogProducts(Id TEXT PRIMARY KEY, Json TEXT NOT NULL);CREATE INDEX IF NOT EXISTS IX_CatalogProducts_Sku ON CatalogProducts(json_extract(Json,'$.Sku') COLLATE NOCASE);CREATE INDEX IF NOT EXISTS IX_CatalogProducts_Barcode ON CatalogProducts(json_extract(Json,'$.Barcode') COLLATE NOCASE);CREATE INDEX IF NOT EXISTS IX_CatalogProducts_Brand ON CatalogProducts(json_extract(Json,'$.Brand') COLLATE NOCASE);CREATE INDEX IF NOT EXISTS IX_CatalogProducts_Category ON CatalogProducts(json_extract(Json,'$.Category') COLLATE NOCASE);";cmd.ExecuteNonQuery();InitializeProductSourceBindings(c);InventoryLedger.Initialize(c);InitializeOrderStock(c);InitializeStockPolicies(c);InitializePricePolicies(c);SchemaVersion.Ensure(c);InitializeSequenceIds(c);}
  SqliteConnection Open(){var c=new SqliteConnection(connectionString);c.Open();return c;}
  static List<T> Read<T>(SqliteConnection c,string table,SqliteTransaction? tx=null){using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText=$"SELECT Json FROM {table}";using var r=cmd.ExecuteReader();var list=new List<T>();while(r.Read())list.Add(JsonSerializer.Deserialize<T>(r.GetString(0))!);return list;}
- static void Put<T>(SqliteConnection c,string table,string id,T value,SqliteTransaction? tx=null){if(table=="CatalogProducts"&&value is CatalogProduct product)AssignSequenceIds(c,tx,product);using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText=$"INSERT INTO {table}(Id,Json) VALUES($id,$json) ON CONFLICT(Id) DO UPDATE SET Json=excluded.Json";cmd.Parameters.AddWithValue("$id",id);cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(value));cmd.ExecuteNonQuery();}
+ internal static void Put<T>(SqliteConnection c,string table,string id,T value,SqliteTransaction? tx=null){if(table=="CatalogProducts"&&value is CatalogProduct product)AssignSequenceIds(c,tx,product);using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText=$"INSERT INTO {table}(Id,Json) VALUES($id,$json) ON CONFLICT(Id) DO UPDATE SET Json=excluded.Json";cmd.Parameters.AddWithValue("$id",id);cmd.Parameters.AddWithValue("$json",JsonSerializer.Serialize(value));cmd.ExecuteNonQuery();if(table=="CatalogProducts"&&value is CatalogProduct savedProduct)InventoryLedger.SyncOnlineBalance(c,tx,savedProduct);}
  public List<XmlSource> Sources(){using var c=Open();return Read<XmlSource>(c,"Sources");}
  public void SaveSource(XmlSource source){XmlCatalog.ValidateSource(source);if(string.IsNullOrWhiteSpace(source.Id))throw new InvalidOperationException("Kaynak kimliği boş.");using var c=Open();Put(c,"Sources",source.Id,source);}
+ public bool TryRecordSourceRun(string sourceId,DateTime lastRunUtc,string lastStatus){if(string.IsNullOrWhiteSpace(sourceId))throw new ArgumentException("Kaynak kimliği gerekli.",nameof(sourceId));using var c=Open();using var cmd=c.CreateCommand();cmd.CommandText="UPDATE Sources SET Json=json_set(Json,'$.LastRunUtc',$lastRun,'$.LastStatus',$status) WHERE Id=$id AND json_valid(Json)=1 AND COALESCE(json_extract(Json,'$.Enabled'),1)=1";cmd.Parameters.AddWithValue("$lastRun",lastRunUtc.ToUniversalTime().ToString("O",System.Globalization.CultureInfo.InvariantCulture));cmd.Parameters.AddWithValue("$status",lastStatus??"");cmd.Parameters.AddWithValue("$id",sourceId);return cmd.ExecuteNonQuery()==1;}
+ public static string SourceConfigRevision(XmlSource source)
+ {
+  ArgumentNullException.ThrowIfNull(source);
+  var snapshot=JsonSerializer.Deserialize<XmlSource>(JsonSerializer.Serialize(source))!;
+  snapshot.LastRunUtc=null;
+  snapshot.LastStatus="";
+  snapshot.Fields=snapshot.Fields.OrderBy(pair=>pair.Key,StringComparer.Ordinal).ToDictionary(pair=>pair.Key,pair=>pair.Value,StringComparer.Ordinal);
+  snapshot.CategoryRules=snapshot.CategoryRules.Where(rule=>rule.Enabled==false||!string.Equals(rule.XmlCategory.Trim(),rule.TargetCategory.Trim(),StringComparison.Ordinal)||rule.Prices.Values.Any(formula=>!string.IsNullOrWhiteSpace(formula.SaleFormula)||!string.IsNullOrWhiteSpace(formula.ListFormula))).ToList();
+  foreach(var rule in snapshot.CategoryRules)rule.Prices=rule.Prices.OrderBy(pair=>pair.Key,StringComparer.Ordinal).ToDictionary(pair=>pair.Key,pair=>pair.Value,StringComparer.Ordinal);
+  snapshot.CategoryRules=snapshot.CategoryRules.OrderBy(rule=>rule.XmlCategory.Trim(),StringComparer.OrdinalIgnoreCase).ThenBy(rule=>rule.XmlCategory.Trim(),StringComparer.Ordinal).ToList();
+  if(snapshot.AutoFx)
+  {
+   snapshot.TryPerTargetUnit=0;
+   snapshot.FxRateDate=null;
+   snapshot.FxFetchedUtc=null;
+  }
+  return JsonSerializer.Serialize(snapshot);
+ }
+ public bool TryRecordAutoFxQuote(string sourceId,string expectedRevision,FxQuote quote)
+ {
+  if(string.IsNullOrWhiteSpace(sourceId))throw new ArgumentException("Kaynak kimliği gerekli.",nameof(sourceId));
+  if(string.IsNullOrWhiteSpace(expectedRevision))throw new ArgumentException("Kaynak revizyonu gerekli.",nameof(expectedRevision));
+  ArgumentNullException.ThrowIfNull(quote);
+  using var c=Open();using var tx=c.BeginTransaction(System.Data.IsolationLevel.Serializable);
+  using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM Sources WHERE Id=$id";find.Parameters.AddWithValue("$id",sourceId);
+  var json=find.ExecuteScalar() as string;
+  if(json is null)return false;
+  XmlSource persisted;
+  try{persisted=JsonSerializer.Deserialize<XmlSource>(json)??throw new JsonException();}
+  catch(JsonException){return false;}
+  if(!persisted.Enabled||!persisted.AutoFx||!string.Equals(persisted.Currency,quote.Currency,StringComparison.OrdinalIgnoreCase)||!string.Equals(persisted.FxKind,quote.Kind,StringComparison.Ordinal)||SourceConfigRevision(persisted)!=expectedRevision)return false;
+  using var update=c.CreateCommand();update.Transaction=tx;update.CommandText="UPDATE Sources SET Json=json_set(Json,'$.TryPerTargetUnit',CAST($rate AS REAL),'$.FxRateDate',$rateDate,'$.FxFetchedUtc',$fetched) WHERE Id=$id AND json_valid(Json)=1 AND COALESCE(json_extract(Json,'$.Enabled'),1)=1 AND COALESCE(json_extract(Json,'$.AutoFx'),0)=1";
+  update.Parameters.AddWithValue("$rate",quote.TryPerUnit);
+  update.Parameters.AddWithValue("$rateDate",quote.RateDate.ToUniversalTime().ToString("O",System.Globalization.CultureInfo.InvariantCulture));
+  update.Parameters.AddWithValue("$fetched",quote.FetchedUtc.ToUniversalTime().ToString("O",System.Globalization.CultureInfo.InvariantCulture));
+  update.Parameters.AddWithValue("$id",sourceId);
+  if(update.ExecuteNonQuery()!=1)return false;
+  tx.Commit();
+  return true;
+ }
  /// Gives a supplier feed a stable, human-readable SKU namespace without changing
  /// the immutable central product Id. The transaction either updates every row of
  /// that source or leaves all identities untouched.
@@ -108,7 +150,7 @@ public partial class CatalogStore
   using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",id);
   var json=find.ExecuteScalar() as string??throw new InvalidOperationException("Kayıt bulunamadı.");
   if(TryDeserializeProduct(id,json,out _,out _))throw new InvalidOperationException("Bu kayıt bozuk değil; normal ürün silme akışını kullanın.");
-  using var del=c.CreateCommand();del.Transaction=tx;del.CommandText="DELETE FROM CatalogProducts WHERE Id=$id";del.Parameters.AddWithValue("$id",id);del.ExecuteNonQuery();tx.Commit();
+  InventoryLedger.DeleteCatalogProduct(c,tx,id);tx.Commit();
  }
  public List<CatalogProduct> Products(string search=""){using var c=Open();return ReadProductsSafe(c).Healthy.Where(p=>search==""||new[]{p.Name,p.Sku,p.Barcode,p.Brand,p.Category}.Any(v=>v.Contains(search,StringComparison.OrdinalIgnoreCase))).ToList();}
  static void Valid(CatalogProduct p){
@@ -192,32 +234,80 @@ public partial class CatalogStore
   tx.Commit();
   return product;
  }
- public void DeleteProduct(CatalogProduct product){using var c=Open();using var tx=c.BeginTransaction();using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",product.Id);var json=find.ExecuteScalar() as string??throw new InvalidOperationException("Ürün bulunamadı.");if(!TryDeserializeProduct(product.Id,json,out var old,out _))throw new InvalidOperationException("Bu ürün kaydı bozuk (REVIEW_REQUIRED); silmek için kurtarma akışını kullanın.");if(old!.UpdatedUtc!=product.UpdatedUtc)throw new InvalidOperationException("Ürün değişti; yenileyip tekrar deneyin.");if(old.EtsyCreationAttempted||!string.IsNullOrEmpty(old.EtsyListingId))throw new InvalidOperationException("Etsy bağlantısı veya gönderim kaydı olan ürünü silmek yerine pasife alın.");using var cmd=c.CreateCommand();cmd.Transaction=tx;cmd.CommandText="DELETE FROM CatalogProducts WHERE Id=$id";cmd.Parameters.AddWithValue("$id",product.Id);cmd.ExecuteNonQuery();ProductAssetCache.QueueDeletion(c,tx,product.Id);tx.Commit();new ProductAssetCache(Path.GetDirectoryName(c.DataSource)).CleanupDeletedProducts();}
+ public void DeleteProduct(CatalogProduct product){using var c=Open();using var tx=c.BeginTransaction();using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM CatalogProducts WHERE Id=$id";find.Parameters.AddWithValue("$id",product.Id);var json=find.ExecuteScalar() as string??throw new InvalidOperationException("Ürün bulunamadı.");if(!TryDeserializeProduct(product.Id,json,out var old,out _))throw new InvalidOperationException("Bu ürün kaydı bozuk (REVIEW_REQUIRED); silmek için kurtarma akışını kullanın.");if(old!.UpdatedUtc!=product.UpdatedUtc)throw new InvalidOperationException("Ürün değişti; yenileyip tekrar deneyin.");if(old.EtsyCreationAttempted||!string.IsNullOrEmpty(old.EtsyListingId))throw new InvalidOperationException("Etsy bağlantısı veya gönderim kaydı olan ürünü silmek yerine pasife alın.");InventoryLedger.DeleteCatalogProduct(c,tx,product.Id);ProductAssetCache.QueueDeletion(c,tx,product.Id);tx.Commit();new ProductAssetCache(Path.GetDirectoryName(c.DataSource)).CleanupDeletedProducts();}
  static void Index(Dictionary<string,List<CatalogProduct>> index,string key,CatalogProduct product){if(key=="")return;if(!index.TryGetValue(key,out var values))index[key]=values=new();if(!values.Any(p=>p.Id==product.Id))values.Add(product);}
+ static Dictionary<string,Dictionary<ProductFieldGroup,ProductSourceBinding>> LoadImportBindings(SqliteConnection c,SqliteTransaction tx,IReadOnlyList<CatalogProduct> products)
+ {
+  var sourceIds=new HashSet<string>(StringComparer.Ordinal);using(var sources=c.CreateCommand()){sources.Transaction=tx;sources.CommandText="SELECT Id,Json FROM Sources";using var reader=sources.ExecuteReader();while(reader.Read()){var id=reader.GetString(0);try{var parsed=JsonSerializer.Deserialize<XmlSource>(reader.GetString(1));if(parsed is not null&&string.Equals(parsed.Id,id,StringComparison.Ordinal))sourceIds.Add(id);}catch(JsonException){}}}
+  var now=DateTime.UtcNow.ToString("O",System.Globalization.CultureInfo.InvariantCulture);
+  foreach(var product in products)foreach(var group in Enum.GetValues<ProductFieldGroup>())
+  {
+   var legacyXml=group switch{ProductFieldGroup.Content=>string.Equals(product.SourceKind,"xml",StringComparison.OrdinalIgnoreCase)||string.Equals(product.MediaSource,"xml",StringComparison.OrdinalIgnoreCase),ProductFieldGroup.Price=>string.Equals(product.PriceSource,"xml",StringComparison.OrdinalIgnoreCase),_=>string.Equals(product.StockSource,"xml",StringComparison.OrdinalIgnoreCase)};
+   var sourceId=legacyXml&&sourceIds.Contains(product.SourceId)?product.SourceId:"";
+   using var insert=c.CreateCommand();insert.Transaction=tx;insert.CommandText="INSERT OR IGNORE INTO ProductSourceBindings(ProductId,FieldGroup,SourceKind,SourceId,Enabled,Version,UpdatedUtc) VALUES($product,$group,$kind,$source,1,1,$updated)";insert.Parameters.AddWithValue("$product",product.Id);insert.Parameters.AddWithValue("$group",(int)group);insert.Parameters.AddWithValue("$kind",sourceId.Length>0?(int)ProductSourceKind.Xml:(int)ProductSourceKind.Manual);insert.Parameters.AddWithValue("$source",sourceId);insert.Parameters.AddWithValue("$updated",now);insert.ExecuteNonQuery();
+  }
+  var result=new Dictionary<string,Dictionary<ProductFieldGroup,ProductSourceBinding>>(StringComparer.Ordinal);using var command=c.CreateCommand();command.Transaction=tx;command.CommandText="SELECT ProductId,FieldGroup,SourceKind,SourceId,Enabled,Version,UpdatedUtc FROM ProductSourceBindings";using var rows=command.ExecuteReader();while(rows.Read()){var group=(ProductFieldGroup)rows.GetInt32(1);var binding=new ProductSourceBinding(rows.GetString(0),group,(ProductSourceKind)rows.GetInt32(2),rows.GetString(3),rows.GetInt32(4)!=0,rows.GetInt64(5),DateTime.Parse(rows.GetString(6),System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.RoundtripKind));if(!result.TryGetValue(binding.ProductId,out var groups))result[binding.ProductId]=groups=new();groups[group]=binding;}return result;
+ }
+ static void InsertXmlImportBindings(SqliteConnection c,SqliteTransaction tx,string productId,string sourceId)
+ {
+  var now=DateTime.UtcNow.ToString("O",System.Globalization.CultureInfo.InvariantCulture);foreach(var group in Enum.GetValues<ProductFieldGroup>()){using var command=c.CreateCommand();command.Transaction=tx;command.CommandText="INSERT INTO ProductSourceBindings(ProductId,FieldGroup,SourceKind,SourceId,Enabled,Version,UpdatedUtc) VALUES($product,$group,$kind,$source,1,1,$updated)";command.Parameters.AddWithValue("$product",productId);command.Parameters.AddWithValue("$group",(int)group);command.Parameters.AddWithValue("$kind",(int)ProductSourceKind.Xml);command.Parameters.AddWithValue("$source",sourceId);command.Parameters.AddWithValue("$updated",now);command.ExecuteNonQuery();}
+ }
  public ImportSummary Import(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
  {
   ImportSummary? result=null;
   XmlSourceExecutionGate.RunAsync(source.Id,()=>{result=ImportCore(source,incoming);return Task.CompletedTask;}).GetAwaiter().GetResult();
   return result!;
  }
+ public ImportSummary ImportIfSourceCurrent(XmlSource source,string expectedRevision,IReadOnlyList<CatalogProduct> incoming)
+ {
+  if(string.IsNullOrWhiteSpace(expectedRevision))throw new InvalidOperationException("XML önizleme revizyonu eksik; önizlemeyi yeniden hesaplayın.");
+  ImportSummary? result=null;
+  XmlSourceExecutionGate.RunAsync(source.Id,()=>{result=ImportIfSourceCurrentCore(source,expectedRevision,incoming);return Task.CompletedTask;}).GetAwaiter().GetResult();
+  return result!;
+ }
+ ImportSummary ImportIfSourceCurrentCore(XmlSource source,string expectedRevision,IReadOnlyList<CatalogProduct> incoming)
+ {
+  XmlCatalog.ValidateSource(source);
+  using var c=Open();using var tx=c.BeginTransaction(System.Data.IsolationLevel.Serializable);
+  using var find=c.CreateCommand();find.Transaction=tx;find.CommandText="SELECT Json FROM Sources WHERE Id=$id";find.Parameters.AddWithValue("$id",source.Id);
+  var json=find.ExecuteScalar() as string;
+  if(json is null)throw new InvalidOperationException("XML kaynağı silinmiş; önizlemeyi yeniden hesaplayın.");
+  XmlSource persisted;
+  try{persisted=JsonSerializer.Deserialize<XmlSource>(json)??throw new JsonException();}
+  catch(JsonException){throw new InvalidOperationException("XML kaynağı ayarları okunamadı; önizlemeyi yeniden hesaplayın.");}
+  if(!persisted.Enabled)throw new InvalidOperationException("XML kaynağı devre dışı; önizlemeyi yeniden hesaplayın.");
+  if(SourceConfigRevision(persisted)!=expectedRevision)throw new InvalidOperationException("XML kaynağı ayarları değişti; önizlemeyi yeniden hesaplayın.");
+  var result=ImportCore(source,incoming,c,tx);
+  tx.Commit();
+  return result;
+ }
  internal ImportSummary ImportCore(XmlSource source,IReadOnlyList<CatalogProduct> incoming)
  {
-  XmlCatalog.ValidateSource(source);using var c=Open();using var tx=c.BeginTransaction();var products=ReadProductsSafe(c,tx).Healthy;int added=0,updated=0,unchanged=0;var skus=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var bars=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var touched=new HashSet<string>();var sourceProductIndex=new Dictionary<string,List<CatalogProduct>>(StringComparer.OrdinalIgnoreCase);var skuIndex=new Dictionary<string,List<CatalogProduct>>(StringComparer.OrdinalIgnoreCase);var barcodeIndex=new Dictionary<string,List<CatalogProduct>>(StringComparer.OrdinalIgnoreCase);foreach(var p in products.Where(p=>p.SourceId==source.Id)){Index(sourceProductIndex,p.SourceProductId,p);Index(skuIndex,p.Sku,p);Index(barcodeIndex,p.Barcode,p);}
+  using var c=Open();using var tx=c.BeginTransaction();
+  var result=ImportCore(source,incoming,c,tx);
+  tx.Commit();
+  return result;
+ }
+ ImportSummary ImportCore(XmlSource source,IReadOnlyList<CatalogProduct> incoming,SqliteConnection c,SqliteTransaction tx)
+ {
+  XmlCatalog.ValidateSource(source);var products=ReadProductsSafe(c,tx).Healthy;var bindings=LoadImportBindings(c,tx,products);int added=0,updated=0,unchanged=0;var skus=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var bars=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var touched=new HashSet<string>();var sourceProductIndex=new Dictionary<string,List<CatalogProduct>>(StringComparer.OrdinalIgnoreCase);var skuIndex=new Dictionary<string,List<CatalogProduct>>(StringComparer.OrdinalIgnoreCase);var barcodeIndex=new Dictionary<string,List<CatalogProduct>>(StringComparer.OrdinalIgnoreCase);foreach(var p in products){Index(skuIndex,p.Sku,p);Index(barcodeIndex,p.Barcode,p);if(string.Equals(p.SourceId,source.Id,StringComparison.Ordinal)&&bindings.TryGetValue(p.Id,out var owned)&&owned.TryGetValue(ProductFieldGroup.Content,out var content)&&content.Enabled&&content.Kind==ProductSourceKind.Xml&&content.SourceId==source.Id)Index(sourceProductIndex,p.SourceProductId,p);}
   foreach(var row in incoming){Valid(row);if(row.SourceId!=source.Id)throw new InvalidOperationException("Kaynak kimliği uyuşmuyor.");if((row.Sku!=""&&!skus.Add(row.Sku))||(row.Barcode!=""&&!bars.Add(row.Barcode)))throw new InvalidOperationException("Yinelenen SKU veya barkod; aktarım iptal edildi.");var matches=skuIndex.GetValueOrDefault(row.Sku)??new List<CatalogProduct>();if(matches.Count==0&&row.Barcode!="")matches=barcodeIndex.GetValueOrDefault(row.Barcode)??new List<CatalogProduct>();var barcodeMatches=barcodeIndex.GetValueOrDefault(row.Barcode)??new List<CatalogProduct>();if(matches.Count==1&&barcodeMatches.Any(p=>p.Id!=matches[0].Id))throw new InvalidOperationException("SKU ve barkod farklı ürünlerle eşleşiyor.");if(matches.Count>1)throw new InvalidOperationException("Barkod veya SKU birden fazla ürünle eşleşiyor.");
-   if(row.SourceProductId.Length>0){var idMatches=sourceProductIndex.GetValueOrDefault(row.SourceProductId)??new List<CatalogProduct>();if(idMatches.Count>1)throw new InvalidOperationException("XML ürün ID birden fazla kayıtla eşleşiyor.");if(idMatches.Count==1){if(matches.Any(p=>p.Id!=idMatches[0].Id))throw new InvalidOperationException("XML ürün ID ve SKU/barkod farklı ürünlerle eşleşiyor.");matches=idMatches;}else if(matches.Any(p=>p.SourceProductId.Length>0&&!string.Equals(p.SourceProductId,row.SourceProductId,StringComparison.OrdinalIgnoreCase)))throw new InvalidOperationException("Bu SKU farklı bir XML ürün ID ile kayıtlı.");}
-   var old=matches.SingleOrDefault();if(old==null){var p=JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(row))!;p.Id=Guid.NewGuid().ToString("N");p.UpdatedUtc=DateTime.UtcNow;products.Add(p);Index(sourceProductIndex,p.SourceProductId,p);Index(skuIndex,p.Sku,p);Index(barcodeIndex,p.Barcode,p);Put(c,"CatalogProducts",p.Id,p,tx);touched.Add(p.Id);added++;continue;}
-   if(!touched.Add(old.Id))throw new InvalidOperationException("Birden fazla satır aynı ürüne eşleşiyor.");var before=JsonSerializer.Serialize(old);old.SourceKind="xml";old.SourceId=source.Id;old.SourceUpdatedUtc=DateTime.UtcNow;if(source.Fields.ContainsKey("Gtin"))old.Gtin=row.Gtin;if(source.Fields.ContainsKey("Mpn"))old.Mpn=row.Mpn;if(source.Fields.ContainsKey("VatRate"))old.VatRate=row.VatRate;old.Cost=row.Cost;old.CostCurrency=row.CostCurrency;if(!old.LockPrice){old.Price=row.Price;old.Currency=row.Currency;old.PriceSource="xml";old.FormulaPriceTry=row.FormulaPriceTry;old.AppliedTryRate=row.AppliedTryRate;old.FxRateDate=row.FxRateDate;}if(!old.LockStock){old.Stock=row.Stock;old.StockSource="xml";}if(source.UpdateName&&!old.LockName)old.Name=row.Name;if(source.UpdateDescription&&!old.LockDescription)old.Description=row.Description;if(source.UpdateImages&&!old.LockImages){old.ImageUrls=row.ImageUrls;old.MediaSource="xml";}
-   if(row.SourceProductId.Length>0){if(skuIndex.TryGetValue(old.Sku,out var oldSkus))oldSkus.RemoveAll(p=>p.Id==old.Id);if(barcodeIndex.TryGetValue(old.Barcode,out var oldBars))oldBars.RemoveAll(p=>p.Id==old.Id);old.SourceProductId=row.SourceProductId;old.Sku=row.Sku;old.Barcode=row.Barcode;Index(sourceProductIndex,old.SourceProductId,old);Index(skuIndex,old.Sku,old);Index(barcodeIndex,old.Barcode,old);}
-   if(source.UpdateDetails){old.Brand=row.Brand;old.Category=row.Category;old.VatRate=row.VatRate;old.InvoiceName=row.InvoiceName;old.Subtitle=row.Subtitle;old.Shelf=row.Shelf;old.ExpiresOn=row.ExpiresOn;old.XmlAttributes=row.XmlAttributes;}
-   else {if(old.InvoiceName.Length==0)old.InvoiceName=row.InvoiceName;if(old.Subtitle.Length==0)old.Subtitle=row.Subtitle;if(old.Shelf.Length==0)old.Shelf=row.Shelf;if(old.ExpiresOn==null)old.ExpiresOn=row.ExpiresOn;foreach(var pair in row.XmlAttributes)old.XmlAttributes.TryAdd(pair.Key,pair.Value);}
-   old.XmlCategory=row.XmlCategory;
-   if(source.FixedCategory.Length>0||source.CategoryRules.Any(r=>string.Equals(r.XmlCategory,row.XmlCategory,StringComparison.OrdinalIgnoreCase))){old.Category=row.Category;old.Active=row.Active;}
-   if(!old.LockPrice)old.ChannelPrices=row.ChannelPrices;
+   if(row.SourceProductId.Length>0){var idMatches=sourceProductIndex.GetValueOrDefault(row.SourceProductId)??new List<CatalogProduct>();if(idMatches.Count>1)throw new InvalidOperationException("XML ürün ID birden fazla kayıtla eşleşiyor.");if(idMatches.Count==1){if(matches.Any(p=>p.Id!=idMatches[0].Id))throw new InvalidOperationException("XML ürün ID ve SKU/barkod farklı ürünlerle eşleşiyor.");matches=idMatches;}else if(matches.Any(p=>bindings.TryGetValue(p.Id,out var owned)&&owned.TryGetValue(ProductFieldGroup.Content,out var content)&&content.Enabled&&content.Kind==ProductSourceKind.Xml&&content.SourceId==source.Id&&string.Equals(p.SourceId,source.Id,StringComparison.Ordinal)&&p.SourceProductId.Length>0&&!string.Equals(p.SourceProductId,row.SourceProductId,StringComparison.OrdinalIgnoreCase)))throw new InvalidOperationException("Bu SKU farklı bir XML ürün ID ile kayıtlı.");}
+   var old=matches.SingleOrDefault();if(old==null){var p=JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(row))!;p.Id=Guid.NewGuid().ToString("N");p.UpdatedUtc=DateTime.UtcNow;products.Add(p);Index(sourceProductIndex,p.SourceProductId,p);Index(skuIndex,p.Sku,p);Index(barcodeIndex,p.Barcode,p);Put(c,"CatalogProducts",p.Id,p,tx);InsertXmlImportBindings(c,tx,p.Id,source.Id);touched.Add(p.Id);added++;continue;}
+   if(!touched.Add(old.Id))throw new InvalidOperationException("Birden fazla satır aynı ürüne eşleşiyor.");if(!bindings.TryGetValue(old.Id,out var ownership))throw new InvalidOperationException("Ürün kaynak sahipliği bulunamadı.");bool Owns(ProductFieldGroup group)=>ownership.TryGetValue(group,out var binding)&&binding.Enabled&&binding.Kind==ProductSourceKind.Xml&&string.Equals(binding.SourceId,source.Id,StringComparison.Ordinal);var contentOwned=Owns(ProductFieldGroup.Content);var priceOwned=Owns(ProductFieldGroup.Price);var stockOwned=Owns(ProductFieldGroup.OnlineStock);var before=JsonSerializer.Serialize(old);if(contentOwned){old.SourceKind="xml";old.SourceId=source.Id;if(source.Fields.ContainsKey("Gtin"))old.Gtin=row.Gtin;if(source.Fields.ContainsKey("Mpn"))old.Mpn=row.Mpn;if(source.Fields.ContainsKey("VatRate"))old.VatRate=row.VatRate;if(source.UpdateName&&!old.LockName)old.Name=row.Name;if(source.UpdateDescription&&!old.LockDescription)old.Description=row.Description;if(source.UpdateImages&&!old.LockImages){old.ImageUrls=row.ImageUrls;old.MediaSource="xml";}}
+   if(priceOwned){old.Cost=row.Cost;old.CostCurrency=row.CostCurrency;if(!old.LockPrice){old.Price=row.Price;old.Currency=row.Currency;old.PriceSource="xml";old.FormulaPriceTry=row.FormulaPriceTry;old.AppliedTryRate=row.AppliedTryRate;old.FxRateDate=row.FxRateDate;old.ChannelPrices=row.ChannelPrices;}}
+   if(stockOwned&&!old.LockStock){old.Stock=row.Stock;old.StockSource="xml";}
+   if(contentOwned&&row.SourceProductId.Length>0){if(skuIndex.TryGetValue(old.Sku,out var oldSkus))oldSkus.RemoveAll(p=>p.Id==old.Id);if(barcodeIndex.TryGetValue(old.Barcode,out var oldBars))oldBars.RemoveAll(p=>p.Id==old.Id);old.SourceProductId=row.SourceProductId;old.Sku=row.Sku;old.Barcode=row.Barcode;Index(sourceProductIndex,old.SourceProductId,old);Index(skuIndex,old.Sku,old);Index(barcodeIndex,old.Barcode,old);}
+   if(contentOwned&&source.UpdateDetails){old.Brand=row.Brand;old.Category=row.Category;old.VatRate=row.VatRate;old.InvoiceName=row.InvoiceName;old.Subtitle=row.Subtitle;old.Shelf=row.Shelf;old.ExpiresOn=row.ExpiresOn;old.XmlAttributes=row.XmlAttributes;}
+   else if(contentOwned){if(old.InvoiceName.Length==0)old.InvoiceName=row.InvoiceName;if(old.Subtitle.Length==0)old.Subtitle=row.Subtitle;if(old.Shelf.Length==0)old.Shelf=row.Shelf;if(old.ExpiresOn==null)old.ExpiresOn=row.ExpiresOn;foreach(var pair in row.XmlAttributes)old.XmlAttributes.TryAdd(pair.Key,pair.Value);}
+   if(contentOwned){old.XmlCategory=row.XmlCategory;if(source.FixedCategory.Length>0||source.CategoryRules.Any(r=>string.Equals(r.XmlCategory,row.XmlCategory,StringComparison.OrdinalIgnoreCase))){old.Category=row.Category;old.Active=row.Active;}}
+   if(contentOwned||priceOwned||stockOwned)old.SourceUpdatedUtc=DateTime.UtcNow;
+   EnsureUniqueIdentity(c,tx,old);
    if(before==JsonSerializer.Serialize(old)){unchanged++;continue;}old.UpdatedUtc=DateTime.UtcNow;Put(c,"CatalogProducts",old.Id,old,tx);updated++;
-  }tx.Commit();return new(added,updated,unchanged);
+  }return new(added,updated,unchanged);
  }
  public CatalogUndoReceipt ImportWithUndo(XmlSource source,IReadOnlyList<CatalogProduct> incoming){var before=Products().Select(p=>JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(p))!).ToList();ImportSummary summary=Import(source,incoming);var after=Products().Select(p=>JsonSerializer.Deserialize<CatalogProduct>(JsonSerializer.Serialize(p))!).ToList();return new(Guid.NewGuid().ToString("N"),before,after);}
- public void Undo(CatalogUndoReceipt receipt){using var c=Open();using var tx=c.BeginTransaction();var(current,corrupt)=ReadProductsSafe(c,tx);if(corrupt.Count>0)throw new InvalidOperationException("Kataloğ bozuk kayıt(lar) içeriyor; geri alma güvenlik nedeniyle durduruldu. Önce kurtarma/silme yapın.");var expected=JsonSerializer.Serialize(receipt.After.OrderBy(p=>p.Id));var actual=JsonSerializer.Serialize(current.OrderBy(p=>p.Id));if(expected!=actual)throw new InvalidOperationException("Katalog bu içe aktarmadan sonra değişti; geri alma güvenlik nedeniyle durduruldu.");using(var delete=c.CreateCommand()){delete.Transaction=tx;delete.CommandText="DELETE FROM CatalogProducts";delete.ExecuteNonQuery();}foreach(var p in receipt.Before)Put(c,"CatalogProducts",p.Id,p,tx);tx.Commit();}
+ public void Undo(CatalogUndoReceipt receipt){using var c=Open();using var tx=c.BeginTransaction();var(current,corrupt)=ReadProductsSafe(c,tx);if(corrupt.Count>0)throw new InvalidOperationException("Kataloğ bozuk kayıt(lar) içeriyor; geri alma güvenlik nedeniyle durduruldu. Önce kurtarma/silme yapın.");var expected=JsonSerializer.Serialize(receipt.After.OrderBy(p=>p.Id));var actual=JsonSerializer.Serialize(current.OrderBy(p=>p.Id));if(expected!=actual)throw new InvalidOperationException("Katalog bu içe aktarmadan sonra değişti; geri alma güvenlik nedeniyle durduruldu.");var beforeIds=receipt.Before.Select(p=>p.Id).ToHashSet(StringComparer.Ordinal);foreach(var removed in current.Where(p=>!beforeIds.Contains(p.Id)))InventoryLedger.DeleteCatalogProduct(c,tx,removed.Id);foreach(var p in receipt.Before)Put(c,"CatalogProducts",p.Id,p,tx);tx.Commit();}
 }
 
 

@@ -41,9 +41,12 @@ public static class OrderCardWindow
     public static void ShowExisting(OrderSnapshot order,string? directory,Action? changed=null,Action? catalogChanged=null)=>Show(order.Copy(),directory,false,changed,catalogChanged);
     public static void ShowNew(string? directory,Action? changed=null)=>Show(OrderCardRules.NewManual(),directory,true,changed,null);
 
-    static void Show(OrderSnapshot order,string? directory,bool editable,Action? changed,Action? catalogChanged)
+    static void Show(OrderSnapshot order,string? directory,bool editable,Action? changed,Action? catalogChanged)=>Build(order,directory,editable,changed,catalogChanged).ShowDialog();
+
+    /// Builds the card without showing it (tests and callers decide how to show it).
+    public static Window Build(OrderSnapshot order,string? directory,bool editable,Action? changed,Action? catalogChanged)
     {
-        var win=new Window{Title=editable?"Yeni sipariş kartı":$"Sipariş kartı · {order.OrderId}",Width=1380,Height=820,MinWidth=980,MinHeight=650,WindowStartupLocation=WindowStartupLocation.CenterOwner,Owner=Application.Current?.MainWindow,Background=Surface};
+        var win=new Window{Title=editable?"Yeni sipariş kartı":$"Sipariş kartı · {order.OrderId}",Width=1380,Height=820,MinWidth=980,MinHeight=650,WindowStartupLocation=WindowStartupLocation.CenterOwner,Owner=Application.Current is { } app&&app.Dispatcher.CheckAccess()&&app.MainWindow is { IsLoaded: true } mainWindow?mainWindow:null,Background=Surface};
         var root=new DockPanel{Margin=new Thickness(14)};win.Content=root;
         var header=new Grid{Margin=new Thickness(0,0,0,10)};header.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});header.ColumnDefinitions.Add(new(){Width=GridLength.Auto});DockPanel.SetDock(header,Dock.Top);root.Children.Add(header);
         var titles=new StackPanel();titles.Children.Add(new TextBlock{Text=editable?"Yeni sipariş":"Sipariş kartı",FontSize=24,FontWeight=FontWeights.SemiBold,Foreground=Ink});titles.Children.Add(new TextBlock{Text=editable?"Müşteri, ürün, KDV ve teslimat bilgilerini tamamlayın.":$"{order.Marketplace} · {order.ShopId} · {order.OrderId}",Foreground=Muted,Margin=new Thickness(0,4,0,0)});header.Children.Add(titles);
@@ -52,7 +55,10 @@ public static class OrderCardWindow
         if(!editable)
         {
             var invoice=Action("Fatura işlemleri");invoice.Click+=(_,_)=>OrderInvoiceDialog.Show(order,directory,null,changed);
-            var stock=Action("Stok işlemi");stock.Click+=(_,_)=>
+            var stock=Action("Stok işlemi");stock.Name="OrderApplyStockButton";
+            // Physical sales already left the physical shelf, and an order whose account/product match needs review must not move online stock.
+            if(order.IsPhysicalSale||order.ReviewRequired){stock.IsEnabled=false;stock.ToolTip=order.IsPhysicalSale?"Fiziksel satış çevrimiçi stoktan düşülemez.":"Eşleşmesi incelenmesi gereken sipariş stoktan düşülemez.";}
+            stock.Click+=(_,_)=>
             {
                 try
                 {
@@ -102,7 +108,7 @@ public static class OrderCardWindow
             string V(string key)=>boxes.GetValueOrDefault(key)?.Text.Trim()??"";
             order.Marketplace=V("Marketplace");order.ShopId=V("ShopId");order.OrderId=V("OrderId");order.PlatformReference=V("PlatformReference");order.RawStatus=V("RawStatus");order.PaymentStatus=V("PaymentStatus");order.PaymentType=V("PaymentType");order.Currency=V("Currency").ToUpperInvariant();order.CustomerName=V("CustomerName");order.CustomerId=V("CustomerId");order.CustomerCode=V("CustomerCode");order.CustomerEmail=V("CustomerEmail");order.BillingEmail=V("BillingEmail");order.CustomerPhone=V("CustomerPhone");order.TaxNumber=V("TaxNumber");order.CustomerTaxOffice=V("CustomerTaxOffice");order.BillingName=V("BillingName");order.InvoiceType=V("InvoiceType");order.BillingAddress=V("BillingAddress");order.BillingCountry=V("BillingCountry");order.BillingCity=V("BillingCity");order.BillingDistrict=V("BillingDistrict");order.ShippingName=V("ShippingName");order.ShippingPhone=V("ShippingPhone");order.ShippingAddress=V("ShippingAddress");order.ShippingCountry=V("ShippingCountry");order.ShippingCity=V("ShippingCity");order.ShippingDistrict=V("ShippingDistrict");order.SellerNote=V("SellerNote");
         }
-        win.ShowDialog();
+        return win;
     }
 
     static DataGrid DataGrid(bool editable)=>new(){AutoGenerateColumns=false,IsReadOnly=!editable,CanUserAddRows=false,CanUserDeleteRows=false,SelectionMode=DataGridSelectionMode.Single,HeadersVisibility=DataGridHeadersVisibility.Column,GridLinesVisibility=DataGridGridLinesVisibility.Horizontal,RowHeight=30,Background=Brushes.White};
