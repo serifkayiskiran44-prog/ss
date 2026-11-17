@@ -53,8 +53,8 @@ public sealed partial class TaxonomyWorkspacePanel : Grid
  void InvalidatePreview(){rendered=Array.Empty<TaxonomyContentPreview>();preview.ItemsSource=null;}
  void Reload()
  {
-  var keep=selected?.Id;products=catalog.Products();store.EnsureCatalogEntries(products);entries=store.List(kind);ReloadRows(keep);
-  status.Text=$"{entries.Count} kayıt · {products.Count} ürün. Çoklu seçim: Ctrl / Shift; filtredeki tüm kayıtlar için Tümünü seç.";
+  var keep=selected?.Id;products=catalog.Products();var skipped=store.EnsureCatalogEntries(products);entries=store.List(kind);ReloadRows(keep);
+  status.Text=$"{entries.Count} kayıt · {products.Count} ürün. Çoklu seçim: Ctrl / Shift; filtredeki tüm kayıtlar için Tümünü seç."+(skipped>0?$" {skipped} ürünün kategori yolu geçersiz olduğu için atlandı; ürün kartından düzeltin.":"");
 
  }
  void Edit(TaxonomyEntry? entry)

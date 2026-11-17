@@ -9,19 +9,22 @@ public sealed partial class TaxonomyStore
  static string CategoryIdentity(string path)=>string.Join(" > ",path.Split('>').Select(p=>p.Trim()));
  public static bool SameCategory(string path,string other)=>CategoryIdentity(path).Equals(CategoryIdentity(other),StringComparison.OrdinalIgnoreCase);
  public static bool InCategory(string path,string parent){path=CategoryIdentity(path);parent=CategoryIdentity(parent);return path.Equals(parent,StringComparison.OrdinalIgnoreCase)||path.StartsWith(parent+" > ",StringComparison.OrdinalIgnoreCase); }
- public void EnsureCatalogEntries(IEnumerable<CatalogProduct> products)
+ /// Returns how many products were skipped because their category path cannot be normalised (e.g. "Kedi >").
+ /// Product validation only checks the length, so such a value can exist; one bad product must not block the others or the screen that calls this.
+ public int EnsureCatalogEntries(IEnumerable<CatalogProduct> products)
  {
-  using var c=Open();using var tx=c.BeginTransaction();
+  using var c=Open();using var tx=c.BeginTransaction();var skipped=0;
   foreach(var p in products)
   {
    if(!string.IsNullOrWhiteSpace(p.Brand))EnsureWorkspaceEntry(c,tx,TaxonomyKind.Brand,p.Brand.Trim());
    if(!string.IsNullOrWhiteSpace(p.Category))
    {
-    var path=ExcelProductImport.NormalizeCategory(p.Category);var parts=path.Split(" > ");
+    string path;try{path=ExcelProductImport.NormalizeCategory(p.Category);}catch(InvalidOperationException){skipped++;continue;}
+    var parts=path.Split(" > ");
     for(int i=1;i<=parts.Length;i++)EnsureWorkspaceEntry(c,tx,TaxonomyKind.Category,string.Join(" > ",parts.Take(i)));
    }
   }
-  tx.Commit();
+  tx.Commit();return skipped;
  }
  static void EnsureWorkspaceEntry(SqliteConnection c,SqliteTransaction tx,TaxonomyKind kind,string name)
  {

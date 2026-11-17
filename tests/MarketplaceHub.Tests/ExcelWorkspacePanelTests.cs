@@ -33,6 +33,16 @@ public sealed class ExcelWorkspacePanelTests
         }catch(Exception ex){failure=ex;}finally{SqliteConnection.ClearAllPools();if(Directory.Exists(dir))Directory.Delete(dir,true);}});thread.SetApartmentState(ApartmentState.STA);thread.Start();thread.Join();if(failure!=null)throw failure;
     }
 
+    [TestMethod]public void TaxonomyPanelOpensWhenAProductHasAMalformedCategoryPath()
+    {
+        Exception failure=null;var thread=new Thread(()=>{var dir=Path.Combine(Path.GetTempPath(),"taxonomy-ui-"+Guid.NewGuid().ToString("N"));try{
+            var catalog=new CatalogStore(dir);catalog.CreateManual(new(){Sku="BAD",Name="Bad",Category="Kedi >",Currency="TRY"});catalog.CreateManual(new(){Sku="OK",Name="Ok",Category="Köpek",Currency="TRY"});
+            var panel=new TaxonomyWorkspacePanel(dir,TaxonomyKind.Category,()=>{});
+            var list=Walk(panel).OfType<DataGrid>().Single(g=>g.Name=="TaxonomyList");Assert.AreEqual(1,list.Items.Count);
+            Assert.IsTrue(Walk(panel).OfType<TextBlock>().Any(t=>t.Text.Contains("geçersiz")),"The skipped product must be reported, not hidden.");
+        }catch(Exception ex){failure=ex;}finally{SqliteConnection.ClearAllPools();if(Directory.Exists(dir))Directory.Delete(dir,true);}});thread.SetApartmentState(ApartmentState.STA);thread.Start();thread.Join();if(failure!=null)throw failure;
+    }
+
     [TestMethod]public void TaxonomyChannelChangeLoadsOnlyCurrentScopeMappings()
     {
         Exception failure=null;var thread=new Thread(()=>{var dir=Path.Combine(Path.GetTempPath(),"taxonomy-ui-"+Guid.NewGuid().ToString("N"));try{
