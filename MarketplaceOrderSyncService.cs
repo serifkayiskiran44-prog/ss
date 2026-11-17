@@ -109,12 +109,13 @@ public sealed class MarketplaceOrderSyncService
             if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
             beforePersist?.Invoke(connection);
             if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
+            var goLive = orders.GoLiveCutoff(connection.Id, now);
             var applied = 0;var resolved = new List<AccountOrderStockResolution>(normalized.Count);
             foreach (var copy in normalized)
             {
                 token.ThrowIfCancellationRequested();
                 var decision = stock.ResolveAccountOrder(connection, copy);
-                var deduct = !decision.ReviewRequired && IsStockDeductible(decision.Order);
+                var deduct = !decision.ReviewRequired && IsStockDeductible(decision.Order) && !(decision.Order.OrderDate is { } placed && placed.UtcDateTime < goLive);
                 AccountOrderApplyResult result;
                 try { result = stock.ApplyAccountOrder(connection, decision, deduct, accountSettings.Revision); }
                 catch (OrderStockShortageException shortage) when (deduct)

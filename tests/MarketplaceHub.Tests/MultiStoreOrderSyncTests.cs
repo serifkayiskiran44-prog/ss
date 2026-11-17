@@ -117,6 +117,25 @@ public sealed class MultiStoreOrderSyncTests
     }
 
     [TestMethod]
+    public async Task OrdersPlacedBeforeTheFirstSyncAreHistoryAndNeverDeductStock()
+    {
+        var setup = SetupOneAccount();                                   // now = epoch + 100 days, stock 10
+        var before = Order("101", "ORD-OLD", "REMOTE-A", 2, 10); before.OrderDate = DateTimeOffset.UnixEpoch.AddDays(40);
+        var after = Order("101", "ORD-NEW", "REMOTE-A", 1, 11); after.OrderDate = DateTimeOffset.UnixEpoch.AddDays(100).AddHours(1);
+        setup.Reader.Set(before, after);
+
+        await setup.Service.RefreshAllAsync();
+
+        Assert.AreEqual(2, new OrdersStore(root).ReadAll().Count, "History orders are still collected and shown.");
+        Assert.AreEqual(9, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+
+        var updated = Order("101", "ORD-OLD", "REMOTE-A", 2, 30, "Shipped"); updated.OrderDate = before.OrderDate;
+        setup.Reader.Set(updated);
+        await setup.Service.RefreshAllAsync();
+        Assert.AreEqual(9, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity, "A later status update must not turn a history order into a deduction.");
+    }
+
+    [TestMethod]
     public async Task CancelledOrderIsCollectedButNeverDeductsInventory()
     {
         var setup = SetupOneAccount();
