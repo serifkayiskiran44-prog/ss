@@ -313,6 +313,19 @@ public sealed class MultiStoreOrderSyncTests
     }
 
     [TestMethod]
+    public async Task ScheduledRefreshWaitsOutAnActiveApiHealthBackoff()
+    {
+        var setup = SetupOneAccount();
+        setup.Reader.Set(Order("101", "ORD-1", "REMOTE-A", 1, 10));
+        new ApiHealthStore(root).Observe(setup.Connection.Channel, setup.Connection.ShopId, new ApiHealthObservation { State = "RATE_LIMITED", ErrorClass = "RateLimit", HttpStatus = 429, BackoffUntilUtc = DateTimeOffset.UtcNow.AddMinutes(10) });
+
+        var scheduled = await setup.Service.RefreshAllAsync(respectInterval: true);
+
+        Assert.AreEqual(0, setup.Reader.Calls, "The marketplace asked us to back off; the scheduled read must not call it.");
+        Assert.AreEqual(MarketplaceOrderSyncStatus.Backoff, scheduled.Single().Status);
+    }
+
+    [TestMethod]
     public async Task DisabledAndUnsupportedAccountsAreNotRead()
     {
         var connections = new MarketplaceConnectionStore(root);

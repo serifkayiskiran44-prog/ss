@@ -92,6 +92,10 @@ public sealed class MarketplaceOrderSyncService
         if (respectInterval && sameGeneration && stored!.FailureCount == 0 && stored.UpdatedUtc.AddMinutes(accountSettings.Sync.IntervalMinutes) > now)
             return Result(connection, MarketplaceOrderSyncStatus.Backoff, 0, 0, 0, cursor, "");
 
+        // The marketplace itself asked us to wait (429 / Retry-After): honour it for scheduled reads.
+        if (respectInterval && new ApiHealthStore(directory).Get(connection.Channel, connection.ShopId)?.BackoffUntilUtc is { } healthBackoff && healthBackoff.UtcDateTime > now)
+            return Result(connection, MarketplaceOrderSyncStatus.Backoff, 0, 0, 0, cursor, "");
+
         try
         {
             var remote = await adapter.ReadOrdersAsync(connection.Id, cursor, token).ConfigureAwait(false);

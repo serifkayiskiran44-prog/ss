@@ -33,6 +33,18 @@ public sealed class TrendyolOrderWriteGuardTests
     }
 
     [TestMethod]
+    public void ResolveUsesTheVaultCredentialsOfTheOrdersShopAndFallsBackToTheLegacyFile()
+    {
+        var second = new MarketplaceConnectionStore(dir).Save("trendyol", "202", "TY B", true);
+        new MarketplaceCredentialVault(dir).Save(second.Id, second.Channel, second.ShopId, new TrendyolSettings("202", "key-b", "secret-b", "agent"));
+        new TrendyolSettingsStore(Path.Combine(dir, "trendyol.bin")).Save(new("101", "key-a", "secret-a", "agent"));
+
+        Assert.AreEqual("key-b", TrendyolOrderWriteGuard.Resolve(dir, "202").ApiKey);
+        Assert.AreEqual("key-a", TrendyolOrderWriteGuard.Resolve(dir, "101").ApiKey, "Legacy single-account file still works for its own shop.");
+        Assert.ThrowsException<InvalidOperationException>(() => TrendyolOrderWriteGuard.Resolve(dir, "303"));
+    }
+
+    [TestMethod]
     public async Task QueueMarketplaceUploadForAnotherShopFailsBeforeAnyHttpCall()
     {
         new TrendyolSettingsStore(Path.Combine(dir, "trendyol.bin")).Save(new("101", "key", "secret", "agent"));

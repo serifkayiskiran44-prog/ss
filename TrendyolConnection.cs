@@ -9,6 +9,17 @@ public sealed record TrendyolSettings(string SupplierId, string ApiKey, string A
 /// <summary>The saved Trendyol credentials are a single legacy account; a live write for an order of another shop must be refused before any request.</summary>
 public static class TrendyolOrderWriteGuard
 {
+    /// <summary>Credentials for the order's own shop: the per-account vault first (multi-store), the legacy single-account file only if it belongs to that same shop.</summary>
+    public static TrendyolSettings Resolve(string? directory, string orderShopId)
+    {
+        if (string.IsNullOrWhiteSpace(orderShopId)) throw new InvalidOperationException("Siparişin Trendyol mağaza kimliği yok; işlem yapılmadı.");
+        var shop = orderShopId.Trim();
+        var connection = new MarketplaceConnectionStore(directory).List(false).FirstOrDefault(x => x.Enabled && x.Channel == "trendyol" && string.Equals(x.ShopId, shop, StringComparison.Ordinal));
+        if (connection is not null && new MarketplaceCredentialVault(directory).Load<TrendyolSettings>(connection.Id, connection.Channel, connection.ShopId) is { } scoped) return Require(scoped, shop);
+        var legacy = new TrendyolSettingsStore(directory is null ? null : System.IO.Path.Combine(directory, "trendyol.bin")).Load() ?? throw new InvalidOperationException("Bu mağaza için Trendyol bağlantı ayarları kayıtlı değil; işlem yapılmadı.");
+        return Require(legacy, shop);
+    }
+
     public static TrendyolSettings Require(TrendyolSettings settings, string orderShopId)
     {
         if (string.IsNullOrWhiteSpace(orderShopId) || !string.Equals(settings.SupplierId?.Trim(), orderShopId.Trim(), StringComparison.Ordinal))
