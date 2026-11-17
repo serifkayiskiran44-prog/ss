@@ -279,6 +279,41 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
+    public void GlobalCommandBarRemainsVisibleAndSharedThemeResourcesResolveOnDenseRoutes() => InSta(root =>
+    {
+        var window = new MainWindow(root); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            var commandBar = Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "GlobalCommandBar");
+            var pageHost = Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageCommandHost");
+            var globalSearch = Walk(window).OfType<TextBox>().Single(x => x.Name == "GlobalSearchBox");
+            var history = Walk(window).OfType<Expander>().Single(x => Equals(x.Header, "İşlem geçmişi"));
+
+            Assert.IsTrue(Walk(commandBar).Contains(globalSearch), "Global search must belong to the persistent command bar.");
+            Assert.IsFalse(history.IsExpanded, "Operation history must not consume grid height on startup.");
+            Assert.IsTrue(((Thickness)pageHost.GetValue(FrameworkElement.MarginProperty)).Left <= 14);
+
+            foreach (var key in new[]
+            {
+                "MonoCanvasBrush", "MonoSurfaceBrush", "MonoNavigationBrush", "MonoPrimaryBrush", "MonoBorderBrush",
+                "MonoTextBrush", "MonoMutedTextBrush", "PrimaryButtonStyle", "SecondaryButtonStyle", "ToolbarButtonStyle",
+                "CompactButtonStyle", "DangerButtonStyle", "CompactDataGridStyle"
+            })
+                Assert.IsNotNull(window.TryFindResource(key), $"Shared UI resource '{key}' must resolve from the shell.");
+
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "products"));
+            Assert.AreEqual(Visibility.Visible, commandBar.Visibility);
+            Assert.AreEqual(Visibility.Visible, globalSearch.Visibility);
+
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "marketplaces"));
+            Assert.AreEqual(Visibility.Visible, commandBar.Visibility);
+            Assert.AreEqual(Visibility.Visible, globalSearch.Visibility);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
     public void MainWindowSeedingAfterHomeConstructionCannotPromoteDefaultPlaceholder() => InSta(root =>
     {
         var window = new MainWindow(root); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);

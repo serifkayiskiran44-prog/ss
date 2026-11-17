@@ -4,6 +4,10 @@
              xmlns:local="clr-namespace:TrMarketplaceHubDesktop"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/MonoBridgeTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>
