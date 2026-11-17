@@ -98,14 +98,18 @@ public sealed class HepsiburadaDispatchStore
             string? error = barcode.Length == 0 ? "Barkod zorunludur." : null;
             if (operation is HepsiburadaOperation.Price or HepsiburadaOperation.Stock or HepsiburadaOperation.PriceAndStock or HepsiburadaOperation.DispatchTime or HepsiburadaOperation.SaleState && binding is null)
                 error = "Ürün bu Hepsiburada mağazasına bağlı değil.";
-            if ((operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && product.Price <= 0) error = "Satış fiyatı sıfırdan büyük olmalıdır.";
-            else if ((operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && !string.Equals(product.Currency, "TRY", StringComparison.OrdinalIgnoreCase)) error = "Hepsiburada fiyatı TRY olmalı; ürün para birimi " + product.Currency + ".";
+            var pricing = operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock;
+            var (policyPrice, policyError) = pricing && error is null ? PolicyPrice(account, product) : (null, null);
+            if (policyError is not null) error = policyError;
+            else if (policyPrice is not null) { }
+            else if (pricing && product.Price <= 0) error = "Satış fiyatı sıfırdan büyük olmalıdır.";
+            else if (pricing && !string.Equals(product.Currency, "TRY", StringComparison.OrdinalIgnoreCase)) error = "Hepsiburada fiyatı TRY olmalı; ürün para birimi " + product.Currency + ".";
             if (binding is not null && error is null && (operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && !binding.ManagePrice) error = "Bu bağlantıda fiyat yönetimi kapalı.";
             if (binding is not null && error is null && (operation is HepsiburadaOperation.Stock or HepsiburadaOperation.PriceAndStock) && !binding.ManageStock) error = "Bu bağlantıda stok yönetimi kapalı.";
             if ((operation is HepsiburadaOperation.CatalogCreate or HepsiburadaOperation.CatalogUpdate or HepsiburadaOperation.ListingCreate) && (product.Name.Trim().Length == 0 || product.Brand.Trim().Length == 0 || product.Category.Trim().Length == 0))
                 error = "Ürün adı, marka ve kategori zorunludur.";
             if (error is not null) { rows.Add(new(product.Id, barcode, binding?.RemoteId ?? "", "Hatalı", error, null)); continue; }
-            var item = BuildItem(operation, product, binding, barcode, StockFor(account, product));
+            var item = BuildItem(operation, product, binding, barcode, StockFor(account, product), policyPrice ?? product.Price);
             var itemJson = JsonSerializer.Serialize(item);
             items.Add(JsonSerializer.Deserialize<JsonElement>(itemJson));
             rows.Add(new(product.Id, barcode, binding?.RemoteId ?? "", "Gönderime hazır", "", itemJson));
@@ -207,14 +211,25 @@ public sealed class HepsiburadaDispatchStore
         return policy is { Enabled: true } ? catalog.PreviewStock("hepsiburada", account.ShopId, product.Id) : product.Stock;
     }
 
-    static object BuildItem(HepsiburadaOperation operation, CatalogProduct product, ProductChannelBinding? binding, string barcode, int stock) => operation switch
+    // A saved, enabled price policy decides the price (formula from cost, minimum price/margin guards); a violation blocks the row instead of silently sending the pool price.
+    (decimal? Price, string? Error) PolicyPrice(MarketplaceConnection account, CatalogProduct product)
+    {
+        var catalog = new CatalogStore(directory);
+        var policy = catalog.GetPricePolicy("hepsiburada", account.ShopId);
+        if (policy is not { Enabled: true }) return (null, null);
+        if (!string.Equals(policy.Currency, "TRY", StringComparison.OrdinalIgnoreCase)) return (null, "Hepsiburada fiyat kuralı TRY olmalı; kural para birimi " + policy.Currency + ".");
+        try { return (catalog.PreviewPrice("hepsiburada", account.ShopId, product.Id).Price, null); }
+        catch (InvalidOperationException ex) { return (null, "Fiyat kuralı: " + ex.Message); }
+    }
+
+    static object BuildItem(HepsiburadaOperation operation, CatalogProduct product, ProductChannelBinding? binding, string barcode, int stock, decimal price) => operation switch
     {
         HepsiburadaOperation.Stock => new { barcode, availableStock = stock },
-        HepsiburadaOperation.Price => new { barcode, price = product.Price },
-        HepsiburadaOperation.PriceAndStock => new { barcode, price = product.Price, availableStock = stock },
+        HepsiburadaOperation.Price => new { barcode, price = price },
+        HepsiburadaOperation.PriceAndStock => new { barcode, price = price, availableStock = stock },
         HepsiburadaOperation.SaleState => new { barcode, active = product.Active },
         HepsiburadaOperation.DispatchTime => new { barcode, dispatchTime = 1 },
-        _ => new { merchantSku = product.Sku, barcode, title = product.Name, brand = product.Brand, category = product.Category, price = product.Price, availableStock = stock, description = product.Description, images = product.ImageUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) }
+        _ => new { merchantSku = product.Sku, barcode, title = product.Name, brand = product.Brand, category = product.Category, price = price, availableStock = stock, description = product.Description, images = product.ImageUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) }
     };
 
     static string CatalogHash(IEnumerable<CatalogProduct> products) => Hash(JsonSerializer.Serialize(products.OrderBy(x => x.Id, StringComparer.Ordinal)));
