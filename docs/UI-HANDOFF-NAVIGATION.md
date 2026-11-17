@@ -67,3 +67,28 @@ Ayrıca bazı testler görünür metinle arar: "Bağlantıyı ve yönetimi günc
 ## 7. Ekranı bekleyen hazır servis: siteye XML yayınlama
 
 `SiteXmlPublisher` (kök dizin) hazır ve testli, ekranı yok. Akış: `Preview(siteKey, fileName, xmlPath)` → `SiteXmlPublishPreview` (hedef adres, SHA-256, Model sayısı, boyut gösterilir) → kullanıcı açıkça onaylar → `PublishAsync(preview, approved: true)` → `SiteXmlPublishReceipt`. `IsConfigured` anahtarın kayıtlı olup olmadığını söyler (değeri asla vermez). Hatalar `SiteXmlPublishException` (doğrulama farkı için `SiteXmlPublishVerificationException`) olarak gelir ve iletilebilir; belirteç içermez. Zamanlayıcıya veya tepsiye bağlamayın.
+
+## 8. Kullanıcının hedef ana menüsü ↔ koddaki karşılığı
+
+Kaynak: `GROK_ENTEGRA_MONOBRIDGE_TEK_GOREV_PAKETI.md`, "Ana ekran ve navigasyon". Menü tasarımı ayrı yürütüldüğü için yalnız mevcut parçaların eşlemesi verilir.
+
+| Hedef menü | Koddaki karşılık | Durum |
+|---|---|---|
+| Genel Bakış | `DashboardPanel.Create(dir, navigate)` | hazır, menüde yok |
+| Ürün Yönetimi | `products` (ürün havuzu), `bulk-products`, `media`, `data-quality` | `products` menüde; diğerleri hazır, menüde yok |
+| Mağazalar | `marketplaces` (hesap kartları + hesap çalışma alanı), `connections`, `listing-matrix`, `api-health` | ilk ikisi menüde |
+| Tedarikçiler / XML | `xml` | menüde |
+| Kategori ve Özellik Merkezi | `categories`, `brands` | menüde (iki ayrı rota) |
+| Stok Yönetimi | stok konumları ve transfer: `InventoryLocationsDialog` (siparişler ekranında), `InventoryTransfer*` kontrolleri; `stock-policies` | kendi sayfası yok |
+| Fiyat Yönetimi | `price-policies`, `policy-center`; hesap ayarlarında "Ürün kuralları" | sayfalar hazır, menüde yok |
+| Siparişler | `orders`; `order-exceptions` | ilki menüde |
+| Excel İşlemleri | `excel` | menüde |
+| Fatura | `nes`, `bizimhesap` | menüde |
+| Kargo | `NavlungoPanel.Create()`; siparişlerde etiket/yazdırma merkezi | Navlungo ayarına ulaşan ekran yok |
+| Otomasyon | `MainWindow.BuildAutomation()`; tepsi ayarı `settings` içinde | hazır, menüde yok |
+| Hata Merkezi | `MainWindow.BuildSync()` (sync işleri, XML geçmişi, otomasyon işleri), `messages`, `order-exceptions` | hazır, menüde yok |
+| İşlem Geçmişi / Denetim | `diagnostics` (audit, destek paketi) | hazır, menüde yok |
+| Raporlar | ayrı panel yok; Genel bakıştaki "Son 14 gün yerel raporları" | rapor sayfası yazılmadı |
+| Ayarlar | `settings` | menüde |
+
+Mağaza kartlarında istenen veriler: kanal, mağaza adı, bağlantı durumu, bağlı ürün, eşleşmeyen ürün, bekleyen işlem, hatalı işlem, son başarılı senkron zamanı, son hata. `MarketplaceAccountCard` modelinde şu an var: kanal, kanal adı, mağaza kimliği, görünen ad, durum, bağlı/bekleyen/hatalı ürün sayıları. Modelde olmayanlar: eşleşmeyen ürün, son başarılı senkron, son hata (bağlantı testi hatası `MarketplaceConnection.LastError` ve `LastTestUtc` mevcut). Bu alanların veri tarafı mantık işi olarak eklenecek; kartta gösterimi tasarım işidir.
