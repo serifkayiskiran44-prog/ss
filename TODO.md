@@ -1,5 +1,15 @@
 # Devam durumu — 2026-09-11
 
+## Entegra esinli operasyon arayüzü — 2026-11-17
+- [x] MonoBridge kimliğini koruyan kompakt uygulama kabuğu, global komut alanı ve tam operasyon navigasyonu eklendi.
+- [x] Ürün Yönetimi; filtre, sonuç özeti, yoğun ürün tablosu ve mevcut güvenli düzenleme akışlarını öne çıkaran çalışma alanına dönüştürüldü.
+- [x] XML Yönetimi; kaynak listesi, sürüklenebilir ayırıcı, tanım/önizleme bölmeleri ve seçim durumuna bağlı özetle yeniden düzenlendi.
+- [x] Ayarlar; uygulama ve mağaza ayarlarını yedi açık bölümde topladı. Yeni giriş/parola veya kopya credential akışı eklenmedi.
+- [x] Varsayılan ana sayfa, Ürünler, XML, Ayarlar, Pazaryerleri ve Siparişler rotaları WPF sözleşme testleriyle doğrulandı.
+- [x] Tam Release paketi **1491/1491** geçti; self-contained win-x64 yayın, paket smoke'u ve izole gerçek `MonoBridge — Yönetim Merkezi` ana pencere açılışı başarılı.
+- [ ] Windows erişilebilirlik köprüsü yayınlanan WPF penceresine bağlanamadığı için 1366×720 ve büyütülmüş pencerede elle görsel rota turu ayrıca yapılmalı; bu sınırlama otomatik test veya açılış hatası değildir.
+- [ ] Ayrı kirli çalışma kopyasında kalan “Yeni ürün adayı” işi bu dala alınmadı ve değiştirilmedi.
+
 ## Sipariş çalışma alanı — 2026-09-21
 - [x] Altı Entegra sipariş eğitimindeki genel kullanım, manuel sipariş, toplu işlem, ayrıntılı filtre, Excel ve iade akışlarını incele.
 - [x] Kullanıcının 124 sütunlu sipariş Excel örneğini kimlik, müşteri, fatura, sevk, kargo, ödeme, KDV, indirim, komisyon ve ürün gruplarına ayır.
