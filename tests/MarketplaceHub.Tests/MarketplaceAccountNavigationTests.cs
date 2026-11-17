@@ -88,6 +88,7 @@ public sealed class MarketplaceAccountNavigationTests
     {
         var connection = new MarketplaceConnectionStore(root).Save("trendyol", "101", "Trendyol A", true);
         var product = new CatalogStore(root).CreateManual(new() { Sku = "CARD-ROUTE", Name = "Card route", Currency = "TRY" });
+        new ProductChannelBindingStore(root).Save(Binding(product.Id, connection.Id, "remote-card", "Active"), 0);
         using var panel = new MarketplaceAccountHomePanel(root);
         var requested = new List<string>();
         panel.ProductCardRequested += requested.Add;

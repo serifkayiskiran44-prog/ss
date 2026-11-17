@@ -51,6 +51,13 @@ public sealed class ProductChannelBindingStore
                 ConnectionId TEXT NOT NULL,
                 Json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS ProductChannelCandidates(
+                ProductId TEXT NOT NULL,
+                ConnectionId TEXT NOT NULL,
+                PreviewId TEXT NOT NULL,
+                CreatedUtc TEXT NOT NULL,
+                PRIMARY KEY(ProductId,ConnectionId)
+            );
             """;
         command.ExecuteNonQuery();
     }
@@ -79,6 +86,31 @@ public sealed class ProductChannelBindingStore
         var result = new List<ProductChannelBinding>();
         while (reader.Read()) result.Add(ReadBinding(reader));
         return result;
+    }
+
+    /// <summary>Products assigned to this account that have no remote listing yet. They are kept apart from bindings: a candidate has no remote id, so it must never take a binding row.</summary>
+    public IReadOnlyList<string> CandidateProductIds(string connectionId)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT c.ProductId FROM ProductChannelCandidates c JOIN CatalogProducts p ON p.Id=c.ProductId WHERE c.ConnectionId=$connection " +
+            "AND NOT EXISTS(SELECT 1 FROM ProductChannelBindings b WHERE b.ProductId=c.ProductId AND b.ConnectionId=c.ConnectionId) ORDER BY c.ProductId";
+        command.Parameters.AddWithValue("$connection", Required(connectionId, nameof(connectionId)));
+        using var reader = command.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read()) result.Add(reader.GetString(0));
+        return result;
+    }
+
+    /// <summary>Local only: takes a candidate off this account's list. No remote call is made.</summary>
+    public bool RemoveCandidate(string productId, string connectionId)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM ProductChannelCandidates WHERE ProductId=$product AND ConnectionId=$connection";
+        command.Parameters.AddWithValue("$product", Required(productId, nameof(productId)));
+        command.Parameters.AddWithValue("$connection", Required(connectionId, nameof(connectionId)));
+        return command.ExecuteNonQuery() == 1;
     }
 
     public ProductChannelBinding Save(ProductChannelBinding binding, long expectedVersion)
@@ -145,6 +177,14 @@ public sealed class ProductChannelBindingStore
         Bind(command, saved);
         try { command.ExecuteNonQuery(); }
         catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { throw new InvalidOperationException("Uzak ilan bu mağazada başka bir ürüne bağlı."); }
+        using (var clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText = "DELETE FROM ProductChannelCandidates WHERE ProductId=$product AND ConnectionId=$connection";
+            clear.Parameters.AddWithValue("$product", binding.ProductId);
+            clear.Parameters.AddWithValue("$connection", binding.ConnectionId);
+            clear.ExecuteNonQuery();
+        }
         return saved;
     }
 
@@ -207,6 +247,19 @@ public sealed class ProductChannelBindingStore
             applied.Add(Save(connection, transaction, binding, current?.Version ?? 0));
         }
         var candidates = preview.Rows.Where(row => row.Outcome == ProductChannelMatchOutcome.NewListingCandidate).Select(row => row.ProductId).Distinct(StringComparer.Ordinal).ToArray();
+        foreach (var productId in candidates)
+        {
+            if (ReadBinding(connection, transaction, productId, preview.ConnectionId) is not null) continue;   // already bound: its binding row keeps it on the account list
+            using var assign = connection.CreateCommand();
+            assign.Transaction = transaction;
+            assign.CommandText = "INSERT INTO ProductChannelCandidates(ProductId,ConnectionId,PreviewId,CreatedUtc) VALUES($product,$connection,$preview,$created) " +
+                "ON CONFLICT(ProductId,ConnectionId) DO UPDATE SET PreviewId=excluded.PreviewId,CreatedUtc=excluded.CreatedUtc";
+            assign.Parameters.AddWithValue("$product", productId);
+            assign.Parameters.AddWithValue("$connection", preview.ConnectionId);
+            assign.Parameters.AddWithValue("$preview", preview.Id);
+            assign.Parameters.AddWithValue("$created", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            assign.ExecuteNonQuery();
+        }
         var receipt = new ProductChannelBindingReceipt(preview.Id, preview.ConnectionId, DateTime.UtcNow, applied.ToArray(), candidates, creationPreviewId);
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
