@@ -48,6 +48,19 @@ public sealed class HepsiburadaDispatchTests
     }
 
     [TestMethod]
+    public void PricePlanAppliesTheStorePricePolicyFormulaWhenOneIsSaved()
+    {
+        var catalog = new CatalogStore(root);
+        var p = catalog.Products().Single(); p.Cost = 100m; catalog.SaveProduct(p);
+        catalog.SavePricePolicy(new PricePolicy { Channel = "hepsiburada", Shop = account.ShopId, Formula = "x * 2", ListFormula = "x * 2", Currency = "TRY", TryPerUnit = 1m, Enabled = true });
+
+        var plan = new HepsiburadaDispatchStore(root).Preview(account.Id, [product.Id], HepsiburadaOperation.Price);
+
+        using var json = JsonDocument.Parse(plan.PayloadJson);
+        Assert.AreEqual(200m, json.RootElement.GetProperty("listings")[0].GetProperty("price").GetDecimal(), "Cost 100 through the saved x*2 formula, not the pool price 123.45.");
+    }
+
+    [TestMethod]
     public void StockPreviewContainsOnlyStockIdentityAndQuantity()
     {
         var plan = new HepsiburadaDispatchStore(root).Preview(account.Id, [product.Id], HepsiburadaOperation.Stock);

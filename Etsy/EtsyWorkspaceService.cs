@@ -109,7 +109,7 @@ public sealed partial class EtsyWorkspaceService(string? directory, HttpClient h
                             offering["price"]=price;
                         }
                         if(operation is EtsyOperation.Stock or EtsyOperation.PriceAndStock)
-                        { if(product.Stock<=0)throw new InvalidOperationException("Sıfır stok için ayrı Pasife al önizlemesini kullanın."); offering["quantity"]=product.Stock; }
+                        { var stock=catalog.GetStockPolicy("etsy",state.ShopId.ToString()) is { Enabled: true }?catalog.PreviewStock("etsy",state.ShopId.ToString(),product.Id):product.Stock; if(stock<=0)throw new InvalidOperationException("Sıfır stok için ayrı Pasife al önizlemesini kullanın."); offering["quantity"]=stock; }
                         row.Steps.Add(new() { Method="PUT",Path=$"listings/{row.ListingId}/inventory",Json=body.ToJsonString() });
                         row.Detail=$"Fiyat: {offering["price"]} {shop.Currency}; stok: {offering["quantity"]}. Seçilmeyen fiyat/stok, SKU, özellikler ve hazırlık profili mevcut Etsy değerleriyle korunur.";
                     }

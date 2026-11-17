@@ -76,7 +76,7 @@ public sealed class SiteXmlPublisher : IDisposable
 {
     public const string ExpectedHost = "www.petshoptedarik.com.tr";
     public const long MaxBytes = 256L * 1024 * 1024;
-    static readonly Regex SafeName = new("^[a-z0-9][a-z0-9_-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    static readonly Regex SafeName = new("^[a-z0-9][a-z0-9_-]{0,63}\\z", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     static readonly Regex TokenInText = new("token=[^&\\s\"']+", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     readonly string connectionString;
@@ -88,7 +88,7 @@ public sealed class SiteXmlPublisher : IDisposable
         directory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonoBridgeDesktop");
         Directory.CreateDirectory(directory);
         this.settings = settings ?? new RegistrySiteUploadSettings();
-        http = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(5) };
+        http = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(5), MaxResponseContentBufferSize = MaxBytes + 1024 * 1024 };
         connectionString = new SqliteConnectionStringBuilder { DataSource = Path.Combine(directory, "site-xml-publish.db"), DefaultTimeout = 15, Pooling = true }.ToString();
         using var connection = Open();
         using var command = connection.CreateCommand();
@@ -190,7 +190,7 @@ public sealed class SiteXmlPublisher : IDisposable
     {
         if (!SafeName.IsMatch(siteKey ?? "") || !SafeName.IsMatch(fileName ?? "")) throw new SiteXmlPublishException("Site veya XML dosya adı güvenli değil.");
         if (!Uri.TryCreate(settings.UploadUrl, UriKind.Absolute, out var upload) || !Uri.TryCreate(settings.PublicBaseUrl, UriKind.Absolute, out var baseUrl) ||
-            upload.Scheme != Uri.UriSchemeHttps || baseUrl.Scheme != Uri.UriSchemeHttps ||
+            upload.Scheme != Uri.UriSchemeHttps || baseUrl.Scheme != Uri.UriSchemeHttps || !upload.IsDefaultPort || !baseUrl.IsDefaultPort || upload.UserInfo.Length > 0 || baseUrl.UserInfo.Length > 0 ||
             !string.Equals(upload.Host, ExpectedHost, StringComparison.OrdinalIgnoreCase) || !string.Equals(baseUrl.Host, ExpectedHost, StringComparison.OrdinalIgnoreCase))
             throw new SiteXmlPublishException("XML yayın adresi güvenli değil; yalnız " + ExpectedHost + " üzerinde https kabul edilir.");
         return baseUrl.AbsoluteUri.TrimEnd('/') + "/" + siteKey + "/" + fileName + ".xml";

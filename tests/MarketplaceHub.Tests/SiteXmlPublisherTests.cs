@@ -164,12 +164,37 @@ public sealed class SiteXmlPublisherTests
             Assert.ThrowsException<SiteXmlPublishException>(() => publisher.Preview("trendyol", "feed", path));
         }
         using var normal = Publisher();
-        foreach (var name in new[] { "../x", "UPPER", "a b", "", "x/y", new string('a', 65) })
+        foreach (var name in new[] { "../x", "UPPER", "a b", "", "x/y", new string('a', 65), "feed\n" })
         {
             Assert.ThrowsException<SiteXmlPublishException>(() => normal.Preview(name, "feed", path));
             Assert.ThrowsException<SiteXmlPublishException>(() => normal.Preview("trendyol", name, path));
         }
         Assert.AreEqual(0, site.Requests.Count);
+    }
+
+    [TestMethod]
+    public void PortAndUserInfoInThePinnedUrlsAreRefused()
+    {
+        var path = Feed();
+        foreach (var settings in new[]
+        {
+            new Settings { UploadUrl = "https://www.petshoptedarik.com.tr:8443/marketxml/upload.php" },
+            new Settings { UploadUrl = "https://user:pw@www.petshoptedarik.com.tr/marketxml/upload.php" },
+            new Settings { PublicBaseUrl = "https://www.petshoptedarik.com.tr:8443/marketxml/files" }
+        })
+        {
+            using var publisher = Publisher(settings);
+            Assert.ThrowsException<SiteXmlPublishException>(() => publisher.Preview("trendyol", "feed", path));
+        }
+    }
+
+    [TestMethod]
+    public void OversizedFeedIsRefusedWithoutLoadingItWhole()
+    {
+        using var publisher = Publisher();
+        var path = Feed();
+        using (var stream = new FileStream(path, FileMode.Append)) stream.SetLength(SiteXmlPublisher.MaxBytes + 1);
+        Assert.ThrowsException<SiteXmlPublishException>(() => publisher.Preview("trendyol", "feed", path));
     }
 
     [TestMethod]
