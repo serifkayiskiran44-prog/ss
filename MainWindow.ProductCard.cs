@@ -50,6 +50,7 @@ public partial class MainWindow
         var expiry = new DatePicker(); expiry.SetBinding(DatePicker.SelectedDateProperty, new Binding("ExpiresOn") { Mode = BindingMode.TwoWay }); CompactField(identity, "Miad", expiry);
         pricing.Children.Add(Heading("Fiyatlar")); CompactBoundField(pricing, "Alış fiyatı", "Cost"); Choice(pricing, "Alış para birimi", "CostCurrency", ["TRY", "USD", "EUR", "GBP"]);
         CompactBoundField(pricing, "Satış fiyatı", "Price"); Choice(pricing, "Satış para birimi", "Currency", ["TRY", "USD", "EUR", "GBP"]); CompactBoundField(pricing, "KDV %", "VatRate");
+        var openPrice = product.Price; var openCurrency = product.Currency; var openChannelPrices = new Dictionary<string, XmlChannelPrice>(product.ChannelPrices ?? new());
         var prices = XmlCategoryRules.Channels.Select(channel => { var price = product.ChannelPrices.GetValueOrDefault(channel); return new EditableChannelPrice { Channel = channel, SalePrice = price?.SalePrice ?? product.Price, ListPrice = price?.ListPrice, Currency = price?.Currency ?? product.Currency }; }).ToList();
         var priceGrid = new DataGrid { ItemsSource = prices, IsReadOnly = false, AutoGenerateColumns = false, CanUserAddRows = false, Height = 310, RowHeight = 28 };
         Column(priceGrid, "Pazaryeri", "Channel", 105); priceGrid.Columns[0].IsReadOnly = true;
@@ -91,7 +92,7 @@ public partial class MainWindow
         {
             priceGrid.CommitEdit(DataGridEditingUnit.Cell, true); priceGrid.CommitEdit(DataGridEditingUnit.Row, true); ValidBindings(tabs);
             if (prices.Any(p => p.SalePrice < 0 || p.ListPrice < 0 || p.ListPrice is > 0 && p.ListPrice < p.SalePrice || !LocaleSettings.SupportedCurrencies.Contains(p.Currency))) throw new InvalidOperationException("Pazaryeri fiyatı veya para birimi geçersiz; üstü çizili fiyat satıştan düşük olamaz.");
-            product.ChannelPrices = prices.ToDictionary(p => p.Channel, p => new XmlChannelPrice(p.SalePrice, p.ListPrice == 0 ? null : p.ListPrice, p.Currency));
+            product.ChannelPrices = ChannelPriceMerge.Keep(openChannelPrices, prices.Select(p => (p.Channel, p.SalePrice, p.ListPrice, p.Currency)), openPrice, openCurrency);
             product.ImageUrls = string.Join(" | ", imageRows.Select(b => b.Text.Trim()).Where(v => v.Length > 0).Distinct());
             if (create) store.CreateManual(product); else store.SaveProduct(product);
             RefreshProducts(); Log($"Ürün kaydedildi: {product.ProductIdLabel} • {product.Name}"); dialog!.Close();
