@@ -113,8 +113,18 @@ public sealed class MarketplaceOrderSyncService
             foreach (var copy in normalized)
             {
                 token.ThrowIfCancellationRequested();
-                var decision = stock.ResolveAccountOrder(connection, copy);resolved.Add(decision);
-                var result = stock.ApplyAccountOrder(connection, decision, !decision.ReviewRequired && IsStockDeductible(decision.Order), accountSettings.Revision);
+                var decision = stock.ResolveAccountOrder(connection, copy);
+                var deduct = !decision.ReviewRequired && IsStockDeductible(decision.Order);
+                AccountOrderApplyResult result;
+                try { result = stock.ApplyAccountOrder(connection, decision, deduct, accountSettings.Revision); }
+                catch (OrderStockShortageException shortage) when (deduct)
+                {
+                    // The failed transaction stored nothing. An oversold order is still a paid order: keep it for review without touching stock
+                    // and carry on, instead of failing the account and re-reading the same order forever.
+                    decision = ParkForShortage(decision, shortage);
+                    result = stock.ApplyAccountOrder(connection, decision, false, accountSettings.Revision);
+                }
+                resolved.Add(decision);
                 if (result.StockApplied) applied++;
             }
             var nextCursor = resolved.Count == 0 ? cursor : resolved.Max(item => item.Order.SourceUpdatedAt.UtcDateTime);
@@ -144,6 +154,14 @@ public sealed class MarketplaceOrderSyncService
             }
             return Result(connection, MarketplaceOrderSyncStatus.Failed, 0, 0, 0, cursor, safeError);
         }
+    }
+
+    static AccountOrderStockResolution ParkForShortage(AccountOrderStockResolution decision, OrderStockShortageException shortage)
+    {
+        var order = decision.Order.Copy();
+        order.ReviewRequired = true;
+        order.ReviewReason = $"Stok yetersiz: {shortage.Sku} ({shortage.Available}/{shortage.Requested}). Stok düşülmedi; stok tamamlanınca siparişi yeniden değerlendirin.";
+        return decision with { Order = order, ReviewRequired = true, ReviewReason = order.ReviewReason };
     }
 
     bool StillCurrent(MarketplaceConnection expected, long expectedSettingsRevision)

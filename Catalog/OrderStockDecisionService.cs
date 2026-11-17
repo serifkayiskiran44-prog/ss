@@ -7,6 +7,12 @@ public sealed record OrderStockDecisionPreview(string Marketplace,string ShopId,
 public sealed record AccountOrderStockResolution(OrderSnapshot Order,IReadOnlyList<ResolvedOrderStockLine> Lines,IReadOnlyList<ResolvedOrderBinding> Bindings,bool ReviewRequired,string ReviewReason);
 public sealed record AccountOrderApplyResult(bool OrderApplied,bool StockApplied,bool AlreadyApplied);
 
+/// <summary>The online balance cannot cover an order line. Kept apart from the fence failures so a sync can park that one order for review instead of failing the whole account.</summary>
+public sealed class OrderStockShortageException(string sku,int available,int requested):InvalidOperationException($"SKU {sku}: stok yetersiz ({available}/{requested}).")
+{
+ public string Sku{get;}=sku;public int Available{get;}=available;public int Requested{get;}=requested;
+}
+
 /// <summary>Every decision binds an order line to an immutable product identity and inventory version.</summary>
 public sealed class OrderStockDecisionService
 {

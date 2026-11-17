@@ -96,6 +96,27 @@ public sealed class MultiStoreOrderSyncTests
     }
 
     [TestMethod]
+    public async Task OversoldOrderIsKeptForReviewAndDoesNotStopTheRestOfTheAccount()
+    {
+        var setup = SetupOneAccount();                                                  // online stock 10
+        setup.Reader.Set(Order("101", "ORD-BIG", "REMOTE-A", 12, 20), Order("101", "ORD-OK", "REMOTE-A", 1, 10));
+
+        var result = (await setup.Service.RefreshAllAsync()).Single();
+
+        Assert.AreEqual(MarketplaceOrderSyncStatus.Succeeded, result.Status);
+        var stored = new OrdersStore(root).ReadAll();
+        var big = stored.Single(order => order.OrderId == "ORD-BIG");
+        Assert.IsTrue(big.ReviewRequired, "A paid order must stay visible even when the stock cannot cover it.");
+        StringAssert.Contains(big.ReviewReason, "Stok yetersiz");
+        Assert.IsFalse(stored.Single(order => order.OrderId == "ORD-OK").ReviewRequired);
+        Assert.AreEqual(9, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+        Assert.AreEqual(1, new InventoryLocationStore(root).Movements(setup.Product.Id).Count(movement => movement.Kind == InventoryMovementKind.OnlineOrder));
+        var state = new OrdersStore(root).GetSyncState(setup.Connection.Id)!;
+        Assert.AreEqual(DateTime.UnixEpoch.AddSeconds(20), state.CursorUtc, "The cursor must move past the parked order.");
+        Assert.AreEqual(0, state.FailureCount);
+    }
+
+    [TestMethod]
     public async Task CancelledOrderIsCollectedButNeverDeductsInventory()
     {
         var setup = SetupOneAccount();
