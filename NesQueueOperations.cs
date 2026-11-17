@@ -112,6 +112,8 @@ public sealed class NesQueueOperations : INesQueueOperations, IDisposable
         if (!item.Marketplace.Equals("Trendyol", StringComparison.OrdinalIgnoreCase)) throw new NesQueueValidationException("Bu pazaryeri için otomatik PDF yükleme desteklenmiyor.");
         if (!long.TryParse(item.PackageId, out var packageId) || packageId <= 0) throw new NesQueueValidationException("Trendyol paket kimliği geçersiz.");
         var settings = trendyolSettings.Load() ?? throw new NesQueueValidationException("Trendyol bağlantı ayarları kayıtlı değil.");
+        try { TrendyolOrderWriteGuard.Require(settings, item.ShopId); }
+        catch (InvalidOperationException ex) { throw new NesQueueValidationException(ex.Message); }
         var bytes = pdf.Bytes.Length > 0 ? pdf.Bytes : File.Exists(pdf.Path) ? await File.ReadAllBytesAsync(pdf.Path, token) : throw new NesQueueValidationException("NES PDF dosyası bulunamadı.");
         await new TrendyolInvoiceClient(settings, http).UploadPdfAsync(packageId, item.InvoiceNumber, DateTimeOffset.UtcNow, bytes, token);
     }
