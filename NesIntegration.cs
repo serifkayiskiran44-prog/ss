@@ -239,7 +239,12 @@ public sealed class NesConnection(HttpClient http)
         if (response.StatusCode is HttpStatusCode.Moved or HttpStatusCode.Redirect or HttpStatusCode.RedirectMethod or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect)
         { response.Dispose(); throw new InvalidOperationException("NES yönlendirme yanıtı verdi; API anahtarı başka adrese gönderilmedi."); }
         if (!response.IsSuccessStatusCode)
-        { var code = (int)response.StatusCode; response.Dispose(); throw new InvalidOperationException($"NES HTTP {code}: işlem tamamlanamadı. API yetkisini ve belge alanlarını kontrol edin."); }
+        {
+            var code = (int)response.StatusCode; string detail = "";
+            try { detail = Limit(MarketplaceConnectionStore.Redact(await response.Content.ReadAsStringAsync(cancellationToken))); } catch { }
+            response.Dispose();
+            throw new InvalidOperationException($"NES HTTP {code}: işlem tamamlanamadı.{(detail.Length > 0 ? " " + detail : " API yetkisini ve belge alanlarını kontrol edin.")}");
+        }
         return response;
     }
 
@@ -288,13 +293,20 @@ public static class NesUblBuilder
         var netTotal = lines.Sum(x => x.Net); var taxTotal = lines.Sum(x => x.Tax); var grossTotal = lines.Sum(x => x.Gross);
         if (order.Total.HasValue && Math.Abs(order.Total.Value - grossTotal) > 0.02m) throw new InvalidOperationException("Sipariş toplamı ile fatura satırları uyuşmuyor; NES belgesi hazırlanmadı.");
 
-        XElement Party(string title, string taxNumber, string identityScheme, string taxOffice, string address, string district, string city, string email, string phone) =>
-            new(cac + "Party",
+        XElement Party(string title, string taxNumber, string identityScheme, string taxOffice, string address, string district, string city, string email, string phone)
+        {
+            var isPerson = identityScheme.Equals("TCKN", StringComparison.OrdinalIgnoreCase);
+            var nameParts = title.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var firstName = nameParts.Length > 1 ? string.Join(' ', nameParts[..^1]) : title;
+            var familyName = nameParts.Length > 1 ? nameParts[^1] : ".";
+            return new(cac + "Party",
                 new XElement(cac + "PartyIdentification", new XElement(cbc + "ID", new XAttribute("schemeID", identityScheme), taxNumber)),
-                new XElement(cac + "PartyName", new XElement(cbc + "Name", title)),
+                isPerson ? null : new XElement(cac + "PartyName", new XElement(cbc + "Name", title)),
                 new XElement(cac + "PostalAddress", new XElement(cbc + "StreetName", address), new XElement(cbc + "CitySubdivisionName", district), new XElement(cbc + "CityName", city), new XElement(cac + "Country", new XElement(cbc + "Name", "Türkiye"))),
                 taxOffice.Length == 0 ? null : new XElement(cac + "PartyTaxScheme", new XElement(cac + "TaxScheme", new XElement(cbc + "Name", taxOffice))),
-                new XElement(cac + "Contact", phone.Length == 0 ? null : new XElement(cbc + "Telephone", phone), email.Length == 0 ? null : new XElement(cbc + "ElectronicMail", email)));
+                new XElement(cac + "Contact", phone.Length == 0 ? null : new XElement(cbc + "Telephone", phone), email.Length == 0 ? null : new XElement(cbc + "ElectronicMail", email)),
+                isPerson ? new XElement(cac + "Person", new XElement(cbc + "FirstName", firstName), new XElement(cbc + "FamilyName", familyName)) : null);
+        }
 
         var taxSubtotals = lines.GroupBy(x => x.Item.VatRate).Select(group =>
             new XElement(cac + "TaxSubtotal",
@@ -325,6 +337,12 @@ public static class NesUblBuilder
             new XElement(cbc + "IssueDate", issueAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)), new XElement(cbc + "IssueTime", issueAt.ToString("HH:mm:ss", CultureInfo.InvariantCulture)),
             new XElement(cbc + "InvoiceTypeCode", "SATIS"), new XElement(cbc + "DocumentCurrencyCode", currency), new XElement(cbc + "LineCountNumeric", order.Items.Count),
             new XElement(cac + "OrderReference", new XElement(cbc + "ID", order.OrderId), new XElement(cbc + "IssueDate", order.UpdatedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))),
+            kind == NesDocumentKind.EArchive
+                ? new XElement(cac + "AdditionalDocumentReference",
+                    new XElement(cbc + "ID", "ELEKTRONIK"),
+                    new XElement(cbc + "IssueDate", issueAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                    new XElement(cbc + "DocumentTypeCode", "SEND_TYPE"))
+                : null,
             new XElement(cac + "AccountingSupplierParty", Party(settings.CompanyTitle.Trim(), settings.TaxNumber, settings.TaxNumber.Length == 10 ? "VKN" : "TCKN", settings.TaxOffice.Trim(), settings.Address.Trim(), settings.District.Trim(), settings.City.Trim(), settings.Email.Trim(), settings.Phone.Trim())),
             new XElement(cac + "AccountingCustomerParty", Party(order.BillingName.Trim(), receiverIdentity.Value, receiverIdentity.Scheme, order.CustomerTaxOffice.Trim(), order.BillingAddress.Trim(), order.BillingDistrict.Trim(), order.BillingCity.Trim(), order.BillingEmail.Trim(), order.CustomerPhone.Trim())),
             new XElement(cac + "TaxTotal", Amount(cbc + "TaxAmount", taxTotal, currency), taxSubtotals),

@@ -158,8 +158,12 @@ public sealed class ExcelWorkspacePanel : Grid
                 if(profile.ColumnLetters.TryGetValue(field.Key,out var saved)&&letter.Length==0)letter=saved;
                 if(suggest && letter.Length==0 && !profile.UseColumnLetters)
                 {
-                    var aliases=field.Key switch{"Sku"=>new[]{"sku","stok kodu","stokkodu","kod","stockcode"},"Name"=>new[]{"ürün","ürün adı","name","title"},"Price"=>new[]{"fiyat","satış","price"},"Stock" or "Quantity"=>new[]{"stok","adet","stock","quantity"},"OrderId"=>new[]{"sipariş","sipariş no","sipariş numarası","orderid"},"Category"=>new[]{"kategori","kategori ağacı","category"},_=>new[]{field.Key,field.Label}};
-                    var match=columns.FirstOrDefault(c=>aliases.Any(a=>ExcelColumnMapping.Normalize(a)==ExcelColumnMapping.Normalize(c.Header)));letter=match?.Letter??"";
+                    if(kind=="orders")letter=OrderExcelHeaders.Suggest(field.Key,columns);
+                    else
+                    {
+                        var aliases=field.Key switch{"Sku"=>new[]{"sku","stok kodu","stokkodu","kod","stockcode"},"Name"=>new[]{"ürün","ürün adı","name","title"},"Price"=>new[]{"fiyat","satış","price"},"Stock" or "Quantity"=>new[]{"stok","adet","stock","quantity"},"Category"=>new[]{"kategori","kategori ağacı","category"},_=>new[]{field.Key,field.Label}};
+                        var match=columns.FirstOrDefault(c=>aliases.Any(a=>ExcelColumnMapping.Normalize(a)==ExcelColumnMapping.Normalize(c.Header)));letter=match?.Letter??"";
+                    }
                     if(profile.ColumnMappings.TryGetValue(field.Key,out var oldHeader))letter=columns.FirstOrDefault(c=>c.Header==oldHeader)?.Letter??letter;
                 }
                 combo.ItemsSource=columns;combo.SelectedItem=columns.FirstOrDefault(c=>c.Letter==letter);if(combo.SelectedItem==null)combo.Text=letter;

@@ -1,4 +1,7 @@
 using System.IO;
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using TrMarketplaceHubDesktop.Catalog;
@@ -7,10 +10,10 @@ public static class ExcelOrderImport
 {
     public static IReadOnlyList<ExcelProductField> Fields{get;}=new List<ExcelProductField>
     {
-        new("OrderId","Sipariş numarası","Genel"),new("CustomerName","Müşteri adı soyadı","Genel"),new("PaymentStatus","Ödeme durumu / tipi","Genel"),new("RawStatus","Sipariş durumu","Genel"),new("Currency","Para birimi","Genel"),new("Total","Sipariş toplamı","Genel"),
-        new("BillingName","Fatura adı soyadı","Fatura"),new("BillingAddress","Fatura adresi","Fatura"),new("BillingCity","Fatura ili","Fatura"),new("BillingDistrict","Fatura ilçesi","Fatura"),new("TaxNumber","Vergi / kimlik numarası","Fatura"),
-        new("ShippingName","Alıcı adı soyadı","Sevk"),new("ShippingAddress","Sevk adresi","Sevk"),new("ShippingCity","Sevk ili","Sevk"),new("ShippingDistrict","Sevk ilçesi","Sevk"),
-        new("Sku","Ürün stok kodu / SKU","Ürünler"),new("Name","Ürün adı","Ürünler"),new("Quantity","Adet","Ürünler"),new("UnitPrice","Birim fiyat","Ürünler"),new("VatRate","KDV oranı (%)","Ürünler")
+        new("OrderId","Sipariş numarası","Genel"),new("PlatformReference","Platform referans no","Genel"),new("OrderDate","Sipariş tarihi","Genel"),new("AddedAt","Entegrasyona eklenme tarihi","Genel"),new("CustomerName","Müşteri adı soyadı","Genel"),new("CustomerId","Müşteri ID","Genel"),new("CustomerCode","Müşteri kodu","Genel"),new("CustomerEmail","E-posta","Genel"),new("CustomerPhone","Telefon","Genel"),new("PaymentStatus","Ödeme durumu","Genel"),new("PaymentType","Ödeme tipi","Genel"),new("RawStatus","Sipariş durumu","Genel"),new("Currency","Para birimi","Genel"),new("Total","Genel toplam","Genel"),new("NetTotal","Net tutar","Genel"),new("VatTotal","KDV tutarı","Genel"),new("DiscountTotal","İndirim tutarı","Genel"),new("CommissionTotal","Komisyon tutarı","Genel"),new("UndiscountedTotal","İndirimsiz toplam","Genel"),new("SellerNote","Satıcı notu","Genel"),
+        new("BillingName","Fatura adı soyadı","Fatura"),new("BillingAddress","Fatura adresi","Fatura"),new("BillingCountry","Fatura ülkesi","Fatura"),new("BillingCity","Fatura ili","Fatura"),new("BillingDistrict","Fatura ilçesi","Fatura"),new("TaxNumber","Vergi / kimlik numarası","Fatura"),new("CustomerTaxOffice","Vergi dairesi","Fatura"),new("InvoiceType","Fatura tipi","Fatura"),new("InvoiceNumber","Fatura no","Fatura"),new("InvoiceUrl","Fatura URL","Fatura"),
+        new("ShippingName","Alıcı adı soyadı","Sevk"),new("ShippingAddress","Sevk adresi","Sevk"),new("ShippingCountry","Sevk ülkesi","Sevk"),new("ShippingCity","Sevk ili","Sevk"),new("ShippingDistrict","Sevk ilçesi","Sevk"),new("ShippingPhone","Sevk telefonu","Sevk"),new("Carrier","Kargo firması","Sevk"),new("TrackingNumber","Kargo takip kodu","Sevk"),new("PackageCode","Paket kodu","Sevk"),new("PaymentParty","Kargo ödemesi","Sevk"),new("DeliveryType","Teslimat tipi","Sevk"),
+        new("Sku","Ürün stok kodu / SKU","Ürünler"),new("ProductId","Ürün ID","Ürünler"),new("MarketplaceProductCode","Mağaza ürün kodu","Ürünler"),new("Barcode","Barkod","Ürünler"),new("Name","Ürün adı","Ürünler"),new("InvoiceTitle","Fatura ürün adı","Ürünler"),new("Quantity","Adet","Ürünler"),new("NetUnitPrice","Net birim fiyat","Ürünler"),new("UnitPrice","KDV dâhil birim fiyat","Ürünler"),new("VatRate","KDV oranı (%)","Ürünler"),new("ItemDiscount","Ürün indirimi","Ürünler"),new("ItemCommission","Ürün komisyonu","Ürünler"),new("PurchasePrice","Alış fiyatı","Ürünler")
     }.AsReadOnly();
     internal static string Scope(string market,string shop)=>JsonSerializer.Serialize(new[]{market.Trim(),shop.Trim()});
     static void ValidateScope(string market,string shop){if(string.IsNullOrWhiteSpace(market)||string.IsNullOrWhiteSpace(shop)||market.Length>80||shop.Length>200)throw new InvalidOperationException("Pazaryeri ve mağaza bilgisi zorunlu.");}
@@ -41,10 +44,42 @@ public static class ExcelOrderImport
                     if(field.Key=="Currency"){value=value.ToUpperInvariant();if(value=="TL")value="TRY";if(!LocaleSettings.SupportedCurrencies.Contains(value))throw new InvalidOperationException("Para birimi desteklenmiyor.");}
                     typeof(OrderSnapshot).GetProperty(field.Key)!.SetValue(order,value);
                 }
+                foreach(var key in new[]{"NetTotal","VatTotal","DiscountTotal","CommissionTotal","UndiscountedTotal"})
+                {
+                    if(!Mapped(key)||data.Text(row,key).Length==0)continue;
+                    var value=data.Number(row,key);if(value<0)throw new InvalidOperationException(Fields.First(f=>f.Key==key).Label+": negatif olamaz.");
+                    var property=typeof(OrderSnapshot).GetProperty(key)!;var old=(decimal?)property.GetValue(order);
+                    if(old.HasValue&&old.Value!=value)throw new InvalidOperationException("Aynı siparişin satırlarında "+Fields.First(f=>f.Key==key).Label+" farklı.");
+                    property.SetValue(order,value);
+                }
+                foreach(var key in new[]{"OrderDate","AddedAt"})
+                {
+                    if(!Mapped(key)||data.Text(row,key).Length==0)continue;
+                    if(!DateTimeOffset.TryParse(data.Text(row,key),ExcelProfileStore.Culture(profile.CultureName),System.Globalization.DateTimeStyles.AssumeLocal,out var value))throw new InvalidOperationException(Fields.First(f=>f.Key==key).Label+": tarih biçimi geçersiz.");
+                    typeof(OrderSnapshot).GetProperty(key)!.SetValue(order,(DateTimeOffset?)value);
+                }
                 if(Mapped("Name")&&data.Text(row,"Name").Length>0)item.Title=data.Text(row,"Name");
+                if(Mapped("ProductId")&&data.Text(row,"ProductId").Length>0)item.ProductId=data.Text(row,"ProductId");
+                if(Mapped("MarketplaceProductCode")&&data.Text(row,"MarketplaceProductCode").Length>0)item.MarketplaceProductCode=data.Text(row,"MarketplaceProductCode");
+                if(Mapped("Barcode")&&data.Text(row,"Barcode").Length>0)item.Barcode=data.Text(row,"Barcode");
+                if(Mapped("InvoiceTitle")&&data.Text(row,"InvoiceTitle").Length>0)item.InvoiceTitle=data.Text(row,"InvoiceTitle");
                 if(Mapped("Quantity")&&data.Text(row,"Quantity").Length>0){var quantity=data.Number(row,"Quantity");if(quantity<=0||quantity>int.MaxValue||decimal.Truncate(quantity)!=quantity)throw new InvalidOperationException("Sipariş adedi pozitif tam sayı olmalı.");item.Quantity=(int)quantity;}
                 if(Mapped("VatRate")&&data.Text(row,"VatRate").Length>0)item.VatRate=data.Number(row,"VatRate");if(item.VatRate is <0 or >100)throw new InvalidOperationException("KDV oranı 0–100 arasında olmalı.");
+                if(Mapped("NetUnitPrice")&&data.Text(row,"NetUnitPrice").Length>0){var price=data.Number(row,"NetUnitPrice");if(price<0)throw new InvalidOperationException("Net fiyat negatif olamaz.");item.NetUnitPrice=price;if(!Mapped("UnitPrice"))item.UnitPrice=Math.Round(price*(1+item.VatRate/100),2,MidpointRounding.AwayFromZero);}
                 if(Mapped("UnitPrice")&&data.Text(row,"UnitPrice").Length>0){var price=data.Number(row,"UnitPrice");if(price<0)throw new InvalidOperationException("Fiyat negatif olamaz.");item.UnitPrice=Math.Round(profile.PriceIncludesVat?price:checked(price*(1+item.VatRate/100)),2,MidpointRounding.AwayFromZero);}
+                if(Mapped("ItemDiscount")&&data.Text(row,"ItemDiscount").Length>0)item.DiscountAmount=data.Number(row,"ItemDiscount");
+                if(Mapped("ItemCommission")&&data.Text(row,"ItemCommission").Length>0)item.CommissionAmount=data.Number(row,"ItemCommission");
+                if(Mapped("PurchasePrice")&&data.Text(row,"PurchasePrice").Length>0)item.PurchasePrice=data.Number(row,"PurchasePrice");
+                if(new[]{"Carrier","TrackingNumber","PackageCode","PaymentParty","DeliveryType"}.Any(Mapped))
+                {
+                    var package=Mapped("PackageCode")?data.Text(row,"PackageCode"):"";var shipment=order.Shipments.FirstOrDefault(s=>s.Id==(package.Length>0?package:id));
+                    if(shipment==null){shipment=new OrderShipment{Id=package.Length>0?package:id,Source="Excel"};order.Shipments.Add(shipment);}
+                    if(Mapped("Carrier")&&data.Text(row,"Carrier").Length>0)shipment.Carrier=data.Text(row,"Carrier");
+                    if(Mapped("TrackingNumber")&&data.Text(row,"TrackingNumber").Length>0)shipment.TrackingNumber=data.Text(row,"TrackingNumber");
+                    if(package.Length>0)shipment.PackageCode=package;
+                    if(Mapped("PaymentParty")&&data.Text(row,"PaymentParty").Length>0)shipment.PaymentParty=data.Text(row,"PaymentParty");
+                    if(Mapped("DeliveryType")&&data.Text(row,"DeliveryType").Length>0)shipment.DeliveryType=data.Text(row,"DeliveryType");
+                }
                 if(Mapped("Total")&&data.Text(row,"Total").Length>0){var total=data.Number(row,"Total");if(total<0)throw new InvalidOperationException("Toplam negatif olamaz.");if(explicitTotals.TryGetValue(id,out var oldTotal)&&oldTotal!=total)throw new InvalidOperationException("Aynı siparişin satırlarında toplam tutar farklı.");explicitTotals[id]=total;}
                 OrdersRules.Validate(order);rows.Add(new(row.RowNumber(),existing.ContainsKey(id)?"UPDATE":"CREATE",id,item.Title,$"SKU {sku} · {item.Quantity} adet · {item.UnitPrice:0.00} {order.Currency}"));
             }

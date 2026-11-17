@@ -121,5 +121,12 @@ public sealed partial class OrdersStore
   order.InvoiceProvider="NES";order.InvoiceType=invoiceType;order.InvoiceUuid=uuid;order.InvoiceNumber=number;order.InvoiceStatus=status;order.InvoiceIssuedAt=issuedAt??DateTimeOffset.UtcNow;
   using var put=c.CreateCommand();put.Transaction=tx;put.CommandText="UPDATE orders SET payload=$p WHERE marketplace=$m AND shop=$s AND id=$i";put.Parameters.AddWithValue("$p",JsonSerializer.Serialize(order));put.Parameters.AddWithValue("$m",marketplace);put.Parameters.AddWithValue("$s",shop);put.Parameters.AddWithValue("$i",orderId);put.ExecuteNonQuery();tx.Commit();
  }
+ public void MarkMarketplaceInvoiceUploaded(string marketplace,string shop,string orderId)
+ {
+  using var c=Open();using var tx=c.BeginTransaction();using var get=c.CreateCommand();get.Transaction=tx;get.CommandText="SELECT payload FROM orders WHERE marketplace=$m AND shop=$s AND id=$i";get.Parameters.AddWithValue("$m",marketplace);get.Parameters.AddWithValue("$s",shop);get.Parameters.AddWithValue("$i",orderId);
+  var payload=get.ExecuteScalar() as string??throw new InvalidOperationException("Pazaryeri faturasının bağlanacağı sipariş bulunamadı.");if(!TryReadOrder(marketplace,shop,orderId,payload,out var order,out var corrupt))throw new OrderRowCorruptException(marketplace,shop,orderId,corrupt!.Reason);
+  if(order!.InvoiceNumber.Length==0||order.InvoiceUuid.Length==0)throw new InvalidOperationException("NES faturası bağlanmadan pazaryeri fatura durumu güncellenemez.");order.MarketplaceInvoiceStatus="Invoiced";
+  using var put=c.CreateCommand();put.Transaction=tx;put.CommandText="UPDATE orders SET payload=$p WHERE marketplace=$m AND shop=$s AND id=$i";put.Parameters.AddWithValue("$p",JsonSerializer.Serialize(order));put.Parameters.AddWithValue("$m",marketplace);put.Parameters.AddWithValue("$s",shop);put.Parameters.AddWithValue("$i",orderId);put.ExecuteNonQuery();tx.Commit();
+ }
  static void Key(SqliteCommand cmd,OrderSnapshot o){cmd.Parameters.AddWithValue("$m",o.Marketplace);cmd.Parameters.AddWithValue("$s",o.ShopId);cmd.Parameters.AddWithValue("$i",o.OrderId);}
 }

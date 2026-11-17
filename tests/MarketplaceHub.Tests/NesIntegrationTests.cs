@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using TrMarketplaceHubDesktop;
 
 namespace MarketplaceHub.Tests;
@@ -106,6 +107,22 @@ public sealed class NesIntegrationTests
     }
 
     [TestMethod]
+    public async Task NesHttpErrorIncludesBoundedProviderReason()
+    {
+        var handler = new Handler(_ => new(HttpStatusCode.UnprocessableEntity)
+        {
+            Content = new StringContent("{\"message\":\"SEND_TYPE alanı geçersiz\"}", Encoding.UTF8, "application/json")
+        });
+        using var http = new HttpClient(handler);
+
+        var error = await Assert.ThrowsExceptionAsync<InvalidOperationException>(() =>
+            new NesConnection(http).PreviewAsync(Settings(), NesDocumentKind.EArchive, Encoding.UTF8.GetBytes("<Invoice />")));
+
+        StringAssert.Contains(error.Message, "NES HTTP 422");
+        StringAssert.Contains(error.Message, "SEND_TYPE alanı geçersiz");
+    }
+
+    [TestMethod]
     public void UblPreviewUsesOrderIdentityTurkishTextAndBalancedTotals()
     {
         var order = new OrderSnapshot
@@ -119,10 +136,57 @@ public sealed class NesIntegrationTests
 
         var xml = Encoding.UTF8.GetString(draft.Xml);
         StringAssert.Contains(xml, "SİP-42");
-        StringAssert.Contains(xml, "Çağrı Öztürk");
+        StringAssert.Contains(xml, "<cbc:FirstName>Çağrı</cbc:FirstName>");
+        StringAssert.Contains(xml, "<cbc:FamilyName>Öztürk</cbc:FamilyName>");
         Assert.AreEqual(240m, draft.PayableAmount);
         Assert.AreEqual(200m, draft.TaxExclusiveAmount);
         Assert.AreEqual(40m, draft.TaxAmount);
+    }
+
+    [TestMethod]
+    public void UblUsesPersonForEveryTcknParty()
+    {
+        var settings = Settings();
+        settings.CompanyTitle = "Şerif Kayışkıran";
+        settings.TaxNumber = "12218715546";
+        var order = new OrderSnapshot
+        {
+            Marketplace = "trendyol", ShopId = "shop-1", OrderId = "person-order", Currency = "TRY",
+            BillingName = "Eda Sarıkaya", BillingAddress = "Cumhuriyet Mahallesi", BillingCity = "Kocaeli", BillingDistrict = "Gölcük",
+            TaxNumber = "11111111111",
+            Items = [new() { Title = "Kedi maması", Sku = "SKU-1", Quantity = 1, UnitPrice = 99.90m, VatRate = 20m }]
+        };
+
+        var draft = NesUblBuilder.Build(settings, order, NesDocumentKind.EArchive, "EAR2026000000001", Guid.Parse("22222222-2222-2222-2222-222222222224"), DateTimeOffset.Parse("2026-09-22T12:00:00+03:00"));
+        var document = XDocument.Parse(Encoding.UTF8.GetString(draft.Xml));
+        XNamespace cac = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2";
+        XNamespace cbc = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2";
+        var people = document.Descendants(cac + "Person").ToArray();
+
+        Assert.AreEqual(2, people.Length);
+        CollectionAssert.AreEquivalent(new[] { "Şerif", "Eda" }, people.Select(x => (string?)x.Element(cbc + "FirstName") ?? "").ToArray());
+        CollectionAssert.AreEquivalent(new[] { "Kayışkıran", "Sarıkaya" }, people.Select(x => (string?)x.Element(cbc + "FamilyName") ?? "").ToArray());
+    }
+
+    [TestMethod]
+    public void EArchiveUblDeclaresElectronicSendType()
+    {
+        var order = new OrderSnapshot
+        {
+            Marketplace = "trendyol", ShopId = "shop-1", OrderId = "archive-send-type", Currency = "TRY",
+            BillingName = "Eda Sarıkaya", BillingAddress = "Cumhuriyet Mahallesi", BillingCity = "Kocaeli", BillingDistrict = "Gölcük",
+            TaxNumber = "11111111111",
+            Items = [new() { Title = "Kedi maması", Sku = "SKU-1", Quantity = 1, UnitPrice = 99.90m, VatRate = 20m }]
+        };
+
+        var draft = NesUblBuilder.Build(Settings(), order, NesDocumentKind.EArchive, "EAR2026000000002", Guid.Parse("22222222-2222-2222-2222-222222222225"), DateTimeOffset.Parse("2026-09-22T12:00:00+03:00"));
+        var document = XDocument.Parse(Encoding.UTF8.GetString(draft.Xml));
+        XNamespace cac = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2";
+        XNamespace cbc = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2";
+        var sendType = document.Descendants(cac + "AdditionalDocumentReference")
+            .Single(x => (string?)x.Element(cbc + "DocumentTypeCode") == "SEND_TYPE");
+
+        Assert.AreEqual("ELEKTRONIK", (string?)sendType.Element(cbc + "ID"));
     }
 
     [TestMethod]
@@ -198,6 +262,27 @@ public sealed class NesIntegrationTests
             store.SaveManual(original); store.AttachNesInvoice("trendyol", "shop-1", "order-1", "e‑Arşiv", "44444444-4444-4444-4444-444444444444", "MBA2026000000001", "Gönderildi");
             var refreshed = original.Copy(); refreshed.Source = "Trendyol API"; refreshed.RawStatus = "shipped"; refreshed.UpdatedAt = DateTimeOffset.Parse("2026-09-19T11:00:00Z"); store.SaveBatch([refreshed]);
             var saved = store.ReadAll().Single(); Assert.AreEqual("MBA2026000000001", saved.InvoiceNumber); Assert.AreEqual("44444444-4444-4444-4444-444444444444", saved.InvoiceUuid);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [TestMethod]
+    public void MarketplaceUploadStatusIsPersistedOnlyForLinkedInvoice()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "nes-market-upload-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new OrdersStore(root);
+            store.SaveManual(new OrderSnapshot { Marketplace = "Trendyol", ShopId = "411150", OrderId = "order-1", Currency = "TRY" });
+            Assert.ThrowsException<InvalidOperationException>(() => store.MarkMarketplaceInvoiceUploaded("Trendyol", "411150", "order-1"));
+            store.AttachNesInvoice("Trendyol", "411150", "order-1", "e-Arşiv", "44444444-4444-4444-4444-444444444444", "EAR2026000000001", "Gönderildi");
+
+            store.MarkMarketplaceInvoiceUploaded("Trendyol", "411150", "order-1");
+
+            Assert.AreEqual("Invoiced", store.ReadAll().Single().MarketplaceInvoiceStatus);
         }
         finally
         {
