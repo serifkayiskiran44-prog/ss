@@ -350,3 +350,10 @@ Multi-store production integration closure (2026-09-19): XML apply paths now enf
 - Gerçek veri denemesi: gerçek klasör (göç 2026-09-19'da tamamlanmış, arşiv zip'i yok) kimlik bilgisi ve görseller hariç kopyalandı; yayın derlemesi bu kopyada açıldı, ana pencere geldi ve işlem günlüğüne yeni oturum satırı yazıldı. Gerçek klasör (12.193 dosya) boyut ve zaman damgasıyla değişmedi; mağaza çağrısı yapılmadı.
 - Tasarım/menü işleri bilinçli olarak bu çalışmanın dışında bırakıldı (kullanıcı kararı: tasarım ayrı yürütülüyor). Ana menüye bağlanmamış hazır paneller ve rota sözleşmesi `docs/UI-HANDOFF-NAVIGATION.md` içinde.
 - Doğrulama: tüm Release testi **1491/1491** geçti.
+
+## Siteye XML yayınlama servisi — 2026-11-17
+- "Kendi web sitesi" kanalı için `SiteXmlPublisher`: ortak yükleme anahtarı `HKCU\Software\MarketXmlSuite\FiyatKarsilastirmaPro\marketxml` altındaki `upload_token` değerinden yalnız yükleme anında okunur; kaynakta yoktur, saklanmaz, günlüğe/rapora/makbuza yazılmaz. Adres ve ana makine sabittir: yalnız `https://www.petshoptedarik.com.tr` kabul edilir, yönlendirme izlenmez.
+- Akış: değişmez önizleme (hedef adres, SHA-256, Model sayısı, boyut) → açık onay → dosyanın önizlemeden sonra değişmediğinin denetimi → yükleme → dönen adresin beklenen adres olduğunun denetimi → siteden geri okuyup SHA-256 ve Model sayısı doğrulaması → makbuz. Aynı önizleme ikinci kez yüklenemez; hatada makbuz yazılmaz, aynı önizleme yeniden denenebilir.
+- Korumalar: kök `Models` veya `ArrayOfModel` olmalı ve en az bir `Model` içermeli (boş dosya canlı yayını boşaltırdı); DTD yasak; 256 MB üst sınır; site ve dosya adı `^[a-z0-9][a-z0-9_-]{0,63}$`. Hata metinleri ve veritabanı belirteçten arındırılır (ham ve URL kodlu biçimler testle doğrulandı).
+- Henüz ekranı ve otomasyon bağlantısı yoktur (tasarım ayrı yürütülüyor); zamanlayıcı ve tepsi hiçbir koşulda yükleme başlatmaz. Hangi XML'in yayınlanacağı kullanıcı kararı bekliyor: MonoBridge `Products` dışa aktarımı site beslemesiyle (`Models/Model`) aynı şema değildir ve servis tarafından reddedilir.
+- Doğrulama: 16 yeni test (sahte HTTP; gerçek siteye istek yok).

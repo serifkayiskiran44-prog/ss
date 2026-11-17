@@ -705,3 +705,9 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] Tamamlanmış çoklu mağaza göçü, silinmiş geri dönüş arşivi yüzünden açılışı engellemez; yarım göç kapalı başarısız kalır.
 - [x] Gerçek verinin kimlik bilgisiz kopyasında açılış denemesi geçti; gerçek klasör değişmedi.
 - [ ] Kimlik bilgili gerçek veriyle mağaza okumaları kullanıcı oturumunda (salt okunur) doğrulanmalı.
+
+# Siteye XML yayınlama — 2026-11-17
+
+- [x] `SiteXmlPublisher`: ortak anahtar HKCU'dan okunur; önizleme, açık onay, değişiklik denetimi, geri okuma doğrulaması ve makbuz; ana makine sabit, belirteç sızıntısı testli; sahte HTTP ile 16 test.
+- [ ] Yayınlama ekranı ve hangi XML'in yayınlanacağı (`Models/Model` şeması) kullanıcı kararı bekliyor; zamanlayıcıdan yükleme bilinçli olarak kapalı.
+- [ ] Canlı siteye ilk yükleme kullanıcı oturumunda, açık onayla denenmeli (şu an canlı istek yapılmadı).
