@@ -69,8 +69,16 @@ public sealed class NesQueueOperations : INesQueueOperations, IDisposable
             documents.MarkSent(draft, result.Uuid, result.DocumentNumber);
             return result;
         }
-        catch (HttpRequestException ex) { throw new NesUnknownResultException("NES gönderiminin sonucu doğrulanamadı: " + MarketplaceConnectionStore.Redact(ex.Message)); }
-        catch (TaskCanceledException ex) when (!token.IsCancellationRequested) { throw new NesUnknownResultException("NES gönderimi zaman aşımına uğradı; uzaktan mutabakat gerekli. " + MarketplaceConnectionStore.Redact(ex.Message)); }
+        catch (HttpRequestException ex) { MarkDraftUnknown(item); throw new NesUnknownResultException("NES gönderiminin sonucu doğrulanamadı: " + MarketplaceConnectionStore.Redact(ex.Message)); }
+        catch (TaskCanceledException ex) when (!token.IsCancellationRequested) { MarkDraftUnknown(item); throw new NesUnknownResultException("NES gönderimi zaman aşımına uğradı; uzaktan mutabakat gerekli. " + MarketplaceConnectionStore.Redact(ex.Message)); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { MarkDraftUnknown(item); throw; }
+    }
+
+    /// The request may have reached NES: the local draft must stop looking sendable, for the queue and for the manual invoice dialog alike.
+    void MarkDraftUnknown(NesQueueItem item)
+    {
+        var draft = documents.List().SingleOrDefault(x => x.Marketplace == item.Marketplace && x.ShopId == item.ShopId && x.OrderId == item.OrderId);
+        if (draft is not null) documents.MarkUnknown(draft);
     }
 
     public async Task<NesMatchedInvoice?> FindRemoteAsync(NesQueueItem item, CancellationToken token)

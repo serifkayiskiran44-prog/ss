@@ -20,6 +20,7 @@ public sealed class NesQueueProcessor
     {
         var now = clock.GetUtcNow();
         if (!queue.TryClaimNext(now, TimeSpan.FromMinutes(2), out var item)) return false;
+        var sendInFlight = false;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -32,7 +33,10 @@ public sealed class NesQueueProcessor
                     queue.Advance(item.Id, item.LeaseToken, NesQueueStep.SendInvoice, NesQueueState.Ready, clock.GetUtcNow());
                     break;
                 case NesQueueStep.SendInvoice:
+                    cancellationToken.ThrowIfCancellationRequested();
+                    sendInFlight = true;
                     var upload = await operations.SendAsync(item, order, new NesPreparedInvoice(item.Id, [], ""), cancellationToken);
+                    sendInFlight = false;
                     queue.RecordRemoteAndAdvance(item.Id, item.LeaseToken, upload.Uuid, upload.DocumentNumber, NesQueueStep.AwaitNumber, clock.GetUtcNow());
                     break;
                 case NesQueueStep.AwaitNumber:
@@ -59,7 +63,10 @@ public sealed class NesQueueProcessor
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            queue.Release(item!.Id, item.LeaseToken, clock.GetUtcNow());
+            // A cancelled send may already have reached NES. Releasing it would re-send a legally binding invoice on the next launch,
+            // so it is parked as Unknown (same as an expired send lease) and needs a remote check first.
+            if (sendInFlight) queue.MarkUnknown(item!.Id, item.LeaseToken, "NES gönderimi sırasında uygulama durduruldu; faturanın gidip gitmediği bilinmiyor. Yeniden göndermeden önce NES'te kontrol edin.", clock.GetUtcNow());
+            else queue.Release(item!.Id, item.LeaseToken, clock.GetUtcNow());
             throw;
         }
         catch (NesUnknownResultException ex)
