@@ -21,6 +21,23 @@ namespace MarketplaceHub.Tests;
   Assert.ThrowsException<InvalidOperationException>(()=>store.Delete(TaxonomyKind.Category,parent.Id));
   Assert.ThrowsException<InvalidOperationException>(()=>store.SaveWorkspaceEntry(new(){Id=parent.Id,Kind=parent.Kind,Name="Other",UpdatedUtc=parent.UpdatedUtc}));
  }
+ [TestMethod]public void CategoryRenameAlsoFollowsXmlSourceFixedCategoryAndRuleTargets()
+ {
+  var catalog=new CatalogStore(dir);catalog.CreateManual(new(){Sku="ONE",Name="One",Category="Clothes > Men > Shirts",Currency="TRY"});
+  var source=new XmlSource{Id="src",Location="https://example.test/f.xml",FixedCategory="Clothes > Men"};
+  source.CategoryRules.Add(new XmlCategoryRule{XmlCategory="Gömlek",TargetCategory="Clothes > Men > Shirts"});
+  source.CategoryRules.Add(new XmlCategoryRule{XmlCategory="Diğer",TargetCategory="Other"});
+  catalog.SaveSource(source);
+  var store=new TaxonomyStore(dir);store.EnsureCatalogEntries(catalog.Products());
+  var parent=store.List(TaxonomyKind.Category).Single(e=>e.Name=="Clothes > Men");
+
+  store.SaveWorkspaceEntry(new(){Id=parent.Id,Kind=parent.Kind,Name="Clothes > Women",UpdatedUtc=parent.UpdatedUtc});
+
+  var saved=catalog.Sources().Single();
+  Assert.AreEqual("Clothes > Women",saved.FixedCategory);
+  Assert.AreEqual("Clothes > Women > Shirts",saved.CategoryRules.Single(r=>r.XmlCategory=="Gömlek").TargetCategory);
+  Assert.AreEqual("Other",saved.CategoryRules.Single(r=>r.XmlCategory=="Diğer").TargetCategory);
+ }
  [TestMethod]public void MalformedProductCategoryIsSkippedAndDoesNotBlockTheOtherEntries()
  {
   var catalog=new CatalogStore(dir);

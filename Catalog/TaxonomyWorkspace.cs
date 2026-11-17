@@ -74,7 +74,22 @@ public sealed partial class TaxonomyStore
     using var put=c.CreateCommand();put.Transaction=tx;put.CommandText="UPDATE CatalogProducts SET Json=$json WHERE Id=$id";put.Parameters.AddWithValue("$json",JsonSerializer.Serialize(p));put.Parameters.AddWithValue("$id",p.Id);put.ExecuteNonQuery();
    }
   }
+  if(oldName!=null && oldName!=entry.Name && entry.Kind==TaxonomyKind.Category)FollowRenameInXmlSources(c,tx,oldName,entry.Name);
   return renamed.Single(e=>e.Id==entry.Id);
+ }
+ // XML sources point at categories by name; without this a rename silently sends later imports back to the old, now empty category.
+ static void FollowRenameInXmlSources(SqliteConnection c,SqliteTransaction tx,string oldName,string newName)
+ {
+  string Map(string value){var current=CategoryIdentity(value);return value.Length>0&&InCategory(current,oldName)?newName+current[oldName.Length..]:value;}
+  var rows=new List<(string Id,XmlSource Source)>();
+  using(var read=c.CreateCommand()){read.Transaction=tx;read.CommandText="SELECT Id,Json FROM Sources";using var r=read.ExecuteReader();while(r.Read()){try{var source=JsonSerializer.Deserialize<XmlSource>(r.GetString(1));if(source!=null)rows.Add((r.GetString(0),source));}catch(JsonException){}}}
+  foreach(var (id,source) in rows)
+  {
+   var changed=false;var fixedCategory=Map(source.FixedCategory);if(fixedCategory!=source.FixedCategory){source.FixedCategory=fixedCategory;changed=true;}
+   foreach(var rule in source.CategoryRules){var target=Map(rule.TargetCategory);if(target!=rule.TargetCategory){rule.TargetCategory=target;changed=true;}}
+   if(!changed)continue;
+   using var put=c.CreateCommand();put.Transaction=tx;put.CommandText="UPDATE Sources SET Json=$json WHERE Id=$id";put.Parameters.AddWithValue("$json",JsonSerializer.Serialize(source));put.Parameters.AddWithValue("$id",id);put.ExecuteNonQuery();
+  }
  }
 
  public void ApplyWorkspaceBatch(TaxonomyKind kind,IReadOnlyList<TaxonomyEntry> selection,TaxonomyBatchAction action,string? parentId=null)
