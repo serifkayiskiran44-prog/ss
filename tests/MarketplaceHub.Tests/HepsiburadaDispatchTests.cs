@@ -37,6 +37,17 @@ public sealed class HepsiburadaDispatchTests
     [TestCleanup] public void Cleanup() { try { Directory.Delete(root, true); } catch { } }
 
     [TestMethod]
+    public void StockPlanAppliesTheStoreStockPolicyWhenOneIsSaved()
+    {
+        new CatalogStore(root).SaveStockPolicy(new StockPolicy { Channel = "hepsiburada", Shop = account.ShopId, SafetyStock = 3, Enabled = true });
+
+        var plan = new HepsiburadaDispatchStore(root).Preview(account.Id, [product.Id], HepsiburadaOperation.Stock);
+
+        using var json = JsonDocument.Parse(plan.PayloadJson);
+        Assert.AreEqual(4, json.RootElement.GetProperty("listings")[0].GetProperty("availableStock").GetInt32(), "Stock 7 minus safety stock 3.");
+    }
+
+    [TestMethod]
     public void StockPreviewContainsOnlyStockIdentityAndQuantity()
     {
         var plan = new HepsiburadaDispatchStore(root).Preview(account.Id, [product.Id], HepsiburadaOperation.Stock);
@@ -46,6 +57,26 @@ public sealed class HepsiburadaDispatchTests
         Assert.AreEqual(7, row.GetProperty("availableStock").GetInt32());
         Assert.IsFalse(row.TryGetProperty("price", out _));
         Assert.IsFalse(row.TryGetProperty("title", out _));
+    }
+
+    [TestMethod]
+    public void PricePreviewRefusesForeignCurrencyAndUnmanagedBindings()
+    {
+        var store = new HepsiburadaDispatchStore(root);
+        product.Currency = "USD"; new CatalogStore(root).SaveProduct(product);
+        var usd = store.Preview(account.Id, [product.Id], HepsiburadaOperation.Price);
+        Assert.AreEqual("Hatalı", usd.Rows.Single().Status);
+        StringAssert.Contains(usd.Rows.Single().Error, "TRY");
+        Assert.AreEqual("Gönderime hazır", store.Preview(account.Id, [product.Id], HepsiburadaOperation.Stock).Rows.Single().Status, "Currency does not matter for stock.");
+
+        product.Currency = "TRY"; new CatalogStore(root).SaveProduct(product);
+        var binding = new ProductChannelBindingStore(root).Get(product.Id, account.Id)!;
+        new ProductChannelBindingStore(root).Save(binding with { ManagePrice = false, ManageStock = false }, binding.Version);
+
+        var price = store.Preview(account.Id, [product.Id], HepsiburadaOperation.Price);
+        var stock = store.Preview(account.Id, [product.Id], HepsiburadaOperation.Stock);
+        Assert.AreEqual("Hatalı", price.Rows.Single().Status);
+        Assert.AreEqual("Hatalı", stock.Rows.Single().Status);
     }
 
     [TestMethod]

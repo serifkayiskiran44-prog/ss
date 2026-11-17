@@ -48,7 +48,7 @@ public sealed class MarketplaceOrderSyncService
         this.beforeSyncStatePersist = beforeSyncStatePersist;
     }
 
-    public async Task<IReadOnlyList<MarketplaceOrderSyncResult>> RefreshAllAsync(CancellationToken token = default)
+    public async Task<IReadOnlyList<MarketplaceOrderSyncResult>> RefreshAllAsync(CancellationToken token = default, bool respectInterval = false)
     {
         var results = new List<MarketplaceOrderSyncResult>();
         foreach (var connection in MarketplaceOperationalAccounts.List(connections))
@@ -60,7 +60,7 @@ public sealed class MarketplaceOrderSyncService
                 if (!adapter.Capabilities.Supports(MarketplaceOperation.OrdersRead)) continue;
                 var accountSettings = settings.Load(connection.Id);
                 if (!OrdersEnabled(accountSettings)) continue;
-                results.Add(await RefreshAsync(connection, adapter, accountSettings, token).ConfigureAwait(false));
+                results.Add(await RefreshAsync(connection, adapter, accountSettings, token, respectInterval).ConfigureAwait(false));
             }
             catch (ArgumentException) { continue; }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
@@ -75,7 +75,7 @@ public sealed class MarketplaceOrderSyncService
         return results;
     }
 
-    async Task<MarketplaceOrderSyncResult> RefreshAsync(MarketplaceConnection connection, IMarketplaceAdapter adapter, MarketplaceShopSettings accountSettings, CancellationToken token)
+    async Task<MarketplaceOrderSyncResult> RefreshAsync(MarketplaceConnection connection, IMarketplaceAdapter adapter, MarketplaceShopSettings accountSettings, CancellationToken token, bool respectInterval)
     {
         var now = Utc(utcNow());
         var stored = orders.GetSyncState(connection.Id);
@@ -87,6 +87,10 @@ public sealed class MarketplaceOrderSyncService
         var expectedStateVersion = stored?.Version ?? 0;
         if (sameGeneration && stored!.NextAttemptUtc is { } next && next > now)
             return Result(connection, MarketplaceOrderSyncStatus.Backoff, 0, 0, 0, cursor, stored.LastError);
+
+        // Scheduled reads follow the per-account "Senkron aralığı"; a manual refresh always reads.
+        if (respectInterval && sameGeneration && stored!.FailureCount == 0 && stored.UpdatedUtc.AddMinutes(accountSettings.Sync.IntervalMinutes) > now)
+            return Result(connection, MarketplaceOrderSyncStatus.Backoff, 0, 0, 0, cursor, "");
 
         try
         {
@@ -109,12 +113,23 @@ public sealed class MarketplaceOrderSyncService
             if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
             beforePersist?.Invoke(connection);
             if (!StillCurrent(connection, accountSettings.Revision)) return Result(connection, MarketplaceOrderSyncStatus.Stale, 0, 0, 0, cursor, "");
+            var goLive = orders.GoLiveCutoff(connection.Id, now);
             var applied = 0;var resolved = new List<AccountOrderStockResolution>(normalized.Count);
             foreach (var copy in normalized)
             {
                 token.ThrowIfCancellationRequested();
-                var decision = stock.ResolveAccountOrder(connection, copy);resolved.Add(decision);
-                var result = stock.ApplyAccountOrder(connection, decision, !decision.ReviewRequired && IsStockDeductible(decision.Order), accountSettings.Revision);
+                var decision = stock.ResolveAccountOrder(connection, copy);
+                var deduct = !decision.ReviewRequired && IsStockDeductible(decision.Order) && !(decision.Order.OrderDate is { } placed && placed.UtcDateTime < goLive);
+                AccountOrderApplyResult result;
+                try { result = stock.ApplyAccountOrder(connection, decision, deduct, accountSettings.Revision); }
+                catch (OrderStockShortageException shortage) when (deduct)
+                {
+                    // The failed transaction stored nothing. An oversold order is still a paid order: keep it for review without touching stock
+                    // and carry on, instead of failing the account and re-reading the same order forever.
+                    decision = ParkForShortage(decision, shortage);
+                    result = stock.ApplyAccountOrder(connection, decision, false, accountSettings.Revision);
+                }
+                resolved.Add(decision);
                 if (result.StockApplied) applied++;
             }
             var nextCursor = resolved.Count == 0 ? cursor : resolved.Max(item => item.Order.SourceUpdatedAt.UtcDateTime);
@@ -144,6 +159,14 @@ public sealed class MarketplaceOrderSyncService
             }
             return Result(connection, MarketplaceOrderSyncStatus.Failed, 0, 0, 0, cursor, safeError);
         }
+    }
+
+    static AccountOrderStockResolution ParkForShortage(AccountOrderStockResolution decision, OrderStockShortageException shortage)
+    {
+        var order = decision.Order.Copy();
+        order.ReviewRequired = true;
+        order.ReviewReason = $"Stok yetersiz: {shortage.Sku} ({shortage.Available}/{shortage.Requested}). Stok düşülmedi; stok tamamlanınca siparişi yeniden değerlendirin.";
+        return decision with { Order = order, ReviewRequired = true, ReviewReason = order.ReviewReason };
     }
 
     bool StillCurrent(MarketplaceConnection expected, long expectedSettingsRevision)

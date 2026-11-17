@@ -339,7 +339,7 @@ public sealed class MarketplaceOrderReadBackgroundJob : IBackgroundJob
     public MarketplaceOrderReadBackgroundJob(string? directory) => service = new MarketplaceOrderSyncService(directory);
     public async Task ExecuteAsync(CancellationToken token)
     {
-        var results = await service.RefreshAllAsync(token).ConfigureAwait(false);
+        var results = await service.RefreshAllAsync(token, respectInterval: true).ConfigureAwait(false);
         var errors = results.Where(row => row.Status == MarketplaceOrderSyncStatus.Failed).Select(row => row.Error).Where(error => error.Length > 0).ToList();
         if (errors.Count > 0) throw new InvalidOperationException(string.Join("; ", errors));
     }

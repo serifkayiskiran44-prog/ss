@@ -48,6 +48,7 @@ public sealed class MarketplaceShopWorkspaceTests
 
         CollectionAssert.AreEquivalent(new[] { linked.Id, error.Id, unlinked.Id }, firstModel.Filter(new()).Select(x => x.ProductId).ToArray());
         CollectionAssert.AreEqual(new[] { linked.Id }, firstModel.Filter(new(Binding: MarketplaceShopBindingFilter.Linked)).Select(x => x.ProductId).ToArray());
+        CollectionAssert.AreEquivalent(new[] { linked.Id, error.Id }, firstModel.Filter(new(Binding: MarketplaceShopBindingFilter.Bound)).Select(x => x.ProductId).ToArray());
         CollectionAssert.AreEqual(new[] { unlinked.Id }, firstModel.Filter(new(Binding: MarketplaceShopBindingFilter.Unlinked)).Select(x => x.ProductId).ToArray());
         CollectionAssert.AreEqual(new[] { error.Id }, firstModel.Filter(new(Binding: MarketplaceShopBindingFilter.Error)).Select(x => x.ProductId).ToArray());
         Assert.AreEqual("remote-a", firstModel.Filter(new()).Single(x => x.ProductId == linked.Id).RemoteId);
@@ -301,6 +302,8 @@ public sealed class MarketplaceShopWorkspaceTests
         CollectionAssert.IsSubsetOf(new[] { "Sku", "Gtin", "Name", "LocalStock", "LocalPrice", "RemoteStock", "RemotePrice", "Category", "Brand", "RemoteStateText", "Error", "ManagementState" }, paths);
         var filterLabels = Walk(products).OfType<ComboBox>().SelectMany(combo => combo.Items.Cast<object>()).Select(item => item.ToString()).ToArray();
         Assert.IsTrue(filterLabels.Contains("Tümü"));
+        Assert.IsTrue(filterLabels.Contains("Bağlı ürünler"));
+        Assert.IsFalse(filterLabels.Contains("Bağlı değil"));
         Assert.IsFalse(filterLabels.Contains("All"));
         Assert.IsTrue(Walk(products).OfType<Button>().Any(x => x.Name == "MarketplaceSelectAllFiltered"));
         CollectionAssert.AreEqual(new[] { "Etkinlik", "Bağlantı", "Ürün kuralları", "Sipariş kuralları", "Senkronizasyon" },
@@ -312,6 +315,7 @@ public sealed class MarketplaceShopWorkspaceTests
     {
         var connection = new MarketplaceConnectionStore(directory).Save("trendyol", "101", "Shop", true);
         var product = new CatalogStore(directory).CreateManual(new() { Sku = "CARD-1", Name = "Open me", Currency = "TRY" });
+        new ProductChannelBindingStore(directory).Save(Binding(product.Id, connection.Id, "remote-card", "Active"), 0);
         var panel = new MarketplaceShopProductsPanel(connection.Id, directory);
         var requested = new List<string>();
         panel.ProductCardRequested += requested.Add;
@@ -326,6 +330,66 @@ public sealed class MarketplaceShopWorkspaceTests
 
         CollectionAssert.AreEqual(new[] { product.Id, product.Id }, requested);
     });
+
+    [TestMethod]
+    public void AccountProductPanelShowsOnlyProductsBoundToThatExactStore() => InSta(() =>
+    {
+        var (first, second, linked, error, unlinked) = SeedTwoAccounts();
+        var bindings = new ProductChannelBindingStore(directory);
+        bindings.Save(Binding(linked.Id, first.Id, "remote-first", "Active"), 0);
+        bindings.Save(Binding(error.Id, first.Id, "remote-error", "Error: rejected"), 0);
+        bindings.Save(Binding(unlinked.Id, second.Id, "remote-second", "Active"), 0);
+
+        var panel = new MarketplaceShopProductsPanel(first.Id, directory);
+        var grid = Walk(panel).OfType<DataGrid>().Single(x => x.Name == "MarketplaceShopProducts");
+
+        CollectionAssert.AreEquivalent(new[] { linked.Id, error.Id }, grid.Items.Cast<MarketplaceShopProductRow>().Select(x => x.ProductId).ToArray());
+        Assert.IsFalse(grid.Items.Cast<MarketplaceShopProductRow>().Any(x => x.ProductId == unlinked.Id));
+    });
+
+    [TestMethod]
+    public void AccountProductPanelListsAssignedCandidatesAndCanDropThemLocally() => InSta(() =>
+    {
+        var (first, second, linked, _, candidate) = SeedTwoAccounts();
+        new ProductChannelBindingStore(directory).Save(Binding(linked.Id, first.Id, "remote-first", "Active"), 0);
+        var service = new ProductChannelMatchService(directory, new EmptySnapshotProvider(), new FixedCreationHandoff());
+        service.ApplyMatches(service.PreviewMatch(first.Id, new[] { candidate.Id }, Array.Empty<ProductChannelRemoteRow>()).Id);
+        var panel = new MarketplaceShopProductsPanel(first.Id, directory);
+        var grid = Walk(panel).OfType<DataGrid>().Single(x => x.Name == "MarketplaceShopProducts");
+
+        CollectionAssert.AreEquivalent(new[] { linked.Id, candidate.Id }, grid.Items.Cast<MarketplaceShopProductRow>().Select(x => x.ProductId).ToArray());
+        Assert.AreEqual("NewListingCandidate", grid.Items.Cast<MarketplaceShopProductRow>().Single(x => x.ProductId == candidate.Id).RemoteState);
+        Assert.AreEqual(0, Walk(new MarketplaceShopProductsPanel(second.Id, directory)).OfType<DataGrid>().Single(x => x.Name == "MarketplaceShopProducts").Items.Count);
+
+        SelectRow(grid, linked.Id);
+        Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceDropCandidates").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.AreEqual(2, grid.Items.Count);   // a bound product is never dropped by this button
+
+        SelectRow(grid, candidate.Id);
+        Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceDropCandidates").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        CollectionAssert.AreEqual(new[] { linked.Id }, grid.Items.Cast<MarketplaceShopProductRow>().Select(x => x.ProductId).ToArray());
+        Assert.IsNotNull(new ProductChannelBindingStore(directory).Get(linked.Id, first.Id));
+    });
+
+    [TestMethod]
+    public void NewListingCandidateAppearsOnlyInTheStoreItWasAssignedTo()
+    {
+        var (first, second, _, _, candidate) = SeedTwoAccounts();
+        var snapshots = new EmptySnapshotProvider();
+        var service = new ProductChannelMatchService(directory, snapshots, new FixedCreationHandoff());
+        var preview = service.PreviewMatch(first.Id, new[] { candidate.Id }, Array.Empty<ProductChannelRemoteRow>());
+
+        service.ApplyMatches(preview.Id);
+
+        var firstRows = new MarketplaceShopProductsModel(first.Id, directory)
+            .Filter(new(Binding: MarketplaceShopBindingFilter.Bound));
+        var secondRows = new MarketplaceShopProductsModel(second.Id, directory)
+            .Filter(new(Binding: MarketplaceShopBindingFilter.Bound));
+        var assigned = firstRows.Single(row => row.ProductId == candidate.Id);
+        Assert.AreEqual("NewListingCandidate", assigned.RemoteState);
+        Assert.AreEqual("", assigned.RemoteId);
+        Assert.AreEqual(0, secondRows.Count);
+    }
 
     [TestMethod]
     public void SpecialistButtonPersistsTheExactSelectionAndBindingRevisions() => InSta(() =>
@@ -921,6 +985,17 @@ public sealed class MarketplaceShopWorkspaceTests
             throw new NotSupportedException();
     }
 
+    sealed class EmptySnapshotProvider : IProductChannelRemoteSnapshotProvider
+    {
+        public ProductChannelRemoteSnapshot Read(MarketplaceConnection connection) =>
+            new(connection.Id, connection.ShopId, Array.Empty<ProductChannelRemoteRow>());
+    }
+
+    sealed class FixedCreationHandoff : IProductChannelCreationPreviewHandoff
+    {
+        public string Preview(MarketplaceConnection connection, IReadOnlyList<string> productIds) => "creation-preview";
+    }
+
     sealed class EtsyShopHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) =>
@@ -994,6 +1069,12 @@ public sealed class MarketplaceShopWorkspaceTests
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         });
+    }
+
+    static void SelectRow(DataGrid grid, string productId)
+    {
+        grid.UnselectAll();
+        grid.SelectedItem = grid.Items.Cast<MarketplaceShopProductRow>().Single(row => row.ProductId == productId);
     }
 
     static void SelectProduct(DataGrid grid, string productId)

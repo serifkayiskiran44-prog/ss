@@ -709,3 +709,32 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [ ] Hepsiburada panelinden bu entegrasyona atanmış yeni servis anahtarı alınmalı; mevcut canlı denemede ürün/kategori 403, listing/sipariş 401 döndü.
 - [ ] Salt okunur doğrulama başarılı olduktan sonra resmî yazma izinleri ve takip uçları gerçek test ürünüyle doğrulanmalı; o zamana kadar canlı gönderim kapalı kalacak.
 - [ ] Sonraki modül: Trendyol + Hepsiburada + Amazon ortak rekabet analizi; Excel ile min/max/barem fiyatı, aktiflik ve rakip bağlantısını toplu önizleme/onay ile güncelleme.
+
+# Aday ürünler ve açılış kapısı — 2026-11-17
+
+- [x] Yeni ürün adayı (`NewListingCandidate`) hesap başına kalıcı; hesap listesi yalnız bağlı ürün ve o hesabın adaylarını gösterir; aday bağlanınca temizlenir; yerel "Adaylıktan çıkar" mağazaya yazmaz.
+- [x] Tamamlanmış çoklu mağaza göçü, silinmiş geri dönüş arşivi yüzünden açılışı engellemez; yarım göç kapalı başarısız kalır.
+- [x] Gerçek verinin kimlik bilgisiz kopyasında açılış denemesi geçti; gerçek klasör değişmedi.
+- [ ] Kimlik bilgili gerçek veriyle mağaza okumaları kullanıcı oturumunda (salt okunur) doğrulanmalı.
+
+# Siteye XML yayınlama — 2026-11-17
+
+- [x] `SiteXmlPublisher`: ortak anahtar HKCU'dan okunur; önizleme, açık onay, değişiklik denetimi, geri okuma doğrulaması ve makbuz; ana makine sabit, belirteç sızıntısı testli; sahte HTTP ile 16 test.
+- [ ] Yayınlama ekranı ve hangi XML'in yayınlanacağı (`Models/Model` şeması) kullanıcı kararı bekliyor; zamanlayıcıdan yükleme bilinçli olarak kapalı.
+- [ ] Canlı siteye ilk yükleme kullanıcı oturumunda, açık onayla denenmeli (şu an canlı istek yapılmadı).
+
+# Denetim bulguları — 2026-11-17 (doğrulanmamış, sırada)
+
+Kaynak: salt okunur denetim; ikinci doğrulama aşaması kullanım sınırına takıldığı için aşağıdakiler henüz kodda tek tek doğrulanmadı.
+- [ ] Trendyol iptal/iade: çift gönderim ve belirsiz sonuçta tekrar gönderim artık işlem defteriyle engelli (`TrendyolActionLedger`, LWG-01 kısmen); canlı önizleme ve eski-veri (stale) kontrolü hâlâ yok.
+- [x] Üç Trendyol yazma yolu sipariş mağazasıyla SupplierId karşılaştırıyor (LWG-03; kimlik bilgisi hâlâ tek hesaplı `trendyol.bin`, çok hesaplı kasaya geçiş açık).
+- [x] İlk eşitlemeden önceki siparişler geçmiş sayılır, stok düşmez (STK-03).
+- [ ] Hepsiburada stok planı kayıtlı stok politikasını uyguluyor (PP-01 kısmen); fiyat politikası ve diğer kanalların planları hâlâ okumuyor. Hepsiburada para birimi ve yönetim bayrağı denetimi eklendi (PP-02/03).
+- [ ] XML içe aktarma Active/Category'yi kural eşleşmesinde sıfırlıyor (POOL-02). Elle girilen alanların silinmesi (POOL-03) ve kartın kanal fiyatını donmuş kopya yazması (POOL-01) düzeltildi.
+- [x] Kategori yeniden adlandırma XML kaynağının sabit kategorisine ve kural hedeflerine yansıyor (TAX-01). Excel tarih kayması (XA-04) doğrulanamadı; Windows-1254 çözümü eklendi (XA-08).
+- [x] Zamanlanmış sipariş okuma hesabın 'Senkron aralığı'na uyuyor, elle yenileme her zaman okur (AE-03; API sağlık geri çekilmesi hâlâ açık). Etsy arka plan belirteç yenilemesi eklendi (AE-02).
+- [ ] 82 açık TODO maddesinin sınıflandırması: yalnız ilk 27'nin sonucu alındı; kalan 55 için denetim yeniden çalıştırılmalı.
+
+## Kod incelemesiyle yeniden değerlendirilenler (2026-11-17)
+- POOL-02: kural eşleşince kategori/aktiflik beslemeden yazılması kural tasarımının kendisi; hata olarak doğrulanamadı. Elle pasife alınan ürünün her içe aktarmada yeniden aktifleşmesi istenmiyorsa ürün kilidi eklenmeli (karar gerekir).
+- XA-04: Excel miad tarihi profil kültürüyle (varsayılan tr-TR) ayrıştırılıyor; kayma yalnız profil yanlış seçilirse olur, gerçek örnek dosya olmadan doğrulanamadı.

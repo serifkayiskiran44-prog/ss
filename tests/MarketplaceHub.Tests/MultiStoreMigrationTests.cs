@@ -713,6 +713,38 @@ public sealed class MultiStoreMigrationTests
     }
 
     [TestMethod]
+    public void CompletedMigrationStillStartsWhenItsRollbackArchiveWasDeletedLater()
+    {
+        var target = CopyLegacyFixture();
+        var service = new MultiStoreMigrationService(target);
+        var report = service.DryRun();
+        var completed = service.Apply(report, report.ConfirmationToken);
+        File.Delete(completed.BackupPath);
+        var prompted = false;
+
+        var ready = MultiStoreMigrationStartupGate.EnsureReady(target, _ => { prompted = true; return null; });
+
+        Assert.IsTrue(ready, "A finished migration must not need its rollback archive just to start.");
+        Assert.IsFalse(prompted);
+        Assert.IsNull(new MultiStoreMigrationService(target).StartupReport());
+    }
+
+    [TestMethod]
+    public void InterruptedMigrationStillFailsClosedWhenItsRollbackArchiveIsMissing()
+    {
+        var target = CopyLegacyFixture();
+        Assert.ThrowsException<InjectedMigrationFailureException>(() => MultiStoreMigrationStartupGate.EnsureReady(target, report => report.ConfirmationToken, checkpoint =>
+        {
+            if (checkpoint == MultiStoreMigrationCheckpoint.ConnectionsApplied) throw new InjectedMigrationFailureException(checkpoint);
+        }));
+        foreach (var archive in Directory.GetFiles(Directory.GetParent(target)!.FullName, Path.GetFileName(target) + "-multi-store-v1-*.zip")) File.Delete(archive);
+
+        var error = Assert.ThrowsException<InvalidOperationException>(() => MultiStoreMigrationStartupGate.EnsureReady(target, report => report.ConfirmationToken));
+
+        StringAssert.Contains(error.Message, "yedek");
+    }
+
+    [TestMethod]
     public void InterruptedMigrationRejectsAlteredDataWithOriginalOrUnrelatedNewApproval()
     {
         foreach (var useNewReport in new[] { false, true })

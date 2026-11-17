@@ -108,8 +108,10 @@ public sealed class MultiStoreMigrationService
         var state = ReadState();
         if (state is not null)
         {
-            ValidateBackup(state);
+            // A finished migration must not depend on its rollback archive just to start: the archive lives outside the data folder and may be cleaned up later.
+            // An unfinished migration still validates it first, because recovery would need it.
             if (state.Checkpoint == MultiStoreMigrationCheckpoint.Completed) return null;
+            ValidateBackup(state);
             if (PendingStage(state) is not null)
             {
                 try { RestoreApprovedBackup(state); }

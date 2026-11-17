@@ -53,11 +53,27 @@ public partial class CatalogStore
 
     static string SafeKeyHash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..12];
 
+    /// Receipts are keyed with the marketplace exactly as the order carried it (account sync writes "Trendyol"), while the exception
+    /// queue stores it lower-cased. Returns the spelling the receipt was stored with so the restore is keyed like the deduction it undoes;
+    /// without a receipt the old lower-case form is kept.
+    string StoredReceiptMarketplace(string marketplace, string shopId, string orderId)
+    {
+        using var connection = Open(); using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Marketplace FROM OrderStockReceipts WHERE Marketplace=$marketplace COLLATE NOCASE AND ShopId=$shop AND OrderId=$order";
+        OrderStockIdentityParams(command, marketplace, shopId, orderId);
+        var stored = new List<string>();
+        using (var reader = command.ExecuteReader()) while (reader.Read()) stored.Add(reader.GetString(0));
+        if (stored.Count == 0) return marketplace.ToLowerInvariant();
+        if (stored.Contains(marketplace, StringComparer.Ordinal)) return marketplace;
+        if (stored.Count == 1) return stored[0];
+        throw new InvalidOperationException("Bu sipariş için farklı yazımlarla birden fazla stok kaydı var; stok incelemesi gerekli.");
+    }
+
     public OrderRestockPreview CreateOrderRestockPreview(string marketplace, string shopId, string orderId, string actionKey)
     {
         if (new[] { marketplace, shopId, orderId }.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("İptal/iade stok önizlemesi için kanal, mağaza, sipariş ve olay anahtarı zorunlu.");
         actionKey = CanonicalRestockActionKey(actionKey);
-        marketplace = marketplace.Trim().ToLowerInvariant(); shopId = shopId.Trim(); orderId = orderId.Trim();
+        shopId = shopId.Trim(); orderId = orderId.Trim(); marketplace = StoredReceiptMarketplace(marketplace.Trim(), shopId, orderId);
         var receipt = GetOrderStockStatus(marketplace, shopId, orderId) ?? throw new InvalidOperationException("Bu sipariş için daha önce uygulanmış stok hareketi bulunamadı; otomatik geri koyma önerisi üretilemez.");
         var products = Products().ToDictionary(x => x.Id);
         var lines = new List<OrderRestockPreviewLine>();

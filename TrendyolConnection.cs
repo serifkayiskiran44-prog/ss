@@ -6,6 +6,17 @@ namespace TrMarketplaceHubDesktop;
 
 public sealed record TrendyolSettings(string SupplierId, string ApiKey, string ApiSecret, string UserAgent);
 
+/// <summary>The saved Trendyol credentials are a single legacy account; a live write for an order of another shop must be refused before any request.</summary>
+public static class TrendyolOrderWriteGuard
+{
+    public static TrendyolSettings Require(TrendyolSettings settings, string orderShopId)
+    {
+        if (string.IsNullOrWhiteSpace(orderShopId) || !string.Equals(settings.SupplierId?.Trim(), orderShopId.Trim(), StringComparison.Ordinal))
+            throw new InvalidOperationException("Kayıtlı Trendyol bağlantısı bu siparişin mağazasına (" + orderShopId + ") ait değil; işlem yapılmadı. Doğru mağaza bağlantısını kaydedin.");
+        return settings;
+    }
+}
+
 public sealed class TrendyolSettingsStore(string? path = null)
 {
     const int MaxEncryptedFileBytes = 64 * 1024;

@@ -118,6 +118,86 @@ public sealed class ProductChannelMatchingTests
     }
 
     [TestMethod]
+    public void NewListingCandidateIsRememberedForTheAssignedAccountAndNeverOwnsABindingRow()
+    {
+        var product = Create("SKU-A", "BAR-A");
+        remote.Rows = [];
+        var service = Service();
+
+        service.ApplyMatches(service.PreviewMatch(connection.Id, [product.Id], remote.Rows).Id);
+
+        var store = new ProductChannelBindingStore(directory);
+        CollectionAssert.AreEqual(new[] { product.Id }, store.CandidateProductIds(connection.Id).ToArray());
+        Assert.AreEqual(0, store.CandidateProductIds("another-connection").Count);
+        Assert.AreEqual(0, store.List().Count);
+    }
+
+    [TestMethod]
+    public void SeveralCandidatesOfOneAccountDoNotCollideOnTheEmptyRemoteId()
+    {
+        var first = Create("SKU-A", "BAR-A");
+        var second = Create("SKU-B", "");
+        remote.Rows = [];
+        var service = Service();
+
+        service.ApplyMatches(service.PreviewMatch(connection.Id, [first.Id, second.Id], remote.Rows).Id);
+
+        CollectionAssert.AreEquivalent(new[] { first.Id, second.Id }, new ProductChannelBindingStore(directory).CandidateProductIds(connection.Id).ToArray());
+    }
+
+    [TestMethod]
+    public void CandidateStopsBeingACandidateOnceTheProductGetsBound()
+    {
+        var product = Create("SKU-A", "BAR-A");
+        remote.Rows = [];
+        var service = Service();
+        service.ApplyMatches(service.PreviewMatch(connection.Id, [product.Id], remote.Rows).Id);
+
+        remote.Rows = [Row("r1", "SKU-A", "BAR-A")];
+        var preview = service.PreviewMatch(connection.Id, [product.Id], remote.Rows);
+        service.ApplyMatches(service.ReviewMatches(preview.Id, [new(product.Id, "r1")]).Id);
+
+        var store = new ProductChannelBindingStore(directory);
+        Assert.AreEqual(0, store.CandidateProductIds(connection.Id).Count);
+        Assert.AreEqual("r1", store.Get(product.Id, connection.Id)!.RemoteId);
+    }
+
+    [TestMethod]
+    public void AlreadyBoundProductIsNotRegisteredAsCandidateWhenItsRemoteRowDisappears()
+    {
+        var product = Create("SKU-A", "BAR-A");
+        remote.Rows = [Row("r1", "SKU-A", "BAR-A")];
+        var service = Service();
+        service.ApplyMatches(service.ReviewMatches(service.PreviewMatch(connection.Id, [product.Id], remote.Rows).Id, [new(product.Id, "r1")]).Id);
+
+        remote.Rows = [];
+        service.ApplyMatches(service.PreviewMatch(connection.Id, [product.Id], remote.Rows).Id);
+
+        var store = new ProductChannelBindingStore(directory);
+        Assert.AreEqual(0, store.CandidateProductIds(connection.Id).Count);
+        Assert.IsNotNull(store.Get(product.Id, connection.Id));
+    }
+
+    [TestMethod]
+    public void RemovingACandidateIsLocalAndDeletedProductsAreNotListed()
+    {
+        var kept = Create("SKU-A", "BAR-A");
+        var removed = Create("SKU-B", "BAR-B");
+        var deleted = catalog.CreateManual(new() { Sku = "SKU-C", Barcode = "BAR-C", Name = "SKU-C", Price = 10, Stock = 0, Currency = "TRY" });   // a product with stock cannot be deleted
+        remote.Rows = [];
+        var service = Service();
+        service.ApplyMatches(service.PreviewMatch(connection.Id, [kept.Id, removed.Id, deleted.Id], remote.Rows).Id);
+        var store = new ProductChannelBindingStore(directory);
+
+        Assert.IsTrue(store.RemoveCandidate(removed.Id, connection.Id));
+        Assert.IsFalse(store.RemoveCandidate(removed.Id, connection.Id));
+        catalog.DeleteProduct(catalog.Products().Single(x => x.Id == deleted.Id));
+
+        CollectionAssert.AreEqual(new[] { kept.Id }, store.CandidateProductIds(connection.Id).ToArray());
+        Assert.AreEqual(0, handoff.RemoteWrites);
+    }
+
+    [TestMethod]
     public void StaleNewListingPreviewDoesNotReachCreationHandoff()
     {
         var product = Create("SKU-A", "BAR-A");

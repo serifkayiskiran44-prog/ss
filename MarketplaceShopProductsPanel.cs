@@ -12,7 +12,7 @@ using TrMarketplaceHubDesktop.Trendyol;
 
 namespace TrMarketplaceHubDesktop;
 
-public enum MarketplaceShopBindingFilter { All, Linked, Unlinked, Error }
+public enum MarketplaceShopBindingFilter { All, Bound, Linked, Unlinked, Error }
 public enum MarketplaceShopManagementFilter { All, Managed, Unmanaged, Content, Price, Stock }
 public enum MarketplaceShopBulkOperation
 {
@@ -98,6 +98,7 @@ public sealed class MarketplaceShopProductsModel
         ArgumentNullException.ThrowIfNull(filter);
         connection = RequireOperational(connection.Id);
         var bindingByProduct = bindings.List(connectionId: connection.Id).ToDictionary(x => x.ProductId, StringComparer.Ordinal);
+        var candidateIds = bindings.CandidateProductIds(connection.Id).ToHashSet(StringComparer.Ordinal);
         var remote = RemoteCache();
         var rows = catalog.Products().Select(product => Row(product, bindingByProduct.GetValueOrDefault(product.Id), remote)).Where(row =>
         {
@@ -105,6 +106,7 @@ public sealed class MarketplaceShopProductsModel
             var hasError = hasBinding && IsError(row.RemoteState, row.Error);
             var bindingMatch = filter.Binding switch
             {
+                MarketplaceShopBindingFilter.Bound => hasBinding || candidateIds.Contains(row.ProductId),
                 MarketplaceShopBindingFilter.Linked => hasBinding && !hasError,
                 MarketplaceShopBindingFilter.Unlinked => !hasBinding,
                 MarketplaceShopBindingFilter.Error => hasError,
@@ -128,6 +130,13 @@ public sealed class MarketplaceShopProductsModel
     }
 
     public MarketplaceShopSelectionSnapshot SelectAllFiltered(MarketplaceShopProductFilter filter) => SelectPage(Filter(filter).Select(x => x.ProductId));
+
+    /// <summary>Takes assigned new-listing candidates of this exact account off its list. Bound products and other accounts are never touched; nothing is sent to the store.</summary>
+    public int DropCandidates(IEnumerable<string> productIds)
+    {
+        connection = RequireOperational(connection.Id);
+        return productIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).Count(id => bindings.RemoveCandidate(id, connection.Id));
+    }
 
     public MarketplaceShopSelectionSnapshot SelectPage(IEnumerable<string> productIds)
     {
@@ -631,9 +640,8 @@ public sealed class MarketplaceShopProductsPanel : UserControl
     readonly TextBox search = new() { MinWidth = 240, Margin = new Thickness(3) };
     readonly ComboBox binding = new() { MinWidth = 130, Margin = new Thickness(3), ItemsSource = new[]
     {
-        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.All, "Tümü"),
-        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.Linked, "Bağlı"),
-        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.Unlinked, "Bağlı değil"),
+        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.Bound, "Bağlı ürünler"),
+        new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.Linked, "Sorunsuz"),
         new FilterChoice<MarketplaceShopBindingFilter>(MarketplaceShopBindingFilter.Error, "Hatalı")
     } };
     readonly ComboBox management = new() { MinWidth = 130, Margin = new Thickness(3), ItemsSource = new[]
@@ -646,7 +654,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
         new FilterChoice<MarketplaceShopManagementFilter>(MarketplaceShopManagementFilter.Stock, "Stok")
     } };
     readonly TextBlock summary = new() { Margin = new Thickness(4), TextWrapping = TextWrapping.Wrap };
-    MarketplaceShopProductFilter filter = new();
+    MarketplaceShopProductFilter filter = new(Binding: MarketplaceShopBindingFilter.Bound);
 
     public MarketplaceShopSelectionSnapshot? SelectionSnapshot { get; private set; }
     public event Action<MarketplaceShopSpecialistPreview>? BulkPreviewRequested;
@@ -664,6 +672,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
         top.Children.Add(filters);
         var actions = new WrapPanel();
         actions.Children.Add(Button("Ürün kartını aç", "MarketplaceOpenProductCard", RequestProductCard));
+        actions.Children.Add(Button("Adaylıktan çıkar", "MarketplaceDropCandidates", DropCandidates));
         foreach (var operation in model.BulkOperations)
         {
             var captured = operation;
@@ -676,7 +685,7 @@ public sealed class MarketplaceShopProductsPanel : UserControl
             }));
         }
         top.Children.Add(actions); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
-        top.Children.Add(new TextBlock{Text="Ürün kartı: satıra çift tıklayın veya ürünü seçip Ürün kartını aç düğmesine basın.",Margin=new Thickness(4,2,4,4),Foreground=System.Windows.Media.Brushes.SlateGray,TextWrapping=TextWrapping.Wrap});
+        top.Children.Add(new TextBlock{Text="Bu listede yalnız ana Ürün yönetimi ekranından bu mağazaya bağladığınız ürünler görünür. Ürün kartı için satıra çift tıklayın.",Margin=new Thickness(4,2,4,4),Foreground=System.Windows.Media.Brushes.SlateGray,TextWrapping=TextWrapping.Wrap});
         AddColumns(); products.MouseDoubleClick += (_, _) => RequestProductCard(); root.Children.Add(products);
         var footer = new WrapPanel();
         footer.Children.Add(Button("Sayfayı seç", "MarketplaceSelectPage", () => { products.SelectAll(); SelectionSnapshot = model.SelectPage(products.Items.Cast<MarketplaceShopProductRow>().Select(x => x.ProductId)); }));
@@ -689,9 +698,9 @@ public sealed class MarketplaceShopProductsPanel : UserControl
     void Refresh()
     {
         filter = new(search.Text,
-            (binding.SelectedItem as FilterChoice<MarketplaceShopBindingFilter>)?.Value ?? MarketplaceShopBindingFilter.All,
+            (binding.SelectedItem as FilterChoice<MarketplaceShopBindingFilter>)?.Value ?? MarketplaceShopBindingFilter.Bound,
             (management.SelectedItem as FilterChoice<MarketplaceShopManagementFilter>)?.Value ?? MarketplaceShopManagementFilter.All);
-        var rows = model.Filter(filter); products.ItemsSource = rows; summary.Text = $"{rows.Count} ürün · Hesap: {model.ConnectionId}";
+        var rows = model.Filter(filter); products.ItemsSource = rows; summary.Text = $"{rows.Count} bağlı ürün · Hesap: {model.ConnectionId}";
     }
 
     public void Reload() => Refresh();
@@ -730,6 +739,15 @@ public sealed class MarketplaceShopProductsPanel : UserControl
             catch(Exception ex){MessageBox.Show(dialog,MarketplaceConnectionStore.Redact(ex.Message),"Toplu yönetim",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
         dialog.ShowDialog();
+    }
+
+    void DropCandidates()
+    {
+        var dropped = model.DropCandidates(products.SelectedItems.Cast<MarketplaceShopProductRow>().Select(x => x.ProductId).ToArray());
+        Refresh();
+        summary.Text = dropped == 0
+            ? "Seçilenler arasında yeni ürün adayı yok; bağlı ürünler bu düğmeyle kaldırılmaz."
+            : $"{dropped} yeni ürün adayı bu mağazanın listesinden çıkarıldı. Mağazaya hiçbir şey gönderilmedi.";
     }
 
     void RequestProductCard()

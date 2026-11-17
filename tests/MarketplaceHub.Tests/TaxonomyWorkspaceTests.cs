@@ -21,6 +21,37 @@ namespace MarketplaceHub.Tests;
   Assert.ThrowsException<InvalidOperationException>(()=>store.Delete(TaxonomyKind.Category,parent.Id));
   Assert.ThrowsException<InvalidOperationException>(()=>store.SaveWorkspaceEntry(new(){Id=parent.Id,Kind=parent.Kind,Name="Other",UpdatedUtc=parent.UpdatedUtc}));
  }
+ [TestMethod]public void CategoryRenameAlsoFollowsXmlSourceFixedCategoryAndRuleTargets()
+ {
+  var catalog=new CatalogStore(dir);catalog.CreateManual(new(){Sku="ONE",Name="One",Category="Clothes > Men > Shirts",Currency="TRY"});
+  var source=new XmlSource{Id="src",Location="https://example.test/f.xml",FixedCategory="Clothes > Men"};
+  source.CategoryRules.Add(new XmlCategoryRule{XmlCategory="Gömlek",TargetCategory="Clothes > Men > Shirts"});
+  source.CategoryRules.Add(new XmlCategoryRule{XmlCategory="Diğer",TargetCategory="Other"});
+  catalog.SaveSource(source);
+  var store=new TaxonomyStore(dir);store.EnsureCatalogEntries(catalog.Products());
+  var parent=store.List(TaxonomyKind.Category).Single(e=>e.Name=="Clothes > Men");
+
+  store.SaveWorkspaceEntry(new(){Id=parent.Id,Kind=parent.Kind,Name="Clothes > Women",UpdatedUtc=parent.UpdatedUtc});
+
+  var saved=catalog.Sources().Single();
+  Assert.AreEqual("Clothes > Women",saved.FixedCategory);
+  Assert.AreEqual("Clothes > Women > Shirts",saved.CategoryRules.Single(r=>r.XmlCategory=="Gömlek").TargetCategory);
+  Assert.AreEqual("Other",saved.CategoryRules.Single(r=>r.XmlCategory=="Diğer").TargetCategory);
+ }
+ [TestMethod]public void MalformedProductCategoryIsSkippedAndDoesNotBlockTheOtherEntries()
+ {
+  var catalog=new CatalogStore(dir);
+  catalog.CreateManual(new(){Sku="BAD",Name="Bad",Category="Kedi >",Brand="BrandBad",Currency="TRY"});
+  catalog.CreateManual(new(){Sku="GAP",Name="Gap",Category="A > > B",Currency="TRY"});
+  catalog.CreateManual(new(){Sku="OK",Name="Ok",Category="Köpek > Mama",Brand="BrandOk",Currency="TRY"});
+  var store=new TaxonomyStore(dir);
+
+  var skipped=store.EnsureCatalogEntries(catalog.Products());
+
+  Assert.AreEqual(2,skipped);
+  CollectionAssert.AreEquivalent(new[]{"Köpek","Köpek > Mama"},store.List(TaxonomyKind.Category).Select(e=>e.Name).ToArray());
+  CollectionAssert.AreEquivalent(new[]{"BrandBad","BrandOk"},store.List(TaxonomyKind.Brand).Select(e=>e.Name).ToArray());
+ }
  [TestMethod]public void BrandRenamePreservesIdAndUpdatesProducts()
  {
   var catalog=new CatalogStore(dir);catalog.CreateManual(new(){Sku="ONE",Name="One",Brand="Old",Currency="TRY"});

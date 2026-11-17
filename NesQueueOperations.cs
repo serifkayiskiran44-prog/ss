@@ -69,8 +69,16 @@ public sealed class NesQueueOperations : INesQueueOperations, IDisposable
             documents.MarkSent(draft, result.Uuid, result.DocumentNumber);
             return result;
         }
-        catch (HttpRequestException ex) { throw new NesUnknownResultException("NES gönderiminin sonucu doğrulanamadı: " + MarketplaceConnectionStore.Redact(ex.Message)); }
-        catch (TaskCanceledException ex) when (!token.IsCancellationRequested) { throw new NesUnknownResultException("NES gönderimi zaman aşımına uğradı; uzaktan mutabakat gerekli. " + MarketplaceConnectionStore.Redact(ex.Message)); }
+        catch (HttpRequestException ex) { MarkDraftUnknown(item); throw new NesUnknownResultException("NES gönderiminin sonucu doğrulanamadı: " + MarketplaceConnectionStore.Redact(ex.Message)); }
+        catch (TaskCanceledException ex) when (!token.IsCancellationRequested) { MarkDraftUnknown(item); throw new NesUnknownResultException("NES gönderimi zaman aşımına uğradı; uzaktan mutabakat gerekli. " + MarketplaceConnectionStore.Redact(ex.Message)); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { MarkDraftUnknown(item); throw; }
+    }
+
+    /// The request may have reached NES: the local draft must stop looking sendable, for the queue and for the manual invoice dialog alike.
+    void MarkDraftUnknown(NesQueueItem item)
+    {
+        var draft = documents.List().SingleOrDefault(x => x.Marketplace == item.Marketplace && x.ShopId == item.ShopId && x.OrderId == item.OrderId);
+        if (draft is not null) documents.MarkUnknown(draft);
     }
 
     public async Task<NesMatchedInvoice?> FindRemoteAsync(NesQueueItem item, CancellationToken token)
@@ -104,6 +112,8 @@ public sealed class NesQueueOperations : INesQueueOperations, IDisposable
         if (!item.Marketplace.Equals("Trendyol", StringComparison.OrdinalIgnoreCase)) throw new NesQueueValidationException("Bu pazaryeri için otomatik PDF yükleme desteklenmiyor.");
         if (!long.TryParse(item.PackageId, out var packageId) || packageId <= 0) throw new NesQueueValidationException("Trendyol paket kimliği geçersiz.");
         var settings = trendyolSettings.Load() ?? throw new NesQueueValidationException("Trendyol bağlantı ayarları kayıtlı değil.");
+        try { TrendyolOrderWriteGuard.Require(settings, item.ShopId); }
+        catch (InvalidOperationException ex) { throw new NesQueueValidationException(ex.Message); }
         var bytes = pdf.Bytes.Length > 0 ? pdf.Bytes : File.Exists(pdf.Path) ? await File.ReadAllBytesAsync(pdf.Path, token) : throw new NesQueueValidationException("NES PDF dosyası bulunamadı.");
         await new TrendyolInvoiceClient(settings, http).UploadPdfAsync(packageId, item.InvoiceNumber, DateTimeOffset.UtcNow, bytes, token);
     }

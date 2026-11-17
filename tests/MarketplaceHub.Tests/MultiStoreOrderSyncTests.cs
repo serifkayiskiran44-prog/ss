@@ -79,6 +79,63 @@ public sealed class MultiStoreOrderSyncTests
     }
 
     [TestMethod]
+    public async Task ArchivedOrderIsNotResurrectedOrDeductedByALaterSync()
+    {
+        var setup = SetupOneAccount();
+        setup.Reader.Set(Order("101", "ORD-ARCH", "UNKNOWN-SKU", 2, 10));           // unmatched: stored for review, never deducted
+        await setup.Service.RefreshAllAsync();
+        new OrdersStore(root).Archive("Trendyol", "101", "ORD-ARCH", "test");
+        setup.Reader.Set(Order("101", "ORD-ARCH", "REMOTE-A", 2, 20, "Shipped"));     // a newer remote version that now resolves to a product
+
+        var result = (await setup.Service.RefreshAllAsync()).Single();
+
+        Assert.AreEqual(MarketplaceOrderSyncStatus.Succeeded, result.Status);
+        Assert.AreEqual(0, new OrdersStore(root).ReadAll().Count, "A refresh must not put an archived order back on the active list.");
+        Assert.AreEqual(1, new OrdersStore(root).ReadArchived().Count);
+        Assert.AreEqual(10, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+    }
+
+    [TestMethod]
+    public async Task OversoldOrderIsKeptForReviewAndDoesNotStopTheRestOfTheAccount()
+    {
+        var setup = SetupOneAccount();                                                  // online stock 10
+        setup.Reader.Set(Order("101", "ORD-BIG", "REMOTE-A", 12, 20), Order("101", "ORD-OK", "REMOTE-A", 1, 10));
+
+        var result = (await setup.Service.RefreshAllAsync()).Single();
+
+        Assert.AreEqual(MarketplaceOrderSyncStatus.Succeeded, result.Status);
+        var stored = new OrdersStore(root).ReadAll();
+        var big = stored.Single(order => order.OrderId == "ORD-BIG");
+        Assert.IsTrue(big.ReviewRequired, "A paid order must stay visible even when the stock cannot cover it.");
+        StringAssert.Contains(big.ReviewReason, "Stok yetersiz");
+        Assert.IsFalse(stored.Single(order => order.OrderId == "ORD-OK").ReviewRequired);
+        Assert.AreEqual(9, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+        Assert.AreEqual(1, new InventoryLocationStore(root).Movements(setup.Product.Id).Count(movement => movement.Kind == InventoryMovementKind.OnlineOrder));
+        var state = new OrdersStore(root).GetSyncState(setup.Connection.Id)!;
+        Assert.AreEqual(DateTime.UnixEpoch.AddSeconds(20), state.CursorUtc, "The cursor must move past the parked order.");
+        Assert.AreEqual(0, state.FailureCount);
+    }
+
+    [TestMethod]
+    public async Task OrdersPlacedBeforeTheFirstSyncAreHistoryAndNeverDeductStock()
+    {
+        var setup = SetupOneAccount();                                   // now = epoch + 100 days, stock 10
+        var before = Order("101", "ORD-OLD", "REMOTE-A", 2, 10); before.OrderDate = DateTimeOffset.UnixEpoch.AddDays(40);
+        var after = Order("101", "ORD-NEW", "REMOTE-A", 1, 11); after.OrderDate = DateTimeOffset.UnixEpoch.AddDays(100).AddHours(1);
+        setup.Reader.Set(before, after);
+
+        await setup.Service.RefreshAllAsync();
+
+        Assert.AreEqual(2, new OrdersStore(root).ReadAll().Count, "History orders are still collected and shown.");
+        Assert.AreEqual(9, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+
+        var updated = Order("101", "ORD-OLD", "REMOTE-A", 2, 30, "Shipped"); updated.OrderDate = before.OrderDate;
+        setup.Reader.Set(updated);
+        await setup.Service.RefreshAllAsync();
+        Assert.AreEqual(9, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity, "A later status update must not turn a history order into a deduction.");
+    }
+
+    [TestMethod]
     public async Task CancelledOrderIsCollectedButNeverDeductsInventory()
     {
         var setup = SetupOneAccount();
@@ -237,6 +294,22 @@ public sealed class MultiStoreOrderSyncTests
         Assert.AreEqual(0, secondState.FailureCount);
         Assert.AreEqual(DateTime.MinValue, setup.FirstReader.FromUtc.Single());
         Assert.AreEqual(DateTime.UnixEpoch.AddSeconds(42), setup.SecondReader.FromUtc.Last());
+    }
+
+    [TestMethod]
+    public async Task ScheduledRefreshHonoursTheAccountSyncIntervalButManualRefreshDoesNot()
+    {
+        var setup = SetupOneAccount();
+        setup.Reader.Set(Order("101", "ORD-1", "REMOTE-A", 1, 10));
+        await setup.Service.RefreshAllAsync(respectInterval: true);
+        var calls = setup.Reader.Calls;
+
+        var scheduled = await setup.Service.RefreshAllAsync(respectInterval: true);
+
+        Assert.AreEqual(calls, setup.Reader.Calls, "The 60-minute default interval has not passed yet.");
+        Assert.AreEqual(MarketplaceOrderSyncStatus.Backoff, scheduled.Single().Status);
+        await setup.Service.RefreshAllAsync();
+        Assert.AreEqual(calls + 1, setup.Reader.Calls, "A manual refresh must always read.");
     }
 
     [TestMethod]

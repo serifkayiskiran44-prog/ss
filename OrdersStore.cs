@@ -62,6 +62,7 @@ public sealed partial class OrdersStore
     connection_id TEXT PRIMARY KEY,channel TEXT NOT NULL,shop_id TEXT NOT NULL,connection_revision INTEGER NOT NULL,
     cursor_utc TEXT NOT NULL,failure_count INTEGER NOT NULL CHECK(failure_count>=0),next_attempt_utc TEXT NULL,
     last_error TEXT NOT NULL,version INTEGER NOT NULL CHECK(version>=1),updated_utc TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS order_sync_golive(connection_id TEXT PRIMARY KEY,cutoff_utc TEXT NOT NULL);
    """;cmd.ExecuteNonQuery();EnsureArchive(c);SchemaVersion.Ensure(c);
  }
  SqliteConnection Open(){var c=new SqliteConnection(connectionString);c.Open();using var pragma=c.CreateCommand();pragma.CommandText="PRAGMA busy_timeout=15000";pragma.ExecuteNonQuery();return c;}
@@ -86,6 +87,8 @@ public sealed partial class OrdersStore
  internal static bool SaveAttached(SqliteConnection connection,SqliteTransaction transaction,OrderSnapshot original)
  {
   OrdersRules.Validate(original);var order=original.Copy();
+  // Same rule as SaveBatch: a remote refresh never puts an archived order back on the active list (and so never deducts stock for it).
+  using(var archived=connection.CreateCommand()){archived.Transaction=transaction;archived.CommandText="SELECT 1 FROM ordersdb.order_archive WHERE marketplace=$m AND shop=$s AND id=$i";Key(archived,order);if(archived.ExecuteScalar() is not null)return false;}
   using(var get=connection.CreateCommand())
   {
    get.Transaction=transaction;get.CommandText="SELECT payload FROM ordersdb.orders WHERE marketplace=$m AND shop=$s AND id=$i";Key(get,order);
@@ -101,6 +104,15 @@ public sealed partial class OrdersStore
    }
   }
   using var put=connection.CreateCommand();put.Transaction=transaction;put.CommandText="INSERT INTO ordersdb.orders VALUES($m,$s,$i,$p) ON CONFLICT(marketplace,shop,id) DO UPDATE SET payload=excluded.payload";Key(put,order);put.Parameters.AddWithValue("$p",JsonSerializer.Serialize(order));put.ExecuteNonQuery();return true;
+ }
+
+ /// First time an account's orders are read: orders placed before this moment are history (collected, never deducted). Fixed once, then stable.
+ public DateTime GoLiveCutoff(string connectionId,DateTime nowUtc)
+ {
+  using var c=Open();using var tx=c.BeginTransaction();
+  using(var ins=c.CreateCommand()){ins.Transaction=tx;ins.CommandText="INSERT OR IGNORE INTO order_sync_golive(connection_id,cutoff_utc) VALUES($id,$at)";ins.Parameters.AddWithValue("$id",connectionId);ins.Parameters.AddWithValue("$at",nowUtc.ToString("O"));ins.ExecuteNonQuery();}
+  using var get=c.CreateCommand();get.Transaction=tx;get.CommandText="SELECT cutoff_utc FROM order_sync_golive WHERE connection_id=$id";get.Parameters.AddWithValue("$id",connectionId);
+  var value=DateTime.Parse((string)get.ExecuteScalar()!,System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.RoundtripKind);tx.Commit();return value.ToUniversalTime();
  }
 
  public SyncState? GetSyncState(string connectionId)

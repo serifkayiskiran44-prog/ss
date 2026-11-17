@@ -99,10 +99,13 @@ public sealed class HepsiburadaDispatchStore
             if (operation is HepsiburadaOperation.Price or HepsiburadaOperation.Stock or HepsiburadaOperation.PriceAndStock or HepsiburadaOperation.DispatchTime or HepsiburadaOperation.SaleState && binding is null)
                 error = "Ürün bu Hepsiburada mağazasına bağlı değil.";
             if ((operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && product.Price <= 0) error = "Satış fiyatı sıfırdan büyük olmalıdır.";
+            else if ((operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && !string.Equals(product.Currency, "TRY", StringComparison.OrdinalIgnoreCase)) error = "Hepsiburada fiyatı TRY olmalı; ürün para birimi " + product.Currency + ".";
+            if (binding is not null && error is null && (operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && !binding.ManagePrice) error = "Bu bağlantıda fiyat yönetimi kapalı.";
+            if (binding is not null && error is null && (operation is HepsiburadaOperation.Stock or HepsiburadaOperation.PriceAndStock) && !binding.ManageStock) error = "Bu bağlantıda stok yönetimi kapalı.";
             if ((operation is HepsiburadaOperation.CatalogCreate or HepsiburadaOperation.CatalogUpdate or HepsiburadaOperation.ListingCreate) && (product.Name.Trim().Length == 0 || product.Brand.Trim().Length == 0 || product.Category.Trim().Length == 0))
                 error = "Ürün adı, marka ve kategori zorunludur.";
             if (error is not null) { rows.Add(new(product.Id, barcode, binding?.RemoteId ?? "", "Hatalı", error, null)); continue; }
-            var item = BuildItem(operation, product, binding, barcode);
+            var item = BuildItem(operation, product, binding, barcode, StockFor(account, product));
             var itemJson = JsonSerializer.Serialize(item);
             items.Add(JsonSerializer.Deserialize<JsonElement>(itemJson));
             rows.Add(new(product.Id, barcode, binding?.RemoteId ?? "", "Gönderime hazır", "", itemJson));
@@ -196,14 +199,22 @@ public sealed class HepsiburadaDispatchStore
         return account;
     }
 
-    static object BuildItem(HepsiburadaOperation operation, CatalogProduct product, ProductChannelBinding? binding, string barcode) => operation switch
+    // The store's saved stock policy (safety/maximum stock, inactive => 0) decides what is sent; without a policy the pool stock is used as before.
+    int StockFor(MarketplaceConnection account, CatalogProduct product)
     {
-        HepsiburadaOperation.Stock => new { barcode, availableStock = product.Stock },
+        var catalog = new CatalogStore(directory);
+        var policy = catalog.GetStockPolicy("hepsiburada", account.ShopId);
+        return policy is { Enabled: true } ? catalog.PreviewStock("hepsiburada", account.ShopId, product.Id) : product.Stock;
+    }
+
+    static object BuildItem(HepsiburadaOperation operation, CatalogProduct product, ProductChannelBinding? binding, string barcode, int stock) => operation switch
+    {
+        HepsiburadaOperation.Stock => new { barcode, availableStock = stock },
         HepsiburadaOperation.Price => new { barcode, price = product.Price },
-        HepsiburadaOperation.PriceAndStock => new { barcode, price = product.Price, availableStock = product.Stock },
+        HepsiburadaOperation.PriceAndStock => new { barcode, price = product.Price, availableStock = stock },
         HepsiburadaOperation.SaleState => new { barcode, active = product.Active },
         HepsiburadaOperation.DispatchTime => new { barcode, dispatchTime = 1 },
-        _ => new { merchantSku = product.Sku, barcode, title = product.Name, brand = product.Brand, category = product.Category, price = product.Price, availableStock = product.Stock, description = product.Description, images = product.ImageUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) }
+        _ => new { merchantSku = product.Sku, barcode, title = product.Name, brand = product.Brand, category = product.Category, price = product.Price, availableStock = stock, description = product.Description, images = product.ImageUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) }
     };
 
     static string CatalogHash(IEnumerable<CatalogProduct> products) => Hash(JsonSerializer.Serialize(products.OrderBy(x => x.Id, StringComparer.Ordinal)));

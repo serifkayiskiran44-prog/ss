@@ -121,6 +121,12 @@ public sealed class MarketplaceAdapterRegistry
             {
                 var credentials = vault.Load<EtsyCredentials>(connection.Id, connection.Channel, connection.ShopId)
                     ?? throw new InvalidOperationException("Etsy bağlantı bilgileri bu hesap için bulunamadı.");
+                // Background reads have no user to re-authorise: refresh an expired access token and keep the rotated pair.
+                if (!credentials.IsAccessTokenUsable() && !string.IsNullOrWhiteSpace(credentials.RefreshToken))
+                {
+                    credentials = await new EtsyOAuth(http).RefreshAsync(credentials, token).ConfigureAwait(false);
+                    vault.Save(connection.Id, connection.Channel, connection.ShopId, credentials);
+                }
                 var since = fromUtc == DateTime.MinValue ? (DateTimeOffset?)null : new DateTimeOffset(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc));
                 return await new OrdersEtsyClient(http).ReadAsync(credentials, since, token).ConfigureAwait(false);
             }

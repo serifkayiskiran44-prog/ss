@@ -9,19 +9,22 @@ public sealed partial class TaxonomyStore
  static string CategoryIdentity(string path)=>string.Join(" > ",path.Split('>').Select(p=>p.Trim()));
  public static bool SameCategory(string path,string other)=>CategoryIdentity(path).Equals(CategoryIdentity(other),StringComparison.OrdinalIgnoreCase);
  public static bool InCategory(string path,string parent){path=CategoryIdentity(path);parent=CategoryIdentity(parent);return path.Equals(parent,StringComparison.OrdinalIgnoreCase)||path.StartsWith(parent+" > ",StringComparison.OrdinalIgnoreCase); }
- public void EnsureCatalogEntries(IEnumerable<CatalogProduct> products)
+ /// Returns how many products were skipped because their category path cannot be normalised (e.g. "Kedi >").
+ /// Product validation only checks the length, so such a value can exist; one bad product must not block the others or the screen that calls this.
+ public int EnsureCatalogEntries(IEnumerable<CatalogProduct> products)
  {
-  using var c=Open();using var tx=c.BeginTransaction();
+  using var c=Open();using var tx=c.BeginTransaction();var skipped=0;
   foreach(var p in products)
   {
    if(!string.IsNullOrWhiteSpace(p.Brand))EnsureWorkspaceEntry(c,tx,TaxonomyKind.Brand,p.Brand.Trim());
    if(!string.IsNullOrWhiteSpace(p.Category))
    {
-    var path=ExcelProductImport.NormalizeCategory(p.Category);var parts=path.Split(" > ");
+    string path;try{path=ExcelProductImport.NormalizeCategory(p.Category);}catch(InvalidOperationException){skipped++;continue;}
+    var parts=path.Split(" > ");
     for(int i=1;i<=parts.Length;i++)EnsureWorkspaceEntry(c,tx,TaxonomyKind.Category,string.Join(" > ",parts.Take(i)));
    }
   }
-  tx.Commit();
+  tx.Commit();return skipped;
  }
  static void EnsureWorkspaceEntry(SqliteConnection c,SqliteTransaction tx,TaxonomyKind kind,string name)
  {
@@ -71,7 +74,22 @@ public sealed partial class TaxonomyStore
     using var put=c.CreateCommand();put.Transaction=tx;put.CommandText="UPDATE CatalogProducts SET Json=$json WHERE Id=$id";put.Parameters.AddWithValue("$json",JsonSerializer.Serialize(p));put.Parameters.AddWithValue("$id",p.Id);put.ExecuteNonQuery();
    }
   }
+  if(oldName!=null && oldName!=entry.Name && entry.Kind==TaxonomyKind.Category)FollowRenameInXmlSources(c,tx,oldName,entry.Name);
   return renamed.Single(e=>e.Id==entry.Id);
+ }
+ // XML sources point at categories by name; without this a rename silently sends later imports back to the old, now empty category.
+ static void FollowRenameInXmlSources(SqliteConnection c,SqliteTransaction tx,string oldName,string newName)
+ {
+  string Map(string value){var current=CategoryIdentity(value);return value.Length>0&&InCategory(current,oldName)?newName+current[oldName.Length..]:value;}
+  var rows=new List<(string Id,XmlSource Source)>();
+  using(var read=c.CreateCommand()){read.Transaction=tx;read.CommandText="SELECT Id,Json FROM Sources";using var r=read.ExecuteReader();while(r.Read()){try{var source=JsonSerializer.Deserialize<XmlSource>(r.GetString(1));if(source!=null)rows.Add((r.GetString(0),source));}catch(JsonException){}}}
+  foreach(var (id,source) in rows)
+  {
+   var changed=false;var fixedCategory=Map(source.FixedCategory);if(fixedCategory!=source.FixedCategory){source.FixedCategory=fixedCategory;changed=true;}
+   foreach(var rule in source.CategoryRules){var target=Map(rule.TargetCategory);if(target!=rule.TargetCategory){rule.TargetCategory=target;changed=true;}}
+   if(!changed)continue;
+   using var put=c.CreateCommand();put.Transaction=tx;put.CommandText="UPDATE Sources SET Json=$json WHERE Id=$id";put.Parameters.AddWithValue("$json",JsonSerializer.Serialize(source));put.Parameters.AddWithValue("$id",id);put.ExecuteNonQuery();
+  }
  }
 
  public void ApplyWorkspaceBatch(TaxonomyKind kind,IReadOnlyList<TaxonomyEntry> selection,TaxonomyBatchAction action,string? parentId=null)

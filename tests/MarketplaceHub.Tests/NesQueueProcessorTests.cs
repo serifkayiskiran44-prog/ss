@@ -23,6 +23,7 @@ public sealed class NesQueueProcessorTests
     {
         public List<string> Calls { get; } = [];
         public bool ThrowUnknownOnSend { get; set; }
+        public CancellationTokenSource? CancelDuringSend { get; set; }
         public int UploadFailuresRemaining { get; set; }
         public int SendCount { get; private set; }
         public int UploadCount { get; private set; }
@@ -30,7 +31,7 @@ public sealed class NesQueueProcessorTests
         public Task<NesPreparedInvoice> PrepareAsync(NesQueueItem item, OrderSnapshot order, CancellationToken token)
         { Calls.Add(item.OrderId + ":prepare"); return Task.FromResult(new NesPreparedInvoice("draft", Encoding.UTF8.GetBytes("<xml/>"), "MBA2026000000001")); }
         public Task<NesUploadResult> SendAsync(NesQueueItem item, OrderSnapshot order, NesPreparedInvoice prepared, CancellationToken token)
-        { Calls.Add(item.OrderId + ":send"); SendCount++; if (ThrowUnknownOnSend) throw new NesUnknownResultException("Sonuç bilinmiyor"); return Task.FromResult(new NesUploadResult("11111111-1111-1111-1111-111111111111", "EAR2026000000001", null)); }
+        { Calls.Add(item.OrderId + ":send"); SendCount++; if (CancelDuringSend is { } exit) { exit.Cancel(); token.ThrowIfCancellationRequested(); } if (ThrowUnknownOnSend) throw new NesUnknownResultException("Sonuç bilinmiyor"); return Task.FromResult(new NesUploadResult("11111111-1111-1111-1111-111111111111", "EAR2026000000001", null)); }
         public Task<NesMatchedInvoice?> FindRemoteAsync(NesQueueItem item, CancellationToken token)
         { Calls.Add(item.OrderId + ":match"); return Task.FromResult<NesMatchedInvoice?>(new("11111111-1111-1111-1111-111111111111", "EAR2026000000001", "Approved", DateTimeOffset.Parse("2026-09-21T10:00:00Z"))); }
         public Task<NesDownloadedInvoice> DownloadAsync(NesQueueItem item, CancellationToken token)
@@ -65,6 +66,43 @@ public sealed class NesQueueProcessorTests
         Assert.AreEqual(NesQueueState.Unknown, queue.List().Single().State);
         Assert.IsFalse(await processor.ProcessNextAsync(CancellationToken.None));
         Assert.AreEqual(1, operations.SendCount);
+    }
+
+    /// Exit or log-off while the invoice POST is in flight: NES may already have accepted it, so it must never be sent again on its own.
+    [TestMethod]
+    public async Task ExitDuringTheInvoiceSendLeavesTheItemUnknownAndNeverSendsItAgain()
+    {
+        using var temp = new TemporaryDirectory();
+        var queue = Seed(temp.Path, "1");
+        using var exit = new CancellationTokenSource();
+        var operations = new RecordingOperations { CancelDuringSend = exit };
+        var processor = Processor(temp.Path, queue, operations, TimeProvider.System);
+
+        await Assert.ThrowsExceptionAsync<OperationCanceledException>(async () => { while (await processor.ProcessNextAsync(exit.Token)) { } });
+
+        Assert.AreEqual(NesQueueState.Unknown, queue.List().Single().State);
+        operations.CancelDuringSend = null;
+        Assert.IsFalse(await processor.ProcessNextAsync(CancellationToken.None), "The next launch must not pick the item up by itself.");
+        Assert.AreEqual(1, operations.SendCount);
+    }
+
+    [TestMethod]
+    public async Task ExitBeforeTheInvoiceSendStartsOnlyReleasesTheItem()
+    {
+        using var temp = new TemporaryDirectory();
+        var queue = Seed(temp.Path, "1");
+        var operations = new RecordingOperations();
+        var processor = Processor(temp.Path, queue, operations, TimeProvider.System);
+        await processor.ProcessNextAsync(CancellationToken.None);                       // prepare -> the item now waits at the send step
+        using var exit = new CancellationTokenSource();
+        exit.Cancel();
+
+        await Assert.ThrowsExceptionAsync<OperationCanceledException>(() => processor.ProcessNextAsync(exit.Token));
+
+        Assert.AreEqual(0, operations.SendCount);
+        while (await processor.ProcessNextAsync(CancellationToken.None)) { }
+        Assert.AreEqual(1, operations.SendCount);
+        Assert.AreEqual(NesQueueState.Completed, queue.List().Single().State);
     }
 
     [TestMethod]

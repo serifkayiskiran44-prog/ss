@@ -353,3 +353,38 @@ Multi-store production integration closure (2026-09-19): XML apply paths now enf
 - Eski tek hesaplı Hepsiburada paneli ve kök `HepsiburadaCompetition.cs` kaldırıldı; hesap bazlı Hepsiburada çalışma alanı kullanılır. Ayarlar ekranındaki Trendyol/Etsy kısa yolları "Mağaza bağlantılarını yönet" altına taşındı.
 - Ana pencere testleri ertelenmiş çalışma alanı kurulumunu bekler; sipariş kartı testleri pencere tanıtıcısı açmadan mantıksal ağaçtan denetler.
 - Doğrulama: tüm Release testi **1481/1481** geçti. Gerçek mağazaya yazma yapılmadı.
+
+## Yeni ürün adayı kaydı, açılış kapısı düzeltmesi ve gerçek veri denemesi — 2026-11-17
+- Mağazaya atanmış ama mağazada karşılığı olmayan ürün (yeni ilan adayı) artık hesap başına `ProductChannelCandidates` tablosunda saklanır; bağlantı satırı oluşturulmaz (boş uzak kimlik `UNIQUE(ConnectionId,RemoteId)` ile çakışırdı). Hesap ürün listesi yalnız bağlı ürünleri ve o hesabın adaylarını gösterir; ürün bağlanınca aday kaydı silinir; "Adaylıktan çıkar" yalnız yerel kaydı kaldırır, mağazaya hiçbir şey göndermez.
+- Açılış kapısı: göçü tamamlanmış (Completed) veri klasörü, sonradan silinen geri dönüş arşivi (zip) yüzünden artık açılmayı reddetmez; yarım kalmış göç eskisi gibi arşivsiz devam etmez (kapalı başarısız). `Apply` ile idempotent yeniden çalıştırma arşivi yine doğrular.
+- Gerçek veri denemesi: gerçek klasör (göç 2026-09-19'da tamamlanmış, arşiv zip'i yok) kimlik bilgisi ve görseller hariç kopyalandı; yayın derlemesi bu kopyada açıldı, ana pencere geldi ve işlem günlüğüne yeni oturum satırı yazıldı. Gerçek klasör (12.193 dosya) boyut ve zaman damgasıyla değişmedi; mağaza çağrısı yapılmadı.
+- Tasarım/menü işleri bilinçli olarak bu çalışmanın dışında bırakıldı (kullanıcı kararı: tasarım ayrı yürütülüyor). Ana menüye bağlanmamış hazır paneller ve rota sözleşmesi `docs/UI-HANDOFF-NAVIGATION.md` içinde.
+- Doğrulama: tüm Release testi **1491/1491** geçti.
+
+## Siteye XML yayınlama servisi — 2026-11-17
+- "Kendi web sitesi" kanalı için `SiteXmlPublisher`: ortak yükleme anahtarı `HKCU\Software\MarketXmlSuite\FiyatKarsilastirmaPro\marketxml` altındaki `upload_token` değerinden yalnız yükleme anında okunur; kaynakta yoktur, saklanmaz, günlüğe/rapora/makbuza yazılmaz. Adres ve ana makine sabittir: yalnız `https://www.petshoptedarik.com.tr` kabul edilir, yönlendirme izlenmez.
+- Akış: değişmez önizleme (hedef adres, SHA-256, Model sayısı, boyut) → açık onay → dosyanın önizlemeden sonra değişmediğinin denetimi → yükleme → dönen adresin beklenen adres olduğunun denetimi → siteden geri okuyup SHA-256 ve Model sayısı doğrulaması → makbuz. Aynı önizleme ikinci kez yüklenemez; hatada makbuz yazılmaz, aynı önizleme yeniden denenebilir.
+- Korumalar: kök `Models` veya `ArrayOfModel` olmalı ve en az bir `Model` içermeli (boş dosya canlı yayını boşaltırdı); DTD yasak; 256 MB üst sınır; site ve dosya adı `^[a-z0-9][a-z0-9_-]{0,63}$`. Hata metinleri ve veritabanı belirteçten arındırılır (ham ve URL kodlu biçimler testle doğrulandı).
+- Henüz ekranı ve otomasyon bağlantısı yoktur (tasarım ayrı yürütülüyor); zamanlayıcı ve tepsi hiçbir koşulda yükleme başlatmaz. Hangi XML'in yayınlanacağı kullanıcı kararı bekliyor: MonoBridge `Products` dışa aktarımı site beslemesiyle (`Models/Model`) aynı şema değildir ve servis tarafından reddedilir.
+- Doğrulama: 16 yeni test (sahte HTTP; gerçek siteye istek yok).
+
+## Denetim bulgularından doğrulanıp düzeltilenler — 2026-11-17
+Salt okunur denetimin (7 alan raporu) bulguları kodda tek tek doğrulandı; önce başarısız test yazıldı, sonra düzeltildi.
+- Kategori yolu bozuk tek ürün (`Kedi >`) kategori/marka sayfalarını kurarken istisna atıp uygulamayı açılışta düşürüyordu: artık atlanır, sayılır ve sayfada bildirilir.
+- Yarıda kesilen (çöken/elektriği giden) XML çalışması kaynağı sonsuza dek kilitliyordu: açılışta ve 2 saat eşiğiyle `Failed (yarıda kesildi)` yapılır.
+- Eşitlenen siparişlerde iptal/iade stok iadesi makbuzu bulamıyordu (`Trendyol` ↔ `trendyol` büyük/küçük harf): artık saklanan yazımla çözülür.
+- Arşivlenmiş sipariş hesap eşitlemesiyle etkin listeye dönüp stok düşebiliyordu: artık arşiv kontrol edilir.
+- Stoğu yetmeyen tek sipariş tüm hesap eşitlemesini durduruyordu: sipariş incelemeye alınır (stok düşmez), imleç ilerler, diğer siparişler işlenir.
+- NES kuyruğunda gönderim sırasında uygulama kapanınca fatura yeniden gönderilebiliyordu: yarıda kalan gönderim `Unknown` olur, kendiliğinden tekrar gönderilmez.
+- Doğrulama: tam Release testi **1516/1516** (NES düzeltmesinden önce); denetimin kalan bulguları aşağıda TODO'da.
+
+## Denetim düzeltmeleri, ikinci tur — 2026-11-17
+Her biri önce başarısız testle yeniden üretildi, sonra düzeltildi; canlı mağazaya istek yapılmadı.
+- Trendyol canlı yazma yolları (iptal/iade, fatura PDF yükleme, NES kuyruğu yüklemesi) artık kayıtlı hesabın sipariş mağazasıyla aynı olduğunu istek öncesinde doğrular (`TrendyolOrderWriteGuard`).
+- Hesabın ilk eşitlemesinden önce verilmiş siparişler geçmiştir: toplanır ve gösterilir ama stok düşmez, sonradan güncellense de düşmez (`order_sync_golive`).
+- XML ayrıntı güncellemesi raf, fatura adı, alt başlık, son kullanma ve ek alanları besleme boşken silmez.
+- Windows-1254 / ISO-8859-9 XML beslemeleri çözülür.
+- Hepsiburada fiyat/stok önizlemesi TRY dışı para birimini ve kapalı "fiyat/stok yönet" bağlantısını reddeder.
+- Ürün kartı kaydı her kanalı taban fiyatın donmuş kopyasına çevirmez (`ChannelPriceMerge`).
+- Arka plandaki Etsy sipariş okuması süresi dolan erişim belirtecini yeniler ve dönen yeni çifti kaydeder.
+- Doğrulama: tam Release testi **1526/1526**.
