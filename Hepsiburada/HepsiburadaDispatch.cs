@@ -99,6 +99,9 @@ public sealed class HepsiburadaDispatchStore
             if (operation is HepsiburadaOperation.Price or HepsiburadaOperation.Stock or HepsiburadaOperation.PriceAndStock or HepsiburadaOperation.DispatchTime or HepsiburadaOperation.SaleState && binding is null)
                 error = "Ürün bu Hepsiburada mağazasına bağlı değil.";
             if ((operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && product.Price <= 0) error = "Satış fiyatı sıfırdan büyük olmalıdır.";
+            else if ((operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && !string.Equals(product.Currency, "TRY", StringComparison.OrdinalIgnoreCase)) error = "Hepsiburada fiyatı TRY olmalı; ürün para birimi " + product.Currency + ".";
+            if (binding is not null && error is null && (operation is HepsiburadaOperation.Price or HepsiburadaOperation.PriceAndStock) && !binding.ManagePrice) error = "Bu bağlantıda fiyat yönetimi kapalı.";
+            if (binding is not null && error is null && (operation is HepsiburadaOperation.Stock or HepsiburadaOperation.PriceAndStock) && !binding.ManageStock) error = "Bu bağlantıda stok yönetimi kapalı.";
             if ((operation is HepsiburadaOperation.CatalogCreate or HepsiburadaOperation.CatalogUpdate or HepsiburadaOperation.ListingCreate) && (product.Name.Trim().Length == 0 || product.Brand.Trim().Length == 0 || product.Category.Trim().Length == 0))
                 error = "Ürün adı, marka ve kategori zorunludur.";
             if (error is not null) { rows.Add(new(product.Id, barcode, binding?.RemoteId ?? "", "Hatalı", error, null)); continue; }

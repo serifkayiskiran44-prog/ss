@@ -49,6 +49,26 @@ public sealed class HepsiburadaDispatchTests
     }
 
     [TestMethod]
+    public void PricePreviewRefusesForeignCurrencyAndUnmanagedBindings()
+    {
+        var store = new HepsiburadaDispatchStore(root);
+        product.Currency = "USD"; new CatalogStore(root).SaveProduct(product);
+        var usd = store.Preview(account.Id, [product.Id], HepsiburadaOperation.Price);
+        Assert.AreEqual("Hatalı", usd.Rows.Single().Status);
+        StringAssert.Contains(usd.Rows.Single().Error, "TRY");
+        Assert.AreEqual("Gönderime hazır", store.Preview(account.Id, [product.Id], HepsiburadaOperation.Stock).Rows.Single().Status, "Currency does not matter for stock.");
+
+        product.Currency = "TRY"; new CatalogStore(root).SaveProduct(product);
+        var binding = new ProductChannelBindingStore(root).Get(product.Id, account.Id)!;
+        new ProductChannelBindingStore(root).Save(binding with { ManagePrice = false, ManageStock = false }, binding.Version);
+
+        var price = store.Preview(account.Id, [product.Id], HepsiburadaOperation.Price);
+        var stock = store.Preview(account.Id, [product.Id], HepsiburadaOperation.Stock);
+        Assert.AreEqual("Hatalı", price.Rows.Single().Status);
+        Assert.AreEqual("Hatalı", stock.Rows.Single().Status);
+    }
+
+    [TestMethod]
     public void ClaimRequiresApprovalAndRejectsChangedCatalog()
     {
         var store = new HepsiburadaDispatchStore(root);
