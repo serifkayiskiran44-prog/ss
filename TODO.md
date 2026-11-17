@@ -716,10 +716,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 
 Kaynak: salt okunur denetim; ikinci doğrulama aşaması kullanım sınırına takıldığı için aşağıdakiler henüz kodda tek tek doğrulanmadı.
 - [ ] Trendyol iptal/iade onayı yalnız onay kutusuyla kapılı; önizleme, stale kontrolü, makbuz yok (LWG-01).
-- [ ] Üç Trendyol yazma yolu eski tek hesaplı `trendyol.bin` ile çalışıyor, sipariş mağazasıyla SupplierId karşılaştırmıyor (LWG-03).
-- [ ] İlk hesap eşitlemesi tüm geçmiş pencere için stok düşüyor; devreye alma kesim tarihi yok (STK-03).
-- [ ] Kanal planları stok/fiyat politikasını okumuyor; politika anahtarı ConnectionId değil (PP-01), Hepsiburada para birimi/yönetim bayrağı denetimi yok (PP-02/03).
-- [ ] XML içe aktarma Active/Category'yi sıfırlıyor, elle girilen alanları siliyor (POOL-02/03); ürün kartı kanal fiyatını sabit kopya yazıyor (POOL-01).
-- [ ] Excel tarih hücreleri kültür kaydırması (XA-04), XML Windows-1254 çözümü (XA-08), kategori yeniden adlandırmanın XML kurallarına yansımaması (TAX-01).
-- [ ] Etsy arka plan okuması erişim belirtecini yenilemiyor (AE-02); sipariş okuma 'Senkron aralığı' ve API sağlık geri çekilmesini yok sayıyor (AE-03).
+- [x] Üç Trendyol yazma yolu sipariş mağazasıyla SupplierId karşılaştırıyor (LWG-03; kimlik bilgisi hâlâ tek hesaplı `trendyol.bin`, çok hesaplı kasaya geçiş açık).
+- [x] İlk eşitlemeden önceki siparişler geçmiş sayılır, stok düşmez (STK-03).
+- [ ] Kanal planları stok/fiyat politikasını okumuyor; politika anahtarı ConnectionId değil (PP-01). Hepsiburada para birimi ve yönetim bayrağı denetimi eklendi (PP-02/03).
+- [ ] XML içe aktarma Active/Category'yi kural eşleşmesinde sıfırlıyor (POOL-02). Elle girilen alanların silinmesi (POOL-03) ve kartın kanal fiyatını donmuş kopya yazması (POOL-01) düzeltildi.
+- [ ] Excel tarih hücreleri kültür kaydırması (XA-04), kategori yeniden adlandırmanın XML kurallarına yansımaması (TAX-01). Windows-1254 çözümü eklendi (XA-08).
+- [ ] Sipariş okuma 'Senkron aralığı' ve API sağlık geri çekilmesini yok sayıyor (AE-03). Etsy arka plan belirteç yenilemesi eklendi (AE-02).
 - [ ] 82 açık TODO maddesinin sınıflandırması: yalnız ilk 27'nin sonucu alındı; kalan 55 için denetim yeniden çalıştırılmalı.

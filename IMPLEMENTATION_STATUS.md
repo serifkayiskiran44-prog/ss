@@ -367,3 +367,14 @@ Salt okunur denetimin (7 alan raporu) bulguları kodda tek tek doğrulandı; ön
 - Stoğu yetmeyen tek sipariş tüm hesap eşitlemesini durduruyordu: sipariş incelemeye alınır (stok düşmez), imleç ilerler, diğer siparişler işlenir.
 - NES kuyruğunda gönderim sırasında uygulama kapanınca fatura yeniden gönderilebiliyordu: yarıda kalan gönderim `Unknown` olur, kendiliğinden tekrar gönderilmez.
 - Doğrulama: tam Release testi **1516/1516** (NES düzeltmesinden önce); denetimin kalan bulguları aşağıda TODO'da.
+
+## Denetim düzeltmeleri, ikinci tur — 2026-11-17
+Her biri önce başarısız testle yeniden üretildi, sonra düzeltildi; canlı mağazaya istek yapılmadı.
+- Trendyol canlı yazma yolları (iptal/iade, fatura PDF yükleme, NES kuyruğu yüklemesi) artık kayıtlı hesabın sipariş mağazasıyla aynı olduğunu istek öncesinde doğrular (`TrendyolOrderWriteGuard`).
+- Hesabın ilk eşitlemesinden önce verilmiş siparişler geçmiştir: toplanır ve gösterilir ama stok düşmez, sonradan güncellense de düşmez (`order_sync_golive`).
+- XML ayrıntı güncellemesi raf, fatura adı, alt başlık, son kullanma ve ek alanları besleme boşken silmez.
+- Windows-1254 / ISO-8859-9 XML beslemeleri çözülür.
+- Hepsiburada fiyat/stok önizlemesi TRY dışı para birimini ve kapalı "fiyat/stok yönet" bağlantısını reddeder.
+- Ürün kartı kaydı her kanalı taban fiyatın donmuş kopyasına çevirmez (`ChannelPriceMerge`).
+- Arka plandaki Etsy sipariş okuması süresi dolan erişim belirtecini yeniler ve dönen yeni çifti kaydeder.
+- Doğrulama: tam Release testi **1526/1526**.
