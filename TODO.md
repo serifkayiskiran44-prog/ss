@@ -723,3 +723,7 @@ Kaynak: salt okunur denetim; ikinci doğrulama aşaması kullanım sınırına t
 - [ ] Excel tarih hücreleri kültür kaydırması (XA-04), kategori yeniden adlandırmanın XML kurallarına yansımaması (TAX-01). Windows-1254 çözümü eklendi (XA-08).
 - [ ] Sipariş okuma 'Senkron aralığı' ve API sağlık geri çekilmesini yok sayıyor (AE-03). Etsy arka plan belirteç yenilemesi eklendi (AE-02).
 - [ ] 82 açık TODO maddesinin sınıflandırması: yalnız ilk 27'nin sonucu alındı; kalan 55 için denetim yeniden çalıştırılmalı.
+
+## Kod incelemesiyle yeniden değerlendirilenler (2026-11-17)
+- POOL-02: kural eşleşince kategori/aktiflik beslemeden yazılması kural tasarımının kendisi; hata olarak doğrulanamadı. Elle pasife alınan ürünün her içe aktarmada yeniden aktifleşmesi istenmiyorsa ürün kilidi eklenmeli (karar gerekir).
+- XA-04: Excel miad tarihi profil kültürüyle (varsayılan tr-TR) ayrıştırılıyor; kayma yalnız profil yanlış seçilirse olur, gerçek örnek dosya olmadan doğrulanamadı.
