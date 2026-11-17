@@ -258,7 +258,7 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
-    public void ProductRouteUsesTheFullHeightWithoutTheSharedHeaderOrSummaryStrip() => InSta(root =>
+    public void DenseRoutesKeepTheCompactSharedHeaderAndHideTheLegacySummaryStrip() => InSta(root =>
     {
         var window = new MainWindow(root); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
         try
@@ -266,14 +266,63 @@ public sealed class MarketplaceAccountNavigationTests
             var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
             navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "products"));
 
-            Assert.AreEqual(Visibility.Collapsed, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
+            Assert.AreEqual(Visibility.Visible, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
             Assert.AreEqual(Visibility.Collapsed, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "ProductSummaryBar").Visibility);
 
             navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "marketplaces"));
-            Assert.AreEqual(Visibility.Collapsed, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
+            Assert.AreEqual(Visibility.Visible, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
 
             navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "categories"));
             Assert.AreEqual(Visibility.Visible, Walk(window).OfType<FrameworkElement>().Single(x => x.Name == "PageHeader").Visibility);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void MainWindowRegistersTheRequiredOperationsRoutesAndFreshProfilesStartOnDashboard() => InSta(root =>
+    {
+        var window = new MainWindow(root); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            var tags = navigation.Items.OfType<ListBoxItem>().Where(x => x.Tag is not null).Select(x => x.Tag!.ToString()!).ToArray();
+            foreach (var route in ScreenParityAudit.RequiredRoutes)
+                Assert.AreEqual(1, tags.Count(x => string.Equals(x, route, StringComparison.OrdinalIgnoreCase)), $"Route '{route}' must be registered exactly once.");
+            Assert.AreEqual("WORKING", ScreenParityAudit.Evaluate(tags).Status);
+            Assert.AreEqual("dashboard", ((ListBoxItem)navigation.SelectedItem).Tag);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void SavedValidRouteWinsOverDashboardDefault() => InSta(root =>
+    {
+        new UiPreferenceStore(root).Set("last-route", "xml");
+        var window = new MainWindow(root); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            Assert.AreEqual("xml", ((ListBoxItem)navigation.SelectedItem).Tag);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void HepsiburadaConnectionOpenUsesTheSharedMarketplaceAccountChooser() => InSta(root =>
+    {
+        var connection = new MarketplaceConnectionStore(root).Save("hepsiburada", "merchant-1", "Hepsiburada A", true);
+        var window = new MainWindow(root); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "connections"));
+            var grid = Walk(window).OfType<DataGrid>().Single(x => x.Name == "MarketplaceConnectionList");
+            grid.SelectedItem = grid.Items.Cast<MarketplaceConnectionListRow>().Single(x => x.Connection.Id == connection.Id);
+
+            Walk(window).OfType<Button>().Single(x => Equals(x.Content, "Mağazayı aç")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+            CollectionAssert.AreEqual(new[] { connection.Id }, AccountCards(window).Select(x => (string)x.Tag).ToArray());
+            Assert.AreEqual("marketplaces", ((ListBoxItem)navigation.SelectedItem).Tag);
         }
         finally { window.Close(); }
     });

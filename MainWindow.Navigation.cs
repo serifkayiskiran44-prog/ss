@@ -28,14 +28,22 @@ public partial class MainWindow
     SelectRoute(key, !selectingRoute, title, description);
    };
   }
-  Group("ÇALIŞMA ALANI");
+  Group("GENEL");
+  Page("dashboard","Genel bakış","Ürün, sipariş, XML ve bağlantı sağlığını tek ekranda izleyin.",DashboardPanel.Create(dataDirectory,OpenMarketplaceRoute));
+  Group("KATALOG");
   Page("products","Ürün yönetimi","Tüm ürün bilgilerini yan yana inceleyin, filtreleyin ve düzenleyin.",builtPages["Ürün havuzu"]);
   Page("categories","Kategoriler","Kategori ağacı, ürün sayıları, pazaryeri eşlemeleri ve içerik şablonları.",new TaxonomyWorkspacePanel(dataDirectory,Catalog.TaxonomyKind.Category,RefreshProducts));
   Page("brands","Markalar","Marka listesi, ürün sayıları ve pazaryeri karşılıkları.",new TaxonomyWorkspacePanel(dataDirectory,Catalog.TaxonomyKind.Brand,RefreshProducts));
+  Page("taxonomy","Kategori ve marka eşleme","Yerel sözlükleri pazaryeri kategori ve markalarıyla eşleyin.",BuildTaxonomy());
+  Page("media","Medya yönetimi","Ürün görsellerini ve medya doğrulama uyarılarını yönetin.",MediaPanel.Create(dataDirectory,OpenMarketplaceRoute));
   Page("xml","XML otomasyonu","XML kaynakları, alan eşleme, fiyat formülü, zamanlama ve manuel çalıştırma.",builtPages["XML otomasyonu"]);
   Page("excel","Excel işlemleri","SKU ve sütun harfleriyle ürün, fiyat, stok, kategori ve sipariş aktarımı; önizleme ve geri alma.",BuildExcel());
+  Group("OPERASYON");
   Page("orders","Siparişler","Sipariş listesi, detay, kargo takibi, iade filtresi ve toplu işlem önizlemesi.",OrdersPanel.Create(dataDirectory,AuthorizedAsync,RefreshProducts));
-  Group("ENTEGRASYON");
+  Page("policy-center","Politika merkezi","Fiyat, stok ve operasyon güvenlik kurallarını yönetin.",PolicyCenterPanel.Create(dataDirectory));
+  Page("sync","Senkronizasyon","Kanal, XML ve otomasyon işlerini tek kuyruğa bağlı olarak izleyin.",BuildSync());
+  Page("automation","Otomasyon","Zamanlanmış işleri ve kontrollü tekrar denemeleri yönetin.",BuildAutomation());
+  Group("MAĞAZALAR");
   marketplaceHome=new MarketplaceAccountHomePanel(dataDirectory);
   marketplaceHome.ProductCardRequested += productId => OpenProductCard(false, productId);
   Page("marketplaces","Pazaryeri hesapları","Etkin mağazaları ayrı kartlar halinde açın; ürün ve işlem verileri seçili hesaba bağlı kalır.",marketplaceHome);
@@ -43,7 +51,12 @@ public partial class MainWindow
   CompatibilityAccountLink("etsy","Etsy","Kayıtlı bir Etsy hesabını açar.");
   Page("bizimhesap","BizimHesap","Ürün/depo okuma ve XML ürünleri için SKU-barkod eşleştirme önizlemesi.",BizimHesapPanel.Create(dataDirectory));
   Page("nes","NES e‑Fatura","Siparişten UBL‑TR hazırlama, NES önizleme, kontrollü gönderim ve belge takibi.",NesPanel.Create(dataDirectory));
-  Group("YÖNETİM");
+  Group("İZLEME");
+  Page("data-quality","Veri kalitesi","Eksik, geçersiz veya eşleşmeyen ürün alanlarını inceleyin.",DataQualityPanel.Create(dataDirectory,OpenMarketplaceRoute));
+  Page("api-health","API sağlığı","Mağaza bağlantıları ve servis sağlık kontrollerini izleyin.",ApiHealthPanel.Create(dataDirectory,OpenMarketplaceRoute));
+  Page("messages","Mesaj merkezi","Operasyon bildirimlerini ve hata mesajlarını tek listede görün.",MessagePanel.Create(dataDirectory,OpenMarketplaceRoute));
+  Page("reports","Raporlar ve denetim","Tanılama, denetim kaydı ve operasyon raporlarını inceleyin.",DiagnosticsPanel.Create(dataDirectory,OpenMarketplaceRoute));
+  Group("SİSTEM");
   Page("connections","Mağaza bağlantıları","Hesap metadatası, etkinlik, bağlantı durumu ve desteklenen yetenekler.",MarketplaceConnectionsPanel.Create(dataDirectory,OpenMarketplaceRoute,marketplaceHome.Refresh));
   var settings=new StackPanel{Margin=new Thickness(20)};
   settings.Children.Add(Heading("Hesaplar ve uygulama ayarları"));
@@ -64,7 +77,13 @@ public partial class MainWindow
   NavigationSearchBox.TextChanged += (_, _) => FilterNavigationItems();
   var parity=ScreenParityAudit.Evaluate(routes.Keys); if(!parity.IsComplete) Log("Ekran paritesi BLOCKED: "+string.Join(", ",parity.MissingRoutes));
   var initial = uiPreferences.Get("last-route");
-  Navigate(routes.ContainsKey(initial ?? "") ? initial! : initial is "trendyol" or "etsy" ? "marketplaces" : "products", false);
+  if(routes.ContainsKey(initial ?? "")) Navigate(initial!, false);
+  else if(IsMarketplaceChannel(initial))
+  {
+   marketplaceHome.ShowChannel(initial!);
+   Navigate("marketplaces", false);
+  }
+  else Navigate("dashboard", false);
 
   void CompatibilityAccountLink(string channel,string title,string description)
   {
@@ -75,14 +94,19 @@ public partial class MainWindow
 
  void OpenMarketplaceRoute(string key)
  {
-  if(key is "trendyol" or "etsy")
+  if(routes.ContainsKey(key))
+  {
+   Navigate(key);
+   return;
+  }
+  if(IsMarketplaceChannel(key))
   {
    marketplaceHome.ShowChannel(key);
    SelectRoute("marketplaces",true);
    return;
   }
-  Navigate(key);
  }
+ static bool IsMarketplaceChannel(string? key) => !string.IsNullOrWhiteSpace(key) && MarketplaceConnectionCatalog.All.Any(x => x.Id.Equals(key,StringComparison.OrdinalIgnoreCase));
  void SelectRoute(string key, bool push, string? title = null, string? description = null)
  {
   if (!routes.TryGetValue(key, out var page)) return;
@@ -92,8 +116,8 @@ public partial class MainWindow
   var item = NavigationList.Items.OfType<ListBoxItem>().Single(i => i.Tag?.ToString() == key);
   selectingRoute = true;
   try { NavigationList.SelectedItem = item; ModuleTabs.SelectedItem = page; } finally { selectingRoute = false; }
-  // Ürün ekranının kendi arama ve işlem araçları vardır; ortak başlık ve özet şeridi tablo alanını daraltmasın.
-  PageHeader.Visibility = key is "products" or "marketplaces" ? Visibility.Collapsed : Visibility.Visible;
+  // Ortak bağlam ve global komutlar yoğun tablolarda da görünür kalır; eski özet şeridi kullanılmaz.
+  PageHeader.Visibility = Visibility.Visible;
   ProductSummaryBar.Visibility = Visibility.Collapsed;
   PageTitle.Text = title ?? routeTitles[key];
   PageDescription.Text = description ?? item.ToolTip?.ToString() ?? "";
