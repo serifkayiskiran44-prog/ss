@@ -1,5 +1,19 @@
 # Devam durumu — 2026-09-11
 
+## Sipariş çalışma alanı — 2026-09-21
+- [x] Altı Entegra sipariş eğitimindeki genel kullanım, manuel sipariş, toplu işlem, ayrıntılı filtre, Excel ve iade akışlarını incele.
+- [x] Kullanıcının 124 sütunlu sipariş Excel örneğini kimlik, müşteri, fatura, sevk, kargo, ödeme, KDV, indirim, komisyon ve ürün gruplarına ayır.
+- [x] Sabit sağ ayrıntı panelini kaldır; tam genişlik liste, çift tıkla ayrı geniş sipariş kartı ve altı bilgi sekmesi ekle.
+- [x] Manuel sipariş, NES fatura, yerel stok önizlemesi, Excel içe alma, ayrıntılı Excel çıktısı ve iade kuyruğunu Siparişler ekranına bağla.
+- [x] Net/KDV/brüt toplamı tek hesaplayıcıda doğrula; kaynak farkını görünür tut ve bozuk Türkçe Excel başlıklarını otomatik eşle.
+- [x] KDV, indirim, komisyon, fatura, müşteri, sevk ve ürün alanlarını sipariş kartında/ayrıntılı Excel'de açık göster; Trendyol iptalini kırmızı, iadeyi turuncu satır olarak işaretle.
+- [x] Sipariş ekranı açıldığında kayıtlı Trendyol mağazasını salt okunur otomatik yenile; müşteri kimliği/e-posta/telefonu kök, fatura ve sevk adresi alanlarından güvenli sırayla tamamla.
+- [x] Trendyol kurumsal fatura unvanı, VKN, vergi dairesi, e-Fatura mükellefiyeti ve maskeli e-postayı sipariş kartına taşı; aynı zaman damgalı eski kayıtları eksik alanlarla zenginleştir.
+- [x] Bireysel e-Arşiv siparişinde TCKN gelmiyorsa `11111111111` uygula; kurumsal/e-Fatura kaydında VKN/TCKN eksikse belgeyi güvenli biçimde durdur.
+- [x] Bireysel e-Arşiv sipariş kartında kaynak VKN/TCKN boş olsa da faturada kullanılacak `11111111111` değerini açık göster; kaynak pazaryeri verisini değiştirme.
+- [x] 1148/1148 Release testi geçti; güncel self-contained win-x64 yayın oluşturuldu.
+- [ ] Gerçek pazaryeri iade onay/ret çağrıları yalnız resmî endpoint ve mevcut canlı yazma güvenlik kapıları doğrulandıktan sonra eklenebilir; yerel karar akışı canlı işlem sayılmaz.
+
 ## Etsy çalışma alanı — 2026-09-18
 - [x] İki Entegra Etsy eğitiminin tam Türkçe altyazısını ve ilgili ekranlarını incele; güncel resmi Etsy API ile karşılaştır.
 - [x] Ayrı Etsy menüsü: geniş kontrol listesi, toplu işlem önizlemeleri, SKU eşleme, ürün kartı, kategori/özellik ve kargo/hazırlık şablonları, işlem geçmişi.
@@ -636,3 +650,20 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [x] M120 Etsy product surface: ürün, Etsy şablonu, credential/shop ve listing mapping’i birleştiren read-only readiness kararı ve wrong-shop negatif testi eklendi (docs/taskpacks/M120.md).
 - [x] M121 supporting screen parity: operasyon sayaçları için ortak gerçek-snapshot özeti eklendi ve dashboard durum satırı bu sözleşmeyi kullanıyor (docs/taskpacks/M121.md).
 - [x] M122 final screen parity: merkezi navigation route audit’i eksik paneli BLOCKED raporlıyor ve mevcut rotaların tam sözleşmesini test ediyor (docs/taskpacks/M122.md).
+
+## NES e‑Fatura / e‑Arşiv — 2026-09-19
+- [x] Resmi NES test OpenAPI uçlarıyla giden e‑Fatura/e‑Arşiv listesi, önizleme ve belge yükleme istemcisi.
+- [x] DPAPI şifreli NES ayarları ve yalnız `nes.com.tr` HTTPS servislerine anahtar gönderme koruması.
+- [x] Siparişten UBL‑TR taslağı, KDV/toplam mutabakatı ve ayrı MBF/MBA seri numarası üretimi.
+- [x] Önizleme + açık onay + kalıcı idempotency + belirsiz sonuç kilidi + siparişe NES UUID/fatura numarası bağlama.
+- [ ] NES test hesabıyla gerçek UBL önizlemesini doğrula; NES tarafından bildirilen zorunlu profil alanlarını tamamla.
+- [ ] Trendyol ve Hepsiburada’nın resmi fatura dosyası/linki yükleme sözleşmelerini ayrı ayrı doğrulayıp NES belgesini pazaryeri siparişine bağla.
+
+## Sipariş ekranından NES ve Trendyol fatura akışı — 2026-09-21
+- [x] Trendyol Order API V2 sipariş/paket okuma, mağaza kimliği doğrulama, fatura mükellefiyeti ve satır KDV verilerini yerel siparişe eşleme.
+- [x] Sipariş ekranına Trendyol yenileme, Fatura işlemleri düğmesi ve sağ tık menüsü ekleme.
+- [x] Tek sipariş kartında alıcı/satır/toplam kontrolü, NES önizleme, açık onaylı gönderim ve fatura PDF açma.
+- [x] NES PDF dosyasını resmi Trendyol paket fatura yükleme servisine ikinci açık onayla gönderme.
+- [x] NES ekranındaki yinelenen sipariş listesini kaldırıp ekranı bağlantı ayarları ve geçmişle sınırlandırma.
+- [ ] Gerçek NES test hesabı ve Trendyol mağazasında tek test siparişiyle uçtan uca canlı doğrulama; kullanıcı onayı olmadan çalıştırılmayacak.
+- [ ] Hepsiburada fatura yükleme sözleşmesini resmi satıcı API erişimiyle ayrıca doğrulama.
