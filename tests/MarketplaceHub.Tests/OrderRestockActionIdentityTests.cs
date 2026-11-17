@@ -31,6 +31,23 @@ public sealed class OrderRestockActionIdentityTests
 
     static int Stock(CatalogStore store) => store.Products().Single(p => p.Sku == "SKU-1").Stock;
 
+    /// Account sync writes the receipt with the marketplace display name ("Trendyol"), the exception queue asks with the lower-cased one.
+    [TestMethod]
+    public void RestockFindsTheReceiptWhateverTheCaseOfTheMarketplaceAndRestoresOnce() => WithStore((store, _) =>
+    {
+        Seed(store);
+        store.ApplyOrderStock("Trendyol", "101", "ORD-1", new[] { new OrderItem { Sku = "SKU-1", Title = "x", Quantity = 3 } });
+        Assert.AreEqual(7, Stock(store));
+
+        var preview = store.CreateOrderRestockPreview("trendyol", "101", "ORD-1", "cancel:1");
+
+        Assert.AreEqual("Trendyol", preview.Marketplace, "The restore must be keyed like the receipt it undoes.");
+        Assert.IsFalse(store.ApplyOrderRestock(preview, true).AlreadyApplied);
+        Assert.AreEqual(10, Stock(store));
+        Assert.IsTrue(store.ApplyOrderRestock(store.CreateOrderRestockPreview("TRENDYOL", "101", "ORD-1", "cancel:1"), true).AlreadyApplied);
+        Assert.AreEqual(10, Stock(store));
+    });
+
     static void InsertRawRestore(string root, string order, string actionKey, string payload, string appliedUtc)
     {
         using var c = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "catalog.db") }.ToString());
