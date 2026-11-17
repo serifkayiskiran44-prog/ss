@@ -715,7 +715,7 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 # Denetim bulguları — 2026-11-17 (doğrulanmamış, sırada)
 
 Kaynak: salt okunur denetim; ikinci doğrulama aşaması kullanım sınırına takıldığı için aşağıdakiler henüz kodda tek tek doğrulanmadı.
-- [ ] Trendyol iptal/iade onayı yalnız onay kutusuyla kapılı; önizleme, stale kontrolü, makbuz yok (LWG-01).
+- [ ] Trendyol iptal/iade: çift gönderim ve belirsiz sonuçta tekrar gönderim artık işlem defteriyle engelli (`TrendyolActionLedger`, LWG-01 kısmen); canlı önizleme ve eski-veri (stale) kontrolü hâlâ yok.
 - [x] Üç Trendyol yazma yolu sipariş mağazasıyla SupplierId karşılaştırıyor (LWG-03; kimlik bilgisi hâlâ tek hesaplı `trendyol.bin`, çok hesaplı kasaya geçiş açık).
 - [x] İlk eşitlemeden önceki siparişler geçmiş sayılır, stok düşmez (STK-03).
 - [ ] Kanal planları stok/fiyat politikasını okumuyor; politika anahtarı ConnectionId değil (PP-01). Hepsiburada para birimi ve yönetim bayrağı denetimi eklendi (PP-02/03).
