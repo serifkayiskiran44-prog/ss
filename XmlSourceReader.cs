@@ -10,6 +10,8 @@ namespace TrMarketplaceHubDesktop;
 public record XmlAuth(string User="",string Password="");
 public class XmlSourceReader(HttpClient client)
 {
+ // Turkish suppliers still serve windows-1254 / iso-8859-9 feeds; without the code-page provider those fail with a misleading "invalid XML" message.
+ static XmlSourceReader(){Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);}
  public const int Limit=25*1024*1024;
  public async Task<string> ReadAsync(string location,XmlAuth? auth=null,CancellationToken ct=default)
  {
