@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -371,6 +372,46 @@ public sealed class MarketplaceAccountNavigationTests
             navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "marketplaces"));
             Assert.AreEqual(Visibility.Visible, commandBar.Visibility);
             Assert.AreEqual(Visibility.Visible, globalSearch.Visibility);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void GlobalCommandRoutingNormalizesDiagnosticsAndMarketplaceChannels() => InSta(root =>
+    {
+        var hepsiburada = new MarketplaceConnectionStore(root).Save("hepsiburada", "merchant-1", "Hepsiburada A", true);
+        var window = new MainWindow(root); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            var open = typeof(MainWindow).GetMethod("OpenMarketplaceRoute", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new AssertFailedException("Shared command-route resolver was not found.");
+
+            open.Invoke(window, new object[] { "diagnostics" });
+            Assert.AreEqual("reports", ((ListBoxItem)navigation.SelectedItem).Tag, "Legacy audit search results must open the reports route.");
+
+            open.Invoke(window, new object[] { "hepsiburada" });
+            Assert.AreEqual("marketplaces", ((ListBoxItem)navigation.SelectedItem).Tag);
+            CollectionAssert.AreEqual(new[] { hepsiburada.Id }, AccountCards(window).Select(x => (string)x.Tag).ToArray());
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void SyncRouteDoesNotExposeTheLegacyGlobalEtsyDispatchControls() => InSta(root =>
+    {
+        var window = new MainWindow(root); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+        try
+        {
+            var navigation = Walk(window).OfType<ListBox>().Single(x => x.Name == "NavigationList");
+            navigation.SelectedItem = navigation.Items.OfType<ListBoxItem>().Single(x => Equals(x.Tag, "sync"));
+            var buttons = Walk(window).OfType<Button>().ToArray();
+
+            Assert.IsFalse(buttons.Any(x => Equals(x.Content, "Seçili üründe Etsy önizlemesi")));
+            Assert.IsFalse(buttons.Any(x => Equals(x.Content, "Önizlemeyi açık onayla ve gönder")));
+            var safeRoute = buttons.Single(x => x.Name == "SyncOpenEtsyWorkspace");
+            safeRoute.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.AreEqual("marketplaces", ((ListBoxItem)navigation.SelectedItem).Tag);
         }
         finally { window.Close(); }
     });

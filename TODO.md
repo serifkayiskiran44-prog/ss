@@ -6,7 +6,8 @@
 - [x] XML Yönetimi; kaynak listesi, sürüklenebilir ayırıcı, tanım/önizleme bölmeleri ve seçim durumuna bağlı özetle yeniden düzenlendi.
 - [x] Ayarlar; uygulama ve mağaza ayarlarını yedi açık bölümde topladı. Yeni giriş/parola veya kopya credential akışı eklenmedi.
 - [x] Varsayılan ana sayfa, Ürünler, XML, Ayarlar, Pazaryerleri ve Siparişler rotaları WPF sözleşme testleriyle doğrulandı.
-- [x] Tam Release paketi **1491/1491** geçti; self-contained win-x64 yayın, paket smoke'u ve izole gerçek `MonoBridge — Yönetim Merkezi` ana pencere açılışı başarılı.
+- [x] Tam Release paketi **1493/1493** geçti; self-contained win-x64 yayın, paket smoke'u ve izole gerçek `MonoBridge — Yönetim Merkezi` ana pencere açılışı başarılı.
+- [x] Nihai inceleme düzeltmesi: global arama kanal/tanılama sonuçları ortak rota çözümleyicisine bağlandı; eski hesap-kapsamsız Etsy gönderim düğmeleri yerine güvenli mağaza çalışma alanı yönlendirmesi kullanıldı.
 - [ ] Windows erişilebilirlik köprüsü yayınlanan WPF penceresine bağlanamadığı için 1366×720 ve büyütülmüş pencerede elle görsel rota turu ayrıca yapılmalı; bu sınırlama otomatik test veya açılış hatası değildir.
 - [ ] Ayrı kirli çalışma kopyasında kalan “Yeni ürün adayı” işi bu dala alınmadı ve değiştirilmedi.
 

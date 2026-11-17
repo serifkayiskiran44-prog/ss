@@ -68,7 +68,7 @@ public partial class MainWindow
         foreach (var hit in hits)
         {
             var button = new Button { HorizontalContentAlignment = HorizontalAlignment.Left, Background = System.Windows.Media.Brushes.White, Foreground = System.Windows.Media.Brushes.DarkSlateGray, Content = new StackPanel { Children = { new TextBlock { Text = $"{hit.Type}  ·  {hit.Title}", FontWeight = FontWeights.SemiBold }, new TextBlock { Text = hit.Detail, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 3, 0, 0) } } } };
-            button.Click += (_, _) => { window.Close(); Navigate(hit.Route); };
+            button.Click += (_, _) => { window.Close(); OpenMarketplaceRoute(hit.Route); };
             list.Items.Add(button);
         }
         root.Children.Add(list); window.Content = root; window.ShowDialog();

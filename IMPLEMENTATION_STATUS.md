@@ -4,8 +4,9 @@
 - Ana kabuk MonoBridge markasını koruyarak daha kompakt bir operasyon düzenine taşındı; global komut alanı ve mevcut bütün ana rotalar görünür kaldı.
 - Ürün Yönetimi yoğun filtre/özet/tablo/düzenleme bölgelerine, XML Yönetimi kaynak/ayırıcı/tanım/önizleme bölgelerine ayrıldı. Mevcut yerel kayıt, önizleme, stale ve onay güvenlikleri değiştirilmedi.
 - Ayarlar uygulama ve mağaza kapsamlarını tek merkezde yedi bölüme ayırdı; credential kopyalanmadı, yeni login eklenmedi ve ertelenmiş kullanıcı alanlarına girilmedi.
-- Doğrulama: tam Release komutu **1491/1491** geçti. `Windows-Entegra-Operations` self-contained win-x64 yayını ve paket smoke'u başarılı; izole geçici veri dizininde gerçek ana pencere `MonoBridge — Yönetim Merkezi` başlığıyla açıldı.
-- Paket SHA-256: `8b055e32ef666ee03a08f5cecfdeb98f70650f0b9dc0ac4621630944bbe23e89`; EXE SHA-256: `48CAC4501CC0AE44BFD2AC590CAC861A9855078FBA9A9B6E151CDC893DDE26FF`.
+- Nihai inceleme düzeltmesinde global arama kanal/tanılama sonuçları ortak rota çözümleyicisine bağlandı. Hesap kimliğiyle uyuşmayan eski global Etsy gönderim kontrolleri kaldırıldı; Sync ekranı güvenli exact-account Etsy çalışma alanına yönlendiriyor.
+- Doğrulama: tam Release komutu **1493/1493** geçti. `Windows-Entegra-Operations` self-contained win-x64 yayını ve paket smoke'u başarılı; izole geçici veri dizininde gerçek ana pencere `MonoBridge — Yönetim Merkezi` başlığıyla açıldı.
+- Paket SHA-256: `4f67ac1535e3029b4c87afd664f38d76a39698e7116bfb9efd9b83adb6bd420c`; EXE SHA-256: `211A5A0597C7DE5F07645294F25C80FCED63817CC150AB2834679C53E09DB893`.
 - Canlı marketplace HTTP/yazma yapılmadı ve gerçek kullanıcı veri/credential dizini kullanılmadı. Windows erişilebilirlik köprüsü WPF penceresini denetleyemediği için ayrıntılı manuel görsel rota turu ayrıca bekliyor; otomatik WPF regresyonları ve gerçek MainWindow açılışı geçti.
 - Ayrı çalışma kopyasındaki tamamlanmamış “Yeni ürün adayı” değişiklikleri bu dala alınmadı.
 

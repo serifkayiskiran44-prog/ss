@@ -20,7 +20,7 @@ Komut:
 dotnet test tests/MarketplaceHub.Tests/MarketplaceHub.Tests.csproj -c Release
 ```
 
-Sonuç: **1491/1491 başarılı**, başarısız ve atlanan test yok.
+Sonuç: **1493/1493 başarılı**, başarısız ve atlanan test yok.
 
 Yayın komutu:
 
@@ -34,8 +34,8 @@ Paketleyici ayrıca integrity manifestlerini üretti, yayın klasörünü denetl
 
 - Yayın klasörü: `Windows-Entegra-Operations`
 - Paket: `Windows-Entegra-Operations.zip`
-- Paket SHA-256: `8b055e32ef666ee03a08f5cecfdeb98f70650f0b9dc0ac4621630944bbe23e89`
-- EXE SHA-256: `48CAC4501CC0AE44BFD2AC590CAC861A9855078FBA9A9B6E151CDC893DDE26FF`
+- Paket SHA-256: `4f67ac1535e3029b4c87afd664f38d76a39698e7116bfb9efd9b83adb6bd420c`
+- EXE SHA-256: `211A5A0597C7DE5F07645294F25C80FCED63817CC150AB2834679C53E09DB893`
 - Paket smoke: **BAŞARILI**
 - Gerçek MainWindow açılışı: **BAŞARILI**
 - Görülen pencere başlığı: `MonoBridge — Yönetim Merkezi`
@@ -52,6 +52,7 @@ Yayınlanan uygulama Windows üzerinde açıldı ve ana pencerenin varlığı do
 - Gerçek kullanıcı veri dizini ve credential kasası kullanılmadı.
 - Canlı marketplace HTTP çağrısı veya yazma işlemi yapılmadı.
 - Ayrı kirli çalışma kopyasında kalan “Yeni ürün adayı” değişiklikleri bu dala alınmadı ve değiştirilmedi.
+- Nihai inceleme sonrası eski hesap-kapsamsız Etsy gönderim düğmeleri kaldırıldı; kullanıcı yalnız exact-account mağaza çalışma alanına yönlendiriliyor.
 
 ## Manuel son kontrol listesi
 

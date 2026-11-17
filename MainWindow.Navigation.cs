@@ -79,6 +79,7 @@ public partial class MainWindow
 
  void OpenMarketplaceRoute(string key)
  {
+  if (key.Equals("diagnostics", StringComparison.OrdinalIgnoreCase)) key = "reports";
   if(routes.ContainsKey(key))
   {
    Navigate(key);
