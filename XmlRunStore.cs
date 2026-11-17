@@ -64,6 +64,7 @@ public sealed class XmlRunStore
     {
         if (string.IsNullOrWhiteSpace(sourceId)) throw new ArgumentException("XML kaynak kimliği zorunludur.", nameof(sourceId));
         var id = Guid.NewGuid().ToString("N");
+        RecoverAbandonedRunning(StaleRunCeiling);
         using var connection = Open();
         using (var running = connection.CreateCommand())
         {
@@ -80,6 +81,39 @@ public sealed class XmlRunStore
         catch (SqliteException error) when (error.SqliteErrorCode == 19)
         { throw new InvalidOperationException("Bu XML kaynağı zaten çalışıyor; paralel ikinci çalışma engellendi."); }
         return id;
+    }
+
+    /// A run older than this is treated as abandoned even without a restart, so a stale row can never block its source for good.
+    public static readonly TimeSpan StaleRunCeiling = TimeSpan.FromHours(2);
+
+    /// Only one Running row per source is allowed, so a run that was cut off by a crash or power loss would block that source forever.
+    /// Marks Running rows that started at least <paramref name="olderThan"/> ago (or whose start time is unreadable) as Failed.
+    /// The app calls this with zero at process start, where the single-instance guard guarantees nothing can really be running.
+    public int RecoverAbandonedRunning(TimeSpan olderThan, DateTime? nowUtc = null)
+    {
+        if (olderThan < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(olderThan));
+        var now = nowUtc ?? DateTime.UtcNow;
+        var cutoff = now - olderThan;
+        using var connection = Open();
+        var abandoned = new List<string>();
+        using (var select = connection.CreateCommand())
+        {
+            select.CommandText = "SELECT Id,StartedUtc FROM XmlRuns WHERE Status='Running'";
+            using var reader = select.ExecuteReader();
+            while (reader.Read())
+                if (!TryParseUtc(reader.GetString(1), out var started) || started.ToUniversalTime() <= cutoff) abandoned.Add(reader.GetString(0));
+        }
+        var recovered = 0;
+        foreach (var id in abandoned)
+        {
+            using var update = connection.CreateCommand();
+            update.CommandText = "UPDATE XmlRuns SET Status='Failed', FinishedUtc=$finished, Error=$error WHERE Id=$id AND Status='Running'";
+            update.Parameters.AddWithValue("$finished", now.ToString("O", CultureInfo.InvariantCulture));
+            update.Parameters.AddWithValue("$error", "Çalışma yarıda kesildi (uygulama kapandı veya çöktü); kaynak yeniden çalıştırılabilir.");
+            update.Parameters.AddWithValue("$id", id);
+            recovered += update.ExecuteNonQuery();
+        }
+        return recovered;
     }
 
     public void Complete(string id, Catalog.ImportSummary summary)

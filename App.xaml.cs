@@ -104,6 +104,9 @@ public partial class App : Application
 
         try
         {
+            // Single instance: an XML run still marked Running at process start was cut off by a crash or power loss and would block its source for good.
+            try { new XmlRunStore(dataDirectory).RecoverAbandonedRunning(TimeSpan.Zero); }
+            catch (Exception ex) { LogFatal(dataDirectory, ex); }
             backgroundController = new BackgroundAppController(dataDirectory, BackgroundJobFactory.Create(dataDirectory));
             var window = new MainWindow(dataDirectory, backgroundController);
             window.ContentRendered += (_, _) => crashGuard?.MarkReachedUi();
