@@ -81,6 +81,15 @@ public sealed class EtsyWorkspaceTests
         using var payload=JsonDocument.Parse(api.Body); var offering=payload.RootElement.GetProperty("products")[0].GetProperty("offerings")[0];
         Assert.AreEqual(10m,offering.GetProperty("price").GetDecimal()); Assert.AreEqual(8,offering.GetProperty("quantity").GetInt32());
     }
+    [TestMethod] public async Task StockPlanAppliesTheSavedEtsyStockPolicy()
+    {
+        new CatalogStore(directory).SaveStockPolicy(new StockPolicy{Channel="etsy",Shop="123",SafetyStock=3,Enabled=true});
+        var api=new Api(); using var http=new HttpClient(api); var service=new EtsyWorkspaceService(directory,http);
+        var plan=await service.PreviewAsync(credentials,[product.Id],EtsyOperation.Stock);
+        await service.SendAsync(credentials,plan.Id,true);
+        using var payload=JsonDocument.Parse(api.Body);
+        Assert.AreEqual(5,payload.RootElement.GetProperty("products")[0].GetProperty("offerings")[0].GetProperty("quantity").GetInt32(),"Stock 8 minus safety stock 3.");
+    }
     [TestMethod] public async Task PriceAndStockWritesDoNotIntroduceAbsentReadinessState()
     {
         foreach(var operation in new[]{EtsyOperation.Price,EtsyOperation.Stock})
