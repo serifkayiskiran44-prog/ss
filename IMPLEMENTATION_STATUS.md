@@ -343,3 +343,10 @@ Multi-store production integration closure (2026-09-19): XML apply paths now enf
 - Eski tek hesaplı Hepsiburada paneli ve kök `HepsiburadaCompetition.cs` kaldırıldı; hesap bazlı Hepsiburada çalışma alanı kullanılır. Ayarlar ekranındaki Trendyol/Etsy kısa yolları "Mağaza bağlantılarını yönet" altına taşındı.
 - Ana pencere testleri ertelenmiş çalışma alanı kurulumunu bekler; sipariş kartı testleri pencere tanıtıcısı açmadan mantıksal ağaçtan denetler.
 - Doğrulama: tüm Release testi **1481/1481** geçti. Gerçek mağazaya yazma yapılmadı.
+
+## Yeni ürün adayı kaydı, açılış kapısı düzeltmesi ve gerçek veri denemesi — 2026-11-17
+- Mağazaya atanmış ama mağazada karşılığı olmayan ürün (yeni ilan adayı) artık hesap başına `ProductChannelCandidates` tablosunda saklanır; bağlantı satırı oluşturulmaz (boş uzak kimlik `UNIQUE(ConnectionId,RemoteId)` ile çakışırdı). Hesap ürün listesi yalnız bağlı ürünleri ve o hesabın adaylarını gösterir; ürün bağlanınca aday kaydı silinir; "Adaylıktan çıkar" yalnız yerel kaydı kaldırır, mağazaya hiçbir şey göndermez.
+- Açılış kapısı: göçü tamamlanmış (Completed) veri klasörü, sonradan silinen geri dönüş arşivi (zip) yüzünden artık açılmayı reddetmez; yarım kalmış göç eskisi gibi arşivsiz devam etmez (kapalı başarısız). `Apply` ile idempotent yeniden çalıştırma arşivi yine doğrular.
+- Gerçek veri denemesi: gerçek klasör (göç 2026-09-19'da tamamlanmış, arşiv zip'i yok) kimlik bilgisi ve görseller hariç kopyalandı; yayın derlemesi bu kopyada açıldı, ana pencere geldi ve işlem günlüğüne yeni oturum satırı yazıldı. Gerçek klasör (12.193 dosya) boyut ve zaman damgasıyla değişmedi; mağaza çağrısı yapılmadı.
+- Tasarım/menü işleri bilinçli olarak bu çalışmanın dışında bırakıldı (kullanıcı kararı: tasarım ayrı yürütülüyor). Ana menüye bağlanmamış hazır paneller ve rota sözleşmesi `docs/UI-HANDOFF-NAVIGATION.md` içinde.
+- Doğrulama: tüm Release testi **1491/1491** geçti.

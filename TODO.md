@@ -698,3 +698,10 @@ Güncel EXE Windows-Policies/TrMarketplaceHubDesktop.exe. Şifre/login yok. Aç�
 - [ ] Hepsiburada panelinden bu entegrasyona atanmış yeni servis anahtarı alınmalı; mevcut canlı denemede ürün/kategori 403, listing/sipariş 401 döndü.
 - [ ] Salt okunur doğrulama başarılı olduktan sonra resmî yazma izinleri ve takip uçları gerçek test ürünüyle doğrulanmalı; o zamana kadar canlı gönderim kapalı kalacak.
 - [ ] Sonraki modül: Trendyol + Hepsiburada + Amazon ortak rekabet analizi; Excel ile min/max/barem fiyatı, aktiflik ve rakip bağlantısını toplu önizleme/onay ile güncelleme.
+
+# Aday ürünler ve açılış kapısı — 2026-11-17
+
+- [x] Yeni ürün adayı (`NewListingCandidate`) hesap başına kalıcı; hesap listesi yalnız bağlı ürün ve o hesabın adaylarını gösterir; aday bağlanınca temizlenir; yerel "Adaylıktan çıkar" mağazaya yazmaz.
+- [x] Tamamlanmış çoklu mağaza göçü, silinmiş geri dönüş arşivi yüzünden açılışı engellemez; yarım göç kapalı başarısız kalır.
+- [x] Gerçek verinin kimlik bilgisiz kopyasında açılış denemesi geçti; gerçek klasör değişmedi.
+- [ ] Kimlik bilgili gerçek veriyle mağaza okumaları kullanıcı oturumunda (salt okunur) doğrulanmalı.
