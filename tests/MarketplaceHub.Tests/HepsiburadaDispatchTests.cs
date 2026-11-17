@@ -37,6 +37,17 @@ public sealed class HepsiburadaDispatchTests
     [TestCleanup] public void Cleanup() { try { Directory.Delete(root, true); } catch { } }
 
     [TestMethod]
+    public void StockPlanAppliesTheStoreStockPolicyWhenOneIsSaved()
+    {
+        new CatalogStore(root).SaveStockPolicy(new StockPolicy { Channel = "hepsiburada", Shop = account.ShopId, SafetyStock = 3, Enabled = true });
+
+        var plan = new HepsiburadaDispatchStore(root).Preview(account.Id, [product.Id], HepsiburadaOperation.Stock);
+
+        using var json = JsonDocument.Parse(plan.PayloadJson);
+        Assert.AreEqual(4, json.RootElement.GetProperty("listings")[0].GetProperty("availableStock").GetInt32(), "Stock 7 minus safety stock 3.");
+    }
+
+    [TestMethod]
     public void StockPreviewContainsOnlyStockIdentityAndQuantity()
     {
         var plan = new HepsiburadaDispatchStore(root).Preview(account.Id, [product.Id], HepsiburadaOperation.Stock);

@@ -718,7 +718,7 @@ Kaynak: salt okunur denetim; ikinci doğrulama aşaması kullanım sınırına t
 - [ ] Trendyol iptal/iade: çift gönderim ve belirsiz sonuçta tekrar gönderim artık işlem defteriyle engelli (`TrendyolActionLedger`, LWG-01 kısmen); canlı önizleme ve eski-veri (stale) kontrolü hâlâ yok.
 - [x] Üç Trendyol yazma yolu sipariş mağazasıyla SupplierId karşılaştırıyor (LWG-03; kimlik bilgisi hâlâ tek hesaplı `trendyol.bin`, çok hesaplı kasaya geçiş açık).
 - [x] İlk eşitlemeden önceki siparişler geçmiş sayılır, stok düşmez (STK-03).
-- [ ] Kanal planları stok/fiyat politikasını okumuyor; politika anahtarı ConnectionId değil (PP-01). Hepsiburada para birimi ve yönetim bayrağı denetimi eklendi (PP-02/03).
+- [ ] Hepsiburada stok planı kayıtlı stok politikasını uyguluyor (PP-01 kısmen); fiyat politikası ve diğer kanalların planları hâlâ okumuyor. Hepsiburada para birimi ve yönetim bayrağı denetimi eklendi (PP-02/03).
 - [ ] XML içe aktarma Active/Category'yi kural eşleşmesinde sıfırlıyor (POOL-02). Elle girilen alanların silinmesi (POOL-03) ve kartın kanal fiyatını donmuş kopya yazması (POOL-01) düzeltildi.
 - [ ] Excel tarih hücreleri kültür kaydırması (XA-04), kategori yeniden adlandırmanın XML kurallarına yansımaması (TAX-01). Windows-1254 çözümü eklendi (XA-08).
 - [x] Zamanlanmış sipariş okuma hesabın 'Senkron aralığı'na uyuyor, elle yenileme her zaman okur (AE-03; API sağlık geri çekilmesi hâlâ açık). Etsy arka plan belirteç yenilemesi eklendi (AE-02).
