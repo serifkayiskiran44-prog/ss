@@ -86,6 +86,8 @@ public sealed partial class OrdersStore
  internal static bool SaveAttached(SqliteConnection connection,SqliteTransaction transaction,OrderSnapshot original)
  {
   OrdersRules.Validate(original);var order=original.Copy();
+  // Same rule as SaveBatch: a remote refresh never puts an archived order back on the active list (and so never deducts stock for it).
+  using(var archived=connection.CreateCommand()){archived.Transaction=transaction;archived.CommandText="SELECT 1 FROM ordersdb.order_archive WHERE marketplace=$m AND shop=$s AND id=$i";Key(archived,order);if(archived.ExecuteScalar() is not null)return false;}
   using(var get=connection.CreateCommand())
   {
    get.Transaction=transaction;get.CommandText="SELECT payload FROM ordersdb.orders WHERE marketplace=$m AND shop=$s AND id=$i";Key(get,order);

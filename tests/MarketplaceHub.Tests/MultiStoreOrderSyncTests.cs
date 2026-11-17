@@ -79,6 +79,23 @@ public sealed class MultiStoreOrderSyncTests
     }
 
     [TestMethod]
+    public async Task ArchivedOrderIsNotResurrectedOrDeductedByALaterSync()
+    {
+        var setup = SetupOneAccount();
+        setup.Reader.Set(Order("101", "ORD-ARCH", "UNKNOWN-SKU", 2, 10));           // unmatched: stored for review, never deducted
+        await setup.Service.RefreshAllAsync();
+        new OrdersStore(root).Archive("Trendyol", "101", "ORD-ARCH", "test");
+        setup.Reader.Set(Order("101", "ORD-ARCH", "REMOTE-A", 2, 20, "Shipped"));     // a newer remote version that now resolves to a product
+
+        var result = (await setup.Service.RefreshAllAsync()).Single();
+
+        Assert.AreEqual(MarketplaceOrderSyncStatus.Succeeded, result.Status);
+        Assert.AreEqual(0, new OrdersStore(root).ReadAll().Count, "A refresh must not put an archived order back on the active list.");
+        Assert.AreEqual(1, new OrdersStore(root).ReadArchived().Count);
+        Assert.AreEqual(10, new InventoryLocationStore(root).GetBalance(setup.Product.Id, InventoryLocationStore.OnlineLocationId).Quantity);
+    }
+
+    [TestMethod]
     public async Task CancelledOrderIsCollectedButNeverDeductsInventory()
     {
         var setup = SetupOneAccount();
