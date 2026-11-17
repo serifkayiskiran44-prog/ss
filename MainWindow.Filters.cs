@@ -47,7 +47,7 @@ public partial class MainWindow {
   panel.Children.Add(Button("Kolon görünürlüğü",OpenProductColumnChooser));
   ApplyProductColumnPreferences();
   ReloadSaved();
-  host.Children.Add(new Expander{Header="Detaylı arama",Content=new ScrollViewer{Content=panel,MaxHeight=310,VerticalScrollBarVisibility=ScrollBarVisibility.Auto},HorizontalAlignment=HorizontalAlignment.Stretch});
+  host.Children.Add(new Expander{Name="ProductDetailedFilterSection",Header="Detaylı arama",Content=new ScrollViewer{Content=panel,MaxHeight=310,VerticalScrollBarVisibility=ScrollBarVisibility.Auto},HorizontalAlignment=HorizontalAlignment.Stretch});
  }
  void ApplyProductColumnPreferences()
  {

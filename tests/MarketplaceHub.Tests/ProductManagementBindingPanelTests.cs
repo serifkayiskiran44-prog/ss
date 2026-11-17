@@ -40,6 +40,42 @@ public sealed class ProductManagementBindingPanelTests
     }
 
     [TestMethod]
+    public void ProductWorkspaceKeepsOperationsInNamedDenseRegionsWithUnifiedPagingSummary() => InSta(() =>
+    {
+        var catalog = new CatalogStore(directory);
+        catalog.CreateManual(new() { Sku = "A", Name = "A", Currency = "TRY", Stock = 2 });
+        catalog.CreateManual(new() { Sku = "B", Name = "B", Currency = "TRY", Stock = 0 });
+        var window = new MainWindow(directory); window.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
+        try
+        {
+            var tree = LogicalWalk((DependencyObject)window.Content).OfType<FrameworkElement>().ToArray();
+            var primary = tree.Single(x => x.Name == "ProductPrimaryCommandBar");
+            var secondary = tree.Single(x => x.Name == "ProductSecondaryCommandBar");
+            var bulk = tree.Single(x => x.Name == "ProductBulkCommandBar");
+            var grid = (DataGrid)tree.Single(x => x.Name == "ProductGrid");
+            var paging = tree.Single(x => x.Name == "ProductPagingBar");
+            var summary = (TextBlock)tree.Single(x => x.Name == "ProductResultSummary");
+
+            CollectionAssert.AreEqual(new[] { "Ara", "Temizle", "+ Yeni ürün", "Ürün kartı" },
+                LogicalWalk(primary).OfType<Button>().Select(x => x.Content?.ToString()).ToArray());
+            foreach (var label in new[] { "Mağazaya bağla", "Bağlantılar", "Kaynak ve stok", "Kolonlar", "Excel'e aktar", "Excel ile güncelle", "BizimHesap" })
+                Assert.AreEqual(1, LogicalWalk(secondary).OfType<Button>().Count(x => Equals(x.Content, label)), $"Operation '{label}' must remain reachable exactly once.");
+            Assert.AreEqual(0, LogicalWalk(primary).OfType<Button>().Count(x => Equals(x.Content, "İşlemi önizle")));
+            Assert.AreEqual(1, LogicalWalk(bulk).OfType<Button>().Count(x => Equals(x.Content, "İşlemi önizle")));
+            Assert.AreEqual(1, LogicalWalk(primary).OfType<TextBox>().Count(), "Primary commands may contain only the existing search field; no quick-edit form is allowed.");
+            Assert.AreEqual(0, LogicalWalk(secondary).OfType<TextBox>().Count(), "Secondary commands must not introduce quick-edit fields.");
+
+            Assert.IsTrue(grid.RowHeight is >= 27 and <= 29);
+            Assert.IsTrue(grid.EnableRowVirtualization);
+            Assert.IsTrue(VirtualizingPanel.GetIsVirtualizing(grid));
+            Assert.IsTrue(LogicalWalk(paging).OfType<ComboBox>().Any(), "Paging must expose the page limit.");
+            foreach (var label in new[] { "Toplam", "Filtrelenmiş", "Seçili", "Sayfa", "Limit" })
+                StringAssert.Contains(summary.Text, label);
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
     public void ExplicitSelectionIsImmutableAndTargetsCarryOnlyEligibleExactConnectionIds()
     {
         var catalog = new CatalogStore(directory);

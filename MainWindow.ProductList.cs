@@ -16,6 +16,11 @@ public partial class MainWindow
     static readonly PageLimit[] PageLimits = [new("50", 50), new("100", 100), new("200", 200), new("500", 500), new("Tümü", 0)];
     readonly TextBlock productSelection = Hint("");
     readonly TextBlock productPageLabel = Hint("");
+    readonly TextBlock productResultSummary = new() { Name = "ProductResultSummary", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 4, 12, 4) };
+    int productAllTotal;
+    int productFilteredTotal;
+    string productCurrentPage = "1 / 1";
+    string productCurrentLimit = "100";
     readonly ComboBox productBulkChoice = new() { Width = 225, DisplayMemberPath = "Label", SelectedValuePath = "Kind" };
     readonly ComboBox productBulkValue = new() { Width = 230, IsEditable = true };
     readonly ComboBox productBulkScope = new() { Width = 225, ItemsSource = new[] { "Yalnız seçtiğim ürünler", "Filtreye uyan tüm ürünler" }, SelectedIndex = 0 };
@@ -37,25 +42,27 @@ public partial class MainWindow
 
     StackPanel BuildProductListHeader()
     {
-        var host = new StackPanel(); var bar = new WrapPanel(); host.Children.Add(bar);
-        search.Width = 340; search.ToolTip = "Ürün adı, stok kodu, barkod, marka veya kategori"; bar.Children.Add(search);
+        var host = new StackPanel();
+        var primary = new WrapPanel { Name = "ProductPrimaryCommandBar", Margin = new Thickness(2) }; host.Children.Add(primary);
+        search.Width = 340; search.ToolTip = "Ürün adı, stok kodu, barkod, marka veya kategori"; primary.Children.Add(search);
         search.TextChanged += (_, _) => { productOffset = 0; searchTimer.Stop(); searchTimer.Start(); };
-        bar.Children.Add(Button("Ara", () => { productOffset = 0; RefreshProducts(); }));
-        bar.Children.Add(Button("Temizle", () => search.Clear()));
-        bar.Children.Add(Button("+ Yeni ürün", () => OpenProductCard(true)));
-        bar.Children.Add(Button("Ürün kartı", () => OpenProductCard(false)));
+        primary.Children.Add(Button("Ara", () => { productOffset = 0; RefreshProducts(); }));
+        primary.Children.Add(Button("Temizle", () => search.Clear()));
+        primary.Children.Add(Button("+ Yeni ürün", () => OpenProductCard(true)));
+        primary.Children.Add(Button("Ürün kartı", () => OpenProductCard(false)));
+        var secondary = new WrapPanel { Name = "ProductSecondaryCommandBar", Margin = new Thickness(2, 0, 2, 2) }; host.Children.Add(secondary);
         productConnectSelectedButton.Click += (_, _) => OpenProductConnections();
         productConnectionsButton.Click += (_, _) => OpenSelectedProductConnections();
         productSourceButton.Click += (_, _) => OpenSelectedProductSource();
-        bar.Children.Add(productConnectSelectedButton);
-        bar.Children.Add(productConnectionsButton);
-        bar.Children.Add(productSourceButton);
-        bar.Children.Add(Button("Kolonlar", OpenProductColumnChooser));
-        bar.Children.Add(Button("Excel'e aktar", ExportProductList));
-        bar.Children.Add(Button("Excel ile güncelle", () => Navigate("excel")));
-        bar.Children.Add(Button("BizimHesap", () => Navigate("bizimhesap")));
+        secondary.Children.Add(productConnectSelectedButton);
+        secondary.Children.Add(productConnectionsButton);
+        secondary.Children.Add(productSourceButton);
+        secondary.Children.Add(Button("Kolonlar", OpenProductColumnChooser));
+        secondary.Children.Add(Button("Excel'e aktar", ExportProductList));
+        secondary.Children.Add(Button("Excel ile güncelle", () => Navigate("excel")));
+        secondary.Children.Add(Button("BizimHesap", () => Navigate("bizimhesap")));
         AddProductFilters(host);
-        var bulk = new WrapPanel { Margin = new Thickness(4) };
+        var bulk = new WrapPanel { Name = "ProductBulkCommandBar", Margin = new Thickness(4) };
         productBulkChoice.ItemsSource = ProductActions; productBulkChoice.SelectedIndex = 0;
         productBulkChoice.SelectionChanged += (_, _) =>
         {
@@ -75,12 +82,17 @@ public partial class MainWindow
 
     FrameworkElement BuildProductTable()
     {
-        var panel = new DockPanel(); var footer = new WrapPanel(); DockPanel.SetDock(footer, System.Windows.Controls.Dock.Bottom); panel.Children.Add(footer);
+        var panel = new DockPanel();
+        var footerHost = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(footerHost, System.Windows.Controls.Dock.Bottom); panel.Children.Add(footerHost);
+        var footer = new WrapPanel { Name = "ProductPagingBar", HorizontalAlignment = HorizontalAlignment.Right };
+        DockPanel.SetDock(footer, System.Windows.Controls.Dock.Right); footerHost.Children.Add(footer);
+        footerHost.Children.Add(productResultSummary);
         footer.Children.Add(Button("‹ Önceki", () => { if (productPageSize == 0) return; productOffset = Math.Max(0, productOffset - productPageSize); RefreshProducts(); }));
         footer.Children.Add(productPageLabel);
         footer.Children.Add(Button("Sonraki ›", () => { if (productPageSize == 0) return; if (productOffset + productPageSize < productTotal) productOffset += productPageSize; RefreshProducts(); }));
         footer.Children.Add(Hint("Sayfa limiti"));
-        var size = new ComboBox { ItemsSource = PageLimits, DisplayMemberPath = "Label", SelectedValuePath = "Count", SelectedValue = productPageSize, Width = 85 };
+        var size = new ComboBox { Name = "ProductPageLimit", ItemsSource = PageLimits, DisplayMemberPath = "Label", SelectedValuePath = "Count", SelectedValue = productPageSize, Width = 85 };
         size.SelectionChanged += (_, _) => { if (size.SelectedItem is PageLimit limit) { productPageSize = limit.Count; productOffset = 0; RefreshProducts(); } }; footer.Children.Add(size);
         panel.Children.Add(products); return panel;
     }
@@ -115,6 +127,7 @@ public partial class MainWindow
         products.SelectionChanged += (_, _) =>
         {
             productSelection.Text = $"Seçilen: {products.SelectedItems.Count:N0}";
+            UpdateProductResultSummary();
             UpdateProductConnectionCommandState();
         };
         UpdateProductConnectionCommandState();
@@ -192,6 +205,9 @@ public partial class MainWindow
     }
 
     static bool IsLockAction(BulkProductOperationKind? kind)=>kind is BulkProductOperationKind.SetPriceLock or BulkProductOperationKind.SetStockLock or BulkProductOperationKind.SetNameLock or BulkProductOperationKind.SetDescriptionLock or BulkProductOperationKind.SetImageLock;
+
+    void UpdateProductResultSummary() => productResultSummary.Text =
+        $"Toplam: {productAllTotal:N0}  •  Filtrelenmiş: {productFilteredTotal:N0}  •  Seçili: {products.SelectedItems.Count:N0}  •  Sayfa: {productCurrentPage}  •  Limit: {productCurrentLimit}";
 
     void PreviewProductBulk()
     {
