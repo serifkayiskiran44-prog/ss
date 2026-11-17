@@ -32,9 +32,9 @@ public sealed class BizimHesapConnection(HttpClient http)
         Validate(settings);
         if (string.IsNullOrWhiteSpace(product.Sku) || string.IsNullOrWhiteSpace(product.Title) || product.NetPrice < 0 || product.VatRate is < 0 or > 100 || product.Quantity < 0)
             throw new ArgumentException("Ürün kodu, adı, negatif olmayan fiyat/stok ve geçerli KDV gerekli.");
-        var currency = product.Currency.Equals("TRY", StringComparison.OrdinalIgnoreCase) ? "TL" : product.Currency.ToUpperInvariant();
-        if (currency is not ("TL" or "USD" or "EUR" or "GBP")) throw new ArgumentException("Desteklenmeyen para birimi.");
-        var payload = JsonSerializer.Serialize(new { title = product.Title.Trim(), taxRate = product.VatRate, id = product.Sku.Trim(), price = product.NetPrice, currency, productType = 1, unit = "adet", quantity = product.Quantity, barcode = product.Barcode.Trim() });
+        var currency = product.Currency.ToUpperInvariant();
+        if (currency is not ("TRY" or "USD" or "EUR")) throw new ArgumentException("Desteklenmeyen para birimi.");
+        var payload = JsonSerializer.Serialize(new { title = product.Title.Trim(), taxRate = product.VatRate, id = product.Sku.Trim(), price = product.NetPrice, currency, productType = 0, unit = "Adet", quantity = product.Quantity, barcode = product.Barcode.Trim() });
         var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(BaseAddress), "addproduct"));
         request.Headers.TryAddWithoutValidation("Token", settings.Token);
         request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
@@ -57,7 +57,7 @@ public sealed class BizimHesapConnection(HttpClient http)
             if (root.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("BizimHesap ürün kaydı yanıtı nesne biçiminde değil.");
             var resultCode = Int(root, "resultCode", "code");
             var error = FirstText(root, "errorText", "error", "message");
-            if (resultCode != 0 || error.Length > 0)
+            if (resultCode is not (0 or 1) || error.Length > 0)
             {
                 var detail = error.Length > 0 ? AuditStore.Sanitize(error) : "Sunucu hata metni döndürmedi.";
                 if (detail.Length > 500) detail = detail[..500];

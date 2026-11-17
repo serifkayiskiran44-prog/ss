@@ -9,6 +9,25 @@ public sealed record BizimHesapReadbackResult(BizimHesapReadbackStatus Status, B
 
 public static class BizimHesapCreateSafety
 {
+    public static bool IsPriceCurrent(BizimHesapCreateProduct local, BizimHesapProduct remote)
+    {
+        var expectedGross = Math.Round(local.NetPrice * (1m + local.VatRate / 100m), 4, MidpointRounding.AwayFromZero);
+        return Math.Abs(expectedGross - remote.Price) < 0.0001m;
+    }
+
+    public static BizimHesapReadbackResult MatchRemoteId(string remoteId, IEnumerable<BizimHesapProduct> remoteProducts)
+    {
+        var key = Normalize(remoteId);
+        if (key.Length == 0) return new(BizimHesapReadbackStatus.Missing, null);
+        var matches = remoteProducts.Where(row => Normalize(row.Id) == key).ToArray();
+        return matches.Length switch
+        {
+            0 => new(BizimHesapReadbackStatus.Missing, null),
+            1 => new(BizimHesapReadbackStatus.Matched, matches[0]),
+            _ => new(BizimHesapReadbackStatus.Ambiguous, null)
+        };
+    }
+
     public static string AccountKey(BizimHesapSettings settings)
     {
         BizimHesapConnection.Validate(settings);

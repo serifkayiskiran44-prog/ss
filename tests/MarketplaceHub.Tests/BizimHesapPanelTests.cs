@@ -27,7 +27,7 @@ public sealed class BizimHesapPanelTests
                 var labels = Walk(panel).OfType<Button>().Select(button => button.Content as string).ToArray();
 
                 CollectionAssert.Contains(labels, "İlk yeni ürünü seç");
-                CollectionAssert.Contains(labels, "Seçili ürünü BizimHesap'a gönder");
+                CollectionAssert.Contains(labels, "Seçili ürünü oluştur / fiyat güncelle");
                 CollectionAssert.DoesNotContain(labels, "Seçilen yeni ürünleri BizimHesap'a gönder");
             }
             catch (Exception e) { failure = e; }

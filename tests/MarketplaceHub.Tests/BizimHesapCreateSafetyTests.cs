@@ -7,6 +7,26 @@ namespace MarketplaceHub.Tests;
 [TestClass]
 public sealed class BizimHesapCreateSafetyTests
 {
+    [TestMethod]
+    public void Stored_remote_guid_matches_even_when_code_and_barcode_are_empty()
+    {
+        var remote = new[] { new BizimHesapProduct("REMOTE-GUID-42", "", "", "Ürün", 100m, 5) };
+
+        var result = BizimHesapCreateSafety.MatchRemoteId("remote-guid-42", remote);
+
+        Assert.AreEqual(BizimHesapReadbackStatus.Matched, result.Status);
+        Assert.AreEqual("REMOTE-GUID-42", result.Product!.Id);
+    }
+
+    [TestMethod]
+    public void Price_comparison_converts_local_net_price_to_remote_gross_price()
+    {
+        var product = new BizimHesapCreateProduct("SKU-1", "BAR-1", "Ürün", 20m, 20m, 7, "TRY");
+
+        Assert.IsTrue(BizimHesapCreateSafety.IsPriceCurrent(product, new("42", "SKU-1", "BAR-1", "Ürün", 24m, 5)));
+        Assert.IsFalse(BizimHesapCreateSafety.IsPriceCurrent(product, new("42", "SKU-1", "BAR-1", "Ürün", 12m, 5)));
+    }
+
     static BizimHesapCreateProduct Product() => new(" SKU-1 ", " BAR-1 ", "Ürün", 100m, 20m, 5, "TRY");
 
     [TestMethod]

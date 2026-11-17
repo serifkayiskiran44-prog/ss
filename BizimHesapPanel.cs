@@ -21,6 +21,7 @@ public static class BizimHesapPanel
         public string Barcode => Product.Barcode;
         public string Name => Product.Name;
         public string Status { get; init; } = "";
+        public string BizimHesapId { get; init; } = "—";
         public string BizimHesapProduct { get; init; } = "—";
     }
 
@@ -37,9 +38,9 @@ public static class BizimHesapPanel
         var status = Text("Bağlantı ayarları kaydedilmedi."); panel.Children.Add(status);
         var productGrid = Table(); var warehouseGrid = Table();
         panel.Children.Add(Group("BizimHesap ürünleri", productGrid)); panel.Children.Add(Group("Depolar", warehouseGrid));
-        var mappingActions = new WrapPanel(); var preview = Button(mappingActions, "Ürün eşleştirme önizlemesi oluştur"); var selectNew = Button(mappingActions, "İlk yeni ürünü seç"); var send = Button(mappingActions, "Seçili ürünü BizimHesap'a gönder"); panel.Children.Add(mappingActions);
+        var mappingActions = new WrapPanel(); var preview = Button(mappingActions, "Ürün eşleştirme önizlemesi oluştur"); var selectNew = Button(mappingActions, "İlk yeni ürünü seç"); var send = Button(mappingActions, "Seçili ürünü oluştur / fiyat güncelle"); panel.Children.Add(mappingActions);
         var mappingGrid = Table(); mappingGrid.SelectionMode = DataGridSelectionMode.Extended; panel.Children.Add(Group("Ürün eşleştirme önizlemesi", mappingGrid));
-        panel.Children.Add(Group("Stok / fiyat", Text("İlk gerçek bağlama aşaması ürün kartı oluşturmadır. Stok/fiyat yazımı ayrıca doğrulanacak API uçları olmadan açılmaz.")));
+        panel.Children.Add(Group("Stok / fiyat", Text("Canlı doğrulamada AddProduct aynı ürün kodunda mevcut GUID'yi koruyarak fiyatı güncelledi. Fiyat KDV hariç gönderilir ve BizimHesap'tan KDV dahil okunur. Quantity alanı mevcut ürünün depo stoğunu güncellemediği için depo stoğu yazımı kapalıdır.")));
 
         var store = new BizimHesapSettingsStore(directory is null ? null : Path.Combine(directory, "bizimhesap.bin")); var api = new BizimHesapConnection(Http); var receipts = new BizimHesapCreateReceiptStore(directory); var busy = false; var remoteProductsLoaded = false; var remoteProducts = Array.Empty<BizimHesapProduct>();
         try { var existing = store.Load(); if (existing is not null) { firm.Text = existing.FirmId; token.Password = existing.Token; status.Text = "Şifreli ayarlar yüklendi; erişim henüz doğrulanmadı."; } } catch { status.Text = "Kayıtlı BizimHesap ayarları okunamadı; bilgileri yeniden girin."; }
@@ -56,20 +57,26 @@ public static class BizimHesapPanel
         SyncRow[] BuildPreviewRows()
         {
             var local = new CatalogStore(directory).Products();
+            var accountKey = BizimHesapCreateSafety.AccountKey(Settings());
             return local.Select(product =>
             {
                 var payload = CreatePayload(product);
-                var readback = BizimHesapCreateSafety.Match(payload, remoteProducts);
+                var storedRemoteId = receipts.RemoteProductId(accountKey, product.Id);
+                var readback = storedRemoteId.Length == 0
+                    ? BizimHesapCreateSafety.Match(payload, remoteProducts)
+                    : BizimHesapCreateSafety.MatchRemoteId(storedRemoteId, remoteProducts);
                 return new SyncRow
                 {
                     Product = product,
                     Status = readback.Status switch
                     {
-                        BizimHesapReadbackStatus.Matched => "EŞLEŞTİ",
+                        BizimHesapReadbackStatus.Matched when BizimHesapCreateSafety.IsPriceCurrent(payload, readback.Product!) => "GÜNCEL",
+                        BizimHesapReadbackStatus.Matched => "FİYAT GÜNCELLENECEK",
                         BizimHesapReadbackStatus.Missing => "YENİ ÜRÜN",
                         BizimHesapReadbackStatus.Ambiguous => "ÇAKIŞMA",
                         _ => "KİMLİK ÇATIŞMASI"
                     },
+                    BizimHesapId = readback.Product?.Id ?? (storedRemoteId.Length == 0 ? "—" : storedRemoteId),
                     BizimHesapProduct = readback.Product?.Title ?? "—"
                 };
             }).ToArray();
@@ -80,13 +87,13 @@ public static class BizimHesapPanel
             var rows = BuildPreviewRows();
             mappingGrid.ItemsSource = rows;
             var localCount = rows.Length;
-            status.Text = $"{localCount:N0} yerel ürün için eşleştirme önizlemesi oluşturuldu. Yalnız YENİ ÜRÜN satırları gönderilebilir.";
+            status.Text = $"{localCount:N0} yerel ürün için eşleştirme önizlemesi oluşturuldu. YENİ ÜRÜN ve FİYAT GÜNCELLENECEK satırları gönderilebilir.";
         };
         selectNew.Click += (_, _) =>
         {
             mappingGrid.UnselectAll();
-            var row = mappingGrid.Items.OfType<SyncRow>().FirstOrDefault(x => x.Status == "YENİ ÜRÜN");
-            if (row is null) { status.Text = "Gönderilebilecek YENİ ÜRÜN bulunamadı."; return; }
+            var row = mappingGrid.Items.OfType<SyncRow>().FirstOrDefault(x => x.Status is "YENİ ÜRÜN" or "FİYAT GÜNCELLENECEK");
+            if (row is null) { status.Text = "Oluşturulacak veya fiyatı güncellenecek ürün bulunamadı."; return; }
             mappingGrid.SelectedItems.Add(row);
             mappingGrid.ScrollIntoView(row);
             status.Text = $"{row.Sku} deneme gönderimi için seçildi. Göndermeden önce ürün özeti gösterilecek.";
@@ -94,8 +101,8 @@ public static class BizimHesapPanel
         send.Click += async (_, _) => await Run(async () =>
         {
             var selected = mappingGrid.SelectedItems.OfType<SyncRow>().ToArray();
-            if (selected.Length != 1) throw new InvalidOperationException("Canlı doğrulama için yalnız bir YENİ ÜRÜN seçin.");
-            if (selected[0].Status != "YENİ ÜRÜN") throw new InvalidOperationException("Yalnız YENİ ÜRÜN durumundaki satır gönderilebilir.");
+            if (selected.Length != 1) throw new InvalidOperationException("Canlı işlem için yalnız bir ürün seçin.");
+            if (selected[0].Status is not ("YENİ ÜRÜN" or "FİYAT GÜNCELLENECEK")) throw new InvalidOperationException("Yalnız YENİ ÜRÜN veya FİYAT GÜNCELLENECEK satırı gönderilebilir.");
 
             var current = new CatalogStore(directory).Products().SingleOrDefault(product => product.Id == selected[0].ProductId)
                 ?? throw new InvalidOperationException("Seçilen yerel ürün artık bulunamadı; önizlemeyi yenileyin.");
@@ -105,11 +112,11 @@ public static class BizimHesapPanel
             remoteProducts = (await api.ReadAllProductsAsync(Settings())).ToArray();
             remoteProductsLoaded = true;
             var preflight = BizimHesapCreateSafety.Match(payload, remoteProducts);
-            if (preflight.Status == BizimHesapReadbackStatus.Matched)
+            if (preflight.Status == BizimHesapReadbackStatus.Matched && BizimHesapCreateSafety.IsPriceCurrent(payload, preflight.Product!))
             {
                 productGrid.ItemsSource = remoteProducts;
                 mappingGrid.ItemsSource = BuildPreviewRows();
-                status.Text = $"{payload.Sku} BizimHesap'ta zaten var; ikinci kez gönderilmedi.";
+                status.Text = $"{payload.Sku} BizimHesap'ta mevcut ve fiyatı güncel; gönderilmedi.";
                 return;
             }
             if (preflight.Status is BizimHesapReadbackStatus.Ambiguous or BizimHesapReadbackStatus.Conflict)
@@ -122,8 +129,9 @@ public static class BizimHesapPanel
                 throw new InvalidOperationException("Bu ürün ve içerik daha önce gönderildi veya sonucu doğrulama bekliyor; tekrar gönderilmedi.");
 
             var gross = Math.Round(payload.NetPrice * (1 + payload.VatRate / 100m), 2, MidpointRounding.AwayFromZero);
-            var summary = $"BizimHesap hesabına bir ürün oluşturulacak.\n\nFirma: {settings.FirmId}\nSKU: {payload.Sku}\nBarkod: {payload.Barcode}\nÜrün: {payload.Title}\nNet fiyat: {payload.NetPrice:N2} {payload.Currency}\nKDV: %{payload.VatRate:N2}\nKDV dahil: {gross:N2} {payload.Currency}\nStok: {payload.Quantity:N0}\n\nGönderilsin mi?";
-            if (MessageBox.Show(summary, "BizimHesap canlı ürün oluşturma", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+            var action = preflight.Status == BizimHesapReadbackStatus.Matched ? "fiyatı güncellenecek" : "oluşturulacak";
+            var summary = $"BizimHesap hesabındaki ürün {action}.\n\nFirma: {settings.FirmId}\nSKU: {payload.Sku}\nBarkod: {payload.Barcode}\nÜrün: {payload.Title}\nNet fiyat: {payload.NetPrice:N2} {payload.Currency}\nKDV: %{payload.VatRate:N2}\nKDV dahil: {gross:N2} {payload.Currency}\n\nNot: Bu işlem depo stoğunu güncellemez.\n\nGönderilsin mi?";
+            if (MessageBox.Show(summary, "BizimHesap canlı ürün işlemi", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
             {
                 status.Text = "BizimHesap ürün gönderimi iptal edildi.";
                 return;
@@ -150,17 +158,19 @@ public static class BizimHesapPanel
             {
                 remoteProducts = (await api.ReadAllProductsAsync(settings)).ToArray();
                 remoteProductsLoaded = true;
-                var readback = BizimHesapCreateSafety.Match(payload, remoteProducts);
-                if (readback.Status != BizimHesapReadbackStatus.Matched)
+                var readback = response.RemoteId.Length == 0
+                    ? BizimHesapCreateSafety.Match(payload, remoteProducts)
+                    : BizimHesapCreateSafety.MatchRemoteId(response.RemoteId, remoteProducts);
+                if (readback.Status != BizimHesapReadbackStatus.Matched || !BizimHesapCreateSafety.IsPriceCurrent(payload, readback.Product!))
                 {
                     receipts.Complete(accountKey, current.Id, payloadHash, BizimHesapCreateAttemptStatus.NeedsReconciliation, response.RemoteId, "API kabul etti; ürün geri okumada kesin eşleşmedi: " + readback.Status, DateTimeOffset.UtcNow);
-                    status.Text = "BizimHesap isteği kabul etti ancak ürün geri okumada doğrulanamadı. Aynı ürünü tekrar göndermeyin; destek yanıtını kontrol edin.";
+                    status.Text = "BizimHesap isteği kabul etti ancak ürün veya fiyat geri okumada doğrulanamadı. Aynı ürünü tekrar göndermeyin; destek yanıtını kontrol edin.";
                     return;
                 }
                 receipts.Complete(accountKey, current.Id, payloadHash, BizimHesapCreateAttemptStatus.Succeeded, readback.Product?.Id ?? response.RemoteId, "Ürün geri okumayla doğrulandı.", DateTimeOffset.UtcNow);
                 productGrid.ItemsSource = remoteProducts;
                 mappingGrid.ItemsSource = BuildPreviewRows();
-                status.Text = $"{payload.Sku} BizimHesap'a gönderildi ve hesaptan geri okunarak doğrulandı.";
+                status.Text = $"{payload.Sku} BizimHesap'a gönderildi; ürün kimliği ve fiyat hesaptan geri okunarak doğrulandı.";
             }
             catch (Exception e) when (e is not InvalidOperationException || !e.Message.Contains("tekrar göndermeyin", StringComparison.OrdinalIgnoreCase))
             {

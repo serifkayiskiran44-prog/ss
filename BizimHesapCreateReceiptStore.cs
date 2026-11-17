@@ -33,6 +33,18 @@ public sealed class BizimHesapCreateReceiptStore
         return value is not null && !string.Equals(value, BizimHesapCreateAttemptStatus.Rejected.ToString(), StringComparison.Ordinal);
     }
 
+    public string RemoteProductId(string accountKey, string productId)
+    {
+        Validate(accountKey, productId);
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT remote_id FROM bizimhesap_create_receipts WHERE account_key=$account AND product_id=$product AND status=$status AND remote_id<>'' ORDER BY updated_utc DESC LIMIT 1";
+        command.Parameters.AddWithValue("$account", accountKey);
+        command.Parameters.AddWithValue("$product", productId);
+        command.Parameters.AddWithValue("$status", BizimHesapCreateAttemptStatus.Succeeded.ToString());
+        return (command.ExecuteScalar() as string ?? "").Trim();
+    }
+
     public void Begin(string accountKey, string productId, string payloadHash, DateTimeOffset now)
     {
         Validate(accountKey, productId, payloadHash);

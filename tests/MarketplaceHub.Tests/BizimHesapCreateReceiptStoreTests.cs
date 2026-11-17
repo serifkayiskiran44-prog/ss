@@ -10,6 +10,26 @@ namespace MarketplaceHub.Tests;
 public sealed class BizimHesapCreateReceiptStoreTests
 {
     [TestMethod]
+    public void Successful_receipt_preserves_remote_product_guid_across_payload_changes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "bizimhesap-receipts-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new BizimHesapCreateReceiptStore(root);
+            store.Begin("account", "product", "old-payload", DateTimeOffset.UtcNow.AddMinutes(-1));
+            store.Complete("account", "product", "old-payload", BizimHesapCreateAttemptStatus.Succeeded, "REMOTE-GUID-42", "Doğrulandı", DateTimeOffset.UtcNow);
+
+            Assert.AreEqual("REMOTE-GUID-42", store.RemoteProductId("account", "product"));
+            Assert.AreEqual("", store.RemoteProductId("account", "another-product"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [TestMethod]
     public void Sent_or_uncertain_attempt_blocks_duplicate_but_rejected_attempt_can_retry()
     {
         var root = Path.Combine(Path.GetTempPath(), "bizimhesap-receipts-" + Guid.NewGuid().ToString("N"));

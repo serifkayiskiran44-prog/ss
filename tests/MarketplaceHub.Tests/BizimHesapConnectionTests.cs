@@ -85,7 +85,7 @@ public sealed class BizimHesapConnectionTests
     }
 
     [TestMethod]
-    public void BuildAddProductRequest_uses_net_price_and_collection_field_names()
+    public void BuildAddProductRequest_uses_new_b2b_product_contract()
     {
         using var request = BizimHesapConnection.BuildAddProductRequest(Settings(), new BizimHesapCreateProduct("SKU-1", "BARKOD-1", "Ürün", 100m, 20m, 5, "TRY"));
         Assert.AreEqual(HttpMethod.Post, request.Method);
@@ -93,8 +93,12 @@ public sealed class BizimHesapConnectionTests
         using var body = JsonDocument.Parse(request.Content!.ReadAsStream());
         Assert.AreEqual("SKU-1", body.RootElement.GetProperty("id").GetString());
         Assert.AreEqual(100m, body.RootElement.GetProperty("price").GetDecimal());
-        Assert.AreEqual("TL", body.RootElement.GetProperty("currency").GetString());
+        Assert.AreEqual("TRY", body.RootElement.GetProperty("currency").GetString());
         Assert.AreEqual(20m, body.RootElement.GetProperty("taxRate").GetDecimal());
+        Assert.AreEqual(0, body.RootElement.GetProperty("productType").GetInt32());
+        Assert.AreEqual("Adet", body.RootElement.GetProperty("unit").GetString());
+        Assert.AreEqual(5, body.RootElement.GetProperty("quantity").GetInt32());
+        Assert.AreEqual("BARKOD-1", body.RootElement.GetProperty("barcode").GetString());
     }
 
     [TestMethod]
@@ -110,6 +114,21 @@ public sealed class BizimHesapConnectionTests
 
         Assert.AreEqual(0, result.ResultCode);
         Assert.AreEqual("remote-42", result.RemoteId);
+    }
+
+    [TestMethod]
+    public async Task AddProductAsync_accepts_live_result_code_one_with_empty_error()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"resultCode\":1,\"errorText\":\"\",\"data\":{}}")
+        });
+        using var http = new HttpClient(handler);
+
+        var result = await new BizimHesapConnection(http).AddProductAsync(Settings(), new("SKU-1", "BARKOD-1", "Ürün", 100m, 20m, 5, "TRY"));
+
+        Assert.AreEqual(1, result.ResultCode);
+        Assert.AreEqual("", result.ErrorText);
     }
 
     [TestMethod]
