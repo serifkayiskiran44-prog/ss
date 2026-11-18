@@ -76,6 +76,20 @@ public sealed class MarketplaceAccountNavigationTests
     });
 
     [TestMethod]
+    public void AccountHomeOffersListingMatrixWithoutSelectingOrReadingAnAccount() => InSta(root =>
+    {
+        var routes = new List<string>();
+        using var panel = new MarketplaceAccountHomePanel(root, _ => Assert.Fail("A matrix shortcut must not open an account."), routes.Add);
+        var matrix = Walk(panel).OfType<Button>().Single(x => x.Name == "MarketplaceListingMatrix");
+
+        Assert.AreEqual(Visibility.Visible, matrix.Visibility);
+        matrix.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        CollectionAssert.AreEqual(new[] { "listing-matrix" }, routes);
+        Assert.IsNull(panel.CurrentConnectionId);
+    });
+
+    [TestMethod]
     public void OpeningAnAccountCollapsesTheChooserSoProductManagementUsesTheRemainingHeight() => InSta(root =>
     {
         new MarketplaceConnectionStore(root).Save("trendyol", "101", "Trendyol A", true);

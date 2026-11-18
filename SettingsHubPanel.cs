@@ -25,8 +25,8 @@ public sealed class SettingsHubPanel : UserControl
         AddSection(content, "Mağaza bağlantıları", BuildConnections(navigate));
         AddSection(content, "Hesap kuralları", BuildAccountRules(navigate));
         AddSection(content, "Zamanlama", BuildScheduling(navigate));
-        AddSection(content, "Yerel ayarlar", Wrap("SettingsLocale", "Döviz, vergi ve yerel ayarlar", "Her mağazanın para birimi, kültür ve vergi varsayılanlarını yönetin.", LocaleSettingsPanel.Create(directory)));
-        AddSection(content, "Veri ve yedek", Wrap("SettingsData", "Veri ve yedek", "Yerel veri klasörünü, güvenli yedeklemeyi ve geri yüklemeyi yönetin.", DataBackupPanel.Create(directory)));
+        AddSection(content, "Yerel ayarlar", BuildLocale(navigate));
+        AddSection(content, "Veri ve yedek", BuildData(navigate));
         AddSection(content, "Sağlık ve tanılama", BuildHealth(navigate));
 
         sections.SelectionChanged += (_, _) => ShowSelectedSection();
@@ -101,14 +101,23 @@ public sealed class SettingsHubPanel : UserControl
         var panel = Stack("Sağlık ve tanılama", "Bağlantı durumlarını, güvenli hata ayrıntılarını ve denetim kayıtlarını inceleyin.");
         panel.Children.Add(RouteButton("SettingsOpenApiHealth", "API sağlığını aç", "api-health", navigate));
         panel.Children.Add(RouteButton("SettingsOpenReports", "Raporlar ve denetimi aç", "reports", navigate));
+        panel.Children.Add(RouteButton("SettingsOpenReadiness", "Üretim hazırlığını aç", "readiness", navigate));
         return Scroll("SettingsHealth", panel);
     }
 
-    static FrameworkElement Wrap(string name, string title, string description, UIElement child)
+    static FrameworkElement BuildLocale(Action<string> navigate)
     {
-        var panel = Stack(title, description);
-        panel.Children.Add(child);
-        return Scroll(name, panel);
+        var panel = Stack("Döviz, vergi ve yerel ayarlar", "Her mağazanın para birimi, kültür ve vergi varsayılanlarını yönetin.");
+        panel.Children.Add(RouteButton("SettingsOpenLocale", "Yerel ayarları aç", "locale", navigate));
+        return Scroll("SettingsLocale", panel);
+    }
+
+    static FrameworkElement BuildData(Action<string> navigate)
+    {
+        var panel = Stack("Veri ve yedek", "Yerel veri klasörünü, güvenli yedeklemeyi, geri yüklemeyi ve veri taşımayı yönetin.");
+        panel.Children.Add(RouteButton("SettingsOpenBackup", "Yedekleme ve geri yüklemeyi aç", "backup", navigate));
+        panel.Children.Add(RouteButton("SettingsOpenMigration", "Veri taşıma asistanını aç", "migration", navigate));
+        return Scroll("SettingsData", panel);
     }
 
     static StackPanel Stack(string title, string description)

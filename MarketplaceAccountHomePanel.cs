@@ -26,6 +26,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
     readonly ScrollViewer chooser = new() { Name = "MarketplaceAccountChooser", VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, MaxHeight = 150 };
     readonly Button chooserToggle = new() { Name = "MarketplaceAccountChooserToggle", Content = "Mağazaları gizle", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 5, 10, 5) };
     readonly Button addStore = new() { Name = "MarketplaceAddStore", Content = "Mağaza ekle", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 5, 10, 5) };
+    readonly Button listingMatrix = new() { Name = "MarketplaceListingMatrix", Content = "İlan matrisi", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 5, 10, 5) };
     readonly DockPanel heading = new() { Name = "MarketplaceAccountHeading", Margin = new Thickness(4, 2, 4, 8) };
     string? channelFilter;
     readonly TextBlock empty = new()
@@ -47,6 +48,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         var root = new DockPanel { Margin = new Thickness(12) };
         DockPanel.SetDock(chooserToggle, Dock.Right); heading.Children.Add(chooserToggle);
         DockPanel.SetDock(addStore, Dock.Right); heading.Children.Add(addStore);
+        DockPanel.SetDock(listingMatrix, Dock.Right); heading.Children.Add(listingMatrix);
         var headingText = new StackPanel();
         headingText.Children.Add(new TextBlock { Text = "Pazaryeri hesapları", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(23, 54, 70)) });
         headingText.Children.Add(new TextBlock { Text = "Mağazayı seçin; ürün yönetimi kalan alanı kullanır.", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray, Margin = new Thickness(0, 3, 0, 0) });
@@ -60,6 +62,7 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         Content = root;
         chooserToggle.Click += (_, _) => SetChooserVisible(chooser.Visibility != Visibility.Visible);
         addStore.Click += (_, _) => this.navigate("connections");
+        listingMatrix.Click += (_, _) => this.navigate("listing-matrix");
         Refresh();
     }
 

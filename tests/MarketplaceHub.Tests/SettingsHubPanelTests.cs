@@ -36,6 +36,8 @@ public sealed class SettingsHubPanelTests
         }));
         Assert.IsFalse(text.Contains("password", StringComparison.OrdinalIgnoreCase));
         Assert.IsFalse(text.Contains("token", StringComparison.OrdinalIgnoreCase));
+        Assert.AreEqual(0, Walk(panel).OfType<DataGrid>().Count(), "Settings must not eagerly embed the locale editor.");
+        Assert.AreEqual(0, Walk(panel).OfType<Button>().Count(x => Equals(x.Content, "Verileri güvenli yedekle")), "Settings must not eagerly embed a second backup panel.");
 
         controller.DisposeAsync().AsTask().GetAwaiter().GetResult();
     });
@@ -59,7 +61,9 @@ public sealed class SettingsHubPanelTests
             ("SettingsOpenConnections", "connections"), ("SettingsOpenMarketplaces", "marketplaces"),
             ("SettingsOpenPolicies", "policy-center"), ("SettingsOpenAutomation", "automation"),
             ("SettingsOpenSync", "sync"), ("SettingsOpenApiHealth", "api-health"),
-            ("SettingsOpenReports", "reports")
+            ("SettingsOpenReports", "reports"), ("SettingsOpenLocale", "locale"),
+            ("SettingsOpenBackup", "backup"), ("SettingsOpenMigration", "migration"),
+            ("SettingsOpenReadiness", "readiness")
         })
         {
             Walk(panel).OfType<Button>().Single(x => x.Name == pair.Item1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
