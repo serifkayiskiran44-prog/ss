@@ -4,7 +4,7 @@
 - [x] Entegra ana menüsü, resmi eğitim/geliştirme/platform kaynakları ve MonoBridge mevcut panelleri salt okunur karşılaştırıldı.
 - [x] Kaynak kodu/decompile/private API kullanmadan kapsamlı bilgi mimarisi ve T0–T11 uygulama sırası hazırlandı: `docs/CLAUDE-ENTEGRA-COMPREHENSIVE-TASK.md`.
 - [x] Yedi `DEFERRED_BY_USER` alanı, yeni login/rol sistemi, fulfillment ve settlement kapsam dışında tutuldu.
-- [ ] T0: Kodda hazır fakat görünmeyen operasyon panellerini ortak navigasyona bağla; yeni servis yazma.
+- [x] T0: Kodda hazır fakat görünmeyen operasyon panellerini ortak navigasyona bağla; yeni servis yazma. 28 rotalık literal sözleşme, yedi lazy operasyon sayfası, Settings tekilleştirmesi ve ilan matrisi kısayolu tamamlandı; tam Release **1554/1554** geçti.
 - [ ] T1–T11: Görev dosyasındaki sırayla stok defteri, ürün kalitesi, mağaza matrisi, Trendyol, sipariş, Excel/XML, scheduler, politika, rapor ve yönetim kapanışlarını uygula.
 - [ ] Entegra yönetici/UAC katmanında açıldığı için alt ekranların kullanıcı oturumunda salt-okunur görsel turunu daha sonra tamamla; UAC aşılmadı ve canlı kaydet/gönder/sil yapılmadı.
 

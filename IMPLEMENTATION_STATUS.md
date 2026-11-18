@@ -6,6 +6,14 @@
 - Entegra yönetici/UAC katmanında açıldığı için alt ekranların otomatik görsel turu tamamlanamadı; UAC aşılmadı, canlı kaydet/gönder/sil yapılmadı.
 - Doküman değişikliğinden sonra self-contained win-x64 `Windows-Current` publish başarılı oldu. Tam test komutu iki kez testhost bağlantı aşamasında sırasıyla 90 ve 180 saniyelik zaman aşımına uğradı; test gövdesi başlamadı ve bu durum başarı olarak raporlanmadı.
 
+## T0 operasyon navigasyonu — 2026-11-18
+- Ana kabuk 28 rotalık bağımsız literal sözleşmeyle korunuyor. `bulk-products`, `listing-matrix`, `order-exceptions`, `readiness`, `locale`, `backup` ve `migration` hazır panelleri ortak navigasyona bağlandı.
+- Yeni ağır paneller uygulama açılışında oluşturulmuyor; ilk rota seçiminde bir kez oluşturulup sonraki seçimlerde aynı örnek kullanılıyor.
+- Ayarlar içindeki mükerrer locale/yedek panel örnekleri kaldırıldı. Yerel ayarlar, yedek, migration ve readiness tek kanonik rotaya gider.
+- Pazaryeri hesap ana ekranına exact-account seçmeden veya connector okumadan ilan matrisi kısayolu eklendi. Global aramanın mevcut `listing-matrix` hedefi artık gerçek bir rotaya ulaşıyor.
+- Eski accountless kanal panelleri ana menüye bağlanmadı; `MarketplaceAccountHomePanel` ve exact-account çalışma alanları otorite olarak korundu.
+- Odak testleri **3/3**, tam Release paketi **1554/1554** geçti. Canlı HTTP/yazma, gerçek profil veya credential kullanılmadı.
+
 ## Entegra esinli operasyon arayüzü — 2026-11-17
 - Ana kabuk MonoBridge markasını koruyarak daha kompakt bir operasyon düzenine taşındı; global komut alanı ve mevcut bütün ana rotalar görünür kaldı.
 - Ürün Yönetimi yoğun filtre/özet/tablo/düzenleme bölgelerine, XML Yönetimi kaynak/ayırıcı/tanım/önizleme bölgelerine ayrıldı. Mevcut yerel kayıt, önizleme, stale ve onay güvenlikleri değiştirilmedi.

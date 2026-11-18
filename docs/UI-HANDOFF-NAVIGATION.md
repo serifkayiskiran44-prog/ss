@@ -1,5 +1,9 @@
 # UI / navigasyon devir notu — 2026-11-17
 
+## T0 görünür operasyon rotaları — 2026-11-18
+
+Ana kabukta 28 kanonik rota vardır. Yeni görünür rotalar: `bulk-products`, `listing-matrix`, `order-exceptions`, `readiness`, `locale`, `backup`, `migration`. Bu ağır paneller lazy oluşturulur. Settings yalnız `locale`, `backup`, `migration` ve `readiness` rotalarına yönlendirir; paneli ikinci kez gömmez. Eski accountless kanal panelleri navigasyona eklenmemelidir; exact-account mağaza çalışma alanı korunur.
+
 Kapsam: Tasarım işi ayrı yürütülüyor. Bu not yalnız kodda **var olan** ama ana menüye bağlı olmayan parçaları, rota sözleşmesini ve testlerin bağlı olduğu adları kaydeder. Mantık/veri tarafı bu notla değişmedi; arayüz dosyalarında yeniden düzenleme yapılmadı.
 
 ## 1. Şimdiki ana menü (`MainWindow.Navigation.cs`, birleşik dal)
