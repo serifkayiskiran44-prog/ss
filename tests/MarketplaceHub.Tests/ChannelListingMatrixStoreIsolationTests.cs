@@ -44,6 +44,9 @@ public sealed class ChannelListingMatrixStoreIsolationTests
         var rowA = rows.Single(r => r.ShopId == "shop-a" && r.ProductId == product.Id);
         var rowB = rows.Single(r => r.ShopId == "shop-b" && r.ProductId == product.Id);
 
+        Assert.AreNotEqual(rowA.ConnectionId, rowB.ConnectionId, "Aynı kanaldaki iki mağaza exact connection kimliğini korumalıdır.");
+        Assert.AreEqual(connections.List().Single(x => x.ShopId == "shop-a").Id, rowA.ConnectionId);
+        Assert.AreEqual(connections.List().Single(x => x.ShopId == "shop-b").Id, rowB.ConnectionId);
         Assert.AreEqual("Failed", rowA.SyncStatus);
         Assert.AreEqual("None", rowB.SyncStatus, "Shop B must never inherit Shop A's sync status for the same channel/product.");
         Assert.AreEqual("", rowB.LastError);

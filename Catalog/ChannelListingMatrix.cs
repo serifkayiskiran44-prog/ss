@@ -1,6 +1,6 @@
 namespace TrMarketplaceHubDesktop;
 
-public sealed record ChannelListingMatrixRow(string ProductId, string Sku, string ProductName, string Channel, string ChannelName, string ShopId, string MappingStatus, string ListingId, string SyncStatus, string LastError, DateTime? LastSyncUtc, string AuthStatus, string Capabilities)
+public sealed record ChannelListingMatrixRow(string ProductId, string Sku, string ProductName, string ConnectionId, string Channel, string ChannelName, string ShopId, string MappingStatus, string ListingId, string SyncStatus, string LastError, DateTime? LastSyncUtc, string AuthStatus, string Capabilities)
 {
     public string SearchText => $"{Sku} {ProductName} {Channel} {ChannelName} {ShopId} {ListingId} {MappingStatus} {SyncStatus} {LastError}";
     public string EslemeDurumu => MarketplaceStatusText.ToTurkish(MappingStatus);
@@ -60,7 +60,7 @@ public sealed class ChannelListingMatrixService
                 var status = string.IsNullOrWhiteSpace(listingId) ? "MISSING" : bindingUpdated < now.AddDays(-180) ? "STALE" : latest?.Status == Catalog.SyncStatus.Failed ? "ERROR" : latest?.Status is Catalog.SyncStatus.Pending or Catalog.SyncStatus.Running ? "PENDING" : latest?.Status == Catalog.SyncStatus.Succeeded ? "SYNCED" : "DRAFT";
                 var auth = connection.Status is "FAILED" or "LIVE_API_BLOCKED" or "NOT_CONFIGURED" ? "AUTH_ERROR" : connection.Status;
                 var capabilities = definition.Capabilities.Enabled.Count == 0 ? "Yerel plan" : string.Join(", ", definition.Capabilities.Enabled.Select(x => x.ToString()));
-                result.Add(new(product.Id, product.Sku, product.Name, connection.Channel, definition.Name, connection.ShopId, status, listingId, latest?.Status.ToString() ?? "None", latest?.LastError ?? "", latest?.UpdatedUtc, auth, capabilities));
+                result.Add(new(product.Id, product.Sku, product.Name, connection.Id, connection.Channel, definition.Name, connection.ShopId, status, listingId, latest?.Status.ToString() ?? "None", latest?.LastError ?? "", latest?.UpdatedUtc, auth, capabilities));
             }
         }
         return result;

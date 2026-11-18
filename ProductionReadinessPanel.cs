@@ -29,7 +29,7 @@ public static class ProductionReadinessPanel
         root.Children.Add(refresh);
         root.Children.Add(summary);
         root.Children.Add(checks);
-        Refresh();
+        summary.Text = "Üretim kontrollerini çalıştırmak için 'Kontrolleri yenile' düğmesine basın.";
         return Scroll(root);
     }
 

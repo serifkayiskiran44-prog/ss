@@ -402,3 +402,9 @@ Her biri önce başarısız testle yeniden üretildi, sonra düzeltildi; canlı 
 - Ürün kartı kaydı her kanalı taban fiyatın donmuş kopyasına çevirmez (`ChannelPriceMerge`).
 - Arka plandaki Etsy sipariş okuması süresi dolan erişim belirtecini yeniler ve dönen yeni çifti kaydeder.
 - Doğrulama: tam Release testi **1526/1526**.
+# T0 operasyon navigasyonu — son güvenlik düzeltmeleri (2026-11-18)
+
+- Veri kalitesi ve üretim hazırlığı sayfaları açılışta tarama/yazma yapmıyor; işlem yalnız açık kullanıcı düğmesiyle başlıyor.
+- Sipariş sayfası açılışta yalnız yerel kayıtları okuyor; Trendyol ve NES yenilemeleri açık kullanıcı işlemi olarak kaldı.
+- Geçiş önizlemesi WPF kontrol değerlerini UI thread üzerinde snapshot alıyor. Toplu ürün uygulaması onaylanan immutable preview'ı kullanıyor ve işlem sırasında yeni preview üretimini kilitliyor.
+- Toplu ürün ekranı dar çözünürlükte dikey kaydırılabilir. İlan matrisi kanal yerine exact connection kimliğiyle seçilen mağazayı açıyor.

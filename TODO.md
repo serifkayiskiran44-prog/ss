@@ -5,6 +5,7 @@
 - [x] Kaynak kodu/decompile/private API kullanmadan kapsamlı bilgi mimarisi ve T0–T11 uygulama sırası hazırlandı: `docs/CLAUDE-ENTEGRA-COMPREHENSIVE-TASK.md`.
 - [x] Yedi `DEFERRED_BY_USER` alanı, yeni login/rol sistemi, fulfillment ve settlement kapsam dışında tutuldu.
 - [x] T0: Kodda hazır fakat görünmeyen operasyon panellerini ortak navigasyona bağla; yeni servis yazma. 28 rotalık literal sözleşme, yedi lazy operasyon sayfası, Settings tekilleştirmesi ve ilan matrisi kısayolu tamamlandı; tam Release **1554/1554** geçti.
+- [x] T0 son güvenlik incelemesi: ekran açılışındaki otomatik kalite/hazırlık taraması ile Trendyol/NES yenilemesini kaldır; geçiş ekranı UI-thread erişimini, toplu işlem immutable preview yarışını, dar ekran kaydırmasını ve ilan matrisindeki exact-account yönlendirmesini düzelt.
 - [ ] T1–T11: Görev dosyasındaki sırayla stok defteri, ürün kalitesi, mağaza matrisi, Trendyol, sipariş, Excel/XML, scheduler, politika, rapor ve yönetim kapanışlarını uygula.
 - [ ] Entegra yönetici/UAC katmanında açıldığı için alt ekranların kullanıcı oturumunda salt-okunur görsel turunu daha sonra tamamla; UAC aşılmadı ve canlı kaydet/gönder/sil yapılmadı.
 

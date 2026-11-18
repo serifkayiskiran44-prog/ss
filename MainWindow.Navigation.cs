@@ -65,7 +65,7 @@ public partial class MainWindow
   Page("bizimhesap","BizimHesap","Ürün/depo okuma ve XML ürünleri için SKU-barkod eşleştirme önizlemesi.",BizimHesapPanel.Create(dataDirectory));
   Page("nes","NES e‑Fatura","Siparişten UBL‑TR hazırlama, NES önizleme, kontrollü gönderim ve belge takibi.",NesPanel.Create(dataDirectory));
   Group("İZLEME");
-  Page("data-quality","Veri kalitesi","Eksik, geçersiz veya eşleşmeyen ürün alanlarını inceleyin.",DataQualityPanel.Create(dataDirectory,OpenMarketplaceRoute));
+  LazyPage("data-quality","Veri kalitesi","Eksik, geçersiz veya eşleşmeyen ürün alanlarını inceleyin.",()=>DataQualityPanel.Create(dataDirectory,OpenMarketplaceRoute));
   Page("api-health","API sağlığı","Mağaza bağlantıları ve servis sağlık kontrollerini izleyin.",ApiHealthPanel.Create(dataDirectory,OpenMarketplaceRoute));
   Page("messages","Mesaj merkezi","Operasyon bildirimlerini ve hata mesajlarını tek listede görün.",MessagePanel.Create(dataDirectory,OpenMarketplaceRoute));
   Page("reports","Raporlar ve denetim","Tanılama, denetim kaydı ve operasyon raporlarını inceleyin.",DiagnosticsPanel.Create(dataDirectory,OpenMarketplaceRoute));
@@ -96,6 +96,13 @@ public partial class MainWindow
 
  void OpenMarketplaceRoute(string key)
  {
+  const string connectionPrefix="connection:";
+  if(key.StartsWith(connectionPrefix,StringComparison.OrdinalIgnoreCase))
+  {
+   marketplaceHome.ShowConnection(key[connectionPrefix.Length..]);
+   SelectRoute("marketplaces",true);
+   return;
+  }
   if (key.Equals("diagnostics", StringComparison.OrdinalIgnoreCase)) key = "reports";
   if(routes.ContainsKey(key))
   {

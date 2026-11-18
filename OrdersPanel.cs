@@ -59,7 +59,7 @@ public static class OrdersPanel
   }
   columnButton.Click+=(_,_)=>ColumnDialog(Window.GetWindow(root),columnDefinitions,visibleColumns,ApplyVisibleColumns);
   var detail=new StackPanel();
-  List<OrderSnapshot> all=[];OrderSnapshot? editing=null;CancellationTokenSource? running=null;bool automaticTrendyolSyncStarted=false;
+  List<OrderSnapshot> all=[];OrderSnapshot? editing=null;CancellationTokenSource? running=null;
   void ReloadViews()=>savedViews.ItemsSource=viewStore.ListViews("orders");
   void LoadView(SavedUiView view){using var doc=JsonDocument.Parse(view.Payload);var root=doc.RootElement;search.Text=root.GetProperty("search").GetString()??"";filter.SelectedIndex=root.GetProperty("state").GetInt32();stockFilter.SelectedItem=root.GetProperty("stock").GetString()??"Tümü";
    marketplaceFilter.SelectedItems.Clear();if(root.TryGetProperty("marketplaces",out var marketplaceArray))foreach(var value in marketplaceArray.EnumerateArray())if(marketplaceFilter.Items.Contains(value.GetString()))marketplaceFilter.SelectedItems.Add(value.GetString());
@@ -80,16 +80,9 @@ public static class OrdersPanel
    grid.ItemsSource=all.Where(o=>MatchesState(o)&&OrderFilterCriteria.Matches(o,q,null,selectedMarketplaces,selectedShops,selectedStock,fromUtc,toUtc,selectedConnections,selectedStatuses,selectedSources,reviewFilter.SelectedItem?.ToString()??"Tümü")&&OrderAdvancedFilterCriteria.Matches(o,payment,"Tümü",invoiced.IsChecked==true?true:null,uninvoiced.IsChecked==true?true:null)).ToList();
    }
   void Load(){all=store.ReadAll();foreach(var order in all)order.StockDecisionLabel=catalog.GetOrderStockStatus(order.Marketplace,order.ShopId,order.OrderId)!=null?"Stok düşüldü":order.IsPhysicalSale?"Fiziksel satış":order.ReviewRequired?"İnceleme gerekli":"Stok bekliyor";marketplaceFilter.ItemsSource=all.Select(o=>o.Marketplace).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x).ToArray();shopFilter.ItemsSource=all.Select(o=>o.ShopId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x).ToArray();connectionFilter.ItemsSource=all.Where(o=>o.ConnectionId.Length>0).GroupBy(o=>o.ConnectionId,StringComparer.Ordinal).Select(group=>{var order=group.First();var name=group.Select(o=>o.ConnectionDisplayName).FirstOrDefault(value=>value.Length>0)??group.Key;return new OrderConnectionFilterOption(group.Key,$"{name} · {order.Marketplace} · {order.ShopId}");}).OrderBy(option=>option.Label,StringComparer.CurrentCultureIgnoreCase).ThenBy(option=>option.ConnectionId,StringComparer.Ordinal).ToArray();statusFilter.ItemsSource=all.Select(o=>o.RawStatus).Where(x=>x.Length>0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x).ToArray();sourceFilter.ItemsSource=all.Select(o=>o.Source).Where(x=>x.Length>0).Distinct(StringComparer.CurrentCultureIgnoreCase).OrderBy(x=>x).ToArray();paymentFilter.ItemsSource=new[]{"Tümü"}.Concat(all.Select(o=>o.PaymentStatus).Where(x=>x.Length>0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x)).ToArray();paymentFilter.SelectedIndex=0;Filter();summary.Text=OrderWorkspaceSummary.From(all).Label;status.Text=$"{all.Count} kayıt · Liste son yükleme: {DateTime.Now:g}. Satıra çift tıklayarak sipariş kartını açın. Boş liste varsa mağaza hesaplarından yenileyin.";}
-  root.Loaded+=async(_,_)=>
+  root.Loaded+=(_,_)=>
   {
-   Load();if(automaticTrendyolSyncStarted)return;automaticTrendyolSyncStarted=true;
-   try
-   {
-    var settingsPath=directory is null?null:Path.Combine(directory,"trendyol.bin");
-     if(new TrendyolSettingsStore(settingsPath).Load()!=null)await RefreshTrendyol();
-     await ReconcileNes(false);
-   }
-   catch(Exception ex){status.Text="Trendyol otomatik yenilemesi başlatılamadı: "+MarketplaceConnectionStore.Redact(ex.Message);}
+   Load();
   };
   void Edit(OrderSnapshot order,bool isNew=false)
   {

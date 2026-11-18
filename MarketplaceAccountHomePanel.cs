@@ -127,6 +127,16 @@ public sealed class MarketplaceAccountHomePanel : UserControl, IDisposable
         Refresh();
     }
 
+    public void ShowConnection(string connectionId)
+    {
+        var connection = new MarketplaceConnectionStore(directory).List().SingleOrDefault(x => x.Id == connectionId && x.Enabled)
+            ?? throw new InvalidOperationException("Seçilen mağaza bağlantısı bulunamadı veya etkin değil.");
+        channelFilter = connection.Channel;
+        Refresh();
+        OpenWorkspace(connection.Id);
+        SetChooserVisible(false);
+    }
+
     void OpenWorkspace(string connectionId)
     {
         if (workspace.Content is IDisposable disposable) disposable.Dispose();
